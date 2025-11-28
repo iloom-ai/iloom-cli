@@ -595,7 +595,7 @@ export class ResourceCleanup {
 		const blockers: string[] = []
 
 		// Check if main worktree
-		const isMain = await this.gitWorktree.isMainWorktree(worktree)
+		const isMain = await this.gitWorktree.isMainWorktree(worktree, this.settingsManager)
 		if (isMain) {
 			blockers.push(`Cannot cleanup main worktree: "${worktree.branch}" @ "${worktree.path}"`)
 		}

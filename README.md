@@ -318,6 +318,12 @@ iloom finish
 # AI assisted validation, commit, merge steps, as well as loom cleanup (run this from the loom directory)
 # Alias: dn
 
+iloom rebase
+# Rebase current branch on main with Claude-assisted conflict resolution (run this from a loom directory)
+# Options:
+#   -f, --force    - Skip confirmation prompts
+#   -n, --dry-run  - Preview actions without executing
+
 iloom cleanup [identifier...]
 # Remove a loom without merging (safely, by default)
 

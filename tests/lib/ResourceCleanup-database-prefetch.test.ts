@@ -21,6 +21,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 vi.mock('../../src/utils/git.js', () => ({
 	executeGitCommand: vi.fn(),
 	findMainWorktreePath: vi.fn().mockResolvedValue('/test/main'),
+	findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
 	hasUncommittedChanges: vi.fn().mockResolvedValue(false),
 }))
 

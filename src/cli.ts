@@ -213,6 +213,22 @@ program
   })
 
 program
+  .command('rebase')
+  .description('Rebase current branch on main with Claude-assisted conflict resolution')
+  .option('-f, --force', 'Skip confirmation prompts')
+  .option('-n, --dry-run', 'Preview actions without executing')
+  .action(async (options: { force?: boolean; dryRun?: boolean }) => {
+    try {
+      const { RebaseCommand } = await import('./commands/rebase.js')
+      const command = new RebaseCommand()
+      await command.execute(options)
+    } catch (error) {
+      logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('spin')
   .alias('ignite')
   .description('Launch Claude with auto-detected workspace context')

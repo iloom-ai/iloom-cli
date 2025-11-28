@@ -19,7 +19,9 @@ import {
   getRepoRoot,
   hasUncommittedChanges,
   getDefaultBranch,
+  findMainWorktreePathWithSettings,
 } from '../utils/git.js'
+import type { SettingsManager } from './SettingsManager.js'
 
 /**
  * Manages Git worktrees for the iloom CLI
@@ -65,15 +67,15 @@ export class GitWorktreeManager {
 
   /**
    * Check if a worktree is the main repository worktree
-   * The main worktree is the first one listed by git worktree list (Git guarantee)
-   * This cannot be determined by path comparison because --show-toplevel returns
-   * the same value for all worktrees.
+   * Uses findMainWorktreePathWithSettings to determine the main worktree based on settings.
+   *
+   * @param worktree - The worktree to check
+   * @param settingsManager - SettingsManager instance for loading settings
+   * @returns true if the worktree is the main worktree
    */
-  async isMainWorktree(worktree: GitWorktree): Promise<boolean> {
-    const worktrees = await this.listWorktrees()
-    // The first worktree is always the main worktree (Git design)
-    const mainWorktree = worktrees[0]
-    return mainWorktree !== undefined && mainWorktree.path === worktree.path
+  async isMainWorktree(worktree: GitWorktree, settingsManager: SettingsManager): Promise<boolean> {
+    const mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, settingsManager)
+    return worktree.path === mainWorktreePath
   }
 
   /**
@@ -444,9 +446,14 @@ export class GitWorktreeManager {
    * Remove multiple worktrees
    * Returns a summary of successes and failures
    * Automatically filters out the main worktree
+   *
+   * @param worktrees - Array of worktrees to remove
+   * @param settingsManager - SettingsManager instance for determining main worktree
+   * @param options - Cleanup options
    */
   async removeWorktrees(
     worktrees: GitWorktree[],
+    settingsManager: SettingsManager,
     options: WorktreeCleanupOptions = {}
   ): Promise<{
     successes: Array<{ worktree: GitWorktree }>
@@ -459,7 +466,7 @@ export class GitWorktreeManager {
 
     for (const worktree of worktrees) {
       // Skip main worktree
-      if (await this.isMainWorktree(worktree)) {
+      if (await this.isMainWorktree(worktree, settingsManager)) {
         skipped.push({ worktree, reason: 'Cannot remove main worktree' })
         continue
       }

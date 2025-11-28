@@ -46,6 +46,7 @@ describe('ResourceCleanup', () => {
 		mockGitWorktree.findWorktreeForIssue = vi.fn()
 		mockGitWorktree.findWorktreeForPR = vi.fn()
 		mockGitWorktree.findWorktreeForBranch = vi.fn()
+		mockGitWorktree.isMainWorktree = vi.fn()
 
 		vi.clearAllMocks()
 	})
