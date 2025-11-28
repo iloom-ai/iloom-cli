@@ -99,7 +99,7 @@ describe('FinishCommand', () => {
 
 		// Mock loadEnvIntoProcess to succeed by default
 		vi.mocked(loadEnvIntoProcess).mockReturnValue({
-			parsed: { NEON_PROJECT_ID: 'test-project', NEON_PARENT_BRANCH: 'main' },
+			parsed: {},
 			error: undefined
 		})
 
@@ -237,7 +237,7 @@ describe('FinishCommand', () => {
 			const mockLoadEnv = vi.mocked(loadEnvIntoProcess)
 			mockLoadEnv.mockClear() // Clear previous calls
 			mockLoadEnv.mockReturnValue({
-				parsed: { NEON_PROJECT_ID: 'test-project', NEON_PARENT_BRANCH: 'main' },
+				parsed: {},
 				error: undefined
 			})
 
@@ -261,32 +261,13 @@ describe('FinishCommand', () => {
 		})
 
 		it('should lazily initialize ResourceCleanup when needed', () => {
-			// Mock environment variables
-			const originalEnv = process.env
-			process.env = {
-				...originalEnv,
-				NEON_PROJECT_ID: 'test-project',
-				NEON_PARENT_BRANCH: 'main'
-			}
-
 			const cmd = new FinishCommand()
 
 			// ResourceCleanup should be undefined initially (lazy initialization)
 			expect(cmd['resourceCleanup']).toBeUndefined()
-
-			// Restore environment
-			process.env = originalEnv
 		})
 
 		it('should not initialize DatabaseManager during construction (lazy initialization)', () => {
-			// Mock environment variables
-			const originalEnv = process.env
-			process.env = {
-				...originalEnv,
-				NEON_PROJECT_ID: 'test-project-123',
-				NEON_PARENT_BRANCH: 'develop'
-			}
-
 			// Clear any previous constructor calls
 			vi.mocked(NeonProvider).mockClear()
 			vi.mocked(DatabaseManager).mockClear()
@@ -297,9 +278,6 @@ describe('FinishCommand', () => {
 			// They are created lazily when needed
 			expect(NeonProvider).not.toHaveBeenCalled()
 			expect(DatabaseManager).not.toHaveBeenCalled()
-
-			// Restore environment
-			process.env = originalEnv
 		})
 
 		it('should verify database cleanup happens during post-merge cleanup', async () => {

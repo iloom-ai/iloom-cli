@@ -86,6 +86,32 @@ export const CapabilitiesSettingsSchema = z
 	.optional()
 
 /**
+ * Zod schema for Neon database provider settings
+ */
+export const NeonSettingsSchema = z.object({
+	projectId: z
+		.string()
+		.min(1)
+		.regex(/^[a-zA-Z0-9-]+$/, 'Neon project ID must contain only letters, numbers, and hyphens')
+		.describe('Neon project ID found in your project URL (e.g., "fantastic-fox-3566354")'),
+	parentBranch: z
+		.string()
+		.min(1)
+		.describe('Branch from which new database branches are created'),
+})
+
+/**
+ * Zod schema for database provider settings
+ */
+export const DatabaseProvidersSettingsSchema = z
+	.object({
+		neon: NeonSettingsSchema.optional().describe(
+			'Neon database configuration. Requires Neon CLI installed and authenticated for database branching.',
+		),
+	})
+	.optional()
+
+/**
  * Zod schema for iloom settings
  */
 export const IloomSettingsSchema = z.object({
@@ -148,7 +174,18 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-reviewer (reviews code changes against requirements)',
 		),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
+	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 })
+
+/**
+ * TypeScript type for Neon settings derived from Zod schema
+ */
+export type NeonSettings = z.infer<typeof NeonSettingsSchema>
+
+/**
+ * TypeScript type for database providers settings derived from Zod schema
+ */
+export type DatabaseProvidersSettings = z.infer<typeof DatabaseProvidersSettingsSchema>
 
 /**
  * TypeScript type for agent settings derived from Zod schema

@@ -27,14 +27,14 @@ export function validateNeonConfig(config: {
   if (!config.projectId) {
     return {
       valid: false,
-      error: 'NEON_PROJECT_ID is required',
+      error: 'Neon projectId is required. Configure in .iloom/settings.json under databaseProviders.neon',
     }
   }
 
   if (!config.parentBranch) {
     return {
       valid: false,
-      error: 'NEON_PARENT_BRANCH is required',
+      error: 'Neon parentBranch is required. Configure in .iloom/settings.json under databaseProviders.neon',
     }
   }
 
@@ -42,7 +42,7 @@ export function validateNeonConfig(config: {
   if (!/^[a-zA-Z0-9-]+$/.test(config.projectId)) {
     return {
       valid: false,
-      error: 'NEON_PROJECT_ID contains invalid characters',
+      error: 'Neon projectId contains invalid characters',
     }
   }
 
@@ -78,7 +78,7 @@ export class NeonProvider implements DatabaseProvider {
 
   /**
    * Check if provider is properly configured
-   * Returns true if NEON_PROJECT_ID and NEON_PARENT_BRANCH are set
+   * Returns true if projectId and parentBranch are valid in settings
    */
   isConfigured(): boolean {
     return this._isConfigured
@@ -94,7 +94,7 @@ export class NeonProvider implements DatabaseProvider {
   private async executeNeonCommand(args: string[], cwd?: string): Promise<string> {
     // Check if provider is properly configured
     if (!this._isConfigured) {
-      throw new Error('NeonProvider is not configured. Check NEON_PROJECT_ID and NEON_PARENT_BRANCH environment variables.')
+      throw new Error('NeonProvider is not configured. Check databaseProviders.neon configuration in .iloom/settings.json')
     }
 
     // Log the exact command being executed for debugging

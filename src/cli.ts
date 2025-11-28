@@ -726,35 +726,23 @@ program
   .description('Test Neon integration and debug configuration')
   .action(async () => {
     try {
-      const { NeonProvider } = await import('./lib/providers/NeonProvider.js')
-      const { loadEnvIntoProcess } = await import('./utils/env.js')
+      const { SettingsManager } = await import('./lib/SettingsManager.js')
+      const { createNeonProviderFromSettings } = await import('./utils/neon-helpers.js')
 
       logger.info('Testing Neon Integration\n')
 
-      // Load environment variables
-      logger.info('0. Loading environment variables...')
-      const envResult = loadEnvIntoProcess()
-      if (envResult.error) {
-        logger.warn(`   Warning: ${envResult.error.message}`)
-      }
-      if (envResult.parsed) {
-        logger.success(`   Loaded ${Object.keys(envResult.parsed).length} environment variables`)
-      } else {
-        logger.info('   No .env files found or parsed')
-      }
-
-      // Test 1: Environment variables
-      logger.info('\n1. Environment Variables:')
-      logger.info(`   NEON_PROJECT_ID: ${process.env.NEON_PROJECT_ID ?? '(not set)'}`)
-      logger.info(`   NEON_PARENT_BRANCH: ${process.env.NEON_PARENT_BRANCH ?? '(not set)'}`)
+      // Test 1: Settings Configuration
+      logger.info('1. Settings Configuration:')
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+      const neonConfig = settings.databaseProviders?.neon
+      logger.info(`   projectId: ${neonConfig?.projectId ?? '(not configured)'}`)
+      logger.info(`   parentBranch: ${neonConfig?.parentBranch ?? '(not configured)'}`)
 
       // Test 2: Create provider and test initialization
       logger.info('\n2. Creating NeonProvider...')
       try {
-        const neonProvider = new NeonProvider({
-          projectId: process.env.NEON_PROJECT_ID ?? '',
-          parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
-        })
+        const neonProvider = createNeonProviderFromSettings(settings)
         logger.success('   NeonProvider created successfully')
 
         // Test 3: CLI availability
@@ -780,7 +768,7 @@ program
         }
 
         // Test 5: List branches (if config is valid)
-        if (process.env.NEON_PROJECT_ID) {
+        if (neonConfig?.projectId) {
           logger.info('\n5. Testing branch listing...')
           try {
             const branches = await neonProvider.listBranches()
@@ -795,14 +783,14 @@ program
             logger.error(`   Failed to list branches: ${error instanceof Error ? error.message : 'Unknown error'}`)
           }
         } else {
-          logger.warn('\n5. Skipping branch listing (NEON_PROJECT_ID not set)')
+          logger.warn('\n5. Skipping branch listing (Neon not configured in settings)')
         }
 
       } catch (error) {
         logger.error(`   Failed to create NeonProvider: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        if (error instanceof Error && error.message.includes('NEON_PROJECT_ID')) {
-          logger.info('\n   This is expected if NEON_PROJECT_ID is not set.')
-          logger.info('   Set NEON_PROJECT_ID and NEON_PARENT_BRANCH environment variables to test fully.')
+        if (error instanceof Error && error.message.includes('not configured')) {
+          logger.info('\n   This is expected if Neon is not configured.')
+          logger.info('   Configure databaseProviders.neon in .iloom/settings.json to test fully.')
         }
       }
 

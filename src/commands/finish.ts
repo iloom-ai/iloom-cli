@@ -9,13 +9,13 @@ import { ResourceCleanup } from '../lib/ResourceCleanup.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { BuildRunner } from '../lib/BuildRunner.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
-import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
+import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -96,10 +96,7 @@ export class FinishCommand {
 		const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
 		const environmentManager = new EnvironmentManager()
-		const neonProvider = new NeonProvider({
-			projectId: process.env.NEON_PROJECT_ID ?? '',
-			parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
-		})
+		const neonProvider = createNeonProviderFromSettings(settings)
 		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
 		const cliIsolationManager = new CLIIsolationManager()
 

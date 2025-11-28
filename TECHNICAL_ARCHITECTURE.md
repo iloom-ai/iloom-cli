@@ -270,10 +270,22 @@ else {
 
 **Configuration Requirements:**
 ```typescript
-// src/lib/providers/NeonProvider.ts:14-20
-interface NeonProviderConfig {
-  projectId: string        // From NEON_PROJECT_ID env var
-  parentBranch?: string    // From NEON_PARENT_BRANCH env var
+// src/lib/providers/NeonProvider.ts:14-17
+interface NeonConfig {
+  projectId: string        // From settings.json: databaseProviders.neon.projectId
+  parentBranch: string     // From settings.json: databaseProviders.neon.parentBranch
+}
+```
+
+Neon configuration is managed through `.iloom/settings.json`:
+```json
+{
+  "databaseProviders": {
+    "neon": {
+      "projectId": "your-project-id",
+      "parentBranch": "main"
+    }
+  }
 }
 ```
 

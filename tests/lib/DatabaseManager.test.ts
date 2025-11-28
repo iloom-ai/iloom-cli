@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { DatabaseManager } from '../../src/lib/DatabaseManager.js'
 import type { DatabaseProvider } from '../../src/types/index.js'
 import { EnvironmentManager } from '../../src/lib/EnvironmentManager.js'
@@ -18,16 +18,8 @@ describe('DatabaseManager', () => {
   let databaseManager: DatabaseManager
   let mockProvider: DatabaseProvider
   let mockEnvironment: EnvironmentManager
-  let originalEnv: Record<string, string | undefined>
 
   beforeEach(() => {
-    // Store original env
-    originalEnv = { ...process.env }
-
-    // Reset environment
-    delete process.env.NEON_PROJECT_ID
-    delete process.env.NEON_PARENT_BRANCH
-
     // Create mock provider
     mockProvider = {
       isCliAvailable: vi.fn().mockResolvedValue(true),
@@ -62,16 +54,10 @@ describe('DatabaseManager', () => {
     vi.clearAllMocks()
   })
 
-  afterEach(() => {
-    // Restore original environment
-    process.env = originalEnv
-  })
-
   describe('shouldUseDatabaseBranching', () => {
-    it('should return true when NEON env vars and DATABASE_URL are present', async () => {
-      // Set up NEON environment variables
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+    it('should return true when provider is configured and DATABASE_URL is present', async () => {
+      // Mock provider as configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Mock .env file with DATABASE_URL
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
@@ -84,10 +70,9 @@ describe('DatabaseManager', () => {
       expect(mockEnvironment.readEnvFile).toHaveBeenCalledWith('/path/to/.env')
     })
 
-    it('should return true when NEON env vars and custom database variable are present', async () => {
-      // Set up NEON environment variables
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+    it('should return true when provider is configured and custom database variable is present', async () => {
+      // Mock provider as configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Create DatabaseManager with custom variable name
       const customDbManager = new DatabaseManager(mockProvider, mockEnvironment, 'POSTGRES_URL')
@@ -102,14 +87,11 @@ describe('DatabaseManager', () => {
       expect(result).toBe(true)
     })
 
-    it('should return false when NEON_PROJECT_ID is missing', async () => {
-      // Only set NEON_PARENT_BRANCH
-      process.env.NEON_PARENT_BRANCH = 'main'
-
+    it('should return false when provider is not configured', async () => {
       // Mock provider as not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      // Mock .env file with DATABASE_URL
+      // Mock .env file with DATABASE_URL (shouldn't be checked)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
@@ -117,27 +99,13 @@ describe('DatabaseManager', () => {
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
 
       expect(result).toBe(false)
-      // Should not check .env file if NEON vars missing
-      expect(mockEnvironment.readEnvFile).not.toHaveBeenCalled()
-    })
-
-    it('should return false when NEON_PARENT_BRANCH is missing', async () => {
-      // Only set NEON_PROJECT_ID
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-
-      // Mock provider as not configured
-      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
-
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
-
-      expect(result).toBe(false)
+      // Should not check .env file if provider not configured
       expect(mockEnvironment.readEnvFile).not.toHaveBeenCalled()
     })
 
     it('should return false when configured database URL variable is missing from .env', async () => {
-      // Set up NEON environment variables
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      // Mock provider as configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Mock .env file without DATABASE_URL
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
@@ -151,9 +119,8 @@ describe('DatabaseManager', () => {
     })
 
     it('should return false when .env file cannot be read', async () => {
-      // Set up NEON environment variables
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      // Mock provider as configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Mock .env file read failure
       vi.mocked(mockEnvironment.readEnvFile).mockRejectedValue(new Error('File not found'))
@@ -187,17 +154,13 @@ describe('DatabaseManager', () => {
   describe('createBranchIfConfigured', () => {
     beforeEach(() => {
       // Set up valid configuration by default
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
     })
 
     it('should return null when database branching not configured', async () => {
-      // Remove NEON env vars
-      delete process.env.NEON_PROJECT_ID
-
       // Mock provider as not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
@@ -259,8 +222,7 @@ describe('DatabaseManager', () => {
   describe('deleteBranchIfConfigured', () => {
     beforeEach(() => {
       // Set up valid configuration by default
-      process.env.NEON_PROJECT_ID = 'test-project-id'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
@@ -438,24 +400,17 @@ describe('DatabaseManager', () => {
   })
 
   describe('private methods behavior verification', () => {
-    it('should verify getNeonConfig behavior through public methods', async () => {
-      // Test when both env vars are present
-      process.env.NEON_PROJECT_ID = 'test-project'
-      process.env.NEON_PARENT_BRANCH = 'development'
+    it('should verify configuration behavior through public methods', async () => {
+      // Test when provider is configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
 
-      // Mock provider as configured
-      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-
       const result1 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
       expect(result1).toBe(true)
 
-      // Test when one env var is missing
-      delete process.env.NEON_PROJECT_ID
-
-      // Mock provider as not configured
+      // Test when provider is not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result2 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
@@ -463,8 +418,8 @@ describe('DatabaseManager', () => {
     })
 
     it('should verify hasDatabaseUrlInEnv behavior through public methods', async () => {
-      process.env.NEON_PROJECT_ID = 'test-project'
-      process.env.NEON_PARENT_BRANCH = 'development'
+      // Mock provider as configured for all tests
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Test with DATABASE_URL
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
@@ -492,11 +447,8 @@ describe('DatabaseManager', () => {
   })
 
   describe('edge cases and integration scenarios', () => {
-    it('should handle empty NEON environment variables', async () => {
-      process.env.NEON_PROJECT_ID = ''
-      process.env.NEON_PARENT_BRANCH = 'main'
-
-      // Mock provider as not configured
+    it('should handle provider not configured due to invalid config', async () => {
+      // Mock provider as not configured (e.g., empty projectId)
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
@@ -504,11 +456,8 @@ describe('DatabaseManager', () => {
       expect(result).toBe(false)
     })
 
-    it('should handle whitespace-only NEON environment variables', async () => {
-      process.env.NEON_PROJECT_ID = '   '
-      process.env.NEON_PARENT_BRANCH = 'main'
-
-      // Mock provider as not configured
+    it('should handle provider not configured due to missing config', async () => {
+      // Mock provider as not configured (e.g., missing parentBranch)
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
@@ -517,8 +466,7 @@ describe('DatabaseManager', () => {
     })
 
     it('should work with different .env file paths', async () => {
-      process.env.NEON_PROJECT_ID = 'test-project'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
@@ -529,8 +477,7 @@ describe('DatabaseManager', () => {
     })
 
     it('should handle branch names with special characters', async () => {
-      process.env.NEON_PROJECT_ID = 'test-project'
-      process.env.NEON_PARENT_BRANCH = 'main'
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )

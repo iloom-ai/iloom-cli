@@ -420,6 +420,12 @@ This allows teams to share project defaults via `settings.json` while individual
     "web": { "basePort": 3000 },
     "database": { "databaseUrlEnvVarName": "DATABASE_URL" }
   },
+  "databaseProviders": {
+    "neon": {
+      "projectId": "fantastic-fox-3566354",
+      "parentBranch": "main"
+    }
+  },
   "workflows": {
     "issue": {
       "permissionMode": "default",
@@ -446,6 +452,8 @@ This allows teams to share project defaults via `settings.json` while individual
 - `mainBranch` - Primary branch for merging (default: "main")
 - `capabilities.web.basePort` - Base port for dev servers (default: 3000)
 - `capabilities.database.databaseUrlEnvVarName` - Name of environment variable for database connection URL (default: "DATABASE_URL")
+- `databaseProviders.neon.projectId` - Neon project ID (found in project URL, e.g., "fantastic-fox-3566354")
+- `databaseProviders.neon.parentBranch` - Branch from which new database branches are created (default: "main")
 - `workflows` - Per-workflow Claude CLI permission modes and tool launching
 - `agents` - Claude model selection (sonnet/opus/haiku) per agent type
 

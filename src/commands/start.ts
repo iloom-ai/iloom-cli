@@ -9,11 +9,11 @@ import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
-import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import type { StartOptions } from '../types/index.js'
 
 export interface StartCommandInput {
@@ -80,25 +80,12 @@ export class StartCommand {
 		// Find main worktree path
 		const mainWorktreePath = await findMainWorktreePathWithSettings()
 
+		// Load settings to get database configuration
+		const settings = await this.settingsManager.loadSettings()
+
 		// Create DatabaseManager with NeonProvider and EnvironmentManager
 		const environmentManager = new EnvironmentManager()
-
-		// Debug environment variables
-		logger.debug('Environment variables for Neon:', {
-			NEON_PROJECT_ID: process.env.NEON_PROJECT_ID,
-			NEON_PARENT_BRANCH: process.env.NEON_PARENT_BRANCH,
-			hasNeonProjectId: !!process.env.NEON_PROJECT_ID,
-			hasNeonParentBranch: !!process.env.NEON_PARENT_BRANCH,
-			neonProjectIdLength: process.env.NEON_PROJECT_ID?.length ?? 0,
-		})
-
-		const neonProvider = new NeonProvider({
-			projectId: process.env.NEON_PROJECT_ID ?? '',
-			parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
-		})
-
-		// Load settings to get database URL environment variable name
-		const settings = await this.settingsManager.loadSettings()
+		const neonProvider = createNeonProviderFromSettings(settings)
 		const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
 		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)

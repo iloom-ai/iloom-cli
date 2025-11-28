@@ -3,13 +3,13 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ResourceCleanup } from '../lib/ResourceCleanup.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
-import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
+import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -85,10 +85,7 @@ export class CleanupCommand {
     const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
     const environmentManager = new EnvironmentManager()
-    const neonProvider = new NeonProvider({
-      projectId: process.env.NEON_PROJECT_ID ?? '',
-      parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
-    })
+    const neonProvider = createNeonProviderFromSettings(settings)
     const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
     const cliIsolationManager = new CLIIsolationManager()
 
