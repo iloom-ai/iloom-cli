@@ -136,7 +136,6 @@ describe('Settings validation on CLI startup', () => {
     mkdirSync(iloomDirectory, { recursive: true })
 
     // Initialize git repository to avoid "not a git repository" errors
-    const { execSync } = require('child_process')
     execSync('git init', { cwd: testDir, stdio: 'ignore' })
     execSync('git remote add origin https://github.com/test/repo.git', { cwd: testDir, stdio: 'ignore' })
   })
