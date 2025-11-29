@@ -21,6 +21,23 @@ vi.mock('../../src/utils/git.js', async () => {
 	}
 })
 
+// Mock remote utilities
+vi.mock('../../src/utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
+}))
+
+// Mock SettingsManager to prevent reading actual settings files
+vi.mock('../../src/lib/SettingsManager.js', () => {
+	return {
+		SettingsManager: class MockSettingsManager {
+			async loadSettings() {
+				return {}
+			}
+		},
+	}
+})
+
 describe('FinishCommand - PR State Detection', () => {
 	let finishCommand: FinishCommand
 	let mockGitHubService: GitHubService

@@ -7,6 +7,15 @@ import type { SettingsManager } from '../lib/SettingsManager.js'
 
 // Mock dependencies
 vi.mock('../lib/IssueEnhancementService.js')
+vi.mock('../lib/SettingsManager.js', () => {
+	return {
+		SettingsManager: class MockSettingsManager {
+			async loadSettings() {
+				return {}
+			}
+		},
+	}
+})
 
 // Mock remote utilities
 vi.mock('../utils/remote.js', () => ({

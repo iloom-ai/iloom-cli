@@ -33,6 +33,15 @@ vi.mock('../lib/DatabaseManager.js')
 vi.mock('../lib/providers/NeonProvider.js')
 vi.mock('../lib/EnvironmentManager.js')
 vi.mock('../utils/env.js')
+vi.mock('../lib/SettingsManager.js', () => {
+	return {
+		SettingsManager: class MockSettingsManager {
+			async loadSettings() {
+				return {}
+			}
+		},
+	}
+})
 
 // Mock package-manager utilities
 vi.mock('../utils/package-manager.js', () => ({

@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
+import { tmpdir } from 'os'
 
 // Helper function to run CLI command and capture output
 function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
@@ -120,7 +121,8 @@ describe('CLI', () => {
 })
 
 describe('Settings validation on CLI startup', () => {
-  const testDir = join(process.cwd(), '.test-cli-settings')
+  // Use temp directory to avoid git repository detection from project
+  const testDir = join(tmpdir(), 'iloom-cli-test-settings')
   const iloomDirectory = join(testDir, '.iloom')
   const settingsPath = join(iloomDirectory, 'settings.json')
 
@@ -132,6 +134,11 @@ describe('Settings validation on CLI startup', () => {
     // Create test directory structure
     mkdirSync(testDir, { recursive: true })
     mkdirSync(iloomDirectory, { recursive: true })
+
+    // Initialize git repository to avoid "not a git repository" errors
+    const { execSync } = require('child_process')
+    execSync('git init', { cwd: testDir, stdio: 'ignore' })
+    execSync('git remote add origin https://github.com/test/repo.git', { cwd: testDir, stdio: 'ignore' })
   })
 
   afterEach(() => {

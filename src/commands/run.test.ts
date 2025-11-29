@@ -18,6 +18,15 @@ vi.mock('../lib/DevServerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
 vi.mock('execa')
+vi.mock('../lib/SettingsManager.js', () => {
+	return {
+		SettingsManager: class MockSettingsManager {
+			async loadSettings() {
+				return {}
+			}
+		},
+	}
+})
 
 // Mock browser utilities
 vi.mock('../utils/browser.js', () => ({

@@ -51,14 +51,22 @@ export async function openTerminalWindow(
 		)
 	}
 
-	// macOS implementation using AppleScript
-	const applescript = buildAppleScript(options)
+	// Detect if iTerm2 is available
+	const hasITerm2 = await detectITerm2()
+
+	// Build appropriate AppleScript based on terminal availability
+	const applescript = hasITerm2
+		? buildITerm2SingleTabScript(options)
+		: buildAppleScript(options)
 
 	try {
 		await execa('osascript', ['-e', applescript])
 
-		// Activate Terminal.app to bring windows to front
-		await execa('osascript', ['-e', 'tell application "Terminal" to activate'])
+		// Activate the appropriate terminal application (only needed for Terminal.app)
+		// iTerm2 script includes its own activation
+		if (!hasITerm2) {
+			await execa('osascript', ['-e', 'tell application "Terminal" to activate'])
+		}
 	} catch (error) {
 		throw new Error(
 			`Failed to open terminal window: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -144,6 +152,37 @@ function escapeForAppleScript(command: string): string {
 			.replace(/\\/g, '\\\\') // Escape backslashes
 			.replace(/"/g, '\\"') // Escape double quotes
 	)
+}
+
+/**
+ * Build iTerm2 AppleScript for single tab
+ */
+function buildITerm2SingleTabScript(options: TerminalWindowOptions): string {
+	const command = buildCommandSequence(options)
+
+	let script = 'tell application id "com.googlecode.iterm2"\n'
+	script += '  create window with default profile\n'
+	script += '  set s1 to current session of current window\n\n'
+
+	// Set background color
+	if (options.backgroundColor) {
+		const { r, g, b } = options.backgroundColor
+		script += `  set background color of s1 to {${Math.round(r * 257)}, ${Math.round(g * 257)}, ${Math.round(b * 257)}}\n`
+	}
+
+	// Execute command
+	script += `  tell s1 to write text "${escapeForAppleScript(command)}"\n\n`
+
+	// Set session name (tab title)
+	if (options.title) {
+		script += `  set name of s1 to "${escapeForAppleScript(options.title)}"\n\n`
+	}
+
+	// Activate iTerm2
+	script += '  activate\n'
+	script += 'end tell'
+
+	return script
 }
 
 /**

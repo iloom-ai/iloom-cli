@@ -13,6 +13,15 @@ vi.mock('../utils/logger.js', () => ({
 		error: vi.fn(),
 	},
 }))
+vi.mock('./SettingsManager.js', () => {
+	return {
+		SettingsManager: class MockSettingsManager {
+			async loadSettings() {
+				return {}
+			}
+		},
+	}
+})
 
 describe('ClaudeService', () => {
 	let service: ClaudeService

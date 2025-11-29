@@ -257,6 +257,100 @@ describe('openTerminalWindow', () => {
 		// This prevents commands from appearing in shell history when HISTCONTROL=ignorespace
 		expect(applescript).toMatch(/do script " [^"]+/)
 	})
+
+	it('should use iTerm2 when available for single terminal', async () => {
+		vi.mocked(existsSync).mockReturnValue(true) // iTerm2 exists
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+		})
+
+		// Should call osascript once (iTerm2 script includes activation)
+		expect(execa).toHaveBeenCalledTimes(1)
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+
+		// Verify iTerm2 AppleScript structure
+		expect(applescript).toContain('tell application id "com.googlecode.iterm2"')
+		expect(applescript).toContain('create window with default profile')
+		expect(applescript).toContain('activate')
+		expect(applescript).not.toContain('tell application "Terminal"')
+	})
+
+	it('should set session name when title provided in iTerm2 mode', async () => {
+		vi.mocked(existsSync).mockReturnValue(true) // iTerm2 exists
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+			title: 'Dev Server - Issue #42',
+		})
+
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+		// Verify session name is set with escaped title
+		expect(applescript).toContain('set name of s1 to "Dev Server - Issue #42"')
+	})
+
+	it('should apply background color in iTerm2 mode', async () => {
+		vi.mocked(existsSync).mockReturnValue(true) // iTerm2 exists
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+			backgroundColor: { r: 128, g: 77, b: 179 },
+		})
+
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+		// 8-bit RGB (0-255) converted to 16-bit RGB (0-65535): multiply by 257
+		// 128 * 257 = 32896, 77 * 257 = 19789, 179 * 257 = 46003
+		expect(applescript).toContain('set background color of s1 to {32896, 19789, 46003}')
+	})
+
+	it('should fall back to Terminal.app when iTerm2 not available', async () => {
+		vi.mocked(existsSync).mockReturnValue(false) // iTerm2 not available
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+		})
+
+		// Should call execa twice: once for terminal creation, once for activation
+		expect(execa).toHaveBeenCalledTimes(2)
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+
+		// Verify Terminal.app AppleScript is used, not iTerm2
+		expect(applescript).toContain('tell application "Terminal"')
+		expect(applescript).not.toContain('tell application id "com.googlecode.iterm2"')
+	})
+
+	it('should handle all options in iTerm2 single-tab mode', async () => {
+		vi.mocked(existsSync).mockReturnValue(true) // iTerm2 exists
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+			title: 'Dev Server',
+			backgroundColor: { r: 128, g: 77, b: 179 },
+			port: 3042,
+			includeEnvSetup: true,
+			includePortExport: true,
+		})
+
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+
+		// Verify all options are present in the iTerm2 script
+		expect(applescript).toContain('/Users/test/workspace')
+		expect(applescript).toContain('source .env')
+		expect(applescript).toContain('export PORT=3042')
+		expect(applescript).toContain('pnpm dev')
+		expect(applescript).toContain('set name of s1 to "Dev Server"')
+		expect(applescript).toContain('set background color of s1 to {32896, 19789, 46003}')
+	})
 })
 
 describe('openDualTerminalWindow', () => {
