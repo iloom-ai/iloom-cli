@@ -69,7 +69,7 @@ describe('GitHubService', () => {
 
 			const result = await service.detectInputType('#123')
 			expect(result.type).toBe('pr')
-			expect(result.number).toBe(123)
+			expect(result.identifier).toBe('123')
 			expect(result.rawInput).toBe('#123')
 		})
 
@@ -94,13 +94,13 @@ describe('GitHubService', () => {
 
 			const result = await service.detectInputType('123')
 			expect(result.type).toBe('issue')
-			expect(result.number).toBe(123)
+			expect(result.identifier).toBe('123')
 		})
 
 		it('should return unknown for non-numeric input', async () => {
 			const result = await service.detectInputType('feature-branch')
 			expect(result.type).toBe('unknown')
-			expect(result.number).toBeNull()
+			expect(result.identifier).toBeNull()
 		})
 
 		it('should handle input with # prefix', async () => {
@@ -124,7 +124,7 @@ describe('GitHubService', () => {
 
 			const result = await service.detectInputType('#456')
 			expect(result.type).toBe('issue')
-			expect(result.number).toBe(456)
+			expect(result.identifier).toBe('456')
 		})
 
 		it('should return unknown when both PR and issue are not found', async () => {
@@ -138,7 +138,7 @@ describe('GitHubService', () => {
 
 			const result = await service.detectInputType('123')
 			expect(result.type).toBe('unknown')
-			expect(result.number).toBeNull()
+			expect(result.identifier).toBeNull()
 		})
 
 		it('should throw error when API calls fail with unexpected errors', async () => {

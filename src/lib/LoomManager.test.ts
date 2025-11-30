@@ -98,6 +98,10 @@ describe('LoomManager', () => {
     // Default mock for setEnvVar - setupPortForWeb now calls this directly
     vi.mocked(mockEnvironment.setEnvVar).mockResolvedValue()
 
+    // Set IssueTracker interface properties
+    mockGitHub.supportsPullRequests = true
+    mockGitHub.providerName = 'github'
+
     vi.clearAllMocks()
   })
 
@@ -138,7 +142,7 @@ describe('LoomManager', () => {
       expect(result.type).toBe('issue')
       expect(result.identifier).toBe(123)
       expect(result.port).toBe(3123)
-      expect(result.githubData?.title).toBe('Test Issue')
+      expect(result.issueData?.title).toBe('Test Issue')
       expect(result.createdAt).toBeInstanceOf(Date)
 
       // Verify installDependencies was called with the correct path
@@ -1218,7 +1222,7 @@ describe('LoomManager', () => {
       expect(result.branch).toBe('issue-39-test')
       expect(result.type).toBe('issue')
       expect(result.identifier).toBe(39)
-      expect(result.githubData?.title).toBe('Test Issue')
+      expect(result.issueData?.title).toBe('Test Issue')
       expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
     })
 

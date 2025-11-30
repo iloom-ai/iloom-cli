@@ -103,6 +103,9 @@ describe('FinishCommand', () => {
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
+		// Set IssueTracker interface properties
+		mockGitHubService.supportsPullRequests = true
+		mockGitHubService.providerName = 'github'
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockValidationRunner = new ValidationRunner()
 		mockCommitManager = new CommitManager()
@@ -185,37 +188,41 @@ describe('FinishCommand', () => {
 	})
 
 	describe('dependency injection', () => {
-		it('should accept GitHubService via constructor', () => {
+		it('should accept IssueTracker via constructor', () => {
 			const customService = new GitHubService()
 			const cmd = new FinishCommand(customService)
 
-			expect(cmd['gitHubService']).toBe(customService)
+			expect(cmd['issueTracker']).toBe(customService)
 		})
 
 		it('should accept GitWorktreeManager via constructor', () => {
 			const customManager = new GitWorktreeManager()
-			const cmd = new FinishCommand(undefined, customManager)
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker, customManager)
 
 			expect(cmd['gitWorktreeManager']).toBe(customManager)
 		})
 
 		it('should accept ValidationRunner via constructor', () => {
 			const customRunner = new ValidationRunner()
-			const cmd = new FinishCommand(undefined, undefined, customRunner)
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker, undefined, customRunner)
 
 			expect(cmd['validationRunner']).toBe(customRunner)
 		})
 
 		it('should accept CommitManager via constructor', () => {
 			const customManager = new CommitManager()
-			const cmd = new FinishCommand(undefined, undefined, undefined, customManager)
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker, undefined, undefined, customManager)
 
 			expect(cmd['commitManager']).toBe(customManager)
 		})
 
 		it('should accept MergeManager via constructor', () => {
 			const customManager = new MergeManager()
-			const cmd = new FinishCommand(undefined, undefined, undefined, undefined, customManager)
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker, undefined, undefined, undefined, customManager)
 
 			expect(cmd['mergeManager']).toBe(customManager)
 		})
@@ -226,8 +233,9 @@ describe('FinishCommand', () => {
 				mockProcessManager,
 				undefined
 			)
+			const mockIssueTracker = new GitHubService()
 			const cmd = new FinishCommand(
-				undefined,
+				mockIssueTracker,
 				undefined,
 				undefined,
 				undefined,
@@ -239,16 +247,18 @@ describe('FinishCommand', () => {
 			expect(cmd['resourceCleanup']).toBe(customCleanup)
 		})
 
-		it('should create default instances when not provided', () => {
-			const cmd = new FinishCommand()
+		it('should create default instances for optional deps when not provided', () => {
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker)
 
-			expect(cmd['gitHubService']).toBeInstanceOf(GitHubService)
+			// IssueTracker is now required
+			expect(cmd['issueTracker']).toBe(mockIssueTracker)
 			expect(cmd['gitWorktreeManager']).toBeInstanceOf(GitWorktreeManager)
 			expect(cmd['validationRunner']).toBeInstanceOf(ValidationRunner)
 			expect(cmd['commitManager']).toBeInstanceOf(CommitManager)
 			expect(cmd['mergeManager']).toBeInstanceOf(MergeManager)
 			expect(cmd['identifierParser']).toBeInstanceOf(IdentifierParser)
-			// ResourceCleanup is now lazily initialized, so it should be undefined initially
+			// ResourceCleanup is lazily initialized, so it should be undefined initially
 			expect(cmd['resourceCleanup']).toBeUndefined()
 		})
 
@@ -260,7 +270,8 @@ describe('FinishCommand', () => {
 				error: undefined
 			})
 
-			new FinishCommand()
+			const mockIssueTracker = new GitHubService()
+			new FinishCommand(mockIssueTracker)
 
 			expect(mockLoadEnv).toHaveBeenCalledOnce()
 		})
@@ -274,13 +285,15 @@ describe('FinishCommand', () => {
 				error: mockError
 			})
 
+			const mockIssueTracker = new GitHubService()
 			// Should not throw
-			expect(() => new FinishCommand()).not.toThrow()
+			expect(() => new FinishCommand(mockIssueTracker)).not.toThrow()
 			expect(mockLoadEnv).toHaveBeenCalledOnce()
 		})
 
 		it('should lazily initialize ResourceCleanup when needed', () => {
-			const cmd = new FinishCommand()
+			const mockIssueTracker = new GitHubService()
+			const cmd = new FinishCommand(mockIssueTracker)
 
 			// ResourceCleanup should be undefined initially (lazy initialization)
 			expect(cmd['resourceCleanup']).toBeUndefined()
@@ -291,7 +304,8 @@ describe('FinishCommand', () => {
 			vi.mocked(NeonProvider).mockClear()
 			vi.mocked(DatabaseManager).mockClear()
 
-			new FinishCommand()
+			const mockIssueTracker = new GitHubService()
+			new FinishCommand(mockIssueTracker)
 
 			// DatabaseManager and NeonProvider should NOT be created during construction
 			// They are created lazily when needed

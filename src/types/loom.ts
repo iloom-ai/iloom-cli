@@ -11,7 +11,7 @@ export interface Loom {
   databaseBranch?: string
   createdAt: Date
   lastAccessed: Date
-  githubData?: {
+  issueData?: {
     title?: string
     body?: string
     url?: string

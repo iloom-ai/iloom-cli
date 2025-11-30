@@ -70,6 +70,27 @@ export interface PullRequest {
   isDraft: boolean
 }
 
+// Issue Tracker types
+/**
+ * Generic input detection result for issue trackers
+ * String-based identifier to support non-numeric IDs (e.g., Linear "ENG-123")
+ */
+export interface IssueTrackerInputDetection {
+	type: 'issue' | 'pr' | 'unknown'
+	identifier: string | null
+	rawInput: string
+}
+
+/**
+ * Branch name generation options - generic version
+ * Decoupled from GitHub-specific types to support multiple providers
+ */
+export interface BranchGenerationOptions {
+	issueNumber: number
+	title: string
+	// Note: strategy is provider-specific and should be handled by the concrete implementation
+}
+
 // Database types
 
 /**

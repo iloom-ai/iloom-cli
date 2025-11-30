@@ -64,6 +64,8 @@ describe('FinishCommand - PR State Detection', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn(),
 			fetchIssue: vi.fn(),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -237,6 +239,8 @@ describe('FinishCommand - Open PR Workflow', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn().mockResolvedValue(mockOpenPR),
 			fetchIssue: vi.fn(),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -424,6 +428,8 @@ describe('FinishCommand - Closed PR Workflow', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn().mockResolvedValue(mockClosedPR),
 			fetchIssue: vi.fn(),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -605,6 +611,8 @@ describe('FinishCommand - Merged PR Workflow', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn().mockResolvedValue(mockMergedPR),
 			fetchIssue: vi.fn(),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -693,6 +701,8 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn(),
 			fetchIssue: vi.fn(),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -835,6 +845,8 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		mockGitHubService = {
 			fetchPR: vi.fn(),
 			fetchIssue: vi.fn().mockResolvedValue(mockIssue),
+			supportsPullRequests: true,
+			providerName: 'github',
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {

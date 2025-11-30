@@ -1,7 +1,5 @@
 import type { AddIssueOptions } from '../types/index.js'
 import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
-import { GitHubService } from '../lib/GitHubService.js'
-import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { logger } from '../utils/logger.js'
@@ -22,14 +20,9 @@ export class AddIssueCommand {
 	private enhancementService: IssueEnhancementService
 	private settingsManager: SettingsManager
 
-	constructor(enhancementService?: IssueEnhancementService, settingsManager?: SettingsManager) {
-		// Use provided service or create default
+	constructor(enhancementService: IssueEnhancementService, settingsManager?: SettingsManager) {
+		this.enhancementService = enhancementService
 		this.settingsManager = settingsManager ?? new SettingsManager()
-		this.enhancementService = enhancementService ?? new IssueEnhancementService(
-			new GitHubService(),
-			new AgentManager(),
-			this.settingsManager
-		)
 	}
 
 	/**
@@ -45,6 +38,7 @@ export class AddIssueCommand {
 
 		// Step 0: Load settings and get configured repo for GitHub operations
 		const settings = await this.settingsManager.loadSettings()
+
 		let repo: string | undefined
 
 		const multipleRemotes = await hasMultipleRemotes()

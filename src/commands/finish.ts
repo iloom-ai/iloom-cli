@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger.js'
-import { GitHubService } from '../lib/GitHubService.js'
+import type { IssueTracker } from '../lib/IssueTracker.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
@@ -41,7 +41,7 @@ export interface ParsedFinishInput {
 }
 
 export class FinishCommand {
-	private gitHubService: GitHubService
+	private issueTracker: IssueTracker
 	private gitWorktreeManager: GitWorktreeManager
 	private validationRunner: ValidationRunner
 	private commitManager: CommitManager
@@ -53,7 +53,7 @@ export class FinishCommand {
 	private loomManager?: LoomManager
 
 	constructor(
-		gitHubService?: GitHubService,
+		issueTracker: IssueTracker,
 		gitWorktreeManager?: GitWorktreeManager,
 		validationRunner?: ValidationRunner,
 		commitManager?: CommitManager,
@@ -73,8 +73,7 @@ export class FinishCommand {
 			logger.debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
 		}
 
-		// Dependency injection for testing
-		this.gitHubService = gitHubService ?? new GitHubService()
+		this.issueTracker = issueTracker
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.validationRunner = validationRunner ?? new ValidationRunner()
 		this.commitManager = commitManager ?? new CommitManager()
@@ -181,6 +180,7 @@ export class FinishCommand {
 		try {
 			// Step 1: Load settings and get configured repo for GitHub operations
 			const settings = await this.settingsManager.loadSettings()
+
 			let repo: string | undefined
 
 			const multipleRemotes = await hasMultipleRemotes()
@@ -214,7 +214,11 @@ export class FinishCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
-				const pr = await this.gitHubService.fetchPR(parsed.number, repo)
+				// Check if provider supports PRs before calling PR methods
+				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
+					throw new Error('Issue tracker does not support pull requests')
+				}
+				const pr = await this.issueTracker.fetchPR(parsed.number, repo)
 				await this.executePRWorkflow(parsed, input.options, worktree, pr)
 			} else {
 				// Execute traditional issue/branch workflow
@@ -393,8 +397,13 @@ export class FinishCommand {
 					throw new Error('Invalid PR number')
 				}
 
+				// Check if provider supports PRs before calling PR methods
+				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
+					throw new Error('Issue tracker does not support pull requests')
+				}
+
 				// Fetch PR from GitHub
-				const pr = await this.gitHubService.fetchPR(parsed.number)
+				const pr = await this.issueTracker.fetchPR(parsed.number)
 
 				// For PRs, we allow closed/merged state (cleanup-only mode)
 				// But we still validate it exists
@@ -410,7 +419,7 @@ export class FinishCommand {
 				}
 
 				// Fetch issue from GitHub
-				const issue = await this.gitHubService.fetchIssue(parsed.number, repo)
+				const issue = await this.issueTracker.fetchIssue(parsed.number, repo)
 
 				// Validate issue state (warn if closed unless --force)
 				if (issue.state === 'closed' && !options.force) {
@@ -742,7 +751,7 @@ export class FinishCommand {
 		if (parsed.type === 'issue' && parsed.number) {
 			// Try to fetch issue title for better PR title
 			try {
-				const issue = await this.gitHubService.fetchIssue(parsed.number)
+				const issue = await this.issueTracker.fetchIssue(parsed.number)
 				prTitle = issue.title
 			} catch (error) {
 				logger.debug('Could not fetch issue title, using branch name', { error })

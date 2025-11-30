@@ -92,6 +92,10 @@ describe('LoomManager - Database Integration', () => {
     vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
     vi.mocked(mockEnvironment.setEnvVar).mockResolvedValue()
 
+    // Set IssueTracker interface properties
+    mockGitHub.supportsPullRequests = true
+    mockGitHub.providerName = 'github'
+
     vi.clearAllMocks()
   })
 

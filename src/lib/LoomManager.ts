@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
-import { GitHubService } from './GitHubService.js'
+import type { IssueTracker } from './IssueTracker.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
@@ -25,7 +25,7 @@ import { logger } from '../utils/logger.js'
 export class LoomManager {
   constructor(
     private gitWorktree: GitWorktreeManager,
-    private github: GitHubService,
+    private issueTracker: IssueTracker,
     private environment: EnvironmentManager,
     _claude: ClaudeContextManager, // Not stored - kept for DI compatibility, LoomLauncher creates its own
     private capabilityDetector: ProjectCapabilityDetector,
@@ -70,24 +70,24 @@ export class LoomManager {
    * NEW: Checks for existing worktrees and reuses them if found
    */
   async createIloom(input: CreateLoomInput): Promise<Loom> {
-    // 1. Fetch GitHub data if needed
-    logger.info('Fetching GitHub data...')
-    const githubData = await this.fetchGitHubData(input)
+    // 1. Fetch issue/PR data if needed
+    logger.info('Fetching issue data...')
+    const issueData = await this.fetchIssueData(input)
 
     // NEW: Check for existing worktree BEFORE generating branch name (for efficiency)
     if (input.type === 'issue' || input.type === 'pr' || input.type === 'branch') {
       logger.info('Checking for existing worktree...')
-      const existing = await this.findExistingIloom(input, githubData)
+      const existing = await this.findExistingIloom(input, issueData)
       if (existing) {
         logger.success(`Found existing worktree, reusing: ${existing.path}`)
-        return await this.reuseIloom(existing, input, githubData)
+        return await this.reuseIloom(existing, input, issueData)
       }
       logger.info('No existing worktree found, creating new one...')
     }
 
     // 2. Generate or validate branch name
     logger.info('Preparing branch name...')
-    const branchName = await this.prepareBranchName(input, githubData)
+    const branchName = await this.prepareBranchName(input, issueData)
 
     // 3. Create git worktree (WITHOUT dependency installation)
     logger.info('Creating git worktree...')
@@ -187,7 +187,10 @@ export class LoomManager {
     if (input.type === 'issue') {
       try {
         logger.info('Moving issue to In Progress...')
-        await this.github.moveIssueToInProgress(input.identifier as number)
+        // Check if provider supports this optional method
+        if (this.issueTracker.moveIssueToInProgress) {
+          await this.issueTracker.moveIssueToInProgress(input.identifier as number)
+        }
       } catch (error) {
         // Warn but don't fail - matches bash script behavior
         logger.warn(
@@ -226,7 +229,7 @@ export class LoomManager {
         capabilities,
         workflowType: input.type === 'branch' ? 'regular' : input.type,
         identifier: input.identifier,
-        ...(githubData?.title && { title: githubData.title }),
+        ...(issueData?.title && { title: issueData.title }),
         oneShot,
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
@@ -248,12 +251,12 @@ export class LoomManager {
       ...(capabilities.length > 0 && { capabilities }),
       ...(Object.keys(binEntries).length > 0 && { binEntries }),
       ...(cliSymlinks && cliSymlinks.length > 0 && { cliSymlinks }),
-      ...(githubData !== null && {
-        githubData: {
-          title: githubData.title,
-          body: githubData.body,
-          url: githubData.url,
-          state: githubData.state,
+      ...(issueData !== null && {
+        issueData: {
+          title: issueData.title,
+          body: issueData.body,
+          url: issueData.url,
+          state: issueData.state,
         },
       }),
     }
@@ -373,39 +376,43 @@ export class LoomManager {
   }
 
   /**
-   * Fetch GitHub data based on input type
+   * Fetch issue/PR data based on input type
    */
-  private async fetchGitHubData(
+  private async fetchIssueData(
     input: CreateLoomInput
   ): Promise<Issue | PullRequest | null> {
     if (input.type === 'issue') {
-      return await this.github.fetchIssue(input.identifier as number)
+      return await this.issueTracker.fetchIssue(input.identifier as number)
     } else if (input.type === 'pr') {
-      return await this.github.fetchPR(input.identifier as number)
+      // Check if provider supports PRs before calling
+      if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
+        throw new Error('Issue tracker does not support pull requests')
+      }
+      return await this.issueTracker.fetchPR(input.identifier as number)
     }
     return null
   }
 
   /**
-   * Prepare branch name based on input type and GitHub data
+   * Prepare branch name based on input type and issue/PR data
    */
   private async prepareBranchName(
     input: CreateLoomInput,
-    githubData: Issue | PullRequest | null
+    issueData: Issue | PullRequest | null
   ): Promise<string> {
     if (input.type === 'branch') {
       return input.identifier as string
     }
 
-    if (input.type === 'pr' && githubData && 'branch' in githubData) {
-      return githubData.branch
+    if (input.type === 'pr' && issueData && 'branch' in issueData) {
+      return issueData.branch
     }
 
-    if (input.type === 'issue' && githubData) {
+    if (input.type === 'issue' && issueData) {
       // Use Claude AI-powered branch name generation
-      const branchName = await this.github.generateBranchName({
+      const branchName = await this.issueTracker.generateBranchName({
         issueNumber: input.identifier as number,
-        title: githubData.title,
+        title: issueData.title,
       })
       return branchName
     }
@@ -720,14 +727,14 @@ export class LoomManager {
    */
   private async findExistingIloom(
     input: CreateLoomInput,
-    githubData: Issue | PullRequest | null
+    issueData: Issue | PullRequest | null
   ): Promise<GitWorktree | null> {
     if (input.type === 'issue') {
       return await this.gitWorktree.findWorktreeForIssue(input.identifier as number)
-    } else if (input.type === 'pr' && githubData && 'branch' in githubData) {
+    } else if (input.type === 'pr' && issueData && 'branch' in issueData) {
       return await this.gitWorktree.findWorktreeForPR(
         input.identifier as number,
-        githubData.branch
+        issueData.branch
       )
     } else if (input.type === 'branch') {
       return await this.gitWorktree.findWorktreeForBranch(input.identifier as string)
@@ -743,7 +750,7 @@ export class LoomManager {
   private async reuseIloom(
     worktree: GitWorktree,
     input: CreateLoomInput,
-    githubData: Issue | PullRequest | null
+    issueData: Issue | PullRequest | null
   ): Promise<Loom> {
     const worktreePath = worktree.path
     const branchName = worktree.branch
@@ -778,7 +785,10 @@ export class LoomManager {
     if (input.type === 'issue') {
       try {
         logger.info('Moving issue to In Progress...')
-        await this.github.moveIssueToInProgress(input.identifier as number)
+        // Check if provider supports this optional method
+        if (this.issueTracker.moveIssueToInProgress) {
+          await this.issueTracker.moveIssueToInProgress(input.identifier as number)
+        }
       } catch (error) {
         logger.warn(
           `Failed to move issue to In Progress: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -816,7 +826,7 @@ export class LoomManager {
         capabilities,
         workflowType: input.type === 'branch' ? 'regular' : input.type,
         identifier: input.identifier,
-        ...(githubData?.title && { title: githubData.title }),
+        ...(issueData?.title && { title: issueData.title }),
         oneShot,
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
@@ -837,12 +847,12 @@ export class LoomManager {
       ...(databaseBranch !== undefined && { databaseBranch }),
       ...(capabilities.length > 0 && { capabilities }),
       ...(Object.keys(binEntries).length > 0 && { binEntries }),
-      ...(githubData !== null && {
-        githubData: {
-          title: githubData.title,
-          body: githubData.body,
-          url: githubData.url,
-          state: githubData.state,
+      ...(issueData !== null && {
+        issueData: {
+          title: issueData.title,
+          body: issueData.body,
+          url: issueData.url,
+          state: issueData.state,
         },
       }),
     }

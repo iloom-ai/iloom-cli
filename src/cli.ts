@@ -2,6 +2,14 @@ import { program, Command, Option } from 'commander'
 import { logger } from './utils/logger.js'
 import { GitWorktreeManager } from './lib/GitWorktreeManager.js'
 import { ShellCompletion } from './lib/ShellCompletion.js'
+import { SettingsManager } from './lib/SettingsManager.js'
+import { IssueTrackerFactory } from './lib/IssueTrackerFactory.js'
+import { IssueEnhancementService } from './lib/IssueEnhancementService.js'
+import { AgentManager } from './lib/AgentManager.js'
+import { StartCommand } from './commands/start.js'
+import { AddIssueCommand } from './commands/add-issue.js'
+import { EnhanceCommand } from './commands/enhance.js'
+import { FinishCommand } from './commands/finish.js'
 import type { StartOptions, CleanupOptions, FinishOptions } from './types/index.js'
 import { getPackageInfo } from './utils/package-info.js'
 import { fileURLToPath } from 'url'
@@ -75,7 +83,6 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   // Tier 2: All other commands require FULL validation (settings + multi-remote)
   // Commands: start, add-issue, enhance, finish, list, cleanup, open, run, etc.
   try {
-    const { SettingsManager } = await import('./lib/SettingsManager.js')
     const settingsManager = new SettingsManager()
 
     // Attempt to load settings - this will throw on validation errors
@@ -199,8 +206,10 @@ program
         }
       }
 
-      const { StartCommand } = await import('./commands/start.js')
-      const command = new StartCommand()
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+      const issueTracker = IssueTrackerFactory.create(settings)
+      const command = new StartCommand(issueTracker, undefined, undefined, settingsManager)
       await command.execute({ identifier: finalIdentifier, options })
     } catch (error) {
       logger.error(`Failed to start workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -215,8 +224,11 @@ program
   .argument('<description>', 'Natural language description of the issue (>50 chars, >2 spaces)')
   .action(async (description: string) => {
     try {
-      const { AddIssueCommand } = await import('./commands/add-issue.js')
-      const command = new AddIssueCommand()
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+      const issueTracker = IssueTrackerFactory.create(settings)
+      const enhancementService = new IssueEnhancementService(issueTracker, new AgentManager(), settingsManager)
+      const command = new AddIssueCommand(enhancementService, settingsManager)
       const issueNumber = await command.execute({
         description,
         options: {}
@@ -263,8 +275,10 @@ program
   .option('--author <username>', 'GitHub username to tag in questions (for CI usage)')
   .action(async (issueNumber: number, options: { browser?: boolean; author?: string }) => {
     try {
-      const { EnhanceCommand } = await import('./commands/enhance.js')
-      const command = new EnhanceCommand()
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+      const issueTracker = IssueTrackerFactory.create(settings)
+      const command = new EnhanceCommand(issueTracker)
       await command.execute({
         issueNumber,
         options: {
@@ -294,8 +308,10 @@ program
   .option('--no-cleanup', 'Keep worktree after PR creation (github-pr mode only)')
   .action(async (identifier: string | undefined, options: FinishOptions) => {
     try {
-      const { FinishCommand } = await import('./commands/finish.js')
-      const command = new FinishCommand()
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+      const issueTracker = IssueTrackerFactory.create(settings)
+      const command = new FinishCommand(issueTracker)
       await command.execute({ identifier, options })
     } catch (error) {
       logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -513,7 +529,7 @@ program
       logger.info('Detecting input type...')
       const detection = await service.detectInputType(identifier)
       logger.info(`   Type: ${detection.type}`)
-      logger.info(`   Number: ${detection.number}`)      
+      logger.info(`   Identifier: ${detection.identifier}`)
 
       if (detection.type === 'unknown') {
         logger.error('Could not detect if input is an issue or PR')
@@ -523,10 +539,11 @@ program
       // Test 2: Fetch the issue/PR
       logger.info('Fetching from GitHub...')
       if (detection.type === 'issue') {
-        if (!detection.number) {
+        if (!detection.identifier) {
           throw new Error('Issue number not detected')
         }
-        const issue = await service.fetchIssue(detection.number)
+        const issueNumber = parseInt(detection.identifier, 10)
+        const issue = await service.fetchIssue(issueNumber)
         logger.success(`   Issue #${issue.number}: ${issue.title}`)
         logger.info(`   State: ${issue.state}`)
         logger.info(`   Labels: ${issue.labels.join(', ') || 'none'}`)
@@ -548,10 +565,11 @@ program
         logger.info(`   ${context.split('\n').join('\n   ')}`)
 
       } else {
-        if (!detection.number) {
+        if (!detection.identifier) {
           throw new Error('PR number not detected')
         }
-        const pr = await service.fetchPR(detection.number)
+        const prNumber = parseInt(detection.identifier, 10)
+        const pr = await service.fetchPR(prNumber)
         logger.success(`   PR #${pr.number}: ${pr.title}`)
         logger.info(`   State: ${pr.state}`)
         logger.info(`   Branch: ${pr.branch}`)

@@ -1,6 +1,6 @@
 import path from 'path'
 import { logger } from '../utils/logger.js'
-import { GitHubService } from '../lib/GitHubService.js'
+import type { IssueTracker } from '../lib/IssueTracker.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
@@ -30,18 +30,18 @@ export interface ParsedInput {
 }
 
 export class StartCommand {
-	private gitHubService: GitHubService
+	private issueTracker: IssueTracker
 	private loomManager: LoomManager | null = null
 	private settingsManager: SettingsManager
 	private providedLoomManager: LoomManager | undefined
 
 	constructor(
-		gitHubService?: GitHubService,
+		issueTracker: IssueTracker,
 		loomManager?: LoomManager,
 		_agentManager?: AgentManager,  // Kept for API compatibility
 		settingsManager?: SettingsManager
 	) {
-		this.gitHubService = gitHubService ?? new GitHubService()
+		this.issueTracker = issueTracker
 		this.settingsManager = settingsManager ?? new SettingsManager()
 		// Store provided LoomManager for testing, but don't initialize yet
 		this.providedLoomManager = loomManager
@@ -85,7 +85,7 @@ export class StartCommand {
 
 		this.loomManager = new LoomManager(
 			new GitWorktreeManager(mainWorktreePath),
-			this.gitHubService,
+			this.issueTracker,
 			environmentManager,  // Reuse same instance
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),
@@ -183,7 +183,7 @@ export class StartCommand {
 			if (parsed.type === 'description') {
 				logger.info('Creating GitHub issue from description...')
 				const body = input.options.body ?? ""  // Use provided body or empty string
-				const result = await this.gitHubService.createIssue(
+				const result = await this.issueTracker.createIssue(
 					parsed.originalInput,  // Use description as title
 					body                   // Use provided body or empty
 				)
@@ -261,8 +261,8 @@ export class StartCommand {
 			if (loom.capabilities?.includes('web')) {
 				logger.info(`   Port: ${loom.port}`)
 			}
-			if (loom.githubData?.title) {
-				logger.info(`   Title: ${loom.githubData.title}`)
+			if (loom.issueData?.title) {
+				logger.info(`   Title: ${loom.issueData.title}`)
 			}
 		} catch (error) {
 			if (error instanceof Error) {
@@ -310,8 +310,8 @@ export class StartCommand {
 		if (numericMatch?.[1]) {
 			const number = parseInt(numericMatch[1], 10)
 
-			// Use GitHubService to detect if it's a PR or issue
-			const detection = await this.gitHubService.detectInputType(
+			// Use IssueTracker to detect if it's a PR or issue
+			const detection = await this.issueTracker.detectInputType(
 				trimmedIdentifier,
 				repo
 			)
@@ -319,13 +319,13 @@ export class StartCommand {
 			if (detection.type === 'pr') {
 				return {
 					type: 'pr',
-					number: detection.number ?? number,
+					number: detection.identifier ? parseInt(detection.identifier, 10) : number,
 					originalInput: trimmedIdentifier,
 				}
 			} else if (detection.type === 'issue') {
 				return {
 					type: 'issue',
-					number: detection.number ?? number,
+					number: detection.identifier ? parseInt(detection.identifier, 10) : number,
 					originalInput: trimmedIdentifier,
 				}
 			} else {
@@ -350,9 +350,13 @@ export class StartCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
+				// Check if provider supports PRs before calling PR methods
+				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR || !this.issueTracker.validatePRState) {
+					throw new Error('Issue tracker does not support pull requests')
+				}
 				// Fetch and validate PR state
-				const pr = await this.gitHubService.fetchPR(parsed.number, repo)
-				await this.gitHubService.validatePRState(pr)
+				const pr = await this.issueTracker.fetchPR(parsed.number, repo)
+				await this.issueTracker.validatePRState(pr)
 				logger.debug(`Validated PR #${parsed.number}`)
 				break
 			}
@@ -362,8 +366,8 @@ export class StartCommand {
 					throw new Error('Invalid issue number')
 				}
 				// Fetch and validate issue state
-				const issue = await this.gitHubService.fetchIssue(parsed.number, repo)
-				await this.gitHubService.validateIssueState(issue)
+				const issue = await this.issueTracker.fetchIssue(parsed.number, repo)
+				await this.issueTracker.validateIssueState(issue)
 				logger.debug(`Validated issue #${parsed.number}`)
 				break
 			}

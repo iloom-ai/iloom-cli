@@ -1,4 +1,4 @@
-import type { GitHubService } from './GitHubService.js'
+import type { IssueTracker } from './IssueTracker.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
 import { launchClaude } from '../utils/claude.js'
@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js'
  */
 export class IssueEnhancementService {
 	constructor(
-		private gitHubService: GitHubService,
+		private gitHubService: IssueTracker,
 		private agentManager: AgentManager,
 		private settingsManager: SettingsManager
 	) {}

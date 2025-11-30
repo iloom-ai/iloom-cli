@@ -21,7 +21,7 @@ vi.mock('../lib/LoomManager.js', () => ({
 			identifier: 123,
 			port: 3123,
 			createdAt: new Date(),
-			githubData: null,
+			issueData: null,
 		}),
 	})),
 }))
@@ -102,6 +102,9 @@ describe('StartCommand', () => {
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
+		// Set IssueTracker interface properties
+		mockGitHubService.supportsPullRequests = true
+		mockGitHubService.providerName = 'github'
 		command = new StartCommand(mockGitHubService)
 	})
 

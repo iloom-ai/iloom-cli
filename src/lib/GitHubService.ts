@@ -1,13 +1,12 @@
-import type { Issue, PullRequest } from '../types/index.js'
+import type { Issue, PullRequest, IssueTrackerInputDetection, BranchGenerationOptions } from '../types/index.js'
 import type {
 	GitHubIssue,
 	GitHubPullRequest,
 	GitHubProject,
-	GitHubInputDetection,
-	BranchGenerationOptions,
 	BranchNameStrategy,
 	ProjectItem,
 	ProjectField,
+	BranchGenerationOptions as GitHubBranchGenerationOptions,
 } from '../types/github.js'
 import { GitHubError, GitHubErrorCode } from '../types/github.js'
 import {
@@ -25,8 +24,12 @@ import {
 } from '../utils/github.js'
 import { logger } from '../utils/logger.js'
 import { promptConfirmation } from '../utils/prompt.js'
+import type { IssueTracker } from './IssueTracker.js'
 
-export class GitHubService {
+export class GitHubService implements IssueTracker {
+	// IssueTracker interface implementation
+	readonly providerName = 'github'
+	readonly supportsPullRequests = true
 	private defaultBranchNameStrategy: BranchNameStrategy
 	private prompter: (message: string) => Promise<boolean>
 
@@ -51,13 +54,13 @@ export class GitHubService {
 		this.prompter = options?.prompter ?? promptConfirmation
 	}
 
-	// Input detection
-	public async detectInputType(input: string, repo?: string): Promise<GitHubInputDetection> {
+	// Input detection - IssueTracker interface implementation
+	public async detectInputType(input: string, repo?: string): Promise<IssueTrackerInputDetection> {
 		// Pattern: #123 or just 123
 		const numberMatch = input.match(/^#?(\d+)$/)
 
 		if (!numberMatch?.[1]) {
-			return { type: 'unknown', number: null, rawInput: input }
+			return { type: 'unknown', identifier: null, rawInput: input }
 		}
 
 		const number = parseInt(numberMatch[1], 10)
@@ -66,18 +69,18 @@ export class GitHubService {
 		logger.debug('Checking if input is a PR', { number })
 		const pr = await this.isValidPR(number, repo)
 		if (pr) {
-			return { type: 'pr', number, rawInput: input }
+			return { type: 'pr', identifier: number.toString(), rawInput: input }
 		}
 
 		// Try issue next (lines 536-575 in bash)
 		logger.debug('Checking if input is an issue', { number })
 		const issue = await this.isValidIssue(number, repo)
 		if (issue) {
-			return { type: 'issue', number, rawInput: input }
+			return { type: 'issue', identifier: number.toString(), rawInput: input }
 		}
 
 		// Neither PR nor issue found
-		return { type: 'unknown', number: null, rawInput: input }
+		return { type: 'unknown', identifier: null, rawInput: input }
 	}
 
 	// Issue fetching with validation
@@ -186,9 +189,11 @@ export class GitHubService {
 
 	// Branch name generation using strategy pattern
 	public async generateBranchName(
-		options: BranchGenerationOptions
+		options: BranchGenerationOptions | GitHubBranchGenerationOptions
 	): Promise<string> {
-		const { issueNumber, title, strategy } = options
+		const { issueNumber, title } = options
+		// TypeScript doesn't know if 'strategy' exists, so we need to check
+		const strategy = 'strategy' in options ? options.strategy : undefined
 
 		// Use provided strategy or fall back to default
 		const nameStrategy = strategy ?? this.defaultBranchNameStrategy

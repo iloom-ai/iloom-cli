@@ -1,4 +1,4 @@
-import type { GitHubService } from '../lib/GitHubService.js'
+import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { AgentManager } from '../lib/AgentManager.js'
 import type { SettingsManager } from '../lib/SettingsManager.js'
 import { launchClaude } from '../utils/claude.js'
@@ -6,7 +6,6 @@ import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { logger } from '../utils/logger.js'
 import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
-import { GitHubService as DefaultGitHubService } from '../lib/GitHubService.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
@@ -26,17 +25,16 @@ export interface EnhanceOptions {
  * Applies the issue enhancer agent to an existing issue, respecting idempotency checks.
  */
 export class EnhanceCommand {
-	private gitHubService: GitHubService
+	private issueTracker: IssueTracker
 	private agentManager: AgentManager
 	private settingsManager: SettingsManager
 
 	constructor(
-		gitHubService?: GitHubService,
+		issueTracker: IssueTracker,
 		agentManager?: AgentManager,
 		settingsManager?: SettingsManager
 	) {
-		// Use provided services or create defaults
-		this.gitHubService = gitHubService ?? new DefaultGitHubService()
+		this.issueTracker = issueTracker
 		this.agentManager = agentManager ?? new DefaultAgentManager()
 		this.settingsManager = settingsManager ?? new DefaultSettingsManager()
 	}
@@ -56,6 +54,7 @@ export class EnhanceCommand {
 
 		// Step 0: Load settings and get configured repo for GitHub operations
 		const settings = await this.settingsManager.loadSettings()
+
 		let repo: string | undefined
 
 		const multipleRemotes = await hasMultipleRemotes()
@@ -69,7 +68,7 @@ export class EnhanceCommand {
 
 		// Step 2: Fetch issue to verify it exists
 		logger.info(`Fetching issue #${issueNumber}...`)
-		const issue = await this.gitHubService.fetchIssue(issueNumber, repo)
+		const issue = await this.issueTracker.fetchIssue(issueNumber, repo)
 		logger.debug('Issue fetched successfully', { number: issue.number, title: issue.title })
 
 		// Step 3: Load agent configurations
