@@ -16,6 +16,7 @@ import { PRManager } from '../lib/PRManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { DefaultBranchNamingService } from '../lib/BranchNamingService.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -115,7 +116,8 @@ export class FinishCommand {
 		// Initialize LoomManager if not provided
 		this.loomManager ??= new LoomManager(
 			this.gitWorktreeManager,
-			this.gitHubService,
+			this.issueTracker,
+			new DefaultBranchNamingService(),
 			environmentManager,
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),

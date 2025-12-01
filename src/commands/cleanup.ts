@@ -6,6 +6,7 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { DefaultBranchNamingService } from '../lib/BranchNamingService.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
@@ -107,6 +108,7 @@ export class CleanupCommand {
       this.loomManager = new LoomManager(
         this.gitWorktreeManager,
         new GitHubService(),
+        new DefaultBranchNamingService(),
         environmentManager,
         new ClaudeContextManager(),
         new ProjectCapabilityDetector(),
