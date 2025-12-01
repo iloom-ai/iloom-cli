@@ -11,6 +11,7 @@ import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { LoomManager } from '../lib/LoomManager.js'
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -30,7 +31,7 @@ export interface CleanupCommandInput {
 export interface ParsedCleanupInput {
   mode: 'list' | 'single' | 'issue' | 'all'
   identifier?: string
-  issueNumber?: number
+  issueNumber?: string | number
   branchName?: string
   originalInput?: string
   options: CleanupOptions
@@ -100,15 +101,15 @@ export class CleanupCommand {
 
     // Initialize LoomManager if not provided (for child loom detection)
     if (!this.loomManager) {
-      const { LoomManager } = await import('../lib/LoomManager.js')
       const { GitHubService } = await import('../lib/GitHubService.js')
       const { ClaudeContextManager } = await import('../lib/ClaudeContextManager.js')
       const { ProjectCapabilityDetector } = await import('../lib/ProjectCapabilityDetector.js')
+      const { DefaultBranchNamingService } = await import('../lib/BranchNamingService.js')
 
       this.loomManager = new LoomManager(
         this.gitWorktreeManager,
         new GitHubService(),
-        new DefaultBranchNamingService(),
+        new DefaultBranchNamingService({ useClaude: true }),
         environmentManager,
         new ClaudeContextManager(),
         new ProjectCapabilityDetector(),

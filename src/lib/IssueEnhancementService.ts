@@ -111,7 +111,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 	 * @param confirm - If true, wait for additional keypress after opening browser before returning
 	 * @param repository - Optional repository to fetch issue from (format: "owner/repo")
 	 */
-	public async waitForReviewAndOpen(issueNumber: number, confirm = false, repository?: string): Promise<void> {
+	public async waitForReviewAndOpen(issueNumber: string | number, confirm = false, repository?: string): Promise<void> {
 		// Check if running in CI environment
 		const isCI = process.env.CI === 'true'
 

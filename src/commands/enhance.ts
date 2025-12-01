@@ -11,7 +11,7 @@ import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManage
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 
 export interface EnhanceCommandInput {
-	issueNumber: number
+	issueNumber: string | number
 	options: EnhanceOptions
 }
 
@@ -133,13 +133,20 @@ export class EnhanceCommand {
 	/**
 	 * Validate that issue number is a valid positive integer
 	 */
-	private validateIssueNumber(issueNumber: number): void {
+	private validateIssueNumber(issueNumber: string | number): void {
 		if (issueNumber === undefined || issueNumber === null) {
 			throw new Error('Issue number is required')
 		}
 
-		if (typeof issueNumber !== 'number' || Number.isNaN(issueNumber) || issueNumber <= 0 || !Number.isInteger(issueNumber)) {
-			throw new Error('Issue number must be a valid positive integer')
+		// For numeric types, validate as before
+		if (typeof issueNumber === 'number') {
+			if (Number.isNaN(issueNumber) || issueNumber <= 0 || !Number.isInteger(issueNumber)) {
+				throw new Error('Issue number must be a valid positive integer')
+			}
+		}
+		// For string types, validate non-empty
+		if (typeof issueNumber === 'string' && issueNumber.trim().length === 0) {
+			throw new Error('Issue identifier cannot be empty')
 		}
 	}
 
@@ -147,7 +154,7 @@ export class EnhanceCommand {
 	 * Construct the prompt for the orchestrating Claude instance.
 	 * This prompt is very clear about expected output format to ensure reliable parsing.
 	 */
-	private constructPrompt(issueNumber: number, author?: string): string {
+	private constructPrompt(issueNumber: string | number, author?: string): string {
 		const authorInstruction = author
 			? `\nIMPORTANT: When you create your analysis comment, tag @${author} in the "Questions for Reporter" section if you have questions.\n`
 			: ''

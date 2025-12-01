@@ -373,7 +373,7 @@ export class IgniteCommand {
 	 * Build context for issue workflow
 	 */
 	private async buildContextForIssue(
-		issueNumber: number,
+		issueNumber: string | number,
 		workspacePath: string,
 		branchName?: string
 	): Promise<ClaudeWorkflowOptions> {

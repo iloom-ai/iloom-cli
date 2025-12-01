@@ -89,7 +89,7 @@ export interface BranchCleanupTarget {
  */
 export interface BatchCleanupResult {
 	/** Issue number that was cleaned up */
-	issueNumber: number
+	issueNumber: string | number
 	/** Number of branches found matching the issue */
 	targetsFound: number
 	/** Number of worktrees successfully removed */

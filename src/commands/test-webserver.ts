@@ -6,7 +6,7 @@ export interface TestWebserverOptions {
 }
 
 export interface TestWebserverCommandInput {
-	issueNumber: number
+	issueNumber: string | number
 	options: TestWebserverOptions
 }
 
@@ -30,9 +30,9 @@ export class TestWebserverCommand {
 	public async execute(input: TestWebserverCommandInput): Promise<void> {
 		const { issueNumber, options } = input
 
-		// Validate issue number
-		if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-			throw new Error('Issue number must be a positive integer')
+		// Validate issue number - test-webserver requires numeric for port calculation
+		if (typeof issueNumber !== 'number' || !Number.isInteger(issueNumber) || issueNumber <= 0) {
+			throw new Error('Issue number must be a positive integer for port calculation')
 		}
 
 		// Calculate port from issue number

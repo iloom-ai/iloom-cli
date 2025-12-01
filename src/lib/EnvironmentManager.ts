@@ -163,14 +163,24 @@ export class EnvironmentManager {
 
     // Priority: issueNumber > prNumber > branchName > basePort only
     if (options.issueNumber !== undefined) {
-      const port = basePort + options.issueNumber
-      // Validate port range
-      if (port > 65535) {
-        throw new Error(
-          `Calculated port ${port} exceeds maximum (65535). Use a lower base port or issue number.`
-        )
+      // Try to parse as number for backward compatibility
+      const numericIssue = typeof options.issueNumber === 'number'
+        ? options.issueNumber
+        : parseInt(String(options.issueNumber), 10)
+
+      if (!isNaN(numericIssue) && String(numericIssue) === String(options.issueNumber)) {
+        // Purely numeric issue ID - use arithmetic port calculation
+        const port = basePort + numericIssue
+        // Validate port range
+        if (port > 65535) {
+          throw new Error(
+            `Calculated port ${port} exceeds maximum (65535). Use a lower base port or issue number.`
+          )
+        }
+        return port
       }
-      return port
+      // Alphanumeric ID - use hash-based calculation
+      return calculatePortForBranch(String(options.issueNumber), basePort)
     }
 
     if (options.prNumber !== undefined) {
@@ -198,7 +208,7 @@ export class EnvironmentManager {
    */
   async setPortForWorkspace(
     envFilePath: string,
-    issueNumber?: number,
+    issueNumber?: string | number,
     prNumber?: number,
     branchName?: string
   ): Promise<number> {

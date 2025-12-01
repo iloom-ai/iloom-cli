@@ -3,7 +3,7 @@ export interface Workspace {
   id: string
   path: string
   branch: string
-  issueNumber?: number
+  issueNumber?: string | number
   prNumber?: number
   port: number
   databaseBranch?: string
@@ -19,7 +19,7 @@ export interface WorkspaceInput {
 
 export interface WorkspaceSummary {
   id: string
-  issueNumber?: number
+  issueNumber?: string | number
   prNumber?: number
   title: string
   branch: string
@@ -35,7 +35,7 @@ export interface Worktree {
   commit: string
   isPR: boolean
   prNumber?: number
-  issueNumber?: number
+  issueNumber?: string | number
   port?: number
 }
 
@@ -264,7 +264,7 @@ export interface ValidationResult {
 // Commit management types
 export interface CommitOptions {
 	dryRun?: boolean
-	issueNumber?: number  // For "Fixes #N" trailer
+	issueNumber?: string | number  // For "Fixes #N" trailer
 	message?: string      // Custom message override
 	noReview?: boolean    // Skip user review of commit message
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)

@@ -20,7 +20,7 @@ export interface RunCommandInput {
 
 interface ParsedRunInput {
 	type: 'issue' | 'pr' | 'branch'
-	number?: number // For issues and PRs
+	number?: string | number // For issues and PRs
 	branchName?: string // For branches
 	originalInput: string
 	autoDetected: boolean
@@ -176,8 +176,13 @@ export class RunCommand {
 		if (parsed.type === 'issue' && parsed.number !== undefined) {
 			worktree = await this.gitWorktreeManager.findWorktreeForIssue(parsed.number)
 		} else if (parsed.type === 'pr' && parsed.number !== undefined) {
+			// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
+			const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+			if (isNaN(prNumber) || !isFinite(prNumber)) {
+				throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+			}
 			// Pass empty string for branch name since we don't know it yet
-			worktree = await this.gitWorktreeManager.findWorktreeForPR(parsed.number, '')
+			worktree = await this.gitWorktreeManager.findWorktreeForPR(prNumber, '')
 		} else if (parsed.type === 'branch' && parsed.branchName) {
 			worktree = await this.gitWorktreeManager.findWorktreeForBranch(
 				parsed.branchName

@@ -10,7 +10,7 @@ import { logger } from '../utils/logger.js'
  * Format: feat/issue-{number}-{slug}
  */
 export class SimpleBranchNameStrategy implements BranchNameStrategy {
-	async generate(issueNumber: number, title: string): Promise<string> {
+	async generate(issueNumber: string | number, title: string): Promise<string> {
 		// Create a simple slug from the title
 		const slug = title
 			.toLowerCase()
@@ -29,7 +29,7 @@ export class SimpleBranchNameStrategy implements BranchNameStrategy {
 export class ClaudeBranchNameStrategy implements BranchNameStrategy {
 	constructor(private claudeModel = 'haiku') {}
 
-	async generate(issueNumber: number, title: string): Promise<string> {
+	async generate(issueNumber: string | number, title: string): Promise<string> {
 		// Dynamic import to allow mocking in tests
 		const { generateBranchName } = await import('../utils/claude.js')
 		return generateBranchName(title, issueNumber, this.claudeModel)

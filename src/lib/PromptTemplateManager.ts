@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { logger } from '../utils/logger.js'
 
 export interface TemplateVariables {
-	ISSUE_NUMBER?: number
+	ISSUE_NUMBER?: string | number
 	PR_NUMBER?: number
 	ISSUE_TITLE?: string
 	PR_TITLE?: string

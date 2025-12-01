@@ -462,7 +462,7 @@ export async function getDefaultBranch(path: string = process.cwd()): Promise<st
  * @param settingsManager - Optional SettingsManager instance (for DI/testing)
  */
 export async function findAllBranchesForIssue(
-  issueNumber: number,
+  issueNumber: string | number,
   path: string = process.cwd(),
   settingsManager?: SettingsManager
 ): Promise<string[]> {

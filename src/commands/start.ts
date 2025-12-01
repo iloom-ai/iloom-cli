@@ -25,7 +25,7 @@ export interface StartCommandInput {
 
 export interface ParsedInput {
 	type: 'issue' | 'pr' | 'branch' | 'description'
-	number?: number
+	number?: string | number
 	branchName?: string
 	originalInput: string
 }

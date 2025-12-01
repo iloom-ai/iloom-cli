@@ -35,7 +35,7 @@ export interface FinishCommandInput {
 
 export interface ParsedFinishInput {
 	type: 'issue' | 'pr' | 'branch'
-	number?: number // For issues and PRs
+	number?: string | number // For issues and PRs
 	branchName?: string // For branch inputs
 	originalInput: string // Raw input for error messages
 	autoDetected?: boolean // True if detected from current directory
@@ -114,10 +114,11 @@ export class FinishCommand {
 		const cliIsolationManager = new CLIIsolationManager()
 
 		// Initialize LoomManager if not provided
+		const { DefaultBranchNamingService } = await import('../lib/BranchNamingService.js')
 		this.loomManager ??= new LoomManager(
 			this.gitWorktreeManager,
 			this.issueTracker,
-			new DefaultBranchNamingService(),
+			new DefaultBranchNamingService({ useClaude: true }),
 			environmentManager,
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),
@@ -156,8 +157,13 @@ export class FinishCommand {
 			const worktree = await this.gitWorktreeManager.findWorktreeForIssue(parsed.number)
 			targetBranch = worktree?.branch
 		} else if (parsed.type === 'pr' && parsed.number !== undefined) {
+			// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
+			const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+			if (isNaN(prNumber) || !isFinite(prNumber)) {
+				throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+			}
 			// For PRs, try to find the worktree by PR number to get the branch name
-			const worktree = await this.gitWorktreeManager.findWorktreeForPR(parsed.number, '')
+			const worktree = await this.gitWorktreeManager.findWorktreeForPR(prNumber, '')
 			targetBranch = worktree?.branch
 		}
 
@@ -477,9 +483,14 @@ export class FinishCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
+				// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
+				const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+				if (isNaN(prNumber) || !isFinite(prNumber)) {
+					throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+				}
 				// Pass empty string for branch name since we don't know it yet
 				worktree = await this.gitWorktreeManager.findWorktreeForPR(
-					parsed.number,
+					prNumber,
 					''
 				)
 				break

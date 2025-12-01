@@ -417,7 +417,7 @@ export class GitWorktreeManager {
    * Avoids false matches like: tissue-44, myissue-44
    * Ports: find_existing_worktree() from bash script lines 131-165
    */
-  async findWorktreeForIssue(issueNumber: number): Promise<GitWorktree | null> {
+  async findWorktreeForIssue(issueNumber: string | number): Promise<GitWorktree | null> {
     const worktrees = await this.listWorktrees({ porcelain: true })
 
     // Pattern: starts with 'issue-{N}' OR has '/issue-{N}', '-issue-{N}', '_issue-{N}' but not 'issue-{N}{digit}'

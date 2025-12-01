@@ -18,6 +18,13 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const packageJson = getPackageInfo(__filename)
 
+// Helper function to parse issue identifiers (numeric or alphanumeric)
+function parseIssueIdentifier(value: string): string | number {
+  const parsed = parseInt(value, 10)
+  // Return number if purely numeric, otherwise return string
+  return !isNaN(parsed) && String(parsed) === value ? parsed : value
+}
+
 program
   .name('iloom')
   .description(packageJson.description)
@@ -270,10 +277,10 @@ program
 program
   .command('enhance')
   .description('Apply enhancement agent to existing GitHub issue')
-  .argument('<issue-number>', 'GitHub issue number to enhance', parseInt)
+  .argument('<issue-number>', 'GitHub issue identifier to enhance', parseIssueIdentifier)
   .option('--no-browser', 'Skip browser opening prompt')
   .option('--author <username>', 'GitHub username to tag in questions (for CI usage)')
-  .action(async (issueNumber: number, options: { browser?: boolean; author?: string }) => {
+  .action(async (issueNumber: string | number, options: { browser?: boolean; author?: string }) => {
     try {
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()

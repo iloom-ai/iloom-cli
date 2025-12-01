@@ -20,7 +20,7 @@ export interface EnvOperationResult {
 
 export interface PortAssignmentOptions {
   basePort?: number
-  issueNumber?: number
+  issueNumber?: string | number
   prNumber?: number
   branchName?: string // For deterministic branch-based port calculation
 }

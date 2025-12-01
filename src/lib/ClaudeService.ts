@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js'
 
 export interface ClaudeWorkflowOptions {
 	type: 'issue' | 'pr' | 'regular'
-	issueNumber?: number
+	issueNumber?: string | number
 	prNumber?: number
 	title?: string
 	workspacePath: string

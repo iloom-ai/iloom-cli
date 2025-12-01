@@ -314,7 +314,7 @@ export async function launchClaudeInNewTerminalWindow(
  */
 export async function generateBranchName(
 	issueTitle: string,
-	issueNumber: number,
+	issueNumber: string | number,
 	model: string = 'haiku'
 ): Promise<string> {
 	try {
@@ -372,7 +372,7 @@ Generate a git branch name for the following issue:
  * Validate branch name format
  * Check format: {prefix}/issue-{number}-{description}
  */
-function isValidBranchName(name: string, issueNumber: number): boolean {
+function isValidBranchName(name: string, issueNumber: string | number): boolean {
 	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}-[a-z0-9-]+$`)
 	return pattern.test(name) && name.length <= 50
 }

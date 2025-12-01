@@ -180,7 +180,7 @@ export class CommitManager {
    */
   private async generateClaudeCommitMessage(
     worktreePath: string,
-    issueNumber?: number
+    issueNumber?: string | number
   ): Promise<string | null> {
     const startTime = Date.now()
 
@@ -302,7 +302,7 @@ export class CommitManager {
    * Build structured XML prompt for commit message generation
    * Uses XML format for clear task definition and output expectations
    */
-  private buildCommitMessagePrompt(issueNumber?: number): string {
+  private buildCommitMessagePrompt(issueNumber?: string | number): string {
     const issueContext = issueNumber
       ? `\n<IssueContext>
 This commit is associated with GitHub issue #${issueNumber}.

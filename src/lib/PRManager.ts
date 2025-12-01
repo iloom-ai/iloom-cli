@@ -49,7 +49,7 @@ export class PRManager {
 	 * @param worktreePath - Path to worktree for context
 	 * @returns PR body markdown
 	 */
-	async generatePRBody(issueNumber: number | undefined, worktreePath: string): Promise<string> {
+	async generatePRBody(issueNumber: string | number | undefined, worktreePath: string): Promise<string> {
 		// Try Claude first for rich body generation
 		const hasClaudeCli = await detectClaudeCli()
 
@@ -88,7 +88,7 @@ export class PRManager {
 	 * Build structured XML prompt for PR body generation
 	 * Uses XML format for clear task definition and output expectations
 	 */
-	private buildPRBodyPrompt(issueNumber?: number): string {
+	private buildPRBodyPrompt(issueNumber?: string | number): string {
 		const issueContext = issueNumber
 			? `\n<IssueContext>
 This PR is associated with GitHub issue #${issueNumber}.
@@ -294,7 +294,7 @@ Start your response immediately with the PR body text.
 	async createOrOpenPR(
 		branchName: string,
 		title: string,
-		issueNumber: number | undefined,
+		issueNumber: string | number | undefined,
 		baseBranch: string,
 		worktreePath: string,
 		openInBrowser: boolean

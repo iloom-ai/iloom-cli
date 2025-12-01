@@ -4,7 +4,7 @@
  * Strategy interface for generating branch names from issue information
  */
 export interface BranchNameStrategy {
-	generate(issueNumber: number, title: string): Promise<string>
+	generate(issueNumber: string | number, title: string): Promise<string>
 }
 
 /**
@@ -12,7 +12,7 @@ export interface BranchNameStrategy {
  * Supports both simple generation and custom strategy override
  */
 export interface BranchGenerationOptions {
-	issueNumber: number
+	issueNumber: string | number
 	title: string
 	strategy?: BranchNameStrategy // Optional override
 }
