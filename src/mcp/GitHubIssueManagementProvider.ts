@@ -170,6 +170,8 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		const raw = await executeGhCommand<GitHubCommentResponse>([
 			'api',
 			`repos/:owner/:repo/issues/comments/${numericCommentId}`,
+			'--jq',
+			'{id: .id, body: .body, user: .user, created_at: .created_at, updated_at: .updated_at, html_url: .html_url, reactions: .reactions}',
 		])
 
 		// Normalize to CommentDetailResult
