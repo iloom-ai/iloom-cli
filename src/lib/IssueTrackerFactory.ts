@@ -7,11 +7,6 @@ import type { IloomSettings } from './SettingsManager.js'
 
 export type IssueTrackerProviderType = 'github' // Extensible: | 'linear' | 'jira'
 
-export interface IssueTrackerFactoryOptions {
-	useClaude?: boolean
-	claudeModel?: string
-}
-
 /**
  * Factory for creating IssueTracker instances based on settings
  * Provides a single point of provider instantiation
@@ -26,30 +21,15 @@ export class IssueTrackerFactory {
 	 * Defaults to GitHub if no provider specified
 	 *
 	 * @param settings - iloom settings containing issueManagement.provider
-	 * @param options - optional configuration for provider initialization
 	 * @returns IssueTracker instance configured for the specified provider
 	 * @throws Error if provider type is not supported
 	 */
-	static create(settings: IloomSettings, options?: IssueTrackerFactoryOptions): IssueTracker {
+	static create(settings: IloomSettings): IssueTracker {
 		const provider = settings.issueManagement?.provider ?? 'github'
 
 		switch (provider) {
-			case 'github': {
-				// Only pass defined options to avoid TypeScript strict optional property errors
-				const githubOptions: {
-					useClaude?: boolean
-					claudeModel?: string
-				} = {}
-
-				if (options?.useClaude !== undefined) {
-					githubOptions.useClaude = options.useClaude
-				}
-				if (options?.claudeModel !== undefined) {
-					githubOptions.claudeModel = options.claudeModel
-				}
-
-				return new GitHubService(githubOptions)
-			}
+			case 'github':
+				return new GitHubService()
 			default:
 				throw new Error(`Unsupported issue tracker provider: ${provider}`)
 		}

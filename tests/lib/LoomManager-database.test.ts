@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { LoomManager } from '../../src/lib/LoomManager.js'
 import { GitWorktreeManager } from '../../src/lib/GitWorktreeManager.js'
 import { GitHubService } from '../../src/lib/GitHubService.js'
+import { DefaultBranchNamingService } from '../../src/lib/BranchNamingService.js'
 import { EnvironmentManager } from '../../src/lib/EnvironmentManager.js'
 import { ClaudeContextManager } from '../../src/lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../../src/lib/ProjectCapabilityDetector.js'
@@ -14,6 +15,7 @@ import { createMockDatabaseManager } from '../mocks/MockDatabaseProvider.js'
 // Mock all dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/GitHubService.js')
+vi.mock('../../src/lib/BranchNamingService.js')
 vi.mock('../../src/lib/EnvironmentManager.js')
 vi.mock('../../src/lib/ClaudeContextManager.js')
 vi.mock('../../src/lib/ProjectCapabilityDetector.js')
@@ -49,6 +51,7 @@ describe('LoomManager - Database Integration', () => {
   let manager: LoomManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
   let mockGitHub: vi.Mocked<GitHubService>
+  let mockBranchNaming: vi.Mocked<DefaultBranchNamingService>
   let mockEnvironment: vi.Mocked<EnvironmentManager>
   let mockClaude: vi.Mocked<ClaudeContextManager>
   let mockCapabilityDetector: vi.Mocked<ProjectCapabilityDetector>
@@ -59,6 +62,7 @@ describe('LoomManager - Database Integration', () => {
   beforeEach(() => {
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     mockGitHub = new GitHubService() as vi.Mocked<GitHubService>
+    mockBranchNaming = new DefaultBranchNamingService() as vi.Mocked<DefaultBranchNamingService>
     mockEnvironment = new EnvironmentManager() as vi.Mocked<EnvironmentManager>
     mockClaude = new ClaudeContextManager() as vi.Mocked<ClaudeContextManager>
     mockCapabilityDetector = new ProjectCapabilityDetector() as vi.Mocked<ProjectCapabilityDetector>
@@ -71,6 +75,7 @@ describe('LoomManager - Database Integration', () => {
     manager = new LoomManager(
       mockGitWorktree,
       mockGitHub,
+      mockBranchNaming,
       mockEnvironment,
       mockClaude,
       mockCapabilityDetector,
@@ -78,6 +83,9 @@ describe('LoomManager - Database Integration', () => {
       mockSettings,
       mockDatabase
     )
+
+    // Default mock for branch naming
+    vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-123-test-branch')
 
     // Default mock for capability detector (web-only) - can be overridden in tests
     vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
@@ -122,7 +130,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
 
       // Mock worktree creation
       const expectedPath = '/test/worktree-issue-123'
@@ -172,7 +180,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-123'
@@ -214,7 +222,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-123'
@@ -244,7 +252,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-123'
@@ -276,7 +284,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-123'
@@ -295,6 +303,7 @@ describe('LoomManager - Database Integration', () => {
       const managerWithoutDb = new LoomManager(
         mockGitWorktree,
         mockGitHub,
+        mockBranchNaming,
         mockEnvironment,
         mockClaude,
         mockCapabilityDetector,
@@ -312,7 +321,7 @@ describe('LoomManager - Database Integration', () => {
         assignees: [],
         url: 'https://github.com/owner/repo/issues/123',
       })
-      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('issue-123-test')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('issue-123-test')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-123'

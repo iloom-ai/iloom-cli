@@ -520,10 +520,12 @@ program
   .action(async (identifier: string, options: { claude?: boolean }) => {
     try {
       const { GitHubService } = await import('./lib/GitHubService.js')
+      const { DefaultBranchNamingService } = await import('./lib/BranchNamingService.js')
 
       logger.info('Testing GitHub Integration\n')
 
-      const service = new GitHubService(options.claude !== undefined ? { useClaude: options.claude } : {})
+      const service = new GitHubService()
+      const branchNaming = new DefaultBranchNamingService({ useClaude: options.claude !== false })
 
       // Test 1: Input detection
       logger.info('Detecting input type...')
@@ -550,9 +552,9 @@ program
         logger.info(`   URL: ${issue.url}`)
 
         // Test 3: Generate branch name
-        
+
         logger.info('Generating branch name...')
-        const branchName = await service.generateBranchName({
+        const branchName = await branchNaming.generateBranchName({
           issueNumber: issue.number,
           title: issue.title
         })

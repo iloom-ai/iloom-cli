@@ -2,6 +2,7 @@ import path from 'path'
 import { logger } from '../utils/logger.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import { LoomManager } from '../lib/LoomManager.js'
+import { DefaultBranchNamingService } from '../lib/BranchNamingService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
@@ -83,9 +84,13 @@ export class StartCommand {
 
 		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
 
+		// Create BranchNamingService (defaults to Claude-based strategy)
+		const branchNaming = new DefaultBranchNamingService({ useClaude: true })
+
 		this.loomManager = new LoomManager(
 			new GitWorktreeManager(mainWorktreePath),
 			this.issueTracker,
+			branchNaming,  // Add branch naming service
 			environmentManager,  // Reuse same instance
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),

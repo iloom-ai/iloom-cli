@@ -1,12 +1,10 @@
-import type { Issue, PullRequest, IssueTrackerInputDetection, BranchGenerationOptions } from '../types/index.js'
+import type { Issue, PullRequest, IssueTrackerInputDetection } from '../types/index.js'
 import type {
 	GitHubIssue,
 	GitHubPullRequest,
 	GitHubProject,
-	BranchNameStrategy,
 	ProjectItem,
 	ProjectField,
-	BranchGenerationOptions as GitHubBranchGenerationOptions,
 } from '../types/github.js'
 import { GitHubError, GitHubErrorCode } from '../types/github.js'
 import {
@@ -19,8 +17,6 @@ import {
 	fetchProjectFields,
 	updateProjectItemField,
 	createIssue,
-	SimpleBranchNameStrategy,
-	ClaudeBranchNameStrategy,
 } from '../utils/github.js'
 import { logger } from '../utils/logger.js'
 import { promptConfirmation } from '../utils/prompt.js'
@@ -30,26 +26,11 @@ export class GitHubService implements IssueTracker {
 	// IssueTracker interface implementation
 	readonly providerName = 'github'
 	readonly supportsPullRequests = true
-	private defaultBranchNameStrategy: BranchNameStrategy
 	private prompter: (message: string) => Promise<boolean>
 
 	constructor(options?: {
-		branchNameStrategy?: BranchNameStrategy
-		useClaude?: boolean
-		claudeModel?: string
 		prompter?: (message: string) => Promise<boolean>
 	}) {
-		// Set up default strategy based on options
-		if (options?.branchNameStrategy) {
-			this.defaultBranchNameStrategy = options.branchNameStrategy
-		} else if (options?.useClaude !== false) {
-			this.defaultBranchNameStrategy = new ClaudeBranchNameStrategy(
-				options?.claudeModel
-			)
-		} else {
-			this.defaultBranchNameStrategy = new SimpleBranchNameStrategy()
-		}
-
 		// Set up prompter (use provided or default to promptConfirmation)
 		this.prompter = options?.prompter ?? promptConfirmation
 	}
@@ -185,26 +166,6 @@ export class GitHubService implements IssueTracker {
 				)
 			}
 		}
-	}
-
-	// Branch name generation using strategy pattern
-	public async generateBranchName(
-		options: BranchGenerationOptions | GitHubBranchGenerationOptions
-	): Promise<string> {
-		const { issueNumber, title } = options
-		// TypeScript doesn't know if 'strategy' exists, so we need to check
-		const strategy = 'strategy' in options ? options.strategy : undefined
-
-		// Use provided strategy or fall back to default
-		const nameStrategy = strategy ?? this.defaultBranchNameStrategy
-
-		logger.debug('Generating branch name', {
-			issueNumber,
-			title,
-			strategy: nameStrategy.constructor.name,
-		})
-
-		return nameStrategy.generate(issueNumber, title)
 	}
 
 	// Issue creation
@@ -382,15 +343,5 @@ export class GitHubService implements IssueTracker {
 
 	private async promptUserConfirmation(message: string): Promise<boolean> {
 		return this.prompter(message)
-	}
-
-	// Allow setting strategy at runtime for specific operations
-	public setDefaultBranchNameStrategy(strategy: BranchNameStrategy): void {
-		this.defaultBranchNameStrategy = strategy
-	}
-
-	// Get current strategy for testing
-	public getBranchNameStrategy(): BranchNameStrategy {
-		return this.defaultBranchNameStrategy
 	}
 }

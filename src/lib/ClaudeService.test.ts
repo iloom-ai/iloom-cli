@@ -264,38 +264,6 @@ describe('ClaudeService', () => {
 		})
 	})
 
-	describe('generateBranchNameWithFallback', () => {
-		it('should return branch name from Claude when successful', async () => {
-			const branchName = 'feat/issue-123-authentication'
-			vi.mocked(claudeUtils.generateBranchName).mockResolvedValueOnce(branchName)
-
-			const result = await service.generateBranchNameWithFallback('Add authentication', 123)
-
-			expect(result).toBe(branchName)
-			expect(claudeUtils.generateBranchName).toHaveBeenCalledWith('Add authentication', 123)
-		})
-
-		it('should use fallback when Claude generation fails', async () => {
-			vi.mocked(claudeUtils.generateBranchName).mockRejectedValueOnce(
-				new Error('Claude error')
-			)
-
-			const result = await service.generateBranchNameWithFallback('Add authentication', 123)
-
-			expect(result).toBe('feat/issue-123')
-		})
-
-		it('should handle different issue numbers in fallback', async () => {
-			vi.mocked(claudeUtils.generateBranchName).mockRejectedValueOnce(
-				new Error('Claude error')
-			)
-
-			const result = await service.generateBranchNameWithFallback('Fix bug', 456)
-
-			expect(result).toBe('feat/issue-456')
-		})
-	})
-
 	describe('getPermissionModeForWorkflow with settings', () => {
 		it('should use configured permission mode for issue workflow when settings provided', async () => {
 			const mockSettingsManager = {

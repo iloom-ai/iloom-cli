@@ -1,4 +1,4 @@
-import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeCliOptions, generateBranchName } from '../utils/claude.js'
+import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
 import { SettingsManager, IloomSettings } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
@@ -192,15 +192,4 @@ export class ClaudeService {
 		}
 	}
 
-	/**
-	 * Generate branch name with Claude, with fallback on failure
-	 */
-	async generateBranchNameWithFallback(issueTitle: string, issueNumber: number): Promise<string> {
-		try {
-			return await generateBranchName(issueTitle, issueNumber)
-		} catch (error) {
-			logger.warn('Claude branch name generation failed, using fallback', { error })
-			return `feat/issue-${issueNumber}`
-		}
-	}
 }

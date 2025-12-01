@@ -82,14 +82,10 @@ export interface IssueTrackerInputDetection {
 }
 
 /**
- * Branch name generation options - generic version
- * Decoupled from GitHub-specific types to support multiple providers
+ * Re-export branch naming types from branch-naming module
+ * These types are provider-agnostic and support all issue trackers
  */
-export interface BranchGenerationOptions {
-	issueNumber: number
-	title: string
-	// Note: strategy is provider-specific and should be handled by the concrete implementation
-}
+export type { BranchNameStrategy, BranchGenerationOptions } from './branch-naming.js'
 
 // Database types
 

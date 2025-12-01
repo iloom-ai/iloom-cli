@@ -1,7 +1,7 @@
 // IssueTracker interface definition
 // Generic interface for issue tracking providers (GitHub, Linear, Jira, etc.)
 
-import type { Issue, PullRequest, IssueTrackerInputDetection, BranchGenerationOptions } from '../types/index.js'
+import type { Issue, PullRequest, IssueTrackerInputDetection } from '../types/index.js'
 
 /**
  * IssueTracker interface - abstraction for issue tracking providers
@@ -40,9 +40,6 @@ export interface IssueTracker {
 
 	// Status management - optional, check provider capabilities before calling
 	moveIssueToInProgress?(identifier: string | number): Promise<void>
-
-	// Branch name generation - delegates to provider-specific strategy
-	generateBranchName(options: BranchGenerationOptions): Promise<string>
 
 	// Context extraction - formats issue/PR for AI prompts
 	extractContext(entity: Issue | PullRequest): string

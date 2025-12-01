@@ -1,12 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GitHubService } from './GitHubService.js'
 import * as githubUtils from '../utils/github.js'
-import type { BranchNameStrategy } from '../types/github.js'
 import { GitHubError } from '../types/github.js'
-import {
-	SimpleBranchNameStrategy,
-	ClaudeBranchNameStrategy,
-} from '../utils/github.js'
 
 vi.mock('execa')
 
@@ -27,13 +22,6 @@ vi.mock('../utils/github.js', async () => {
 	}
 })
 
-// Mock branch name strategy for testing
-class MockBranchNameStrategy implements BranchNameStrategy {
-	async generate(issueNumber: number, _title: string): Promise<string> {
-		return `mock/branch-${issueNumber}`
-	}
-}
-
 describe('GitHubService', () => {
 	let service: GitHubService
 	const mockPrompter = vi.fn()
@@ -41,13 +29,8 @@ describe('GitHubService', () => {
 	beforeEach(() => {
 		mockPrompter.mockResolvedValue(true) // Default to confirming
 		service = new GitHubService({
-			branchNameStrategy: new SimpleBranchNameStrategy(),
 			prompter: mockPrompter,
 		})
-	})
-
-	afterEach(() => {
-		vi.clearAllMocks()
 	})
 
 	describe('detectInputType', () => {
@@ -429,41 +412,6 @@ describe('GitHubService', () => {
 		})
 	})
 
-	describe('generateBranchName', () => {
-		it('should use default strategy when none provided', async () => {
-			const branchName = await service.generateBranchName({
-				issueNumber: 123,
-				title: 'Add feature',
-			})
-
-			expect(branchName).toBe('feat/issue-123-add-feature')
-		})
-
-		it('should use custom strategy when provided', async () => {
-			const customStrategy = new MockBranchNameStrategy()
-
-			const branchName = await service.generateBranchName({
-				issueNumber: 456,
-				title: 'Fix bug',
-				strategy: customStrategy,
-			})
-
-			expect(branchName).toBe('mock/branch-456')
-		})
-
-		it('should use strategy set on service', async () => {
-			const customStrategy = new MockBranchNameStrategy()
-			service.setDefaultBranchNameStrategy(customStrategy)
-
-			const branchName = await service.generateBranchName({
-				issueNumber: 789,
-				title: 'Update docs',
-			})
-
-			expect(branchName).toBe('mock/branch-789')
-		})
-	})
-
 	describe('createIssue', () => {
 		it('should create GitHub issue with title and body', async () => {
 			const issueData = {
@@ -758,42 +706,6 @@ describe('GitHubService', () => {
 			expect(context).toContain('Fix bug')
 			expect(context).toContain('Branch: fix/bug')
 			expect(context).toContain('State: open')
-		})
-	})
-
-	describe('strategy management', () => {
-		it('should allow getting current strategy', () => {
-			const strategy = service.getBranchNameStrategy()
-			expect(strategy).toBeInstanceOf(SimpleBranchNameStrategy)
-		})
-
-		it('should allow setting custom strategy', () => {
-			const customStrategy = new MockBranchNameStrategy()
-			service.setDefaultBranchNameStrategy(customStrategy)
-
-			const strategy = service.getBranchNameStrategy()
-			expect(strategy).toBe(customStrategy)
-		})
-
-		it('should use SimpleBranchNameStrategy when useClaude is false', () => {
-			const serviceWithSimple = new GitHubService({ useClaude: false })
-			const strategy = serviceWithSimple.getBranchNameStrategy()
-			expect(strategy).toBeInstanceOf(SimpleBranchNameStrategy)
-		})
-
-		it('should use ClaudeBranchNameStrategy by default', () => {
-			const serviceWithClaude = new GitHubService()
-			const strategy = serviceWithClaude.getBranchNameStrategy()
-			expect(strategy).toBeInstanceOf(ClaudeBranchNameStrategy)
-		})
-
-		it('should use custom strategy from constructor', () => {
-			const customStrategy = new MockBranchNameStrategy()
-			const serviceWithCustom = new GitHubService({
-				branchNameStrategy: customStrategy,
-			})
-			const strategy = serviceWithCustom.getBranchNameStrategy()
-			expect(strategy).toBe(customStrategy)
 		})
 	})
 })

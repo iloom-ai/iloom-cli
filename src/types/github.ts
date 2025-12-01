@@ -77,17 +77,6 @@ export interface GitHubInputDetection {
 	rawInput: string
 }
 
-// Branch name generation strategy interface
-export interface BranchNameStrategy {
-	generate(issueNumber: number, title: string): Promise<string>
-}
-
-export interface BranchGenerationOptions {
-	issueNumber: number
-	title: string
-	strategy?: BranchNameStrategy
-}
-
 // Context and error types
 export interface GitHubContext {
 	issue?: GitHubIssue

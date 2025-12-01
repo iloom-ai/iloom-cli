@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs-extra'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { IssueTracker } from './IssueTracker.js'
+import type { BranchNamingService } from './BranchNamingService.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
@@ -26,6 +27,7 @@ export class LoomManager {
   constructor(
     private gitWorktree: GitWorktreeManager,
     private issueTracker: IssueTracker,
+    private branchNaming: BranchNamingService,
     private environment: EnvironmentManager,
     _claude: ClaudeContextManager, // Not stored - kept for DI compatibility, LoomLauncher creates its own
     private capabilityDetector: ProjectCapabilityDetector,
@@ -409,8 +411,8 @@ export class LoomManager {
     }
 
     if (input.type === 'issue' && issueData) {
-      // Use Claude AI-powered branch name generation
-      const branchName = await this.issueTracker.generateBranchName({
+      // Use BranchNamingService for AI-powered branch name generation
+      const branchName = await this.branchNaming.generateBranchName({
         issueNumber: input.identifier as number,
         title: issueData.title,
       })

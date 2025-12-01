@@ -10,9 +10,6 @@ import {
 	fetchProjectItems,
 	fetchProjectFields,
 	updateProjectItemField,
-	SimpleBranchNameStrategy,
-	ClaudeBranchNameStrategy,
-	TemplateBranchNameStrategy,
 	createIssue,
 	createIssueComment,
 	updateIssueComment,
@@ -474,113 +471,6 @@ describe('github utils', () => {
 				],
 				expect.any(Object)
 			)
-		})
-	})
-
-	describe('SimpleBranchNameStrategy', () => {
-		it('should generate simple branch name', async () => {
-			const strategy = new SimpleBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add feature')
-
-			expect(name).toBe('feat/issue-123-add-feature')
-		})
-
-		it('should slugify title in simple strategy', async () => {
-			const strategy = new SimpleBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add Authentication Feature')
-
-			expect(name).toBe('feat/issue-123-add-authentication-f')
-		})
-	})
-
-	describe('ClaudeBranchNameStrategy', () => {
-		it('should delegate to generateBranchName from claude utils', async () => {
-			// Mock the generateBranchName function from claude.ts
-			const mockGenerateBranchName = vi.fn().mockResolvedValue('feat/issue-123-add-authentication')
-			vi.doMock('../utils/claude.js', () => ({
-				generateBranchName: mockGenerateBranchName
-			}))
-
-			const strategy = new ClaudeBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add authentication')
-
-			expect(name).toBe('feat/issue-123-add-authentication')
-			expect(mockGenerateBranchName).toHaveBeenCalledWith('Add authentication', 123, 'haiku')
-		})
-
-		it('should use custom Claude model', async () => {
-			// Mock the generateBranchName function from claude.ts
-			const mockGenerateBranchName = vi.fn().mockResolvedValue('feat/issue-123-test')
-			vi.doMock('../utils/claude.js', () => ({
-				generateBranchName: mockGenerateBranchName
-			}))
-
-			const strategy = new ClaudeBranchNameStrategy('custom-model')
-			const name = await strategy.generate(123, 'Test')
-
-			expect(name).toBe('feat/issue-123-test')
-			expect(mockGenerateBranchName).toHaveBeenCalledWith('Test', 123, 'custom-model')
-		})
-	})
-
-	describe('TemplateBranchNameStrategy', () => {
-		it('should generate branch name from template', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add authentication')
-
-			expect(name).toMatch(/^feat\/issue-123-/)
-			expect(name).toContain('authentication')
-		})
-
-		it('should detect fix prefix from title', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(456, 'Fix authentication bug')
-
-			expect(name).toMatch(/^fix\/issue-456-/)
-		})
-
-		it('should detect docs prefix from title', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(789, 'Update documentation')
-
-			expect(name).toMatch(/^docs\/issue-789-/)
-		})
-
-		it('should detect test prefix from title', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(101, 'Add tests for auth')
-
-			expect(name).toMatch(/^test\/issue-101-/)
-		})
-
-		it('should detect refactor prefix from title', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(102, 'Refactor database layer')
-
-			expect(name).toMatch(/^refactor\/issue-102-/)
-		})
-
-		it('should sanitize title to slug', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add "special" chars & symbols!')
-
-			expect(name).toBe('feat/issue-123-add-special-chars-symbols')
-		})
-
-		it('should limit slug length to 30 characters', async () => {
-			const strategy = new TemplateBranchNameStrategy()
-			const longTitle = 'This is a very long title that should be truncated'
-			const name = await strategy.generate(123, longTitle)
-
-			const slug = name.split('issue-123-')[1]
-			expect(slug?.length).toBeLessThanOrEqual(30)
-		})
-
-		it('should use custom template', async () => {
-			const strategy = new TemplateBranchNameStrategy('{number}-{slug}')
-			const name = await strategy.generate(123, 'Add feature')
-
-			expect(name).toBe('123-add-feature')
 		})
 	})
 

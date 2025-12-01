@@ -4,7 +4,6 @@ import type {
 	GitHubPullRequest,
 	GitHubProject,
 	GitHubAuthStatus,
-	BranchNameStrategy,
 	ProjectItem,
 	ProjectField,
 } from '../types/github.js'
@@ -226,63 +225,6 @@ export async function updateProjectItemField(
 		'--format',
 		'json',
 	])
-}
-
-// Branch name generation strategies
-export class SimpleBranchNameStrategy implements BranchNameStrategy {
-	async generate(issueNumber: number, title: string): Promise<string> {
-		// Create a simple slug from the title
-		const slug = title
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '')
-			.substring(0, 20) // Keep it short for the simple strategy
-
-		return `feat/issue-${issueNumber}-${slug}`
-	}
-}
-
-export class ClaudeBranchNameStrategy implements BranchNameStrategy {
-	constructor(private claudeModel = 'haiku') {}
-
-	async generate(issueNumber: number, title: string): Promise<string> {
-		// Import dynamically to avoid circular dependency
-		const { generateBranchName } = await import('../utils/claude.js')
-
-		// Delegate to the shared implementation
-		return generateBranchName(title, issueNumber, this.claudeModel)
-	}
-}
-
-// Template-based strategy for custom patterns
-export class TemplateBranchNameStrategy implements BranchNameStrategy {
-	constructor(private template = '{prefix}/issue-{number}-{slug}') {}
-
-	async generate(issueNumber: number, title: string): Promise<string> {
-		// Determine prefix based on title
-		const prefix = this.determinePrefix(title)
-
-		// Create slug from title
-		const slug = title
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '')
-			.substring(0, 30)
-
-		return this.template
-			.replace('{prefix}', prefix)
-			.replace('{number}', String(issueNumber))
-			.replace('{slug}', slug)
-	}
-
-	private determinePrefix(title: string): string {
-		const lowerTitle = title.toLowerCase()
-		if (lowerTitle.includes('fix') || lowerTitle.includes('bug')) return 'fix'
-		if (lowerTitle.includes('doc')) return 'docs'
-		if (lowerTitle.includes('test')) return 'test'
-		if (lowerTitle.includes('refactor')) return 'refactor'
-		return 'feat'
-	}
 }
 
 // GitHub Issue Operations
