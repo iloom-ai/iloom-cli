@@ -337,7 +337,7 @@ Generate a git branch name for the following issue:
 
 <Requirements>
 <IssueNumber>Must use this exact issue number: ${issueNumber}</IssueNumber>
-<Format>Format must be: {prefix}/issue-${issueNumber}-{description}</Format>
+<Format>Format must be: {prefix}/issue-${issueNumber}__{description}</Format>
 <Prefix>Prefix must be one of: feat, fix, docs, refactor, test, chore</Prefix>
 <MaxLength>Maximum 50 characters total</MaxLength>
 <Characters>Only lowercase letters, numbers, and hyphens allowed</Characters>
@@ -370,9 +370,9 @@ Generate a git branch name for the following issue:
 
 /**
  * Validate branch name format
- * Check format: {prefix}/issue-{number}-{description}
+ * Check format: {prefix}/issue-{number}__{description}
  */
 function isValidBranchName(name: string, issueNumber: string | number): boolean {
-	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}-[a-z0-9-]+$`)
+	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}__[a-z0-9-]+$`)
 	return pattern.test(name) && name.length <= 50
 }

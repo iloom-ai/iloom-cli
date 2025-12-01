@@ -421,7 +421,7 @@ export class GitWorktreeManager {
     const worktrees = await this.listWorktrees({ porcelain: true })
 
     // Pattern: starts with 'issue-{N}' OR has '/issue-{N}', '-issue-{N}', '_issue-{N}' but not 'issue-{N}{digit}'
-    const pattern = new RegExp(`(?:^|[/_-])issue-${issueNumber}(?:-|$)`)
+    const pattern = new RegExp(`(?:^|[/_-])issue-${issueNumber}(?:-|__|$)`)
 
     return worktrees.find(wt => pattern.test(wt.branch)) ?? null
   }

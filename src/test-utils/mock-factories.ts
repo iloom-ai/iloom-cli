@@ -421,7 +421,7 @@ export class TestFixtures {
 
   static readonly SAMPLE_WORKTREE = {
     path: '/tmp/test-workspace-25',
-    branch: 'feat/issue-25-add-auth',
+    branch: 'feat/issue-25__add-auth',
     commit: 'abc123',
     isPR: false,
     issueNumber: 25,

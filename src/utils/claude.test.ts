@@ -107,7 +107,7 @@ describe('claude utils', () => {
 		describe('headless mode', () => {
 			it('should launch in headless mode and return output', async () => {
 				const prompt = 'Generate a branch name'
-				const output = 'feat/issue-123-new-feature'
+				const output = 'feat/issue-123__new-feature'
 
 				vi.mocked(execa).mockResolvedValueOnce({
 					stdout: output,
@@ -465,7 +465,7 @@ describe('claude utils', () => {
 
 			it('should handle branchName option without applying terminal colors', async () => {
 				const prompt = 'Resolve conflicts'
-				const branchName = 'feat/issue-123-test'
+				const branchName = 'feat/issue-123__test'
 
 				vi.mocked(execa).mockResolvedValueOnce({
 					stdout: '',
@@ -575,7 +575,7 @@ describe('claude utils', () => {
 				const userPrompt = 'Generate branch name'
 
 				vi.mocked(execa).mockResolvedValueOnce({
-					stdout: 'feat/issue-123-test',
+					stdout: 'feat/issue-123__test',
 					exitCode: 0,
 				} as MockExecaReturn)
 
@@ -585,7 +585,7 @@ describe('claude utils', () => {
 					appendSystemPrompt: systemPrompt,
 				})
 
-				expect(result).toBe('feat/issue-123-test')
+				expect(result).toBe('feat/issue-123__test')
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
 					[
@@ -1257,7 +1257,7 @@ describe('claude utils', () => {
 		it('should apply branch-specific background color when branchName provided', async () => {
 			const prompt = 'Work on this issue'
 			const workspacePath = '/path/to/workspace'
-			const branchName = 'feat/issue-123-test'
+			const branchName = 'feat/issue-123__test'
 
 			vi.mocked(execa).mockResolvedValueOnce({
 				stdout: '',
@@ -1421,13 +1421,13 @@ describe('claude utils', () => {
 
 			// Mock Claude response with full branch name
 			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'feat/issue-123-user-authentication',
+				stdout: 'feat/issue-123__user-authentication',
 				exitCode: 0,
 			} as MockExecaReturn)
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
-			expect(result).toBe('feat/issue-123-user-authentication')
+			expect(result).toBe('feat/issue-123__user-authentication')
 			expect(execa).toHaveBeenCalledWith(
 				'claude',
 				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp'],
@@ -1505,13 +1505,13 @@ describe('claude utils', () => {
 
 			// Mock Claude returning properly formatted branch
 			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'fix/issue-123-authentication-bug',
+				stdout: 'fix/issue-123__authentication-bug',
 				exitCode: 0,
 			} as MockExecaReturn)
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
-			expect(result).toBe('fix/issue-123-authentication-bug')
+			expect(result).toBe('fix/issue-123__authentication-bug')
 		})
 
 		it('should reject invalid branch name format from Claude', async () => {

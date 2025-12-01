@@ -5,7 +5,7 @@ import fc from 'fast-check'
 describe('Port utilities', () => {
 	describe('generatePortOffsetFromBranchName', () => {
 		it('should generate deterministic port offset for same branch name', () => {
-			const branchName = 'feat/issue-87-add-commands'
+			const branchName = 'feat/issue-87__add-commands'
 			const offset1 = generatePortOffsetFromBranchName(branchName)
 			const offset2 = generatePortOffsetFromBranchName(branchName)
 			expect(offset1).toBe(offset2)

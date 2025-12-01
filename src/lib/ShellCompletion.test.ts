@@ -221,9 +221,9 @@ describe('ShellCompletion', () => {
     it('should include worktrees that can be cleaned up', async () => {
       const mockWorktrees = [
         { path: '/repo', branch: 'main', commit: 'abc123', bare: false, detached: false, locked: false },
-        { path: '/repo/wt1', branch: 'feat/issue-94-shell-autocomplete', commit: 'def456', bare: false, detached: false, locked: false },
-        { path: '/repo/wt2', branch: 'feat/issue-99-cleanup', commit: 'ghi789', bare: false, detached: false, locked: false },
-        { path: '/repo/wt3', branch: 'feat/issue-100-testing', commit: 'jkl012', bare: false, detached: false, locked: false },
+        { path: '/repo/wt1', branch: 'feat/issue-94__shell-autocomplete', commit: 'def456', bare: false, detached: false, locked: false },
+        { path: '/repo/wt2', branch: 'feat/issue-99__cleanup', commit: 'ghi789', bare: false, detached: false, locked: false },
+        { path: '/repo/wt3', branch: 'feat/issue-100__testing', commit: 'jkl012', bare: false, detached: false, locked: false },
       ]
 
       vi.mocked(GitWorktreeManager).mockImplementation(
@@ -233,7 +233,7 @@ describe('ShellCompletion', () => {
             getRepoInfo: vi.fn().mockResolvedValue({
               root: '/repo',
               defaultBranch: 'main',
-              currentBranch: 'feat/issue-94-shell-autocomplete',
+              currentBranch: 'feat/issue-94__shell-autocomplete',
             }),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
           }) as any
@@ -242,7 +242,7 @@ describe('ShellCompletion', () => {
       const suggestions = await shellCompletion.getBranchSuggestions()
 
       // Should show branches that can be cleaned up (not main worktree, not current)
-      expect(suggestions).toEqual(['feat/issue-99-cleanup', 'feat/issue-100-testing'])
+      expect(suggestions).toEqual(['feat/issue-99__cleanup', 'feat/issue-100__testing'])
     })
 
     it('should handle GitWorktreeManager errors gracefully', async () => {

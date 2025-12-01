@@ -121,9 +121,9 @@ describe('NeonProvider', () => {
 
   describe('sanitizeBranchName', () => {
     it('should replace forward slashes with underscores', () => {
-      const result = provider.sanitizeBranchName('feat/issue-5-database')
+      const result = provider.sanitizeBranchName('feat/issue-5__database')
 
-      expect(result).toBe('feat_issue-5-database')
+      expect(result).toBe('feat_issue-5__database')
     })
 
     it('should handle multiple slashes', () => {
@@ -320,16 +320,16 @@ describe('NeonProvider', () => {
     it('should find preview database with underscore pattern (preview_branch_name)', async () => {
       const mockBranches = [
         { name: 'main', id: 'br-main-123' },
-        { name: 'preview_feat_issue-5-database-branch-mgmt', id: 'br-preview-456' },
+        { name: 'preview_feat_issue-5__database-branch-mgmt', id: 'br-preview-456' },
       ]
       vi.mocked(execa).mockResolvedValue({
         stdout: JSON.stringify(mockBranches),
         stderr: '',
       } as ExecaReturnValue<string>)
 
-      const result = await provider.findPreviewBranch('feat/issue-5-database-branch-mgmt')
+      const result = await provider.findPreviewBranch('feat/issue-5__database-branch-mgmt')
 
-      expect(result).toBe('preview_feat_issue-5-database-branch-mgmt')
+      expect(result).toBe('preview_feat_issue-5__database-branch-mgmt')
     })
 
     it('should return null when no preview database exists', async () => {

@@ -15,7 +15,7 @@ vi.mock('../utils/claude.js', () => ({
 
 // Setup the mock return value
 beforeEach(() => {
-	mockGenerateBranchName.mockResolvedValue('feat/issue-123-ai-generated-branch')
+	mockGenerateBranchName.mockResolvedValue('feat/issue-123__ai-generated-branch')
 })
 
 describe('BranchNamingService', () => {
@@ -59,7 +59,7 @@ describe('BranchNamingService', () => {
 					issueNumber: 123,
 					title: 'Test Issue Title',
 				})
-				expect(branchName).toBe('feat/issue-123-test-issue-title')
+				expect(branchName).toBe('feat/issue-123__test-issue-title')
 			})
 
 			it('should use override strategy when provided', async () => {
@@ -105,7 +105,7 @@ describe('BranchNamingService', () => {
 					issueNumber: 100,
 					title: 'Test',
 				})
-				expect(firstBranch).toBe('feat/issue-100-test')
+				expect(firstBranch).toBe('feat/issue-100__test')
 
 				// Change to Claude strategy
 				service.setDefaultStrategy(new ClaudeBranchNameStrategy())
@@ -114,7 +114,7 @@ describe('BranchNamingService', () => {
 					title: 'Test',
 				})
 				// The mock always returns the same value, so this will be the mocked value
-				expect(secondBranch).toBe('feat/issue-123-ai-generated-branch')
+				expect(secondBranch).toBe('feat/issue-123__ai-generated-branch')
 			})
 		})
 	})
@@ -123,25 +123,25 @@ describe('BranchNamingService', () => {
 		it('should generate branch name with feat prefix', async () => {
 			const strategy = new SimpleBranchNameStrategy()
 			const branchName = await strategy.generate(123, 'Add new feature')
-			expect(branchName).toBe('feat/issue-123-add-new-feature')
+			expect(branchName).toBe('feat/issue-123__add-new-feature')
 		})
 
 		it('should convert title to lowercase', async () => {
 			const strategy = new SimpleBranchNameStrategy()
 			const branchName = await strategy.generate(456, 'UPPERCASE TITLE')
-			expect(branchName).toBe('feat/issue-456-uppercase-title')
+			expect(branchName).toBe('feat/issue-456__uppercase-title')
 		})
 
 		it('should replace non-alphanumeric characters with hyphens', async () => {
 			const strategy = new SimpleBranchNameStrategy()
 			const branchName = await strategy.generate(789, 'Fix bug #123 & issue')
-			expect(branchName).toBe('feat/issue-789-fix-bug-123-issue')
+			expect(branchName).toBe('feat/issue-789__fix-bug-123-issue')
 		})
 
 		it('should trim leading and trailing hyphens', async () => {
 			const strategy = new SimpleBranchNameStrategy()
 			const branchName = await strategy.generate(111, '---start and end---')
-			expect(branchName).toBe('feat/issue-111-start-and-end')
+			expect(branchName).toBe('feat/issue-111__start-and-end')
 		})
 
 		it('should truncate slug to 20 characters', async () => {
@@ -151,15 +151,15 @@ describe('BranchNamingService', () => {
 				'This is a very long title that should be truncated'
 			)
 			// The slug is truncated to 20 characters, which may end with a hyphen
-			expect(branchName.startsWith('feat/issue-222-this-is-a-very-long')).toBe(true)
-			const slug = branchName.replace('feat/issue-222-', '')
+			expect(branchName.startsWith('feat/issue-222__this-is-a-very-long')).toBe(true)
+			const slug = branchName.replace('feat/issue-222__', '')
 			expect(slug.length).toBeLessThanOrEqual(20)
 		})
 
 		it('should handle titles with only special characters', async () => {
 			const strategy = new SimpleBranchNameStrategy()
 			const branchName = await strategy.generate(333, '!!!')
-			expect(branchName).toBe('feat/issue-333-')
+			expect(branchName).toBe('feat/issue-333__')
 		})
 	})
 
@@ -172,7 +172,7 @@ describe('BranchNamingService', () => {
 			const { generateBranchName } = await import('../utils/claude.js')
 			expect(generateBranchName).toHaveBeenCalledWith('Test Issue', 123, 'haiku')
 			// The mock should return the mocked value
-			expect(branchName).toBe('feat/issue-123-ai-generated-branch')
+			expect(branchName).toBe('feat/issue-123__ai-generated-branch')
 		})
 
 		it('should use custom claude model when specified', async () => {

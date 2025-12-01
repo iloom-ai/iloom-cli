@@ -88,7 +88,7 @@ describe('LoomManager', () => {
     )
 
     // Default mock for branch naming
-    vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-123-test-branch')
+    vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-123__test-branch')
 
     // Default mock for capability detector (web-only) - can be overridden in tests
     vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
@@ -1597,7 +1597,7 @@ describe('LoomManager', () => {
         assignees: [],
         url: 'https://github.com/test/repo/issues/165',
       })
-      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-165-empty-repo')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-165__empty-repo')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-165'
@@ -1635,7 +1635,7 @@ describe('LoomManager', () => {
         assignees: [],
         url: 'https://github.com/test/repo/issues/166',
       })
-      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-166-with-commits')
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-166__with-commits')
       vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
 
       const expectedPath = '/test/worktree-issue-166'

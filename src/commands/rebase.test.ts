@@ -27,7 +27,7 @@ describe('RebaseCommand', () => {
 	// Helper to create mock worktree
 	const createMockWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
 		path: '/test/worktree',
-		branch: 'feat/issue-123-test',
+		branch: 'feat/issue-123__test',
 		commit: 'abc123',
 		bare: false,
 		detached: false,
@@ -268,7 +268,7 @@ describe('RebaseCommand', () => {
 			})
 			const featureWorktree = createMockWorktree({
 				path: '/test/feat-issue-123',
-				branch: 'feat/issue-123-feature',
+				branch: 'feat/issue-123__feature',
 			})
 			process.cwd = vi.fn().mockReturnValue('/test/feat-issue-123')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)

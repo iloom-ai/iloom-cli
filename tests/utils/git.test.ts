@@ -261,11 +261,11 @@ describe('findAllBranchesForIssue', () => {
     })
 
     it('should handle branches with special characters', async () => {
-      vi.mocked(execa).mockResolvedValue({ stdout: '  issue-25_special\n  feat/issue-25-with-dash\n  test_25\n' } as ExecaReturnValue<string>)
+      vi.mocked(execa).mockResolvedValue({ stdout: '  issue-25_special\n  feat/issue-25__with-dash\n  test_25\n' } as ExecaReturnValue<string>)
 
       const result = await findAllBranchesForIssue(25, process.cwd(), createMockSettingsManager())
 
-      expect(result).toEqual(['issue-25_special', 'feat/issue-25-with-dash', 'test_25'])
+      expect(result).toEqual(['issue-25_special', 'feat/issue-25__with-dash', 'test_25'])
     })
 
     it('should skip remotes/origin/HEAD pointer', async () => {

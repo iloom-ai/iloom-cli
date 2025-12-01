@@ -85,7 +85,7 @@ describe('LoomManager - Database Integration', () => {
     )
 
     // Default mock for branch naming
-    vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-123-test-branch')
+    vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-123__test-branch')
 
     // Default mock for capability detector (web-only) - can be overridden in tests
     vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({

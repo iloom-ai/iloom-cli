@@ -54,7 +54,7 @@ describe('RunCommand', () => {
 
 	const mockWorktree: GitWorktree = {
 		path: '/test/worktrees/issue-87',
-		branch: 'feat/issue-87-test',
+		branch: 'feat/issue-87__test',
 		commit: 'abc123',
 		prunable: 'no',
 	}
@@ -145,7 +145,7 @@ describe('RunCommand', () => {
 
 			// Mock getRepoInfo to return branch with issue pattern
 			vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
-				currentBranch: 'feat/issue-87-description',
+				currentBranch: 'feat/issue-87__description',
 				mainBranch: 'main',
 				worktrees: [],
 			})

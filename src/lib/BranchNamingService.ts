@@ -7,7 +7,7 @@ import { logger } from '../utils/logger.js'
 
 /**
  * Simple branch naming strategy
- * Format: feat/issue-{number}-{slug}
+ * Format: feat/issue-{number}__{slug}
  */
 export class SimpleBranchNameStrategy implements BranchNameStrategy {
 	async generate(issueNumber: string | number, title: string): Promise<string> {
@@ -18,7 +18,7 @@ export class SimpleBranchNameStrategy implements BranchNameStrategy {
 			.replace(/^-|-$/g, '')
 			.substring(0, 20) // Keep it short for the simple strategy
 
-		return `feat/issue-${issueNumber}-${slug}`
+		return `feat/issue-${issueNumber}__${slug}`
 	}
 }
 

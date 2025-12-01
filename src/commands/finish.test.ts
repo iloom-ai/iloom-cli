@@ -1415,7 +1415,7 @@ describe('FinishCommand', () => {
 			describe('issue validation', () => {
 				const mockWorktree: GitWorktree = {
 					path: '/test/worktree-issue-123',
-					branch: 'feat/issue-123-test',
+					branch: 'feat/issue-123__test',
 					commit: 'abc123',
 					isPR: false,
 					issueNumber: 123,
@@ -1750,7 +1750,7 @@ describe('FinishCommand', () => {
 
 					const mockWorktree: GitWorktree = {
 						path: '/test/worktree-issue-123',
-						branch: 'feat/issue-123-test',
+						branch: 'feat/issue-123__test',
 						commit: 'abc123',
 						isPR: false,
 						issueNumber: 123,
@@ -1792,7 +1792,7 @@ describe('FinishCommand', () => {
 
 					const mockWorktree: GitWorktree = {
 						path: '/test/worktree-issue-123-first',
-						branch: 'feat/issue-123-test',
+						branch: 'feat/issue-123__test',
 						commit: 'abc123',
 						isPR: false,
 						issueNumber: 123,

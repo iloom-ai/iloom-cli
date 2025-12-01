@@ -18,7 +18,7 @@ describe('IgniteCommand', () => {
 
 		mockGitWorktreeManager = {
 			getRepoInfo: vi.fn().mockResolvedValue({
-				currentBranch: 'feat/issue-70-test-branch',
+				currentBranch: 'feat/issue-70__test-branch',
 			}),
 		} as unknown as GitWorktreeManager
 
@@ -34,13 +34,13 @@ describe('IgniteCommand', () => {
 	})
 
 	describe('Context Auto-Detection from Directory Name', () => {
-		it('should detect issue workflow from directory name pattern: feat/issue-70-description', async () => {
+		it('should detect issue workflow from directory name pattern: feat/issue-70__description', async () => {
 			// Spy on launchClaude
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock process.cwd() to return directory with issue- pattern
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-70-description')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-70__description')
 
 			try {
 				await command.execute()
@@ -50,7 +50,7 @@ describe('IgniteCommand', () => {
 					expect.any(String), // prompt
 					expect.objectContaining({
 						headless: false,
-						addDir: '/path/to/feat/issue-70-description',
+						addDir: '/path/to/feat/issue-70__description',
 						model: 'claude-sonnet-4-20250514',
 						permissionMode: 'acceptEdits',
 					})
@@ -60,7 +60,7 @@ describe('IgniteCommand', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						WORKSPACE_PATH: '/path/to/feat/issue-70-description',
+						WORKSPACE_PATH: '/path/to/feat/issue-70__description',
 						ISSUE_NUMBER: 70,
 					})
 				)
@@ -115,7 +115,7 @@ describe('IgniteCommand', () => {
 
 			// Mock git branch to return issue pattern
 			mockGitWorktreeManager.getRepoInfo = vi.fn().mockResolvedValue({
-				currentBranch: 'feat/issue-45-another-test',
+				currentBranch: 'feat/issue-45__another-test',
 			})
 
 			try {
@@ -194,7 +194,7 @@ describe('IgniteCommand', () => {
 
 			// Mock process.cwd()
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99-port-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99__port-test')
 
 			try {
 				await command.execute()
@@ -227,7 +227,7 @@ describe('IgniteCommand', () => {
 
 			// Mock process.cwd()
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-88-no-port')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-88__no-port')
 
 			try {
 				await command.execute()
@@ -252,7 +252,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__test')
 
 			try {
 				await command.execute()
@@ -276,7 +276,7 @@ describe('IgniteCommand', () => {
 			// Spy on launchClaude
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
-			const workspacePath = '/workspace/feat/issue-42-workspace'
+			const workspacePath = '/workspace/feat/issue-42__workspace'
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue(workspacePath)
 
@@ -301,10 +301,10 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-33-branch-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-33__branch-test')
 
 			mockGitWorktreeManager.getRepoInfo = vi.fn().mockResolvedValue({
-				currentBranch: 'feat/issue-33-branch-test',
+				currentBranch: 'feat/issue-33__branch-test',
 			})
 
 			try {
@@ -314,7 +314,7 @@ describe('IgniteCommand', () => {
 				expect(launchClaudeSpy).toHaveBeenCalledWith(
 					expect.any(String),
 					expect.objectContaining({
-						branchName: 'feat/issue-33-branch-test',
+						branchName: 'feat/issue-33__branch-test',
 					})
 				)
 			} finally {
@@ -404,7 +404,7 @@ describe('IgniteCommand', () => {
 			launchClaudeInNewTerminalWindowSpy.mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50-terminal-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__terminal-test')
 
 			try {
 				await command.execute()
@@ -414,7 +414,7 @@ describe('IgniteCommand', () => {
 					expect.any(String), // prompt
 					expect.objectContaining({
 						headless: false,
-						addDir: '/path/to/feat/issue-50-terminal-test',
+						addDir: '/path/to/feat/issue-50__terminal-test',
 						model: 'claude-sonnet-4-20250514', // issue workflow model
 						permissionMode: 'acceptEdits', // issue workflow permission mode
 					})
@@ -467,11 +467,11 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-dir')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__dir')
 
 			// Branch has different issue number
 			mockGitWorktreeManager.getRepoInfo = vi.fn().mockResolvedValue({
-				currentBranch: 'feat/issue-200-branch',
+				currentBranch: 'feat/issue-200__branch',
 			})
 
 			try {
@@ -524,7 +524,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-82-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-82__test')
 
 			// Mock template manager to return known content
 			mockTemplateManager.getPrompt = vi.fn().mockResolvedValue('System instructions for issue workflow')
@@ -610,7 +610,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-77-mcp-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-77__mcp-test')
 
 			try {
 				await command.execute()
@@ -689,7 +689,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-88-env-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-88__env-test')
 
 			try {
 				await command.execute()
@@ -746,7 +746,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84__test')
 
 			try {
 				await command.execute()
@@ -774,7 +774,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84__test')
 
 			try {
 				await command.execute()
@@ -870,7 +870,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84-combined')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-84__combined')
 
 			try {
 				await command.execute()
@@ -917,7 +917,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			// Create command with mock agent manager
 			const commandWithAgents = new IgniteCommand(
@@ -970,7 +970,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-pr-456')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__pr-456')
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1041,7 +1041,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1087,7 +1087,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99-combined')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99__combined')
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1154,7 +1154,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			const commandWithSettings = new IgniteCommand(
 				mockTemplateManager,
@@ -1202,7 +1202,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			const commandWithSettings = new IgniteCommand(
 				mockTemplateManager,
@@ -1249,7 +1249,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			const commandWithSettings = new IgniteCommand(
 				mockTemplateManager,
@@ -1305,7 +1305,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
 
 			const commandWithSettings = new IgniteCommand(
 				mockTemplateManager,
@@ -1340,7 +1340,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__oneshot')
 
 			try {
 				// Execute with noReview one-shot mode
@@ -1364,7 +1364,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__oneshot')
 
 			try {
 				// Execute with bypassPermissions one-shot mode
@@ -1388,7 +1388,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__regular')
 
 			try {
 				// Execute without one-shot mode (default)
@@ -1412,7 +1412,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__regular')
 
 			try {
 				// Execute without any oneShot option
@@ -1440,7 +1440,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__oneshot')
 
 			try {
 				await command.execute('noReview')
@@ -1470,7 +1470,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__oneshot')
 
 			try {
 				await command.execute('bypassPermissions')
@@ -1500,7 +1500,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__regular')
 
 			try {
 				await command.execute('default')
@@ -1528,7 +1528,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-default')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__default')
 
 			try {
 				await command.execute('default')
@@ -1550,7 +1550,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-noreview')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__noreview')
 
 			try {
 				await command.execute('noReview')
@@ -1572,7 +1572,7 @@ describe('IgniteCommand', () => {
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-bypass')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__bypass')
 
 			try {
 				await command.execute('bypassPermissions')
@@ -1597,7 +1597,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__firstrun')
 
 			// Create command with mock first-run manager
 			const commandWithFirstRun = new IgniteCommand(
@@ -1636,7 +1636,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-notfirstrun')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__notfirstrun')
 
 			const commandWithFirstRun = new IgniteCommand(
 				mockTemplateManager,
@@ -1670,7 +1670,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__firstrun')
 
 			const commandWithFirstRun = new IgniteCommand(
 				mockTemplateManager,
@@ -1700,7 +1700,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-notfirstrun')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__notfirstrun')
 
 			const commandWithFirstRun = new IgniteCommand(
 				mockTemplateManager,
@@ -1730,7 +1730,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const originalCwd = process.cwd
-			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__firstrun')
 
 			const commandWithFirstRun = new IgniteCommand(
 				mockTemplateManager,

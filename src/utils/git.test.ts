@@ -350,7 +350,7 @@ describe('Git Utility Functions', () => {
     it('should extract issue numbers from various formats', () => {
       const testCases = [
         { branch: 'issue-42', expected: 42 },
-        { branch: 'feat/issue-42-description', expected: 42 },
+        { branch: 'feat/issue-42__description', expected: 42 },
         { branch: 'ISSUE-123', expected: 123 },
         { branch: 'issue_456', expected: 456 },
         { branch: '42-feature-name', expected: 42 },
