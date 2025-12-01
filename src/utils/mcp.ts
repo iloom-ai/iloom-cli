@@ -3,15 +3,17 @@ import { getRepoInfo } from './github.js'
 import { logger } from './logger.js'
 
 /**
- * Generate MCP configuration for GitHub comment broker
+ * Generate MCP configuration for issue management
  * Uses a single server that can handle both issues and pull requests
  * Returns array of MCP server config objects
  * @param contextType - Optional context type (issue or pr)
  * @param repo - Optional repo in "owner/repo" format. If not provided, will auto-detect from git.
+ * @param provider - Issue management provider (default: 'github')
  */
-export async function generateGitHubCommentMcpConfig(
+export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
-	repo?: string
+	repo?: string,
+	provider: 'github' | 'linear' = 'github'
 ): Promise<Record<string, unknown>[]> {
 	// Get repository information - either from provided repo string or auto-detect
 	let owner: string
@@ -36,11 +38,12 @@ export async function generateGitHubCommentMcpConfig(
 	// Generate single MCP server config
 	const mcpServerConfig = {
 		mcpServers: {
-			github_comment: {
+			issue_management: {
 				transport: 'stdio',
 				command: 'node',
-				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/github-comment-server.js')],
+				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')],
 				env: {
+					ISSUE_PROVIDER: provider,
 					REPO_OWNER: owner,
 					REPO_NAME: name,
 					GITHUB_API_URL: 'https://api.github.com/',
@@ -50,7 +53,8 @@ export async function generateGitHubCommentMcpConfig(
 		},
 	}
 
-	logger.debug('Generated MCP config for GitHub comment broker', {
+	logger.debug('Generated MCP config for issue management', {
+		provider,
 		repoOwner: owner,
 		repoName: name,
 		contextType: contextType ?? 'auto-detect',

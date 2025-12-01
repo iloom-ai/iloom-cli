@@ -632,7 +632,7 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [
 					{
-						github_comment: {
+						issue_management: {
 							command: 'node',
 							args: ['server.js'],
 							env: { REPO_OWNER: 'test', REPO_NAME: 'repo' }
@@ -676,7 +676,7 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [
 					{
-						github_comment: {
+						issue_management: {
 							command: 'node',
 							args: ['server.js'],
 							env: { REPO_OWNER: 'test' }
@@ -746,7 +746,7 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [
 					{
-						github_comment: {
+						issue_management: {
 							command: 'node',
 							args: ['server.js'],
 							env: { KEY: 'value' }
@@ -815,7 +815,7 @@ describe('claude utils', () => {
 		describe('allowedTools and disallowedTools parameters', () => {
 			it('should add --allowed-tools flags when allowedTools provided', async () => {
 				const prompt = 'Test prompt'
-				const allowedTools = ['mcp__github_comment__create_comment', 'mcp__github_comment__update_comment']
+				const allowedTools = ['mcp__issue_management__create_comment', 'mcp__issue_management__update_comment']
 
 				vi.mocked(execa).mockResolvedValueOnce({
 					stdout: 'output',
@@ -871,7 +871,7 @@ describe('claude utils', () => {
 
 			it('should add both --allowed-tools and --disallowed-tools when both provided', async () => {
 				const prompt = 'Test prompt'
-				const allowedTools = ['mcp__github_comment__create_comment', 'mcp__github_comment__update_comment']
+				const allowedTools = ['mcp__issue_management__create_comment', 'mcp__issue_management__update_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
 				vi.mocked(execa).mockResolvedValueOnce({
@@ -951,7 +951,7 @@ describe('claude utils', () => {
 
 			it('should work with tool filtering in interactive mode', async () => {
 				const prompt = 'Test prompt'
-				const allowedTools = ['mcp__github_comment__create_comment']
+				const allowedTools = ['mcp__issue_management__create_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
 				vi.mocked(execa).mockResolvedValueOnce({
@@ -982,7 +982,7 @@ describe('claude utils', () => {
 			it('should combine tool filtering with other options in correct order', async () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [{ server: { command: 'node', args: ['s.js'] } }]
-				const allowedTools = ['mcp__github_comment__create_comment']
+				const allowedTools = ['mcp__issue_management__create_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
 				vi.mocked(execa).mockResolvedValueOnce({
@@ -1165,7 +1165,7 @@ describe('claude utils', () => {
 			it('should combine agents with other options in correct order', async () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [{ server: { command: 'node', args: ['s.js'] } }]
-				const allowedTools = ['mcp__github_comment__create_comment']
+				const allowedTools = ['mcp__issue_management__create_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 				const agents = {
 					'test-agent': {

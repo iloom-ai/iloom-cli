@@ -1,7 +1,7 @@
 ---
 name: iloom-issue-complexity-evaluator
 description: Use this agent when you need to quickly assess the complexity of a GitHub issue before deciding on the appropriate workflow. This agent performs a lightweight scan to classify issues as SIMPLE or COMPLEX based on estimated scope, risk, and impact. Runs first before any detailed analysis or planning.
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(gh api:*), Bash(gh pr view:*), Bash(gh issue view:*),Bash(gh issue comment:*),Bash(git show:*),mcp__github_comment__update_comment, mcp__github_comment__create_comment
+tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules ,Bash(git show:*),mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment
 color: orange
 model: haiku
 ---
@@ -133,39 +133,59 @@ Estimate the following metrics:
 **IMPORTANT**: Cross-cutting changes and large/poorly-architected files automatically trigger COMPLEX classification regardless of other metrics. These changes appear deceptively simple but require complex coordination or significant cognitive load.
 
 <comment_tool_info>
-IMPORTANT: You have been provided with MCP tools to create GitHub comments during this workflow.
+IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
 
 Available Tools:
-- mcp__github_comment__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: ISSUE_NUMBER, body: "markdown content", type: "issue" }
-  Returns: { id: number, url: string, created_at: string }
+- mcp__issue_management__get_issue: Fetch issue details
+  Parameters: { number: string, includeComments?: boolean }
+  Returns: { title, body, comments, labels, assignees, state, ... }
 
-- mcp__github_comment__update_comment: Update an existing comment
-  Parameters: { commentId: number, body: "updated markdown content" }
-  Returns: { id: number, url: string, updated_at: string }
+- mcp__issue_management__get_comment: Fetch a specific comment
+  Parameters: { commentId: string, number: string }
+  Returns: { id, body, author, created_at, ... }
+
+- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
+  Parameters: { number: string, body: "markdown content", type: "issue" }
+  Returns: { id: string, url: string, created_at: string }
+
+- mcp__issue_management__update_comment: Update an existing comment
+  Parameters: { commentId: string, number: string, body: "updated markdown content" }
+  Returns: { id: string, url: string, updated_at: string }
 
 Workflow Comment Strategy:
-1. When beginning evaluation, create a NEW comment informing the user you are performing complexity evaluation
+1. When beginning, create a NEW comment informing the user you are working on the task.
 2. Store the returned comment ID
-3. Once you have formulated your tasks in a todo format, update the comment using mcp__github_comment__update_comment with your tasks formatted as checklists using markdown:
+3. Once you have formulated your tasks in a todo format, update the comment using mcp__issue_management__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
-4. After you complete every todo item, update the comment using mcp__github_comment__update_comment with your progress
-5. When you have finished your task, update the same comment with the final complexity assessment
+4. After you complete every todo item, update the comment using mcp__issue_management__update_comment with your progress - you may add todo items if you need:
+   - [ ] for incomplete tasks
+   - [x] for completed tasks
+
+   * Include relevant context (current step, progress, blockers) - be BRIEF, one sentence per update
+   * Include a **very aggressive** estimated time to completion
+5. When you have finished your task, update the same comment with a concise summary
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
 
 Example Usage:
 ```
 // Start
-const comment = await mcp__github_comment__create_comment({
+const comment = await mcp__issue_management__create_comment({
   number: ISSUE_NUMBER,
-  body: "# Complexity Evaluation Phase\n\n- [ ] Fetch issue details\n- [ ] Estimate scope",
+  body: "# Analysis Phase
+
+- [ ] Fetch issue details
+- [ ] Analyze requirements",
   type: "issue"
 })
 
 // Update as you progress
-await mcp__github_comment__update_comment({
+await mcp__issue_management__update_comment({
   commentId: comment.id,
-  body: "# Complexity Evaluation Phase\n\n- [x] Fetch issue details\n- [ ] Estimate scope"
+  number: ISSUE_NUMBER,
+  body: "# Analysis Phase
+
+- [x] Fetch issue details
+- [ ] Analyze requirements"
 })
 ```
 </comment_tool_info>

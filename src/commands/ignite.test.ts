@@ -624,10 +624,10 @@ describe('IgniteCommand', () => {
 				// Verify MCP config structure
 				const mcpConfig = launchClaudeCall[1].mcpConfig[0]
 				expect(mcpConfig).toHaveProperty('mcpServers')
-				expect(mcpConfig.mcpServers).toHaveProperty('github_comment')
-				expect(mcpConfig.mcpServers.github_comment).toHaveProperty('command')
-				expect(mcpConfig.mcpServers.github_comment).toHaveProperty('args')
-				expect(mcpConfig.mcpServers.github_comment).toHaveProperty('env')
+				expect(mcpConfig.mcpServers).toHaveProperty('issue_management')
+				expect(mcpConfig.mcpServers.issue_management).toHaveProperty('command')
+				expect(mcpConfig.mcpServers.issue_management).toHaveProperty('args')
+				expect(mcpConfig.mcpServers.issue_management).toHaveProperty('env')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -696,8 +696,9 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				const mcpConfig = launchClaudeCall[1].mcpConfig[0]
-				const env = mcpConfig.mcpServers.github_comment.env
+				const env = mcpConfig.mcpServers.issue_management.env
 
+				expect(env).toHaveProperty('ISSUE_PROVIDER', 'github')
 				expect(env).toHaveProperty('REPO_OWNER')
 				expect(env).toHaveProperty('REPO_NAME')
 				expect(env).toHaveProperty('GITHUB_EVENT_NAME', 'issues')
@@ -724,8 +725,9 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				const mcpConfig = launchClaudeCall[1].mcpConfig[0]
-				const env = mcpConfig.mcpServers.github_comment.env
+				const env = mcpConfig.mcpServers.issue_management.env
 
+				expect(env).toHaveProperty('ISSUE_PROVIDER', 'github')
 				expect(env).toHaveProperty('GITHUB_EVENT_NAME', 'pull_request')
 			} finally {
 				process.cwd = originalCwd
@@ -752,8 +754,10 @@ describe('IgniteCommand', () => {
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
 				expect(launchClaudeCall[1].allowedTools).toEqual([
-					'mcp__github_comment__create_comment',
-					'mcp__github_comment__update_comment',
+					'mcp__issue_management__get_issue',
+					'mcp__issue_management__get_comment',
+					'mcp__issue_management__create_comment',
+					'mcp__issue_management__update_comment',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -777,7 +781,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -801,8 +805,10 @@ describe('IgniteCommand', () => {
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
 				expect(launchClaudeCall[1].allowedTools).toEqual([
-					'mcp__github_comment__create_comment',
-					'mcp__github_comment__update_comment',
+					'mcp__issue_management__get_issue',
+					'mcp__issue_management__get_comment',
+					'mcp__issue_management__create_comment',
+					'mcp__issue_management__update_comment',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -826,7 +832,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -876,10 +882,12 @@ describe('IgniteCommand', () => {
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
 				expect(launchClaudeCall[1].mcpConfig).toBeInstanceOf(Array)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
-					'mcp__github_comment__create_comment',
-					'mcp__github_comment__update_comment',
+					'mcp__issue_management__get_issue',
+					'mcp__issue_management__get_comment',
+					'mcp__issue_management__create_comment',
+					'mcp__issue_management__update_comment',
 				])
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()

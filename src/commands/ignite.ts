@@ -4,7 +4,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
@@ -135,15 +135,17 @@ export class IgniteCommand {
 
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
-					mcpConfig = await generateGitHubCommentMcpConfig(context.type)
-					logger.debug('Generated MCP configuration for GitHub comment broker')
+					mcpConfig = await generateIssueManagementMcpConfig(context.type)
+					logger.debug('Generated MCP configuration for issue management')
 
 					// Configure tool filtering for issue/PR workflows
 					allowedTools = [
-						'mcp__github_comment__create_comment',
-						'mcp__github_comment__update_comment',
+						'mcp__issue_management__get_issue',
+						'mcp__issue_management__get_comment',
+						'mcp__issue_management__create_comment',
+						'mcp__issue_management__update_comment',
 					]
-					disallowedTools = ['Bash(gh api:*)']
+					disallowedTools = ['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)']
 
 					logger.debug('Configured tool filtering for issue/PR workflow', { allowedTools, disallowedTools })
 				} catch (error) {

@@ -23,7 +23,7 @@ export default defineConfig([
   },
   // MCP Server build configuration
   {
-    entry: ['src/mcp/github-comment-server.ts'],
+    entry: ['src/mcp/issue-management-server.ts'],
     format: ['esm'],
     target: 'node16',
     outDir: 'dist/mcp',

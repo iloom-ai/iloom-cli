@@ -5,7 +5,7 @@ import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { logger } from '../utils/logger.js'
-import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
@@ -76,19 +76,21 @@ export class EnhanceCommand {
 		const loadedAgents = await this.agentManager.loadAgents(settings)
 		const agents = this.agentManager.formatForCli(loadedAgents)
 
-		// Step 3.5: Generate MCP config and tool filtering for GitHub comment broker
+		// Step 3.5: Generate MCP config and tool filtering for issue management
 		let mcpConfig: Record<string, unknown>[] | undefined
 		let allowedTools: string[] | undefined
 		let disallowedTools: string[] | undefined
 
 		try {
-			mcpConfig = await generateGitHubCommentMcpConfig('issue', repo)
-			logger.debug('Generated MCP configuration for GitHub comment broker')
+			mcpConfig = await generateIssueManagementMcpConfig('issue', repo)
+			logger.debug('Generated MCP configuration for issue management')
 
 			// Configure tool filtering for issue workflows
 			allowedTools = [
-				'mcp__github_comment__create_comment',
-				'mcp__github_comment__update_comment',
+				'mcp__issue_management__get_issue',
+				'mcp__issue_management__get_comment',
+				'mcp__issue_management__create_comment',
+				'mcp__issue_management__update_comment',
 			]
 			disallowedTools = ['Bash(gh api:*)']
 

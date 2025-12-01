@@ -17,7 +17,7 @@ vi.mock('../utils/prompt.js', () => ({
 	promptInput: vi.fn(),
 }))
 vi.mock('../utils/mcp.js', () => ({
-	generateGitHubCommentMcpConfig: vi.fn().mockResolvedValue([]),
+	generateIssueManagementMcpConfig: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('../utils/remote.js', () => ({
 	hasMultipleRemotes: vi.fn().mockResolvedValue(false),

@@ -138,7 +138,7 @@ You are orchestrating a set of agents through a development process, with human 
 
 Perform ONE comprehensive scan to determine which agents need to run:
 
-1. Fetch complete issue data using `gh issue view ISSUE_NUMBER --json body,title,comments`
+1. Fetch complete issue data using the MCP tool `mcp__issue_management__get_issue` with `{ number: "ISSUE_NUMBER", includeComments: true }`
 2. Analyze the issue body and ALL comments in a single pass to determine:
 
    **Enhancement Decision:**

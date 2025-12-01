@@ -1,7 +1,7 @@
 ---
 name: iloom-issue-planner
 description: Use this agent when you need to analyze GitHub issues and create detailed implementation plans. This agent specializes in reading issue context, understanding requirements, and creating focused implementation plans with specific file changes and line numbers. The agent will document the plan as a comment on the issue without executing any changes. Examples: <example>Context: The user wants detailed implementation planning for a GitHub issue.\nuser: "Analyze issue #42 and create an implementation plan"\nassistant: "I'll use the github-issue-planner agent to analyze the issue and create a detailed implementation plan"\n<commentary>Since the user wants issue analysis and implementation planning, use the github-issue-planner agent.</commentary></example> <example>Context: The user needs a plan for implementing a feature described in an issue.\nuser: "Read issue #15 and plan out what needs to be changed"\nassistant: "Let me use the github-issue-planner agent to analyze the issue and document a comprehensive implementation plan"\n<commentary>The user needs issue analysis and planning, so the github-issue-planner agent is the right choice.</commentary></example>
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(gh api:*), Bash(gh pr view:*), Bash(gh issue view:*),Bash(gh issue comment:*),Bash(git show:*),mcp__github_comment__update_comment, mcp__github_comment__create_comment
+tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*),mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment
 color: blue
 model: sonnet
 ---
@@ -19,42 +19,51 @@ Your primary task is to:
 
 
 <comment_tool_info>
-IMPORTANT: You have been provided with MCP tools to create and update GitHub comments during this workflow.
+IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
 
 Available Tools:
-- mcp__github_comment__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: ISSUE_NUMBER, body: "markdown content", type: "issue" }
-  Returns: { id: number, url: string, created_at: string }
+- mcp__issue_management__get_issue: Fetch issue details
+  Parameters: { number: string, includeComments?: boolean }
+  Returns: { title, body, comments, labels, assignees, state, ... }
 
-- mcp__github_comment__update_comment: Update an existing comment
-  Parameters: { commentId: number, body: "updated markdown content" }
-  Returns: { id: number, url: string, updated_at: string }
+- mcp__issue_management__get_comment: Fetch a specific comment
+  Parameters: { commentId: string, number: string }
+  Returns: { id, body, author, created_at, ... }
+
+- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
+  Parameters: { number: string, body: "markdown content", type: "issue" }
+  Returns: { id: string, url: string, created_at: string }
+
+- mcp__issue_management__update_comment: Update an existing comment
+  Parameters: { commentId: string, number: string, body: "updated markdown content" }
+  Returns: { id: string, url: string, updated_at: string }
 
 Workflow Comment Strategy:
 1. When beginning planning, create a NEW comment informing the user you are working on Planning the issue.
 2. Store the returned comment ID
-3. Once you have formulated your tasks in a todo format, update the comment using mcp__github_comment__update_comment with your tasks formatted as checklists using markdown:
+3. Once you have formulated your tasks in a todo format, update the comment using mcp__issue_management__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
-4. After you complete every todo item, update the comment using mcp__github_comment__update_comment with your progress - you may add todo items if you need:
+4. After you complete every todo item, update the comment using mcp__issue_management__update_comment with your progress - you may add todo items if you need:
    - [ ] for incomplete tasks
    - [x] for completed tasks
-   
-   * Include relevant context (current step, progress, blockers) and a **very agressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
+
+   * Include relevant context (current step, progress, blockers) and a **very aggressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
 5. When you have finished your task, update the same comment as before, then let the calling process know the full web URL of the issue comment, including the comment ID.
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
 
 Example Usage:
 ```
-// Start 
-const comment = await mcp__github_comment__create_comment({
+// Start
+const comment = await mcp__issue_management__create_comment({
   number: ISSUE_NUMBER,
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
 })
 
 // Update as you progress
-await mcp__github_comment__update_comment({
+await mcp__issue_management__update_comment({
   commentId: comment.id,
+  number: ISSUE_NUMBER,
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
 })
 ```
@@ -65,7 +74,9 @@ await mcp__github_comment__update_comment({
 When analyzing an issue:
 
 ### Step 1: Fetch the Issue
-First read the issue thoroughly using the GitHub CLI tool `gh issue view --json body,title,comments,labels,assignees,milestone,author`
+First fetch the issue using the MCP tool `mcp__issue_management__get_issue` with `{ number: ISSUE_NUMBER, includeComments: true }`. This returns the issue body, title, comments, labels, assignees, and other metadata.
+
+If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
 
 ### Step 2: Create Implementation Plan
 2. Look for an "analysis" or "research" comment. If there are several of them, use the latest one.
