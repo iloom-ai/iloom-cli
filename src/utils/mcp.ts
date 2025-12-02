@@ -15,25 +15,54 @@ export async function generateIssueManagementMcpConfig(
 	repo?: string,
 	provider: 'github' | 'linear' = 'github'
 ): Promise<Record<string, unknown>[]> {
-	// Get repository information - either from provided repo string or auto-detect
-	let owner: string
-	let name: string
-
-	if (repo) {
-		const parts = repo.split('/')
-		if (parts.length !== 2 || !parts[0] || !parts[1]) {
-			throw new Error(`Invalid repo format: ${repo}. Expected "owner/repo"`)
-		}
-		owner = parts[0]
-		name = parts[1]
-	} else {
-		const repoInfo = await getRepoInfo()
-		owner = repoInfo.owner
-		name = repoInfo.name
+	// Build provider-specific environment variables
+	let envVars: Record<string, string> = {
+		ISSUE_PROVIDER: provider,
 	}
 
-	// Map logical types to GitHub's webhook event names (handle GitHub's naming quirk here)
-	const githubEventName = contextType === 'issue' ? 'issues' : contextType === 'pr' ? 'pull_request' : undefined
+	if (provider === 'github') {
+		// Get repository information for GitHub - either from provided repo string or auto-detect
+		let owner: string
+		let name: string
+
+		if (repo) {
+			const parts = repo.split('/')
+			if (parts.length !== 2 || !parts[0] || !parts[1]) {
+				throw new Error(`Invalid repo format: ${repo}. Expected "owner/repo"`)
+			}
+			owner = parts[0]
+			name = parts[1]
+		} else {
+			const repoInfo = await getRepoInfo()
+			owner = repoInfo.owner
+			name = repoInfo.name
+		}
+
+		// Map logical types to GitHub's webhook event names (handle GitHub's naming quirk here)
+		const githubEventName = contextType === 'issue' ? 'issues' : contextType === 'pr' ? 'pull_request' : undefined
+
+		envVars = {
+			...envVars,
+			REPO_OWNER: owner,
+			REPO_NAME: name,
+			GITHUB_API_URL: 'https://api.github.com/',
+			...(githubEventName && { GITHUB_EVENT_NAME: githubEventName }),
+		}
+
+		logger.debug('Generated MCP config for GitHub issue management', {
+			provider,
+			repoOwner: owner,
+			repoName: name,
+			contextType: contextType ?? 'auto-detect',
+			githubEventName: githubEventName ?? 'auto-detect'
+		})
+	} else {
+		// Linear doesn't need repo info - it uses team/identifier patterns
+		logger.debug('Generated MCP config for Linear issue management', {
+			provider,
+			contextType: contextType ?? 'auto-detect',
+		})
+	}
 
 	// Generate single MCP server config
 	const mcpServerConfig = {
@@ -42,24 +71,10 @@ export async function generateIssueManagementMcpConfig(
 				transport: 'stdio',
 				command: 'node',
 				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')],
-				env: {
-					ISSUE_PROVIDER: provider,
-					REPO_OWNER: owner,
-					REPO_NAME: name,
-					GITHUB_API_URL: 'https://api.github.com/',
-					...(githubEventName && { GITHUB_EVENT_NAME: githubEventName }),
-				},
+				env: envVars,
 			},
 		},
 	}
-
-	logger.debug('Generated MCP config for issue management', {
-		provider,
-		repoOwner: owner,
-		repoName: name,
-		contextType: contextType ?? 'auto-detect',
-		githubEventName: githubEventName ?? 'auto-detect'
-	})
 
 	return [mcpServerConfig]
 }

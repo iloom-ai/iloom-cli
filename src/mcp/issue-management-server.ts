@@ -26,8 +26,8 @@ function validateEnvironment(): IssueProvider {
 		process.exit(1)
 	}
 
-	if (provider !== 'github') {
-		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github'`)
+	if (provider !== 'github' && provider !== 'linear') {
+		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github' or 'linear'`)
 		process.exit(1)
 	}
 
@@ -43,6 +43,8 @@ function validateEnvironment(): IssueProvider {
 			process.exit(1)
 		}
 	}
+
+	// Linear doesn't need additional env vars - it uses the linearis CLI which handles auth
 
 	return provider
 }

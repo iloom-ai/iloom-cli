@@ -591,15 +591,107 @@ Example: Issue #25 with basePort 3000 = port 3025
 
 For complete configuration reference, see [.iloom/README.md](./.iloom/README.md)
 
+## Issue Tracker Integration
+
+iloom supports multiple issue tracking systems through a provider abstraction. Choose GitHub or Linear based on your team's workflow.
+
+### GitHub (Default)
+
+GitHub is the default issue tracker and requires no additional configuration beyond authentication with the `gh` CLI.
+
+**Setup:**
+```bash
+# Authenticate with GitHub CLI
+gh auth login
+
+# Start using iloom with GitHub issues
+il start 123
+il start PR-456
+```
+
+**Configuration:**
+```jsonc
+{
+  "issueManagement": {
+    "provider": "github",  // Default, can be omitted
+    "github": {
+      "remote": "origin"  // Optional, defaults to "origin"
+    }
+  }
+}
+```
+
+### Linear
+
+iloom integrates with Linear through the `linearis` CLI tool, enabling full Linear issue tracking support.
+
+**Setup:**
+
+1. Install the `linearis` CLI:
+   ```bash
+   npm install -g linearis
+   ```
+
+2. Set your Linear API key:
+   ```bash
+   export LINEAR_API_TOKEN="lin_api_..."
+   ```
+
+   Or save to `~/.linear_api_token` for persistence.
+
+3. Configure iloom to use Linear:
+   ```bash
+   il init
+   # Follow prompts to select Linear as your issue tracker
+   ```
+
+   Or manually edit `.iloom/settings.json`:
+   ```jsonc
+   {
+     "issueManagement": {
+       "provider": "linear",
+       "linear": {
+         "teamId": "ENG",  // Required: Your Linear team key
+         "branchFormat": "feat/{{key}}__{{title}}"  // Optional
+       }
+     }
+   }
+   ```
+
+**Usage:**
+
+```bash
+# Start working on a Linear issue
+il start ENG-123
+
+# Create a new Linear issue
+il start "Add user authentication"
+
+# Finish and merge
+il finish
+```
+
+**Limitations:**
+
+- Linear does not have pull requests. Use `il finish` with `mergeBehavior.mode: "local"` or `"github-pr"` to merge your code.
+- The Linear MCP integration is not included in this version (CLI-only integration).
+
+**Port Calculation:**
+
+Linear issue identifiers (e.g., ENG-123) use hash-based port calculation instead of simple numeric addition. The port is deterministically generated from the branch name, ensuring consistency across sessions.
+
 ## Requirements
 
 **Essential:**
 - Claude CLI - AI assistance with issue context preloaded
 - Node.js 16+
 - Git 2.5+ (for worktree support)
-- GitHub CLI (`gh`) - authenticated with your repository
 
-**Recommended**
+**Issue Tracker (choose one):**
+- **GitHub CLI (`gh`)** - For GitHub issue tracking (default)
+- **Linear CLI (`linearis`)** - For Linear issue tracking (install with `npm install -g linearis`)
+
+**Recommended:**
 - A Claude Max subscription - iloom uses your own subscription
 
 **Optional (auto-detected):**

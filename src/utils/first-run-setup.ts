@@ -51,7 +51,7 @@ export async function launchFirstRunSetup(): Promise<void> {
 	const { InitCommand } = await import('../commands/init.js')
 	const initCommand = new InitCommand()
 	await initCommand.execute(
-		'Help me configure iloom settings for this project. This is my first time using iloom here.'
+		'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
 	)
 
 	logger.info('Configuration complete! Continuing with your original command...')

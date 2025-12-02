@@ -73,29 +73,29 @@ export class InitCommand {
       logger.debug('Settings migration error details', { error })
     }
 
+    // Update .gitignore
+    logger.debug('Starting .gitignore update')
+    await this.updateGitignore()
+    logger.debug('setupProjectConfiguration() completed')
+
     // Ensure .iloom directory exists
     const iloomDir = path.join(process.cwd(), '.iloom')
     logger.debug('Creating .iloom directory', { iloomDir })
     await mkdir(iloomDir, { recursive: true })
     logger.debug('.iloom directory created/verified')
 
-    // Create settings.local.json if it doesn't exist
-    const settingsLocalPath = path.join(iloomDir, 'settings.local.json')
-    logger.debug('Checking for existing settings.local.json', { settingsLocalPath })
+    // // Create settings.local.json if it doesn't exist
+    // const settingsLocalPath = path.join(iloomDir, 'settings.local.json')
+    // logger.debug('Checking for existing settings.local.json', { settingsLocalPath })
 
-    if (!existsSync(settingsLocalPath)) {
-      logger.debug('Creating settings.local.json file')
-      await writeFile(settingsLocalPath, '{}\n', 'utf-8')
-      logger.info('Created .iloom/settings.local.json')
-      logger.debug('settings.local.json file created successfully')
-    } else {
-      logger.debug('settings.local.json file already exists, skipping')
-    }
-
-    // Update .gitignore
-    logger.debug('Starting .gitignore update')
-    await this.updateGitignore()
-    logger.debug('setupProjectConfiguration() completed')
+    // if (!existsSync(settingsLocalPath)) {
+    //   logger.debug('Creating settings.local.json file')
+    //   await writeFile(settingsLocalPath, '{}\n', 'utf-8')
+    //   logger.info('Created .iloom/settings.local.json')
+    //   logger.debug('settings.local.json file created successfully')
+    // } else {
+    //   logger.debug('settings.local.json file already exists, skipping')
+    // }
   }
 
   /**

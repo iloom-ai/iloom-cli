@@ -6,6 +6,7 @@ import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
@@ -136,8 +137,9 @@ export class IgniteCommand {
 
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
-					mcpConfig = await generateIssueManagementMcpConfig(context.type)
-					logger.debug('Generated MCP configuration for issue management')
+					const provider = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
+					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider)
+					logger.debug('Generated MCP configuration for issue management', { provider })
 
 					// Configure tool filtering for issue/PR workflows
 					allowedTools = [

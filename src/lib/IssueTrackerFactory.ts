@@ -3,9 +3,11 @@
 
 import type { IssueTracker } from './IssueTracker.js'
 import { GitHubService } from './GitHubService.js'
+import { LinearService, type LinearServiceConfig } from './LinearService.js'
 import type { IloomSettings } from './SettingsManager.js'
+import { logger } from '../utils/logger.js'
 
-export type IssueTrackerProviderType = 'github' // Extensible: | 'linear' | 'jira'
+export type IssueTrackerProviderType = 'github' | 'linear'
 
 /**
  * Factory for creating IssueTracker instances based on settings
@@ -27,9 +29,27 @@ export class IssueTrackerFactory {
 	static create(settings: IloomSettings): IssueTracker {
 		const provider = settings.issueManagement?.provider ?? 'github'
 
+		logger.debug(`IssueTrackerFactory: Creating tracker for provider "${provider}"`)
+		logger.debug(`IssueTrackerFactory: issueManagement settings:`, JSON.stringify(settings.issueManagement, null, 2))
+
 		switch (provider) {
 			case 'github':
+				logger.debug('IssueTrackerFactory: Creating GitHubService')
 				return new GitHubService()
+			case 'linear': {
+				const linearSettings = settings.issueManagement?.linear
+				const linearConfig: LinearServiceConfig = {}
+
+				if (linearSettings?.teamId) {
+					linearConfig.teamId = linearSettings.teamId
+				}
+				if (linearSettings?.branchFormat) {
+					linearConfig.branchFormat = linearSettings.branchFormat
+				}
+
+				logger.debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
+				return new LinearService(linearConfig)
+			}
 			default:
 				throw new Error(`Unsupported issue tracker provider: ${provider}`)
 		}

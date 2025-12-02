@@ -24,7 +24,7 @@ export class IdentifierParser {
 	 * Parse identifier using pattern-based detection on existing worktrees.
 	 * Does NOT make GitHub API calls - only checks local worktree patterns.
 	 *
-	 * @param identifier - The identifier to parse (e.g., "42", "#66", "my-branch")
+	 * @param identifier - The identifier to parse (e.g., "42", "#66", "ENG-123", "my-branch")
 	 * @returns ParsedInput with type, number/branchName, and originalInput
 	 * @throws Error if no matching worktree is found
 	 */
@@ -33,7 +33,7 @@ export class IdentifierParser {
 		const cleanId = identifier.replace(/^#/, '').trim()
 		const originalInput = identifier
 
-		// Check if input is numeric
+		// Check if input is numeric (GitHub-style issue/PR numbers)
 		const numericMatch = cleanId.match(/^(\d+)$/)
 
 		if (numericMatch?.[1]) {
@@ -64,7 +64,27 @@ export class IdentifierParser {
 			throw new Error(`No worktree found for identifier: ${identifier}`)
 		}
 
-		// Non-numeric input: treat as branch name
+		// Check if input is alphanumeric issue identifier (Linear/Jira-style: ABC-123, ENG-42)
+		const alphanumericMatch = cleanId.match(/^([A-Za-z]+-\d+)$/)
+
+		if (alphanumericMatch?.[1]) {
+			const alphanumericId = alphanumericMatch[1]
+
+			// Check for issue worktree with alphanumeric identifier
+			const issueWorktree = await this.gitWorktreeManager.findWorktreeForIssue(alphanumericId)
+			if (issueWorktree) {
+				return {
+					type: 'issue',
+					number: alphanumericId,
+					originalInput,
+				}
+			}
+
+			// No matching worktree found for alphanumeric identifier
+			throw new Error(`No worktree found for identifier: ${identifier}`)
+		}
+
+		// Non-numeric/non-alphanumeric input: treat as branch name
 		const branchWorktree = await this.gitWorktreeManager.findWorktreeForBranch(cleanId)
 		if (branchWorktree) {
 			return {

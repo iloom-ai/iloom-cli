@@ -17,6 +17,8 @@ import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import type { StartOptions } from '../types/index.js'
+import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -110,14 +112,15 @@ export class StartCommand {
 			// Step 0: Load settings and get configured repo for GitHub operations
 			const initialSettings = await this.settingsManager.loadSettings()
 
-			// Step 0.1: Check for first-run setup need and launch if necessary
-			const { needsFirstRunSetup, launchFirstRunSetup } = await import(
-				'../utils/first-run-setup.js'
-			)
-			if (await needsFirstRunSetup()) {
+			if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
 				await launchFirstRunSetup()
-				// Reload settings after setup completes
-				await this.settingsManager.loadSettings()
+				// Reload settings and recreate issueTracker if provider changed during setup
+				const newSettings = await this.settingsManager.loadSettings()
+				const newProvider = newSettings.issueManagement?.provider ?? 'github'
+				if (newProvider !== this.issueTracker.providerName) {
+					logger.debug(`Reinitializing issue tracker: provider changed to "${newProvider}"`)
+					this.issueTracker = IssueTrackerFactory.create(newSettings)
+				}
 			}
 
 			let repo: string | undefined
@@ -298,8 +301,8 @@ export class StartCommand {
 			}
 		}
 
-		// Check for PR-specific formats: pr/123, PR-123, PR/123
-		const prPattern = /^(?:pr|PR)[/-](\d+)$/
+		// Check for PR-specific formats: pr/123, PR-123, PR/123, Pr-123 (case-insensitive)
+		const prPattern = /^pr[/-](\d+)$/i
 		const prMatch = trimmedIdentifier.match(prPattern)
 		if (prMatch?.[1]) {
 			return {
@@ -307,6 +310,31 @@ export class StartCommand {
 				number: parseInt(prMatch[1], 10),
 				originalInput: trimmedIdentifier,
 			}
+		}
+
+		// Check for Linear identifier format (TEAM-NUMBER, e.g., ENG-123, PLAT-456)
+		// Requires at least 2 letters before dash to avoid conflict with PR-123 format
+		const linearPattern = /^([A-Z]{2,}-\d+)$/i
+		const linearMatch = trimmedIdentifier.match(linearPattern)
+		if (linearMatch?.[1]) {
+			// Use IssueTracker to validate it exists
+			const detection = await this.issueTracker.detectInputType(
+				trimmedIdentifier,
+				repo
+			)
+
+			if (detection.type === 'issue' && detection.identifier) {
+				return {
+					type: 'issue',
+					number: detection.identifier, // Keep as string for Linear
+					originalInput: trimmedIdentifier,
+				}
+			}
+
+			// Linear identifier format matched but not found
+			throw new Error(
+				`Could not find Linear issue ${linearMatch[1].toUpperCase()}`
+			)
 		}
 
 		// Check for numeric pattern (could be issue or PR)

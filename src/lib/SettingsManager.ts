@@ -258,13 +258,25 @@ export const IloomSettingsSchema = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
-			provider: z.enum(['github']).optional().default('github').describe('Issue tracker provider (github, linear, jira)'),
+			provider: z.enum(['github', 'linear']).optional().default('github').describe('Issue tracker provider (github, linear)'),
 			github: z
 				.object({
 					remote: z
 						.string()
 						.min(1, 'Remote name cannot be empty')
 						.describe('Git remote name to use for GitHub operations'),
+				})
+				.optional(),
+			linear: z
+				.object({
+					teamId: z
+						.string()
+						.min(1, 'Team ID cannot be empty')
+						.describe('Linear team identifier (e.g., "ENG", "PLAT")'),
+					branchFormat: z
+						.string()
+						.optional()
+						.describe('Branch naming template for Linear issues'),
 				})
 				.optional(),
 		})
@@ -357,13 +369,25 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
-			provider: z.enum(['github']).optional().describe('Issue tracker provider (github, linear, jira)'),
+			provider: z.enum(['github', 'linear']).optional().describe('Issue tracker provider (github, linear)'),
 			github: z
 				.object({
 					remote: z
 						.string()
 						.min(1, 'Remote name cannot be empty')
 						.describe('Git remote name to use for GitHub operations'),
+				})
+				.optional(),
+			linear: z
+				.object({
+					teamId: z
+						.string()
+						.min(1, 'Team ID cannot be empty')
+						.describe('Linear team identifier (e.g., "ENG", "PLAT")'),
+					branchFormat: z
+						.string()
+						.optional()
+						.describe('Branch naming template for Linear issues'),
 				})
 				.optional(),
 		})

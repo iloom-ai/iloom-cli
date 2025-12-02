@@ -191,10 +191,13 @@ Parse both settings.json and settings.local.json. Merge them with local taking p
 
 Extract these current values if they exist:
 - `currentMainBranch` from `mainBranch` field (default: "main")
-- `currentWorktreePrefix` from `worktreePrefix` field (default: "" which means use default)
+- `currentWorktreePrefix` from `worktreePrefix` field (default: null which means use default - NOTE: "" does not mean default)
 - `currentPermissionMode` from `workflows.issue.permissionMode` field (default: "acceptEdits")
 - `currentBasePort` from `capabilities.web.basePort` field (default: 3000)
 - `currentMergeMode` from `mergeBehavior.mode` field (default: "local")
+- `currentIssueProvider` from `issueManagement.provider` field (default: "github")
+- `currentLinearTeamId` from `issueManagement.linear.teamId` field (if Linear is provider)
+- `currentGitHubRemote` from `issueManagement.github.remote` field (if GitHub is provider and multiple remotes)
 
 **If configuration already exists, display current configuration summary:**
 
@@ -205,7 +208,9 @@ Main Branch: [currentMainBranch or "main (default)"]
 Worktree Prefix: [currentWorktreePrefix or "default (repo-name-looms)"]
 Permission Mode (Issues): [currentPermissionMode or "acceptEdits (default)"]
 Base Port: [currentBasePort or "3000 (default)"]
-GitHub Remote: [currentGitHubRemote or "not configured"]
+Issue Tracker: [currentIssueProvider or "github (default)"]
+Linear Team ID: [currentLinearTeamId] (only if currentIssueProvider == linear)
+{{#IF MULTIPLE_REMOTES}}GitHub Remote: [currentGitHubRemote] (only if currentIssueProvider == github){{/IF MULTIPLE_REMOTES}}
 ```
 
 **Then ask the user what they want to do:**
@@ -220,48 +225,19 @@ GitHub Remote: [currentGitHubRemote or "not configured"]
 **Based on their answer:**
 - **Modify existing settings** → Proceed to Phase 1 to update settings
 {{#IF MULTIPLE_REMOTES}}
-- **Configure GitHub remote** → Go to Phase 0.5 to configure remote, then skip to Phase 2 (summary), Phase 3 (choose file), and Phase 5 (save). Do NOT re-ask about other settings.
+- **Configure GitHub remote** → Go to Phase 2 to configure tooling (including remote selection), then skip to Phase 3 (summary), Phase 4 (choose file), and Phase 6 (save). Do NOT re-ask about Phase 1 settings.
 {{/IF MULTIPLE_REMOTES}}
-- **Add advanced configuration** → Skip to Phase 8 to help with advanced options
+- **Add advanced configuration** → Skip to Phase 9 to help with advanced options
 - **Start fresh** → Proceed to Phase 1 to reconfigure from scratch
-- **Nothing/Exit** → Show Phase 8 wrap-up message and end session
+- **Nothing/Exit** → Show Phase 9 wrap-up message and end session
 
-**If NO configuration exists**, skip directly to Phase 0.5 (GitHub Remote Configuration) without asking what they want to do.
+**If NO configuration exists**, skip directly to Phase 1 (Local Development Settings) without asking what they want to do.
 
-### Phase 0.5: GitHub Remote Configuration
+### Phase 1: Local Development Settings
 
-REMOTES_INFO
+Use AskUserQuestion to ask ALL local development settings questions **IN A SINGLE BATCH**. **ALWAYS include current values in questions as shown below:**
 
-**IMPORTANT: Before proceeding, determine if remote configuration is needed:**
-
-{{#IF MULTIPLE_REMOTES}}
-This repository has multiple git remotes detected. iloom needs to know which remote's GitHub repository to use for creating and reading issues.
-
-**Detected remotes:**
-REMOTES_INFO
-
-If the user has no `issueManagement.github.remote` configured you MUST ask the user: "Which remote should iloom use for GitHub issue operations?"
-- Show the list of detected remotes above with their repository URLs
-- **Classic fork pattern (origin + upstream)**: If both "origin" and "upstream" remotes exist, recommend "upstream" since issues are typically tracked in the original repository, not personal forks. Explain: "In a typical fork workflow, 'upstream' points to the original project where issues are tracked, while 'origin' is your personal fork for submitting PRs."
-- For other multi-remote scenarios: Default to "origin" if it exists, otherwise the first remote
-- Store answer as: `issueManagement.github.remote`
-
-**IMPORTANT**: Do NOT save this setting yet. You will ask the user where to save ALL configuration settings in Phase 3.
-{{/IF MULTIPLE_REMOTES}}
-
-{{#IF SINGLE_REMOTE}}
-**Note:** Only one remote detected (SINGLE_REMOTE_NAME pointing to SINGLE_REMOTE_URL). iloom will use this for GitHub operations. No configuration needed.
-{{/IF SINGLE_REMOTE}}
-
-{{#IF NO_REMOTES}}
-**Warning:** No git remotes detected. You may need to configure a remote before using iloom's GitHub features.
-{{/IF NO_REMOTES}}
-
-### Phase 1: Essential Settings
-
-Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH**. **ALWAYS include current values in questions as shown below:**
-
-**Create a single AskUserQuestion call with these 4 questions:**
+**Create a single AskUserQuestion call with these questions:**
 
 1. **Main Branch**
    - Question format: "What is your main/primary branch name?{{#IF currentMainBranch}} (Currently: [currentMainBranch]){{/IF currentMainBranch}}"
@@ -276,23 +252,23 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
 2. **Worktree Prefix**
    - Question format: "What prefix should iloom use for worktree directories?{{#IF currentWorktreePrefix}} (Currently: [currentWorktreePrefix]){{/IF currentWorktreePrefix}} Leave empty to use default (<repo-name>-looms)."
    - Options (as examples):
-     - "" (empty) - Use default prefix
-     - "looms" - Simple prefix
-     - "../looms" - Sibling directory
-   - Default: currentWorktreePrefix or "" (empty means use default)
+     - Use default prefix (recommened)
+     - "looms" - Simple 'looms-' prefix
+     - Empty - each loom will be a sibling of this directory
+   - Default: currentWorktreePrefix or default (NOTE: empty does NOT mean use default)
    - Validation: If not empty, only alphanumeric characters, hyphens, underscores, and forward slashes allowed
    - Store answer as: `worktreePrefix`
-   - Note: If user provides empty string, omit this field from settings
+   - Note: If user specifies default, omit this field from settings, it they say empty, add an empty string to the settings
 
 3. **Permission Mode for Issue Workflows**
    - Question format: "What permission mode should Claude use when working on issues?{{#IF currentPermissionMode}} (Currently: [currentPermissionMode]){{/IF currentPermissionMode}}"
    - Options:
+     - "default" - Use Claude Code's default behavior
      - "acceptEdits" - Claude executes with your confirmation (recommended)
      - "plan" - Claude plans but doesn't execute
-     - "bypassPermissions" - ⚠️ Claude executes without confirmation (use with caution)
-     - "default" - Use Claude Code's default behavior
+     - "bypassPermissions" - Claude executes without confirmation (use with caution)
    - Default: currentPermissionMode or "acceptEdits"
-   - Validation: Must be one of: plan, acceptEdits, bypassPermissions, default
+   - Validation: Must be one of: default, plan, acceptEdits, bypassPermissions
    - Store answer as: `workflows.issue.permissionMode`
 
 4. **Base Port**
@@ -305,7 +281,75 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
    - Validation: Number between 1 and 65535
    - Store answer as: `capabilities.web.basePort`
 
-5. **Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
+**Implementation Details:**
+- Set multiSelect: false for all questions (user picks one answer per question)
+- Use the AskUserQuestion tool with all questions in the questions array
+- Users can select "Other" on any question to provide custom input
+- Process all answers at once when the user submits
+
+### Phase 2: Tooling Configuration
+
+This phase configures external tooling integrations. Use AskUserQuestion to gather these settings.
+
+**Step 1: Issue Tracker Provider**
+
+{{#IF MULTIPLE_REMOTES}}
+Since this repository has multiple git remotes, GitHub Issues is suggested as the default since it integrates with your existing GitHub workflow. However, you can choose Linear if that's your team's issue tracker.
+{{/IF MULTIPLE_REMOTES}}
+
+1. **Issue Tracker Provider**
+   - Question format: "Which issue tracker do you use?{{#IF currentIssueProvider}} (Currently: [currentIssueProvider]){{/IF currentIssueProvider}}"
+   - Options:
+     - "github" - GitHub Issues (default)
+     - "linear" - Linear Issues
+   - Default: currentIssueProvider or "github"
+   - Validation: Must be one of: github, linear
+   - Store answer as: `issueManagement.provider`
+
+**Step 2: Provider-Specific Configuration**
+
+Based on the answer to Step 1, ask the appropriate follow-up questions:
+
+**If GitHub was selected:**
+
+{{#IF MULTIPLE_REMOTES}}
+This repository has multiple git remotes detected. iloom needs to know which remote's GitHub repository to use for creating and reading issues.
+
+**Detected remotes:**
+REMOTES_INFO
+
+2. **GitHub Remote** (only ask if GitHub is selected)
+   - Question format: "Which remote should iloom use for GitHub issue operations?"
+   - Show the list of detected remotes above with their repository URLs
+   - **Classic fork pattern (origin + upstream)**: If both "origin" and "upstream" remotes exist, recommend "upstream" since issues are typically tracked in the original repository, not personal forks. Explain: "In a typical fork workflow, 'upstream' points to the original project where issues are tracked, while 'origin' is your personal fork for submitting PRs."
+   - For other multi-remote scenarios: Default to "origin" if it exists, otherwise the first remote
+   - Store answer as: `issueManagement.github.remote`
+{{/IF MULTIPLE_REMOTES}}
+
+{{#IF SINGLE_REMOTE}}
+**Note:** Only one remote detected (SINGLE_REMOTE_NAME pointing to SINGLE_REMOTE_URL). iloom will use this for GitHub operations. No additional configuration needed.
+{{/IF SINGLE_REMOTE}}
+
+{{#IF NO_REMOTES}}
+**Warning:** No git remotes detected. The user will need to configure a remote before using iloom's GitHub features.
+{{/IF NO_REMOTES}}
+
+**If Linear was selected:**
+
+2. **Linear Team ID** (only ask if issue provider is "linear")
+   - Question format: "What is your Linear team ID/key?{{#IF currentLinearTeamId}} (Currently: [currentLinearTeamId]){{/IF currentLinearTeamId}}"
+   - Options (as examples):
+     - "ENG" - Engineering team
+     - "PLAT" - Platform team
+     - "PROD" - Product team
+   - Default: currentLinearTeamId or NO DEFAULT (required if Linear is selected)
+   - Validation: Non-empty string, length <= 7 characters
+   - Store answer as: `issueManagement.linear.teamId`
+   - Context: This is the team key shown in your Linear workspace (e.g., "ENG" in "ENG-123")
+
+**Step 3: Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
+
+3. **Merge Mode**
    - Question format: "How should iloom handle finishing work?{{#IF currentMergeMode}} (Currently: [currentMergeMode]){{/IF currentMergeMode}}"
    - Options:
      - "local" - Merge changes locally (traditional workflow)
@@ -316,32 +360,43 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
    - Context: Fork workflows (with upstream remote) should typically use "github-pr" mode
 
 **Implementation Details:**
-- Set multiSelect: false for all questions (user picks one answer per question)
-- Use the AskUserQuestion tool with all 4 questions in the questions array
-- Users can select "Other" on any question to provide custom input
-- Process all answers at once when the user submits
+- Ask Step 1 first to determine provider
+- Then ask Step 2 based on the provider selected
+- Ask Step 3 only if multiple remotes detected OR user requests advanced config
+- Set multiSelect: false for all questions
+- Process answers sequentially as they depend on each other
 
-### Phase 2: Configuration Summary
+### Phase 3: Configuration Summary
 
-After gathering all answers, display a summary like this:
+After gathering all answers from Phase 1 and Phase 2, display a summary like this:
 
 ```
 Configuration Summary:
 ━━━━━━━━━━━━━━━━━━━━
-Main Branch: [value]
-Worktree Prefix: [value or "default (repo-name-looms)"]
-Permission Mode (Issues): [value]
-Base Port: [value]
-{{#IF MULTIPLE_REMOTES}}GitHub Remote: [value]{{/IF MULTIPLE_REMOTES}}
+
+Local Development Settings (Phase 1):
+  Main Branch: [value]
+  Worktree Prefix: [value or "default (repo-name-looms)"]
+  Permission Mode (Issues): [value]
+  Base Port: [value]
+
+Tooling Configuration (Phase 2):
+  Issue Tracker: [value]
+  Linear Team ID: [value] (only if issue tracker is Linear)
+  {{#IF MULTIPLE_REMOTES}}GitHub Remote: [value] (only if issue tracker is GitHub){{/IF MULTIPLE_REMOTES}}
+  Merge Mode: [value] (only if configured)
 ```
 
-**Note**: Include the GitHub Remote line in the summary ONLY if it was configured in Phase 0.5.
+**Note**:
+- Include the GitHub Remote line in the summary ONLY if it was configured in Phase 2 (multiple remotes and GitHub selected)
+- Include Linear Team ID ONLY if Linear was selected as the issue tracker provider
+- Include Merge Mode ONLY if it was asked and configured (multiple remotes or advanced config)
 
 Then ask: "Does this configuration look correct?"
-- If yes, proceed to Phase 3
+- If yes, proceed to Phase 4
 - If no, ask which setting they want to change and repeat that question
 
-### Phase 3: Choose Configuration File
+### Phase 4: Choose Configuration File
 
 **Fork/Contributor Check:** If "GitHub Remote Configuration" shows both "origin" and "upstream" remotes (classic fork pattern), display: "It looks like you're working on a fork (origin + upstream remotes detected). For contributors, we recommend saving to settings.local.json to avoid including personal settings in PRs to upstream, but you can still choose shared if needed."
 
@@ -356,9 +411,9 @@ Ask the user this exact question: "Should this configuration be committed to git
 - Make decisions about what "should" be shared with the team
 - Skip this question and auto-save to either file
 
-Store the user's answer to determine which file to write in Phase 5.
+Store the user's answer to determine which file to write in Phase 6.
 
-### Phase 4: File Generation
+### Phase 5: File Generation
 
 Based on the user's answers, generate the settings JSON content following these rules:
 
@@ -384,31 +439,33 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
 3. **Merge behavior example:**
    ```
    Before:
-   settings.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 3000 } } }
-   settings.local.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 4000 } } }
+   settings.json: { "mainBranch": "develop", "capabilities": { "web": { "basePort": 3000 } } }
+   settings.local.json: { "mainBranch": "develop", "capabilities": { "web": { "basePort": 4000 } } }
 
    Problem: mainBranch is duplicated (same value in both)
 
    After user updates local settings:
-   settings.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 3000 } } }
+   settings.json: { "mainBranch": "develop", "capabilities": { "web": { "basePort": 3000 } } }
    settings.local.json: { "capabilities": { "web": { "basePort": 4000 } } }
 
    Result: mainBranch removed from local because it matches shared
    ```
 
+   Note: If mainBranch is "main" (the default), it should not appear in either file.
+
 **Settings generation rules:**
 
-1. **Start with base structure:**
+1. **Add mainBranch ONLY if it's not "main" (the default):**
    ```json
    {
-     "mainBranch": "<user's answer>"
+     "mainBranch": "<user's answer>"  // ONLY if not "main"
    }
    ```
+   If user chose "main", do NOT include mainBranch in the settings file.
 
 2. **Add worktreePrefix ONLY if user provided a non-empty value:**
    ```json
    {
-     "mainBranch": "<value>",
      "worktreePrefix": "<user's value>"
    }
    ```
@@ -416,7 +473,6 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
 3. **Add workflows ONLY if permissionMode is not "default":**
    ```json
    {
-     "mainBranch": "<value>",
      "workflows": {
        "issue": {
          "permissionMode": "<user's answer>"
@@ -428,7 +484,6 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
 4. **Add capabilities.web ONLY if basePort is not 3000:**
    ```json
    {
-     "mainBranch": "<value>",
      "capabilities": {
        "web": {
          "basePort": <user's number>
@@ -437,9 +492,48 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    }
    ```
 
-5. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+5. **Add issueManagement ONLY if provider is not "github" OR if github.remote is configured:**
 
-### Phase 5: Write File
+   **For GitHub (default):**
+   - If provider is "github" and no remote configured: OMIT the entire issueManagement section
+   - If provider is "github" and remote IS configured (from Phase 2):
+     ```json
+     {
+       "issueManagement": {
+         "provider": "github",
+         "github": {
+           "remote": "<user's selected remote>"
+         }
+       }
+     }
+     ```
+
+   **For Linear:**
+   ```json
+   {
+     "issueManagement": {
+       "provider": "linear",
+       "linear": {
+         "teamId": "<user's team ID>"
+       }
+     }
+   }
+   ```
+
+6. **Add mergeBehavior ONLY if mode is not "local":**
+   ```json
+   {
+     "mergeBehavior": {
+       "mode": "<user's answer>"
+     }
+   }
+   ```
+
+7. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
+
+8. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+
+### Phase 6: Write File
 
 **CRITICAL: REMOVE DUPLICATES BEFORE WRITING**
 
@@ -477,14 +571,120 @@ Reason: mainBranch has same value in both files, so it's removed from local
    - `.iloom/settings.local.json` if user chose local-only
 4. Use the Write tool to create/update the file
 
-### Phase 6: Update .gitignore
+### Phase 7: Update .gitignore
 
 If the user chose `.iloom/settings.local.json`, ensure `.gitignore` includes this entry:
 - Read `.gitignore` if it exists
 - Check if `.iloom/settings.local.json` is already listed
 - If not, append it to the file
 
-### Phase 7: Completion Message
+### Phase 7.5: Offer to Commit Changes
+
+After making configuration changes, offer to commit the iloom-related files:
+
+**Step 0: Ensure git repository exists**
+
+First, check if the current directory is a git repository:
+```bash
+git rev-parse --is-inside-work-tree 2>/dev/null || echo "not-a-repo"
+```
+
+If the output is "not-a-repo", ask the user:
+```
+This directory is not a git repository. Would you like to initialize one?
+  - Yes - Initialize git repository
+  - No - Skip (iloom requires git to function)
+```
+
+If user says yes, initialize the repository:
+```bash
+git init
+```
+
+Then display:
+```
+✓ Initialized git repository
+```
+
+If user says no, warn them:
+```
+⚠ iloom requires a git repository to function. You'll need to run 'git init' before using iloom commands.
+```
+Then skip to Phase 8 (don't offer to commit since there's no repo).
+
+**Step 1: Identify iloom-related changes**
+
+Use the Bash tool to check for iloom-related changes:
+```bash
+git status --porcelain .iloom/ .gitignore 2>/dev/null | grep -E '^\s*(M|A|\?\?)\s+(.iloom/|\.gitignore)' || true
+```
+
+This identifies ONLY iloom-related files that were:
+- Modified (M)
+- Added (A)
+- Untracked (??)
+
+**Step 2: If changes exist, ask the user**
+
+If there are iloom-related changes, display them and ask:
+
+```
+The following iloom configuration files have been modified:
+  [list files from git status]
+
+Would you like to commit these changes?
+  - Yes - Commit iloom configuration changes (strongly recommended)
+  - No - Skip committing (not recommended)
+
+⚠️  WARNING: If you don't commit settings.json, iloom will not work correctly in new looms.
+    Looms are created from committed code, so your configuration won't be available.
+    (Local files like settings.local.json and .env are copied automatically - but settings.json must be committed.)
+```
+
+**CRITICAL RULES:**
+- **ONLY commit iloom-related files**: .iloom/settings.json, .gitignore
+- **NEVER stage or commit unrelated files** - even if they appear in `git status`
+- **If the commit fails, you must then subsequently request to use --no-verify flag** to bypass pre-commit hooks that might fail due to unrelated codebase state
+- **Do NOT commit settings.local.json** - it should be gitignored, not committed
+
+**Step 3: If user says yes, commit the changes**
+
+Stage ONLY the iloom-related files that should be committed:
+```bash
+git add .iloom/settings.json .gitignore 2>/dev/null || true
+```
+
+Note: Do NOT add .iloom/settings.local.json - it's meant to be local-only.
+
+Then commit:
+
+```bash
+git commit -m "chore: configure iloom CLI settings"
+```
+
+If it fails, suggest to the user that we should try to commit with --no-verfy:
+
+```bash
+git commit --no-verify -m "chore: configure iloom CLI settings"
+```
+
+**Step 4: Report result**
+
+If commit succeeded:
+```
+✓ Committed iloom configuration changes
+```
+
+If commit failed or nothing to commit:
+```
+ℹ No iloom configuration changes to commit (or already committed)
+```
+
+**Step 5: If no changes or user declines**
+
+Simply proceed to Phase 8 without committing.
+
+### Phase 8: Completion Message
 
 After successfully writing the configuration, inform the user:
 
@@ -494,7 +694,7 @@ After successfully writing the configuration, inform the user:
 You can now use iloom CLI with your custom settings!
 
 Next steps:
-  - Run 'iloom start <issue-number>' to create a workspace
+  - Run 'iloom start <issue-number>' to create a loom
   - Edit [filename] directly to modify settings
   - Run 'iloom init' again to reconfigure interactively
 
@@ -502,7 +702,7 @@ Next steps:
 [If settings.local.json]: This configuration is local-only and won't be committed.
 ```
 
-### Phase 8: Wrap Up and Next Steps
+### Phase 9: Wrap Up and Next Steps
 
 After completing the basic configuration, provide a helpful conclusion:
 
@@ -510,9 +710,9 @@ After completing the basic configuration, provide a helpful conclusion:
 🎯 Your iloom CLI is ready to use!
 
 Here's how to get started:
-  • Run `iloom start <issue-number>` to create a workspace for an issue
-  • Run `iloom start <pr-number>` to create a workspace for a pull request
-  • Run `iloom list` to see your active workspaces
+  • Run `iloom start <issue-number>` to create a loom for an issue
+  • Run `iloom start <pr-number>` to create a loom for a pull request
+  • Run `iloom list` to see your active looms
   • Run `iloom finish` when you're done working to merge changes and clean up
 
 Need more advanced configuration? I can help you set up:
@@ -576,11 +776,13 @@ If users ask about specific configurations, help them add these sections to thei
 ## Important Notes
 
 - **Validate ALL inputs** against the schema before writing files
-- **Use batch mode** for AskUserQuestion - ask all 4 essential settings questions in a single call for faster setup
+- **Use batch mode** for AskUserQuestion - ask all Phase 1 (local development) settings questions in a single call for faster setup
 - **ALWAYS follow Phase 0** - Extract current settings and check if configuration exists
 - **For existing users** - Ask what they want to do (modify, add advanced config, start fresh, or exit) instead of forcing them through the entire flow
-- **For new users** - Skip directly to Phase 0.5 (GitHub Remote Configuration) and proceed with setup
-- **ALWAYS use the question formats** specified in Phase 1 that include "(Currently: [value])" when current values exist
+- **For new users** - Skip directly to Phase 1 (Local Development Settings) and proceed through Phase 2 (Tooling Configuration)
+- **ALWAYS use the question formats** specified in Phase 1 and Phase 2 that include "(Currently: [value])" when current values exist
+- **Phase 1 = Local dev settings** (main branch, worktree prefix, permission mode, base port)
+- **Phase 2 = Tooling integrations** (issue tracker provider, provider-specific config, merge mode)
 - **Keep configuration minimal** - only include non-default values
 - **Merge carefully** when updating existing settings - preserve any settings the user didn't modify
 - **Handle errors gracefully** - if schema validation fails, explain what went wrong and ask the user to try again

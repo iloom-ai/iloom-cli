@@ -35,7 +35,7 @@ iloom is a CLI tool for scaling a human's understanding of the AI's work, as the
 4. **Planning** - Creates implementation roadmap with file specifications
 5. **Implementation** - Executes the plan with validation
 
-Each phase creates GitHub comments for team visibility and traceability.
+Each phase creates issue comments for team visibility and traceability.
 
 ### Key iloom Commands
 - `iloom init` / `iloom config` - Interactive configuration wizard
@@ -114,23 +114,23 @@ You are orchestrating a set of agents through a development process, with human 
 
 **Todo List:**
 1. Scan issue and determine workflow plan
-2. Run GitHub issue enhancement for ISSUE_NUMBER (if needed) using @agent-iloom-issue-enhancer
-3. Extract github issue link that includes comment id from agent output (if enhancement was needed), display to user
+2. Run issue enhancement for ISSUE_NUMBER (if needed) using @agent-iloom-issue-enhancer
+3. Extract issue link that includes comment id from agent output (if enhancement was needed), display to user
 4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
    b) If enhancement was NOT needed, let the user know and move to the next step.
 5. Run complexity evaluation for ISSUE_NUMBER using @agent-iloom-issue-complexity-evaluator
-6. Extract github issue link that includes comment id from agent output, display complexity assessment to user
+6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (SIMPLE or COMPLEX)
 9. If SIMPLE: Run combined analysis and planning for ISSUE_NUMBER using @agent-iloom-issue-analyze-and-plan
 10. If COMPLEX: Run separate analysis for ISSUE_NUMBER using @agent-iloom-issue-analyzer
-11. Extract github issue link that includes comment id from agent output, display to user
+11. Extract issue link that includes comment id from agent output, display to user
 12. WAIT for human review and approval to continue, or process their other feedback
 13. If COMPLEX workflow: Run planning for ISSUE_NUMBER using @agent-iloom-issue-planner
-14. If COMPLEX workflow: Extract github issue link that includes comment id from agent output, display to user
+14. If COMPLEX workflow: Extract issue link that includes comment id from agent output, display to user
 15. If COMPLEX workflow: WAIT for human review of planning results and approval to continue
-16. Run GitHub issue implementation for ISSUE_NUMBER (if needed) using @agent-iloom-issue-implementer
-17. Provide final summary with links to all GitHub comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
+16. Run issue implementation for ISSUE_NUMBER (if needed) using @agent-iloom-issue-implementer
+17. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
 
@@ -202,11 +202,11 @@ Perform ONE comprehensive scan to determine which agents need to run:
 **STEP 1 - Enhancement Phase:**
 
 Only execute if workflow plan determined NEEDS_ENHANCEMENT:
-1. Execute: @agent-iloom-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
-2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to GitHub issue comment
+1. Execute: @agent-iloom-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their issue comments. This documents assumptions made during execution.
+2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to issue comment
 3. Mark todo #2 and #3 as completed
 4. Use AskUserQuestion tool with a single question:
-   - Question: "Enhancement complete. See results at: [GitHub comment URL]. How would you like to proceed?"
+   - Question: "Enhancement complete. See results at: [issue comment URL]. How would you like to proceed?"
    - Options:
      - "Continue to complexity evaluation" (default)
      - "Provide feedback on enhancement"
@@ -223,8 +223,8 @@ If workflow plan determined SKIP_ENHANCEMENT:
 **STEP 1.5 - Complexity Evaluation Phase:**
 
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
-1. Execute: @agent-iloom-issue-complexity-evaluator ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
-2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+1. Execute: @agent-iloom-issue-complexity-evaluator ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their issue comments. This documents assumptions made during execution.
+2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 3. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
    - Extract: Classification (SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
@@ -243,7 +243,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
    Reasoning: [reasoning text from evaluator]
    ```
 5. Use AskUserQuestion tool with a single question:
-   - Question: "Complexity evaluated as [SIMPLE/COMPLEX]. See assessment at: [GitHub comment URL]. Do you agree with this classification?"
+   - Question: "Complexity evaluated as [SIMPLE/COMPLEX]. See assessment at: [issue comment URL]. Do you agree with this classification?"
    - Options:
      - "Yes, proceed with [SIMPLE/COMPLEX] workflow" (default)
      - "No, reclassify as SIMPLE"
@@ -271,11 +271,11 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 
 Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLEX:
-1. Execute: @agent-iloom-issue-analyzer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
-2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+1. Execute: @agent-iloom-issue-analyzer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their issue comments. This documents assumptions made during execution.
+2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 3. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
 4. Use AskUserQuestion tool with a single question:
-   - Question: "Analysis complete. See findings at: [GitHub comment URL]. How would you like to proceed?"
+   - Question: "Analysis complete. See findings at: [issue comment URL]. How would you like to proceed?"
    - Options:
      - "Continue to planning phase" (default)
      - "Provide feedback on analysis"
@@ -319,11 +319,11 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 
 Execute combined analyze-and-plan agent:
 1. Display: "Executing combined analyze-and-plan agent for SIMPLE task..."
-2. Execute: @agent-iloom-issue-analyze-and-plan ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
-3. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+2. Execute: @agent-iloom-issue-analyze-and-plan ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their issue comments. This documents assumptions made during execution.
+3. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 4. Mark todo #9 as completed (COMPLEX todos #10-15 were already marked at routing decision point)
 5. Use AskUserQuestion tool with a single question:
-   - Question: "Combined analysis and planning complete. See results at: [GitHub comment URL]. How would you like to proceed?"
+   - Question: "Combined analysis and planning complete. See results at: [issue comment URL]. How would you like to proceed?"
    - Options:
      - "Continue to implementation" (default)
      - "Provide feedback on plan"
@@ -340,11 +340,11 @@ Execute combined analyze-and-plan agent:
 **IMPORTANT: Only execute this step if COMPLEX workflow is being followed (not SIMPLE)**
 
 Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLEX:
-1. Execute: @agent-iloom-issue-planner ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
-2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+1. Execute: @agent-iloom-issue-planner ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their issue comments. This documents assumptions made during execution.
+2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 3. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
 4. Use AskUserQuestion tool with a single question:
-   - Question: "Planning complete. See implementation plan at: [GitHub comment URL]. How would you like to proceed?"
+   - Question: "Planning complete. See implementation plan at: [issue comment URL]. How would you like to proceed?"
    - Options:
      - "Continue to implementation" (default)
      - "Provide feedback on plan"
@@ -365,14 +365,14 @@ If workflow plan determined SKIP_PLANNING AND complexity is COMPLEX:
 Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 1. Before executing implementer, extract the planning comment ID:
    - Look back at the planning phase output (STEP 3 for COMPLEX or STEP 2-SIMPLE for SIMPLE workflows)
-   - Extract the comment ID from the GitHub comment URL that was provided
+   - Extract the comment ID from the issue comment URL that was provided
    - The comment ID is the numeric value after "#issuecomment-" in the URL (e.g., https://github.com/org/repo/issues/123#issuecomment-456789 has comment ID 456789)
 2. Execute: @agent-iloom-issue-implementer ISSUE_NUMBER with these critical instructions:
-   - Add your own answers to any questions you asked in the question tables you create in your GitHub comments to document assumptions made during execution
+   - Add your own answers to any questions you asked in the question tables you create in your issue comments to document assumptions made during execution
    - **CRITICAL**: The implementation plan in the issue comments contains exact file paths and line numbers. You MUST use these exact locations - DO NOT search for files when the plan specifies them. Extract file locations from the plan in Step 1.5 before implementing.
    - The implementation plan is located in comment ID [COMMENT_ID] (if planning phase was executed). Read this comment first in Step 1.5 to extract file specifications.
 3. Upon completion: Mark todo #16 as completed
-4. Provide summary and links to any GitHub comments created - do not open them. All links MUST include comment-id which can be obtained from agent output.
+4. Provide summary and links to any issue comments created - do not open them. All links MUST include comment-id which can be obtained from agent output.
 5. Mark todo #17 as completed
 
 If workflow plan determined SKIP_IMPLEMENTATION:

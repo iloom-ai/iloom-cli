@@ -96,8 +96,8 @@ describe('InitCommand', () => {
       // Verify project configuration still runs
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('settings.local.json'),
-        '{}\n',
+        expect.stringContaining('.gitignore'),
+        '\n# Added by iloom CLI\n.iloom/settings.local.json\n',
         'utf-8'
       )
     })
@@ -171,7 +171,7 @@ describe('InitCommand', () => {
       expect(SettingsMigrationManager).toHaveBeenCalled()
     })
 
-    it('should create empty settings.local.json if not exists', async () => {
+    it('should create .gitignore entry if not exists', async () => {
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
@@ -180,23 +180,21 @@ describe('InitCommand', () => {
 
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('settings.local.json'),
-        '{}\n',
+        expect.stringContaining('.gitignore'),
+        '\n# Added by iloom CLI\n.iloom/settings.local.json\n',
         'utf-8'
       )
     })
 
-    it('should preserve existing settings.local.json', async () => {
-      // First call for settings.local.json (exists)
-      // Second call for .gitignore (exists)
-      vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(true)
-      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+    it('should not create settings.local.json file', async () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('.iloom/settings.local.json\n') // Entry already in .gitignore
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      // writeFile should only be called once for .gitignore, not for settings.local.json
+      // writeFile should not be called at all since .gitignore already has the entry
       const writeFileCalls = vi.mocked(writeFile).mock.calls
       const settingsLocalCalls = writeFileCalls.filter(call =>
         call[0].toString().includes('settings.local.json')
@@ -205,7 +203,7 @@ describe('InitCommand', () => {
     })
 
     it('should add settings.local.json to .gitignore', async () => {
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('node_modules/\n')
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
@@ -219,7 +217,7 @@ describe('InitCommand', () => {
     })
 
     it('should create .gitignore if missing', async () => {
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(false)
+      vi.mocked(existsSync).mockReturnValue(false)
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
@@ -232,7 +230,7 @@ describe('InitCommand', () => {
     })
 
     it('should not duplicate entry in .gitignore', async () => {
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('.iloom/settings.local.json\n')
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
@@ -247,7 +245,7 @@ describe('InitCommand', () => {
     })
 
     it('should handle .gitignore without trailing newline', async () => {
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('node_modules/')
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
