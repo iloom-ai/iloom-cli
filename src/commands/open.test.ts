@@ -134,7 +134,7 @@ describe('OpenCommand', () => {
 
 			await command.execute({})
 
-			expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(87)
+			expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith('87')
 
 			// Restore
 			process.cwd = originalCwd
@@ -172,7 +172,7 @@ describe('OpenCommand', () => {
 
 			await command.execute({})
 
-			expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(87)
+			expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith('87')
 
 			// Restore
 			process.cwd = originalCwd

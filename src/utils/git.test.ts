@@ -349,12 +349,27 @@ describe('Git Utility Functions', () => {
   describe('extractIssueNumber', () => {
     it('should extract issue numbers from various formats', () => {
       const testCases = [
-        { branch: 'issue-42', expected: 42 },
-        { branch: 'feat/issue-42__description', expected: 42 },
-        { branch: 'ISSUE-123', expected: 123 },
-        { branch: 'issue_456', expected: 456 },
-        { branch: '42-feature-name', expected: 42 },
-        { branch: '123-add-new-component', expected: 123 },
+        // New format (double underscore) - alphanumeric IDs
+        { branch: 'feat/issue-ILOOM-456__new-branch', expected: 'ILOOM-456' },
+        { branch: 'feat/issue-ILOOM-123__description', expected: 'ILOOM-123' },
+        { branch: 'feat/issue-PROJ-789__another-new', expected: 'PROJ-789' },
+        { branch: 'feat/issue-ABC-123__description', expected: 'ABC-123' },
+        { branch: 'fix/issue-X-1__quick-fix', expected: 'X-1' },
+        { branch: 'feat/issue-123__new-format', expected: '123' }, // Numeric ID with new format
+
+        // Old format (single dash) - numeric IDs
+        { branch: 'issue-42', expected: '42' },
+        { branch: 'feat/issue-42-description', expected: '42' },
+        { branch: 'ISSUE-123', expected: '123' },
+        { branch: 'feat/issue-123-old-branch', expected: '123' },
+        { branch: 'feat/issue-ILOOM-123', expected: 'ILOOM-123' }, // Alphanumeric in old format
+        { branch: 'issue-abc', expected: 'abc' }, // Simple alphabetic ID
+        { branch: 'feat/issue-abc-123', expected: 'abc-123' }, // Mixed alphanumeric ID
+
+        // Legacy formats
+        { branch: 'issue_456', expected: '456' },
+        { branch: '42-feature-name', expected: '42' },
+        { branch: '123-add-new-component', expected: '123' },
       ]
 
       testCases.forEach(({ branch, expected }) => {
@@ -380,7 +395,7 @@ describe('Git Utility Functions', () => {
     })
 
     it('should handle invalid issue numbers', () => {
-      const invalidCases = ['issue-abc', 'issue_', 'issue-']
+      const invalidCases = ['issue_', 'issue-']
 
       invalidCases.forEach(branch => {
         expect(extractIssueNumber(branch)).toBeNull()

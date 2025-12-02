@@ -16,7 +16,7 @@ import { PRManager } from '../lib/PRManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
-import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
+import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -338,12 +338,9 @@ export class FinishCommand {
 		}
 
 		// Check for issue pattern in directory or branch name
-		// Pattern: /issue-(\d+)/
-		const issuePattern = /issue-(\d+)/
-		const issueMatch = currentDir.match(issuePattern)
+		const issueNumber = extractIssueNumber(currentDir)
 
-		if (issueMatch?.[1]) {
-			const issueNumber = parseInt(issueMatch[1], 10)
+		if (issueNumber !== null) {
 			logger.debug(
 				`Auto-detected issue #${issueNumber} from directory: ${currentDir}`
 			)
@@ -367,15 +364,14 @@ export class FinishCommand {
 		}
 
 		// Try to extract issue from branch name
-		const branchIssueMatch = currentBranch.match(issuePattern)
-		if (branchIssueMatch?.[1]) {
-			const issueNumber = parseInt(branchIssueMatch[1], 10)
+		const branchIssueNumber = extractIssueNumber(currentBranch)
+		if (branchIssueNumber !== null) {
 			logger.debug(
-				`Auto-detected issue #${issueNumber} from branch: ${currentBranch}`
+				`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`
 			)
 			return {
 				type: 'issue',
-				number: issueNumber,
+				number: branchIssueNumber,
 				originalInput: currentBranch,
 				autoDetected: true,
 			}

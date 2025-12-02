@@ -61,7 +61,7 @@ describe('IgniteCommand', () => {
 					'issue',
 					expect.objectContaining({
 						WORKSPACE_PATH: '/path/to/feat/issue-70__description',
-						ISSUE_NUMBER: 70,
+						ISSUE_NUMBER: "70",
 					})
 				)
 			} finally {
@@ -136,7 +136,7 @@ describe('IgniteCommand', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						ISSUE_NUMBER: 45,
+						ISSUE_NUMBER: "45",
 					})
 				)
 			} finally {
@@ -453,7 +453,7 @@ describe('IgniteCommand', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						ISSUE_NUMBER: 10,
+						ISSUE_NUMBER: "10",
 					})
 				)
 			} finally {
@@ -481,7 +481,7 @@ describe('IgniteCommand', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						ISSUE_NUMBER: 100,
+						ISSUE_NUMBER: "100",
 					})
 				)
 			} finally {

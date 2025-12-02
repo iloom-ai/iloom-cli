@@ -16,6 +16,21 @@ vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(undefined),
   hasUncommittedChanges: vi.fn().mockResolvedValue(false),
   findMainWorktreePath: vi.fn().mockResolvedValue('/test/main-worktree'),
+  extractIssueNumber: vi.fn((branch: string) => {
+    // Priority 1: New format - issue-{issueId}__
+    const newMatch = branch.match(/issue-([^_]+)__/i)
+    if (newMatch?.[1]) return newMatch[1]
+
+    // Priority 2: Old format - issue-{number}- or issue-{number}$
+    const oldMatch = branch.match(/issue-(\d+)(?:-|$)/i)
+    if (oldMatch?.[1]) return oldMatch[1]
+
+    // Priority 3: Legacy patterns
+    const legacyMatch = branch.match(/issue_(\d+)|^(\d+)-/i)
+    if (legacyMatch?.[1] || legacyMatch?.[2]) return legacyMatch[1] || legacyMatch[2]
+
+    return null
+  }),
 }))
 
 describe('ResourceCleanup - Database Integration', () => {

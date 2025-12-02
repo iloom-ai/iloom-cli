@@ -9,6 +9,7 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
 import { parseEnvFile, extractPort } from '../utils/env.js'
 import { calculatePortForBranch } from '../utils/port.js'
+import { extractIssueNumber } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -120,11 +121,9 @@ export class OpenCommand {
 		}
 
 		// Check for issue pattern in directory
-		const issuePattern = /issue-(\d+)/
-		const issueMatch = currentDir.match(issuePattern)
+		const issueNumber = extractIssueNumber(currentDir)
 
-		if (issueMatch?.[1]) {
-			const issueNumber = parseInt(issueMatch[1], 10)
+		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 			return {
 				type: 'issue',
@@ -146,13 +145,12 @@ export class OpenCommand {
 		}
 
 		// Try to extract issue from branch name
-		const branchIssueMatch = currentBranch.match(issuePattern)
-		if (branchIssueMatch?.[1]) {
-			const issueNumber = parseInt(branchIssueMatch[1], 10)
-			logger.debug(`Auto-detected issue #${issueNumber} from branch: ${currentBranch}`)
+		const branchIssueNumber = extractIssueNumber(currentBranch)
+		if (branchIssueNumber !== null) {
+			logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
 			return {
 				type: 'issue',
-				number: issueNumber,
+				number: branchIssueNumber,
 				originalInput: currentBranch,
 				autoDetected: true,
 			}
@@ -287,13 +285,15 @@ export class OpenCommand {
 		}
 
 		// Check for issue pattern: issue-N
-		const issuePattern = /issue-(\d+)/
-		const issueMatch = dirName.match(issuePattern) ?? worktree.branch.match(issuePattern)
-		if (issueMatch?.[1]) {
-			const issueNumber = parseInt(issueMatch[1], 10)
-			const port = basePort + issueNumber
-			logger.debug(`Calculated PORT for issue #${issueNumber}: ${port}`)
-			return port
+		const issueId = extractIssueNumber(dirName) ?? extractIssueNumber(worktree.branch)
+		if (issueId !== null) {
+			const issueNumber = parseInt(issueId, 10)
+			if (!isNaN(issueNumber)) {
+				const port = basePort + issueNumber
+				logger.debug(`Calculated PORT for issue #${issueId}: ${port}`)
+				return port
+			}
+			// For alphanumeric IDs, fall through to branch-based hash
 		}
 
 		// Branch-based workspace - use deterministic hash

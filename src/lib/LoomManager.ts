@@ -9,7 +9,7 @@ import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
-import { branchExists, executeGitCommand, ensureRepositoryHasCommits } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
@@ -360,13 +360,11 @@ export class LoomManager {
         // Extract identifier from child branch for finish command
         // Check PR first since PR branches often contain issue numbers too
         const prMatch = child.branch.match(/_pr_(\d+)/)
-        const issueMatch = child.branch.match(/issue-(\d+)/)
+        const issueId = extractIssueNumber(child.branch)
 
         const childIdentifier = prMatch
           ? prMatch[1]  // PR: use number
-          : issueMatch
-          ? issueMatch[1]  // Issue: use number
-          : child.branch  // Branch: use full branch name
+          : issueId ?? child.branch  // Issue: use extracted ID (alphanumeric or numeric), or branch name
 
         logger.warn(`  il finish ${childIdentifier}`)
       }

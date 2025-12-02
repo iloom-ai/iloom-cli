@@ -9,6 +9,7 @@ import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
+import { extractIssueNumber } from '../utils/git.js'
 import { readFile } from 'fs/promises'
 
 /**
@@ -333,12 +334,9 @@ export class IgniteCommand {
 		}
 
 		// Check for issue pattern in directory name
-		// Pattern: /issue-(\d+)/
-		const issuePattern = /issue-(\d+)/
-		const issueMatch = currentDir.match(issuePattern)
+		const issueNumber = extractIssueNumber(currentDir)
 
-		if (issueMatch?.[1]) {
-			const issueNumber = parseInt(issueMatch[1], 10)
+		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 
 			return this.buildContextForIssue(issueNumber, workspacePath)
@@ -351,12 +349,11 @@ export class IgniteCommand {
 
 			if (currentBranch) {
 				// Try to extract issue from branch name
-				const branchIssueMatch = currentBranch.match(issuePattern)
-				if (branchIssueMatch?.[1]) {
-					const issueNumber = parseInt(branchIssueMatch[1], 10)
-					logger.debug(`Auto-detected issue #${issueNumber} from branch: ${currentBranch}`)
+				const branchIssueNumber = extractIssueNumber(currentBranch)
+				if (branchIssueNumber !== null) {
+					logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
 
-					return this.buildContextForIssue(issueNumber, workspacePath, currentBranch)
+					return this.buildContextForIssue(branchIssueNumber, workspacePath, currentBranch)
 				}
 			}
 		} catch (error) {

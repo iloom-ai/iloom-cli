@@ -5,7 +5,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
-import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber } from '../utils/git.js'
 
 import type {
 	ResourceCleanupOptions,
@@ -655,11 +655,11 @@ export class ResourceCleanup {
 	 */
 	private parseIdentifier(identifier: string): ParsedInput {
 		// Check for issue pattern
-		const issueMatch = identifier.match(/issue-(\d+)/)
-		if (issueMatch?.[1]) {
+		const issueId = extractIssueNumber(identifier)
+		if (issueId !== null) {
 			return {
 				type: 'issue',
-				number: parseInt(issueMatch[1], 10),
+				number: issueId,
 				originalInput: identifier
 			}
 		}

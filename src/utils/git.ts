@@ -155,20 +155,35 @@ export function extractPRNumber(branchName: string): number | null {
 
 /**
  * Extract issue number from branch name
+ * Supports both new format (issue-{issueId}__{slug}) and old format (issue-{number}-{slug})
+ * @returns string issue ID (alphanumeric) or null if not found
  */
-export function extractIssueNumber(branchName: string): number | null {
-  const patterns = [
-    /issue-(\d+)/i,       // issue-42, feat/issue-42-description
-    /issue_(\d+)/i,       // issue_42
-    /^(\d+)-/,            // 42-feature-name (leading number)
+export function extractIssueNumber(branchName: string): string | null {
+  // Priority 1: New format - issue-{issueId}__ (alphanumeric ID with double underscore)
+  const newFormatPattern = /issue-([^_]+)__/i
+  const newMatch = branchName.match(newFormatPattern)
+  if (newMatch?.[1]) return newMatch[1]
+
+  // Priority 2: Old format - issue-{number}- or issue-{number}$ (numeric only, dash or end)
+  const oldFormatPattern = /issue-(\d+)(?:-|$)/i
+  const oldMatch = branchName.match(oldFormatPattern)
+  if (oldMatch?.[1]) return oldMatch[1]
+
+  // Priority 3: Alphanumeric ID at end (either format without description)
+  const alphanumericEndPattern = /issue-([^_\s/]+)$/i
+  const alphanumericMatch = branchName.match(alphanumericEndPattern)
+  if (alphanumericMatch?.[1]) return alphanumericMatch[1]
+
+  // Priority 4: Legacy patterns (issue_N, leading number)
+  const legacyPatterns = [
+    /issue_(\d+)/i,     // issue_42
+    /^(\d+)-/,          // 42-feature-name
   ]
-  for (const pattern of patterns) {
+  for (const pattern of legacyPatterns) {
     const match = branchName.match(pattern)
-    if (match?.[1]) {
-      const num = parseInt(match[1], 10)
-      if (!isNaN(num)) return num
-    }
+    if (match?.[1]) return match[1]
   }
+
   return null
 }
 

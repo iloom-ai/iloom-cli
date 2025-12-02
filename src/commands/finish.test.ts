@@ -1077,8 +1077,8 @@ describe('FinishCommand', () => {
 					})
 
 					// Verify issue was fetched with auto-detected number
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(66, undefined)
-					expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(66)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith('66', undefined)
+					expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith("66")
 				} finally {
 					// Restore original cwd
 					process.cwd = originalCwd

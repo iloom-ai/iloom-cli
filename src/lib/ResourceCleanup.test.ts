@@ -14,7 +14,26 @@ vi.mock('./GitWorktreeManager.js')
 vi.mock('./DatabaseManager.js')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./SettingsManager.js')
-vi.mock('../utils/git.js')
+vi.mock('../utils/git.js', () => ({
+	executeGitCommand: vi.fn(),
+	hasUncommittedChanges: vi.fn(),
+	findMainWorktreePathWithSettings: vi.fn(),
+	extractIssueNumber: vi.fn((branch: string) => {
+		// Priority 1: New format - issue-{issueId}__
+		const newMatch = branch.match(/issue-([^_]+)__/i)
+		if (newMatch?.[1]) return newMatch[1]
+
+		// Priority 2: Old format - issue-{number}- or issue-{number}$
+		const oldMatch = branch.match(/issue-(\d+)(?:-|$)/i)
+		if (oldMatch?.[1]) return oldMatch[1]
+
+		// Priority 3: Legacy patterns
+		const legacyMatch = branch.match(/issue_(\d+)|^(\d+)-/i)
+		if (legacyMatch?.[1] || legacyMatch?.[2]) return legacyMatch[1] || legacyMatch[2]
+
+		return null
+	}),
+}))
 
 describe('ResourceCleanup', () => {
 	let resourceCleanup: ResourceCleanup
