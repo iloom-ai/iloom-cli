@@ -230,7 +230,7 @@ export async function updateProjectItemField(
 // GitHub Issue Operations
 
 interface IssueCreateResponse {
-	number: number
+	number: string | number
 	url: string
 }
 

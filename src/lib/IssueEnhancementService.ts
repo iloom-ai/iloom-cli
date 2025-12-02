@@ -92,7 +92,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 		enhancedDescription: string,
 		repository?: string,
 		labels?: string[]
-	): Promise<{ number: number; url: string }> {
+	): Promise<{ number: string | number; url: string }> {
 		logger.info('Creating GitHub issue from description...')
 
 		const result = await this.gitHubService.createIssue(

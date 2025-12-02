@@ -33,7 +33,7 @@ export class AddIssueCommand {
 	 * 4. Wait for keypress and open browser for review
 	 * 5. Return issue number
 	 */
-	public async execute(input: AddIssueCommandInput): Promise<number> {
+	public async execute(input: AddIssueCommandInput): Promise<string | number> {
 		const { description } = input
 
 		// Step 0: Load settings and get configured repo for GitHub operations

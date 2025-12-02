@@ -30,7 +30,7 @@ export interface IssueTracker {
 		body: string,
 		repository?: string,
 		labels?: string[]
-	): Promise<{ number: number; url: string }>
+	): Promise<{ number: string | number; url: string }>
 	getIssueUrl(identifier: string | number, repo?: string): Promise<string>
 
 	// Pull Request operations - optional, check supportsPullRequests before calling

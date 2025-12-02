@@ -40,7 +40,7 @@ export class FeedbackCommand {
 	 * 4. Wait for keypress and open browser for review
 	 * 5. Return issue number
 	 */
-	public async execute(input: FeedbackCommandInput): Promise<number> {
+	public async execute(input: FeedbackCommandInput): Promise<string | number> {
 		const { description } = input
 
 		// Step 1: Validate description format

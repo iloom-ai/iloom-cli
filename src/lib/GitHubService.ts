@@ -174,7 +174,7 @@ export class GitHubService implements IssueTracker {
 		body: string,
 		repository?: string,
 		labels?: string[]
-	): Promise<{ number: number; url: string }> {
+	): Promise<{ number: string | number; url: string }> {
 		// logger.info('Creating GitHub issue', { title })
 		return createIssue(title, body, { repo: repository, labels })
 	}

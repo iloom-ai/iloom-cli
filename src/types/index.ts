@@ -50,7 +50,7 @@ export interface GitStatus {
 
 // GitHub types
 export interface Issue {
-  number: number
+  number: string | number
   title: string
   body: string
   state: 'open' | 'closed'
