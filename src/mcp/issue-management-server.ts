@@ -44,7 +44,12 @@ function validateEnvironment(): IssueProvider {
 		}
 	}
 
-	// Linear doesn't need additional env vars - it uses the linearis CLI which handles auth
+	if (provider === 'linear') {
+		if (!process.env.LINEAR_API_TOKEN) {
+			console.error('Missing LINEAR_API_TOKEN environment variable for Linear provider')
+			process.exit(1)
+		}
+	}
 
 	return provider
 }

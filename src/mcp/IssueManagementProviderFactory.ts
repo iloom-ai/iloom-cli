@@ -17,8 +17,15 @@ export class IssueManagementProviderFactory {
 		switch (provider) {
 			case 'github':
 				return new GitHubIssueManagementProvider()
-			case 'linear':
-				return new LinearIssueManagementProvider()
+			case 'linear': {
+				const apiToken = process.env.LINEAR_API_TOKEN
+				if (!apiToken) {
+					throw new Error('LINEAR_API_TOKEN environment variable is required for Linear provider')
+				}
+				return new LinearIssueManagementProvider({
+					apiToken,
+				})
+			}
 			default:
 				throw new Error(`Unsupported issue management provider: ${provider}`)
 		}

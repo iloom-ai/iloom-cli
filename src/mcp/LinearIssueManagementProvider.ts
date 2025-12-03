@@ -1,6 +1,6 @@
 /**
  * Linear implementation of Issue Management Provider
- * Uses linearis CLI for all operations
+ * Uses direct GraphQL API calls to Linear
  */
 
 import type {
@@ -15,13 +15,13 @@ import type {
 	FlexibleAuthor,
 } from './types.js'
 import {
-	fetchLinearIssue,
-	createLinearComment,
-	getLinearComment,
-	updateLinearComment,
-	executeLinearisCommand,
-	buildLinearIssueUrl,
-} from '../utils/linear.js'
+	fetchLinearIssueByIdentifier,
+	getLinearCommentGraphQL,
+	createLinearCommentGraphQL,
+	updateLinearCommentGraphQL,
+	fetchIssueCommentsGraphQL,
+} from '../utils/linear-graphql.js'
+import { buildLinearIssueUrl } from '../utils/linear.js'
 
 /**
  * Linear-specific author structure
@@ -50,15 +50,23 @@ function normalizeAuthor(author: LinearAuthor | null | undefined): FlexibleAutho
  */
 export class LinearIssueManagementProvider implements IssueManagementProvider {
 	readonly providerName = 'linear'
+	private apiToken: string
+
+	constructor(config?: { apiToken?: string }) {
+		if (!config?.apiToken) {
+			throw new Error('LINEAR_API_TOKEN is required for LinearIssueManagementProvider')
+		}
+		this.apiToken = config.apiToken
+	}
 
 	/**
-	 * Fetch issue details using linearis CLI
+	 * Fetch issue details using GraphQL
 	 */
 	async getIssue(input: GetIssueInput): Promise<IssueResult> {
 		const { number, includeComments = true } = input
 
 		// Fetch issue - Linear uses alphanumeric identifiers like "ENG-123"
-		const raw = await fetchLinearIssue(number)
+		const raw = await fetchLinearIssueByIdentifier(number, this.apiToken)
 
 		// Map Linear state type to open/closed
 		const state = raw.state.type === 'completed' || raw.state.type === 'canceled'
@@ -98,7 +106,7 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 		// Fetch comments if requested
 		if (includeComments) {
 			try {
-				const comments = await this.fetchIssueComments(number)
+				const comments = await this.fetchIssueComments(raw.id)
 				if (comments) {
 					result.comments = comments
 				}
@@ -111,31 +119,17 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	}
 
 	/**
-	 * Fetch comments for an issue
+	 * Fetch comments for an issue using GraphQL
 	 */
-	private async fetchIssueComments(identifier: string): Promise<IssueResult['comments']> {
-		// Use linearis CLI to get comments for an issue
-		interface LinearCommentResponse {
-			id: string
-			body: string
-			createdAt: string
-			updatedAt?: string
-			user: LinearAuthor
-		}
-
+	private async fetchIssueComments(issueId: string): Promise<IssueResult['comments']> {
 		try {
-			const comments = await executeLinearisCommand<LinearCommentResponse[]>([
-				'comments',
-				'list',
-				identifier,
-			])
+			const comments = await fetchIssueCommentsGraphQL(issueId, this.apiToken)
 
 			return comments.map(comment => ({
 				id: comment.id,
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.user),
-				...(comment.updatedAt && { updatedAt: comment.updatedAt }),
 			}))
 		} catch {
 			return []
@@ -143,12 +137,12 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	}
 
 	/**
-	 * Fetch a specific comment by ID
+	 * Fetch a specific comment by ID using GraphQL
 	 */
 	async getComment(input: GetCommentInput): Promise<CommentDetailResult> {
 		const { commentId } = input
 
-		const raw = await getLinearComment(commentId)
+		const raw = await getLinearCommentGraphQL(commentId, this.apiToken)
 
 		return {
 			id: raw.id,
@@ -159,14 +153,16 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	}
 
 	/**
-	 * Create a new comment on an issue
+	 * Create a new comment on an issue using GraphQL
 	 */
 	async createComment(input: CreateCommentInput): Promise<CommentResult> {
 		const { number, body } = input
 		// Note: Linear doesn't distinguish between issue and PR comments
 		// (Linear doesn't have PRs - that's GitHub-specific)
 
-		const result = await createLinearComment(number, body)
+		// First fetch the issue to get its UUID
+		const issue = await fetchLinearIssueByIdentifier(number, this.apiToken)
+		const result = await createLinearCommentGraphQL(issue.id, body, this.apiToken)
 
 		return {
 			id: result.id,
@@ -176,12 +172,12 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	}
 
 	/**
-	 * Update an existing comment
+	 * Update an existing comment using GraphQL
 	 */
 	async updateComment(input: UpdateCommentInput): Promise<CommentResult> {
 		const { commentId, body } = input
 
-		const result = await updateLinearComment(commentId, body)
+		const result = await updateLinearCommentGraphQL(commentId, body, this.apiToken)
 
 		return {
 			id: result.id,

@@ -623,39 +623,51 @@ il start PR-456
 
 ### Linear
 
-iloom integrates with Linear through the `linearis` CLI tool, enabling full Linear issue tracking support.
+iloom integrates with Linear through direct GraphQL API calls, enabling full Linear issue tracking support.
 
 **Setup:**
 
-1. Install the `linearis` CLI:
-   ```bash
-   npm install -g linearis
-   ```
+1. Create a Linear API token:
+   - Go to https://linear.app/settings/api
+   - Click "Create new API key"
+   - Copy the token (starts with `lin_api_...`)
 
-2. Set your Linear API key:
-   ```bash
-   export LINEAR_API_TOKEN="lin_api_..."
-   ```
-
-   Or save to `~/.linear_api_token` for persistence.
-
-3. Configure iloom to use Linear:
+2. Configure iloom to use Linear:
    ```bash
    il init
    # Follow prompts to select Linear as your issue tracker
+   # Enter your team ID (e.g., "ENG")
+   # Enter your API token (stored securely in settings.local.json)
    ```
 
-   Or manually edit `.iloom/settings.json`:
+   Or manually configure:
+
+   `.iloom/settings.json`:
    ```jsonc
    {
      "issueManagement": {
        "provider": "linear",
        "linear": {
-         "teamId": "ENG",  // Required: Your Linear team key
-         "branchFormat": "feat/{{key}}__{{title}}"  // Optional
+         "teamId": "ENG"  // Your Linear team key
        }
      }
    }
+   ```
+
+   `.iloom/settings.local.json` (gitignored):
+   ```jsonc
+   {
+     "issueManagement": {
+       "linear": {
+         "apiToken": "lin_api_..."  // Your Linear API token
+       }
+     }
+   }
+   ```
+
+   **Alternatively**, set the `LINEAR_API_TOKEN` environment variable:
+   ```bash
+   export LINEAR_API_TOKEN="lin_api_..."
    ```
 
 **Usage:**
@@ -674,7 +686,6 @@ il finish
 **Limitations:**
 
 - Linear does not have pull requests. Use `il finish` with `mergeBehavior.mode: "local"` or `"github-pr"` to merge your code.
-- The Linear MCP integration is not included in this version (CLI-only integration).
 
 **Port Calculation:**
 
@@ -689,7 +700,7 @@ Linear issue identifiers (e.g., ENG-123) use hash-based port calculation instead
 
 **Issue Tracker (choose one):**
 - **GitHub CLI (`gh`)** - For GitHub issue tracking (default)
-- **Linear CLI (`linearis`)** - For Linear issue tracking (install with `npm install -g linearis`)
+- **Linear API Token** - For Linear issue tracking (no CLI required, uses GraphQL API)
 
 **Recommended:**
 - A Claude Max subscription - iloom uses your own subscription

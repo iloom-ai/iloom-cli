@@ -277,6 +277,13 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.optional()
 						.describe('Branch naming template for Linear issues'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe(
+							'Linear API token for GraphQL operations. SECURITY WARNING: This should NEVER be committed to source control. ' +
+								'Always store in settings.local.json (gitignored). Falls back to LINEAR_API_TOKEN environment variable if not set.',
+						),
 				})
 				.optional(),
 		})
@@ -388,6 +395,13 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.optional()
 						.describe('Branch naming template for Linear issues'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe(
+							'Linear API token for GraphQL operations. SECURITY WARNING: This should NEVER be committed to source control. ' +
+								'Always store in settings.local.json (gitignored). Falls back to LINEAR_API_TOKEN environment variable if not set.',
+						),
 				})
 				.optional(),
 		})
@@ -525,18 +539,17 @@ export class SettingsManager {
 				)
 			}
 
-			// Validate individual file with strict mode to catch unknown keys
-			// Use non-defaulting schema to prevent polluting partial settings with defaults before merge
-			try {
-				const validated = IloomSettingsSchemaNoDefaults.strict().parse(parsed)
-				return validated
-			} catch (error) {
-				if (error instanceof z.ZodError) {
-					const errorMsg = this.formatAllZodErrors(error, filename)
-					throw errorMsg
-				}
-				throw error
+			// Basic structure validation: ensure file contains an object
+			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+				throw new Error(
+					`Settings validation failed at ${filename}:\n  - root: Expected object, received ${typeof parsed}`,
+				)
 			}
+
+			// Skip detailed Zod validation - only validate the final merged configuration
+			// This allows splitting configuration across settings.json and settings.local.json
+			// where neither file alone has complete valid configuration (e.g., Linear apiToken in local file)
+			return parsed as z.infer<typeof IloomSettingsSchemaNoDefaults>
 		} catch (error) {
 			// File not found is not an error - return empty settings
 			if ((error as { code?: string }).code === 'ENOENT') {

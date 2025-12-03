@@ -1,17 +1,18 @@
 /**
  * LinearService - IssueTracker implementation for Linear
- * Implements issue tracking operations using the linearis CLI tool
+ * Implements issue tracking operations using GraphQL API
  */
 
 import type { Issue, PullRequest, IssueTrackerInputDetection } from '../types/index.js'
 import type { LinearIssue } from '../types/linear.js'
 import { LinearServiceError } from '../types/linear.js'
 import {
-  fetchLinearIssue,
-  createLinearIssue,
-  updateLinearIssueState,
-  buildLinearIssueUrl,
-} from '../utils/linear.js'
+  fetchLinearIssueByIdentifier,
+  createLinearIssueGraphQL,
+  getTeamIdByKey,
+  updateLinearIssueStateGraphQL,
+} from '../utils/linear-graphql.js'
+import { buildLinearIssueUrl } from '../utils/linear.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import type { IssueTracker } from './IssueTracker.js'
 import { logger } from '../utils/logger.js'
@@ -24,6 +25,8 @@ export interface LinearServiceConfig {
   teamId?: string
   /** Branch naming template (e.g., "feat/{{key}}__{{title}}") */
   branchFormat?: string
+  /** Linear API token for GraphQL operations */
+  apiToken?: string
 }
 
 /**
@@ -43,6 +46,29 @@ export class LinearService implements IssueTracker {
   ) {
     this.config = config ?? {}
     this.prompter = options?.prompter ?? promptConfirmation
+
+    // Validate apiToken is available (from config or env var)
+    if (!this.getApiToken()) {
+      throw new LinearServiceError(
+        'UNAUTHORIZED',
+        'LINEAR_API_TOKEN is required. Set it in settings.local.json or as an environment variable.',
+      )
+    }
+  }
+
+  /**
+   * Get API token from config or environment variable
+   * @throws LinearServiceError if token is not available
+   */
+  private getApiToken(): string {
+    const token = this.config.apiToken ?? process.env.LINEAR_API_TOKEN
+    if (!token) {
+      throw new LinearServiceError(
+        'UNAUTHORIZED',
+        'LINEAR_API_TOKEN is required. Set it in settings.local.json or as an environment variable.',
+      )
+    }
+    return token
   }
 
   /**
@@ -85,14 +111,15 @@ export class LinearService implements IssueTracker {
   }
 
   /**
-   * Fetch a Linear issue by identifier
+   * Fetch a Linear issue by identifier using GraphQL
    * @param identifier - Linear issue identifier (string or number)
    * @param _repo - Repository (unused for Linear)
    * @returns Generic Issue type
    * @throws LinearServiceError if issue not found
    */
   public async fetchIssue(identifier: string | number, _repo?: string): Promise<Issue> {
-    const linearIssue = await fetchLinearIssue(String(identifier))
+    const apiToken = this.getApiToken()
+    const linearIssue = await fetchLinearIssueByIdentifier(String(identifier), apiToken)
     return this.mapLinearIssueToIssue(linearIssue)
   }
 
@@ -157,11 +184,22 @@ export class LinearService implements IssueTracker {
 
     logger.info(`Creating Linear issue in team ${this.config.teamId}: ${title}`)
 
-    const result = await createLinearIssue(title, body, this.config.teamId, labels)
+    const apiToken = this.getApiToken()
+
+    // Get team UUID from team key
+    const teamId = await getTeamIdByKey(this.config.teamId, apiToken)
+
+    // Create issue via GraphQL
+    const issue = await createLinearIssueGraphQL(teamId, title, body, apiToken)
+
+    // TODO: Handle labels if provided (requires additional GraphQL mutation)
+    if (labels && labels.length > 0) {
+      logger.warn('Label assignment not yet implemented for GraphQL API')
+    }
 
     return {
-      number: result.identifier,
-      url: result.url,
+      number: issue.identifier,
+      url: issue.url ?? buildLinearIssueUrl(issue.identifier, title),
     }
   }
 
@@ -177,13 +215,20 @@ export class LinearService implements IssueTracker {
   }
 
   /**
-   * Move a Linear issue to "In Progress" state
+   * Move a Linear issue to "In Progress" state using GraphQL
    * @param identifier - Linear issue identifier
    * @throws LinearServiceError if state update fails
    */
   public async moveIssueToInProgress(identifier: string | number): Promise<void> {
     logger.info(`Moving Linear issue ${identifier} to In Progress`)
-    await updateLinearIssueState(String(identifier), 'In Progress')
+
+    const apiToken = this.getApiToken()
+
+    // First fetch the issue to get its UUID
+    const issue = await fetchLinearIssueByIdentifier(String(identifier), apiToken)
+
+    // Update the issue state
+    await updateLinearIssueStateGraphQL(issue.id, 'In Progress', apiToken)
   }
 
   /**

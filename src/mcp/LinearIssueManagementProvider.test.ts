@@ -1,33 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { LinearIssueManagementProvider } from './LinearIssueManagementProvider.js'
+
+// Mock the linear-graphql utils module
+vi.mock('../utils/linear-graphql.js', () => ({
+	fetchLinearIssueByIdentifier: vi.fn(),
+	createLinearCommentGraphQL: vi.fn(),
+	getLinearCommentGraphQL: vi.fn(),
+	updateLinearCommentGraphQL: vi.fn(),
+	fetchIssueCommentsGraphQL: vi.fn(),
+}))
 
 // Mock the linear utils module (keep buildLinearIssueUrl as real implementation)
 vi.mock('../utils/linear.js', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../utils/linear.js')>()
 	return {
 		...actual,
-		fetchLinearIssue: vi.fn(),
-		createLinearComment: vi.fn(),
-		getLinearComment: vi.fn(),
-		updateLinearComment: vi.fn(),
-		executeLinearisCommand: vi.fn(),
 	}
 })
 
-// Import mocked functions for assertions
+// Import after mocking
+import { LinearIssueManagementProvider } from './LinearIssueManagementProvider.js'
 import {
-	fetchLinearIssue,
-	createLinearComment,
-	getLinearComment,
-	updateLinearComment,
-	executeLinearisCommand,
-} from '../utils/linear.js'
+	fetchLinearIssueByIdentifier,
+	createLinearCommentGraphQL,
+	getLinearCommentGraphQL,
+	updateLinearCommentGraphQL,
+	fetchIssueCommentsGraphQL,
+} from '../utils/linear-graphql.js'
+
+const TEST_API_TOKEN = 'lin_api_test_token_123'
 
 describe('LinearIssueManagementProvider', () => {
 	let provider: LinearIssueManagementProvider
 
 	beforeEach(() => {
-		provider = new LinearIssueManagementProvider()
+		provider = new LinearIssueManagementProvider({ apiToken: TEST_API_TOKEN })
 	})
 
 	describe('providerName', () => {
@@ -56,12 +62,12 @@ describe('LinearIssueManagementProvider', () => {
 				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
-			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchIssueCommentsGraphQL).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
-			expect(fetchLinearIssue).toHaveBeenCalledWith('ENG-123')
+			expect(fetchLinearIssueByIdentifier).toHaveBeenCalledWith('ENG-123', TEST_API_TOKEN)
 			expect(result.id).toBe('ENG-123')
 			expect(result.title).toBe('Test Issue')
 			expect(result.body).toBe('Test description')
@@ -91,8 +97,8 @@ describe('LinearIssueManagementProvider', () => {
 				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
-			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchIssueCommentsGraphQL).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
@@ -118,8 +124,8 @@ describe('LinearIssueManagementProvider', () => {
 				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
-			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchIssueCommentsGraphQL).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
@@ -131,8 +137,12 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'uuid-123',
 				identifier: 'ENG-123',
 				title: 'Test Issue',
-				description: 'Test',
-				state: { id: 'state-uuid', name: 'Todo', type: 'unstarted' as const },
+				description: 'Test description',
+				state: {
+					id: 'state-uuid',
+					name: 'In Progress',
+					type: 'started' as const,
+				},
 				labels: [],
 				assignee: null,
 				createdAt: '2024-01-01T00:00:00Z',
@@ -140,11 +150,11 @@ describe('LinearIssueManagementProvider', () => {
 				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
-			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockLinearIssue)
 
 			const result = await provider.getIssue({ number: 'ENG-123', includeComments: false })
 
-			expect(executeLinearisCommand).not.toHaveBeenCalled()
+			expect(fetchIssueCommentsGraphQL).not.toHaveBeenCalled()
 			expect(result.comments).toBeUndefined()
 		})
 
@@ -153,8 +163,12 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'uuid-123',
 				identifier: 'ENG-123',
 				title: 'Test Issue',
-				description: 'Test',
-				state: { id: 'state-uuid', name: 'Todo', type: 'unstarted' as const },
+				description: 'Test description',
+				state: {
+					id: 'state-uuid',
+					name: 'In Progress',
+					type: 'started' as const,
+				},
 				labels: [],
 				assignee: null,
 				createdAt: '2024-01-01T00:00:00Z',
@@ -164,19 +178,19 @@ describe('LinearIssueManagementProvider', () => {
 
 			const mockComments = [
 				{
-					id: 'comment-uuid-1',
+					id: 'comment-1',
 					body: 'First comment',
-					createdAt: '2024-01-01T12:00:00Z',
+					createdAt: '2024-01-01T10:00:00Z',
 					user: { name: 'alice', displayName: 'Alice' },
 				},
 			]
 
-			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue(mockComments)
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchIssueCommentsGraphQL).mockResolvedValue(mockComments)
 
 			const result = await provider.getIssue({ number: 'ENG-123', includeComments: true })
 
-			expect(executeLinearisCommand).toHaveBeenCalledWith(['comments', 'list', 'ENG-123'])
+			expect(fetchIssueCommentsGraphQL).toHaveBeenCalledWith('uuid-123', TEST_API_TOKEN)
 			expect(result.comments).toHaveLength(1)
 			expect(result.comments?.[0]?.body).toBe('First comment')
 			expect(result.comments?.[0]?.author?.displayName).toBe('Alice')
@@ -192,11 +206,11 @@ describe('LinearIssueManagementProvider', () => {
 				user: { name: 'bob', displayName: 'Bob Smith' },
 			}
 
-			vi.mocked(getLinearComment).mockResolvedValue(mockComment)
+			vi.mocked(getLinearCommentGraphQL).mockResolvedValue(mockComment)
 
 			const result = await provider.getComment({ commentId: 'comment-uuid', number: 'ENG-123' })
 
-			expect(getLinearComment).toHaveBeenCalledWith('comment-uuid')
+			expect(getLinearCommentGraphQL).toHaveBeenCalledWith('comment-uuid', TEST_API_TOKEN)
 			expect(result.id).toBe('comment-uuid')
 			expect(result.body).toBe('Test comment body')
 			expect(result.created_at).toBe('2024-01-01T00:00:00Z')
@@ -206,6 +220,19 @@ describe('LinearIssueManagementProvider', () => {
 
 	describe('createComment', () => {
 		it('should create a comment and return result', async () => {
+			const mockIssue = {
+				id: 'issue-uuid-123',
+				identifier: 'ENG-123',
+				title: 'Test',
+				description: '',
+				state: { id: '1', name: 'Open', type: 'unstarted' as const },
+				labels: [],
+				assignee: null,
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-01T00:00:00Z',
+				team: { id: 'team-1', key: 'ENG', name: 'Engineering' },
+			}
+
 			const mockResult = {
 				id: 'new-comment-uuid',
 				body: 'New comment',
@@ -213,7 +240,8 @@ describe('LinearIssueManagementProvider', () => {
 				user: { name: 'alice' },
 			}
 
-			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
+			vi.mocked(fetchLinearIssueByIdentifier).mockResolvedValue(mockIssue)
+			vi.mocked(createLinearCommentGraphQL).mockResolvedValue(mockResult)
 
 			const result = await provider.createComment({
 				number: 'ENG-123',
@@ -221,7 +249,8 @@ describe('LinearIssueManagementProvider', () => {
 				type: 'issue',
 			})
 
-			expect(createLinearComment).toHaveBeenCalledWith('ENG-123', 'New comment')
+			expect(fetchLinearIssueByIdentifier).toHaveBeenCalledWith('ENG-123', TEST_API_TOKEN)
+			expect(createLinearCommentGraphQL).toHaveBeenCalledWith('issue-uuid-123', 'New comment', TEST_API_TOKEN)
 			expect(result.id).toBe('new-comment-uuid')
 			expect(result.created_at).toBe('2024-01-01T00:00:00Z')
 		})
@@ -236,7 +265,7 @@ describe('LinearIssueManagementProvider', () => {
 				user: { name: 'alice' },
 			}
 
-			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
+			vi.mocked(updateLinearCommentGraphQL).mockResolvedValue(mockResult)
 
 			const result = await provider.updateComment({
 				commentId: 'comment-uuid',
@@ -244,7 +273,7 @@ describe('LinearIssueManagementProvider', () => {
 				body: 'Updated comment',
 			})
 
-			expect(updateLinearComment).toHaveBeenCalledWith('comment-uuid', 'Updated comment')
+			expect(updateLinearCommentGraphQL).toHaveBeenCalledWith('comment-uuid', 'Updated comment', TEST_API_TOKEN)
 			expect(result.id).toBe('comment-uuid')
 		})
 	})

@@ -46,6 +46,12 @@ export class IssueTrackerFactory {
 				if (linearSettings?.branchFormat) {
 					linearConfig.branchFormat = linearSettings.branchFormat
 				}
+				// API token: Check settings first, fall back to env var
+				if (linearSettings?.apiToken) {
+					linearConfig.apiToken = linearSettings.apiToken
+				} else if (process.env.LINEAR_API_TOKEN) {
+					linearConfig.apiToken = process.env.LINEAR_API_TOKEN
+				}
 
 				logger.debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
 				return new LinearService(linearConfig)

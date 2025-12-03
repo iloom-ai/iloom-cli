@@ -347,6 +347,14 @@ REMOTES_INFO
    - Store answer as: `issueManagement.linear.teamId`
    - Context: This is the team key shown in your Linear workspace (e.g., "ENG" in "ENG-123")
 
+3. **Linear API Token** (only ask if issue provider is "linear")
+   - Question format: "What is your Linear API token?{{#IF currentLinearApiToken}} (Currently: [REDACTED]){{/IF currentLinearApiToken}}"
+   - Type: Password/sensitive input (do not echo input)
+   - Validation: Must start with "lin_api_" or "lin_oauth_"
+   - Store answer as: `issueManagement.linear.apiToken`
+   - Context: Create a Personal API Key at https://linear.app/settings/api
+   - **CRITICAL SECURITY**: This value MUST ALWAYS be saved to settings.local.json, NEVER to settings.json, regardless of user preference for other settings. Falls back to LINEAR_API_TOKEN environment variable if not configured.
+
 **Step 3: Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
 
 3. **Merge Mode**
@@ -520,6 +528,10 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    }
    ```
 
+   **IMPORTANT FOR LINEAR_API_TOKEN:**
+   - The `apiToken` field should NEVER be written to settings.json
+   - It must ALWAYS be written to settings.local.json (see rule 9 below)
+
 6. **Add mergeBehavior ONLY if mode is not "local":**
    ```json
    {
@@ -532,6 +544,15 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
 7. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
 
 8. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+
+9. **CRITICAL: LINEAR_API_TOKEN Security Rule**
+   If `issueManagement.linear.apiToken` is configured:
+   - This field MUST be written to `settings.local.json`
+   - NEVER write this field to `settings.json`
+   - If user chose to commit other settings to settings.json, split the configuration:
+     * Write non-sensitive Linear settings (teamId, branchFormat) to settings.json
+     * Write apiToken ONLY to settings.local.json
+   - Display warning: "Your Linear API token will be saved to settings.local.json (gitignored) for security."
 
 ### Phase 6: Write File
 

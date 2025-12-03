@@ -57,10 +57,19 @@ export async function generateIssueManagementMcpConfig(
 			githubEventName: githubEventName ?? 'auto-detect'
 		})
 	} else {
-		// Linear doesn't need repo info - it uses team/identifier patterns
+		// Linear needs API token for GraphQL calls
+		// Get from env var (settings are not available in this context)
+		const linearApiToken = process.env.LINEAR_API_TOKEN
+		if (linearApiToken) {
+			envVars = {
+				...envVars,
+				LINEAR_API_TOKEN: linearApiToken,
+			}
+		}
 		logger.debug('Generated MCP config for Linear issue management', {
 			provider,
 			contextType: contextType ?? 'auto-detect',
+			hasApiToken: !!linearApiToken,
 		})
 	}
 
