@@ -2612,6 +2612,99 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('recap settings', () => {
+		it('should allow recap to be omitted (hook applies default)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			// recap is undefined when not specified - hook uses ?? true for default
+			expect(result.recap).toBeUndefined()
+		})
+
+		it('should accept recap.phaseReminders: false', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				recap: {
+					phaseReminders: false,
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.recap?.phaseReminders).toBe(false)
+		})
+
+		it('should default phaseReminders to true when recap object provided without phaseReminders', async () => {
+			const projectRoot = '/test/project'
+			// Settings with empty recap - phaseReminders should default to true
+			const settings = {
+				mainBranch: 'main',
+				recap: {},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.recap?.phaseReminders).toBe(true) // Default applied
+		})
+
+		it('should merge recap settings from local override', async () => {
+			const projectRoot = '/test/project'
+			const baseSettings = {
+				mainBranch: 'main',
+				recap: {
+					phaseReminders: true,
+				},
+			}
+			const localSettings = {
+				recap: {
+					phaseReminders: false,
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+				.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.recap?.phaseReminders).toBe(false) // Local override
+		})
+	})
+
 	describe('getSpinModel', () => {
 		it('should return opus by default when spin not configured', () => {
 			const settings = { sourceEnvOnStart: false }

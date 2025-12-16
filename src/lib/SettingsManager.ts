@@ -374,6 +374,18 @@ export const IloomSettingsSchema = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	recap: z
+		.object({
+			phaseReminders: z
+				.boolean()
+				.default(true)
+				.describe(
+					'Show phase boundary recap reminders when iloom agents complete. ' +
+						'Reminds the orchestrator to capture decisions, insights, risks, and assumptions.'
+				),
+		})
+		.optional()
+		.describe('Recap MCP configuration for capturing session context'),
 })
 
 /**
@@ -544,6 +556,15 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	recap: z
+		.object({
+			phaseReminders: z
+				.boolean()
+				.optional()
+				.describe('Show phase boundary recap reminders when iloom agents complete'),
+		})
+		.optional()
+		.describe('Recap MCP configuration'),
 })
 
 /**

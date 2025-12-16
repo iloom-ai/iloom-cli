@@ -60,6 +60,16 @@ export class IgniteCommand {
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
 
+		// Load settings early to inject env vars for hooks
+		// Settings are pre-validated at CLI startup, so no error handling needed here
+		const cliOverrides = extractSettingsOverrides()
+		this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+
+		// Set ILOOM_RECAP_PHASE_REMINDERS env var for hook to read
+		// Default is true (matches settings schema default)
+		const phaseReminders = this.settings.recap?.phaseReminders ?? true
+		process.env.ILOOM_RECAP_PHASE_REMINDERS = phaseReminders ? 'true' : 'false'
+
 		try {
 			logger.info('🚀 Your loom is spinning up, please wait...')
 

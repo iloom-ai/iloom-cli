@@ -19,10 +19,13 @@
  *
  * Events we skip (exit without broadcasting):
  * - SessionStart - user just launched, they know
- * - SubagentStop - subagent done but main agent may continue
+ * - SubagentStop - subagent done but main agent may continue (recap handled via PostToolUse)
  * - Notification(permission_prompt) - redundant with PermissionRequest
  * - Notification(auth_success) - user just logged in
  * - Any other notification types
+ *
+ * Special handling:
+ * - PostToolUse for Task tool - outputs recap reminder to parent agent via additionalContext
  *
  * This is purely a notification mechanism - it does NOT participate in
  * permission approval/denial. Claude Code handles permission prompts in
@@ -39,8 +42,10 @@ const path = require('path');
 // Set ILOOM_HOOK_DEBUG=0 to disable (enabled by default for now)
 const DEBUG = process.env.ILOOM_HOOK_DEBUG !== '0';
 const LOG_FILE = '/tmp/iloom-hook.log';
+const RECAP_LOG_FILE = '/tmp/iloom-recap-hook.log';
 
-function debug(message, data = {}) {
+
+function debug(message, data = {}, logFile = LOG_FILE) {
   if (!DEBUG) return;
 
   const timestamp = new Date().toISOString();
@@ -48,7 +53,7 @@ function debug(message, data = {}) {
   const logLine = `[${timestamp}] ${message}${dataStr}\n`;
 
   try {
-    fs.appendFileSync(LOG_FILE, logLine);
+    fs.appendFileSync(logFile, logLine);
   } catch {
     // Ignore logging errors
   }
@@ -107,6 +112,63 @@ function findAllIloomSockets() {
     debug('Error finding iloom sockets', { error: error.message });
     return [];
   }
+}
+
+/**
+ * Handle PostToolUse for Task tools - output recap reminder to parent agent
+ * This fires after a Task (subagent) completes, with output going to the parent.
+ * @param {object} hookData - Hook input data
+ * @returns {object|null} Response with additionalContext or null to skip
+ */
+function handleTaskPostToolUse(hookData) {
+  debug('=== handleTaskPostToolUse ENTER ===', {
+   tool_name: hookData.tool_name,
+   tool_input: hookData.tool_input,
+   tool_result: hookData.tool_result
+  }, RECAP_LOG_FILE);
+
+  // Only handle Task tool
+  if (hookData.tool_name !== 'Task') {
+    debug('SKIP: not a Task tool', { tool_name: hookData.tool_name }, RECAP_LOG_FILE);
+    return null;
+  }
+
+  // Get subagent_type from tool_input (the input to the Task tool)
+  const subagentType = hookData.tool_input?.subagent_type;
+  debug('Task tool detected', { subagentType }, RECAP_LOG_FILE);
+
+  // Only handle iloom agents
+  if (!subagentType || !subagentType.includes('iloom')) {
+    debug('SKIP: not an iloom agent', { subagentType, hasIloom: subagentType?.includes('iloom') }, RECAP_LOG_FILE);
+    return null;
+  }
+
+  debug('MATCH: iloom agent detected', { subagentType }, RECAP_LOG_FILE);
+
+  // Check environment variable for phase reminders setting
+  // ILOOM_RECAP_PHASE_REMINDERS is injected by iloom when launching Claude
+  // Default is 'true' if not set (matches settings schema default)
+  const phaseRemindersEnv = process.env.ILOOM_RECAP_PHASE_REMINDERS;
+  if (phaseRemindersEnv === 'false') {
+    debug('SKIP: Phase reminders disabled via ILOOM_RECAP_PHASE_REMINDERS=false', {}, RECAP_LOG_FILE);
+    return null;
+  }
+
+  debug('RETURNING REMINDER: phaseReminders enabled', { phaseRemindersEnv }, RECAP_LOG_FILE);
+
+  // Return PostToolUse response with additionalContext - this goes to the parent agent
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext: `**Recap check:** Did this phase produce anything the USER would want to know?
+
+**First:** Use \`get_recap\` to see what's already captured - avoid duplicates.
+**Add if new:** architectural choice, non-obvious discovery, risk, assumption
+**SKIP if:** already in recap, phase skipped, complexity classification, "tests pass", anything about YOUR process
+
+The recap is for the USER, not a log of your workflow.`
+    }
+  };
 }
 
 /**
@@ -224,6 +286,22 @@ async function main() {
     const { hook_event_name, cwd, notification_type, session_id } = hookData;
 
     debug('Received hook event', { hook_event_name, cwd, notification_type, session_id, tool_name: hookData.tool_name });
+
+    // Handle PostToolUse for Task tools - output recap reminder to parent agent
+    // This fires after a Task (subagent) completes, with additionalContext going to the parent
+    if (hook_event_name === 'PostToolUse' && hookData.tool_name === 'Task') {
+      debug('=== main() PostToolUse Task detected ===', { session_id, cwd, tool_name: hookData.tool_name }, RECAP_LOG_FILE);
+      const response = handleTaskPostToolUse(hookData);
+      if (response) {
+        debug('OUTPUT RESPONSE to stdout', { hookEventName: response.hookSpecificOutput?.hookEventName }, RECAP_LOG_FILE);
+        // Output JSON with hookSpecificOutput.additionalContext - goes to parent agent
+        console.log(JSON.stringify(response));
+        debug('RESPONSE OUTPUT COMPLETE', {}, RECAP_LOG_FILE);
+      } else {
+        debug('NO RESPONSE returned from handleTaskPostToolUse', {}, RECAP_LOG_FILE);
+      }
+      // Continue to allow other processing (e.g., broadcasting) to occur
+    }
 
     const status = mapEventToStatus(hook_event_name, notification_type);
     debug('Mapped event to status', { status });
