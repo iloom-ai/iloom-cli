@@ -51,7 +51,7 @@ describe('CleanupCommand', () => {
       getProtectedBranches: vi.fn(),
       getSpinModel: vi.fn(),
       getSummaryModel: vi.fn(),
-    }) as any)
+    }) as Partial<SettingsManager> as SettingsManager)
 
     mockGitWorktreeManager = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     // Mock listWorktrees by default to prevent executeIssueCleanup from failing
