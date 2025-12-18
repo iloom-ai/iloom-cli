@@ -78,8 +78,9 @@ async function hasNonEmptySettings(filePath: string): Promise<boolean> {
 
 /**
  * Launch interactive first-run setup via InitCommand
+ * @param customMessage Optional custom message to pass to Claude instead of the default
  */
-export async function launchFirstRunSetup(): Promise<void> {
+export async function launchFirstRunSetup(customMessage?: string): Promise<void> {
 	logger.info('First-time project setup detected.')
 	logger.info(
 		'iloom will now launch an interactive configuration session with Claude.'
@@ -89,9 +90,8 @@ export async function launchFirstRunSetup(): Promise<void> {
 	await waitForKeypress('Press any key to start configuration...')
 
 	const initCommand = new InitCommand()
-	await initCommand.execute(
-		'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
-	)
+	const defaultMessage = 'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
+	await initCommand.execute(customMessage ?? defaultMessage)
 
 	// Mark project as configured to prevent wizard from re-triggering
 	// Use the same project root resolution as needsFirstRunSetup() for consistency

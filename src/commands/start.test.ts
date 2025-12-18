@@ -50,6 +50,7 @@ vi.mock('../utils/git.js', async () => {
 // Mock remote utilities
 vi.mock('../utils/remote.js', () => ({
 	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	hasNoRemotes: vi.fn().mockResolvedValue(false),
 	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
 	parseGitRemotes: vi.fn().mockResolvedValue([]),
 	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),

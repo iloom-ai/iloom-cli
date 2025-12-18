@@ -15,7 +15,7 @@ import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
-import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { getConfiguredRepoFromSettings, hasMultipleRemotes, hasNoRemotes } from '../utils/remote.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions, StartResult } from '../types/index.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
@@ -125,6 +125,13 @@ export class StartCommand {
 					getLogger().debug(`Reinitializing issue tracker: provider changed to "${newProvider}"`)
 					this.issueTracker = IssueTrackerFactory.create(newSettings)
 				}
+			}
+
+			// Check for missing remotes and trigger init flow if needed
+			if (!isJsonMode && (await hasNoRemotes())) {
+				getLogger().warn('No git remotes detected. iloom requires a GitHub remote to function.')
+				await launchFirstRunSetup('Help me configure a GitHub remote for this repository. There are no git remotes configured.')
+				// Continue after setup - remotes should now be configured
 			}
 
 			let repo: string | undefined

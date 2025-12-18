@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { CleanupCommand } from '../../src/commands/cleanup.js'
 import { GitWorktreeManager } from '../../src/lib/GitWorktreeManager.js'
 import { ResourceCleanup } from '../../src/lib/ResourceCleanup.js'
+import { SettingsManager } from '../../src/lib/SettingsManager.js'
 import { logger } from '../../src/utils/logger.js'
 import { promptConfirmation } from '../../src/utils/prompt.js'
 import type { CleanupResult, SafetyCheck } from '../../src/types/cleanup.js'
@@ -10,6 +11,7 @@ import type { CleanupResult, SafetyCheck } from '../../src/types/cleanup.js'
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/ResourceCleanup.js')
 vi.mock('../../src/utils/prompt.js')
+vi.mock('../../src/lib/SettingsManager.js')
 vi.mock('../../src/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -33,6 +35,24 @@ describe('CleanupCommand', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+
+    // Mock SettingsManager to prevent reading real config files
+    vi.mocked(SettingsManager).mockImplementation(() => ({
+      loadSettings: vi.fn().mockResolvedValue({
+        capabilities: {
+          database: {
+            databaseUrlEnvVarName: 'DATABASE_URL'
+          }
+        },
+        mergeBehavior: {
+          mode: 'local'
+        }
+      }),
+      getProtectedBranches: vi.fn(),
+      getSpinModel: vi.fn(),
+      getSummaryModel: vi.fn(),
+    }) as any)
+
     mockGitWorktreeManager = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     // Mock listWorktrees by default to prevent executeIssueCleanup from failing
     mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([])

@@ -311,7 +311,31 @@ REMOTES_INFO
 {{/IF SINGLE_REMOTE}}
 
 {{#IF NO_REMOTES}}
-**Warning:** No git remotes detected. The user will need to configure a remote before using iloom's GitHub features.
+**CRITICAL: No git remotes detected.** This repository has no Git remotes configured. iloom requires a GitHub remote to function properly.
+
+**Before proceeding with other configuration, you MUST help the user set up a remote:**
+
+1. **Ask for the GitHub repository URL:**
+   - Question: "Please provide your GitHub repository URL (e.g., https://github.com/owner/repo or git@github.com:owner/repo)"
+   - Validate the URL matches GitHub format (HTTPS or SSH)
+
+2. **Add the remote using git:**
+   ```bash
+   git remote add origin <user-provided-url>
+   ```
+
+3. **Verify the remote was added:**
+   ```bash
+   git remote -v
+   ```
+
+4. **Inform the user:** "Remote 'origin' has been configured. You can now proceed with iloom configuration."
+
+**Important:** If the user doesn't have a GitHub repository yet, guide them to:
+- Create one at https://github.com/new
+- Then return to provide the URL
+
+**After configuring the remote, proceed to Phase 1 (Local Development Settings).**
 {{/IF NO_REMOTES}}
 
 **If Linear was selected:**

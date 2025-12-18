@@ -96,6 +96,25 @@ export async function hasMultipleRemotes(cwd?: string): Promise<boolean> {
 }
 
 /**
+ * Check if repository has no remotes
+ */
+export async function hasNoRemotes(cwd?: string): Promise<boolean> {
+	try {
+		const remotes = await parseGitRemotes(cwd)
+		return remotes.length === 0
+	} catch (error) {
+		// Same error handling pattern as hasMultipleRemotes
+		const errMsg = error instanceof Error ? error.message : String(error)
+		if (/not a git repository/i.test(errMsg)) {
+			logger.debug('Skipping git remote check: not a git repository')
+		} else {
+			logger.warn(`Unable to check git remotes: ${errMsg}`)
+		}
+		return false
+	}
+}
+
+/**
  * Get configured repository string from settings
  * Returns "owner/repo" format for use with gh CLI --repo flag
  * Throws if configured remote not found

@@ -4,6 +4,7 @@ import type { ExecaReturnValue } from 'execa'
 import {
 	parseGitRemotes,
 	hasMultipleRemotes,
+	hasNoRemotes,
 	getConfiguredRepoFromSettings,
 	validateConfiguredRemote,
 } from './remote.js'
@@ -155,6 +156,36 @@ describe('remote utils', () => {
 			vi.mocked(execa).mockRejectedValue(new Error('fatal: not a git repository'))
 
 			const result = await hasMultipleRemotes()
+
+			expect(result).toBe(false)
+		})
+	})
+
+	describe('hasNoRemotes', () => {
+		it('should return true when no remotes exist', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: '',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const result = await hasNoRemotes()
+
+			expect(result).toBe(true)
+		})
+
+		it('should return false when remotes exist', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'origin\tgit@github.com:user/repo.git (fetch)\norigin\tgit@github.com:user/repo.git (push)',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const result = await hasNoRemotes()
+
+			expect(result).toBe(false)
+		})
+
+		it('should return false when git command fails', async () => {
+			vi.mocked(execa).mockRejectedValue(new Error('fatal: not a git repository'))
+
+			const result = await hasNoRemotes()
 
 			expect(result).toBe(false)
 		})
