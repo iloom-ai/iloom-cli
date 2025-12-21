@@ -22,11 +22,23 @@ COMPACT_SUMMARIES
 ------- END PREVIOUS CONTEXT ------
 {{/IF COMPACT_SUMMARIES}}
 
+{{#IF RECAP_JSON}}
+
+**CRITICAL: How to use the recap below:** The recap is a structured log created during the session (goal, decisions, insights, risks, assumptions). Use it to avoid missing key context. If recap entries conflict with the live conversation or compact summaries, prefer the most recent timestamped information.
+
+## Recap Context - STRUCTURED SESSION LOG
+------- BEGIN RECAP JSON ------
+
+RECAP_JSON
+
+------- END RECAP JSON ------
+{{/IF RECAP_JSON}}
+
 ## Your Task
 
-Reflect on THIS conversation (the one you're currently in){{#IF COMPACT_SUMMARIES}} AND the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}, and generate a concise summary focused on:
+Reflect on THIS conversation (the one you're currently in){{#IF COMPACT_SUMMARIES}} AND the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}{{#IF RECAP_JSON}} AND the recap context above (THIS IS VERY IMPORTANT){{/IF RECAP_JSON}}, and generate a concise summary focused on:
 
-1. **Key Insights**: What important learnings emerged during implementation{{#IF COMPACT_SUMMARIES}} INCLUDING the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}?
+1. **Key Insights**: What important learnings emerged during implementation{{#IF COMPACT_SUMMARIES}} INCLUDING the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}{{#IF RECAP_JSON}} AND the recap context above (THIS IS VERY IMPORTANT){{/IF RECAP_JSON}}?
 2. **Decisions Made**: What significant technical decisions were made and why?
 3. **Challenges Encountered**: What obstacles were faced and how were they resolved?
 4. **Mistakes and Corrections**: What mistakes were made and what was learned from them?
@@ -79,4 +91,4 @@ Keep the visible themes section brief (3-5 bullet points, one sentence each). Th
 ## VALIDATION CHECKLIST - FAILING THIS LIST MEANS FAILING THE TASK:
 * Did you ouput ONLY the markdown with no commentary before or after?
 {{#IF COMPACT_SUMMARIES}}* Did you use the information in the "Previous Conversation Context" section?{{/IF COMPACT_SUMMARIES}}
-
+{{#IF RECAP_JSON}}* Did you use the recap context section above?{{/IF RECAP_JSON}}

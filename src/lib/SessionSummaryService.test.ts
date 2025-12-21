@@ -15,6 +15,11 @@ vi.mock('../utils/claude-transcript.js', () => ({
 	readSessionContext: vi.fn(),
 }))
 
+// Mock the recap utility
+vi.mock('../utils/recap.js', () => ({
+	readRecapForPrompt: vi.fn(),
+}))
+
 // Mock the IssueManagementProviderFactory
 vi.mock('../mcp/IssueManagementProviderFactory.js', () => ({
 	IssueManagementProviderFactory: {
@@ -30,6 +35,7 @@ vi.mock('../utils/remote.js', () => ({
 // Import mocked modules
 import { launchClaude } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
+import { readRecapForPrompt } from '../utils/recap.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 
@@ -118,6 +124,9 @@ describe('SessionSummaryService', () => {
 		// Setup transcript mock - returns null by default (no compact summaries)
 		vi.mocked(readSessionContext).mockResolvedValue(null)
 
+		// Setup recap mock - returns empty by default (no recap context)
+		vi.mocked(readRecapForPrompt).mockResolvedValue('')
+
 		// Setup remote mock - defaults to single remote (no fork mode)
 		vi.mocked(hasMultipleRemotes).mockResolvedValue(false)
 
@@ -145,6 +154,7 @@ describe('SessionSummaryService', () => {
 				BRANCH_NAME: 'feat/issue-123__test-feature',
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: '',
+				RECAP_JSON: '',
 			})
 
 			// Verify Claude was called
@@ -304,7 +314,29 @@ describe('SessionSummaryService', () => {
 				BRANCH_NAME: 'feat/issue-123__test-feature',
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: compactSummary,
+				RECAP_JSON: '',
 			})
+		})
+
+		it('should include recap context in prompt when recap exists', async () => {
+			const recapJson = JSON.stringify(
+				{
+					goal: 'Test goal',
+					entries: [
+						{ id: 'uuid-1', timestamp: '2025-01-01T00:00:00Z', type: 'decision', content: 'Use TypeScript' },
+					],
+				},
+				null,
+				2
+			)
+			vi.mocked(readRecapForPrompt).mockResolvedValue(recapJson)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(readRecapForPrompt).toHaveBeenCalledWith(defaultInput.worktreePath)
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_JSON: recapJson,
+			}))
 		})
 
 		it('should work without compact summaries (short sessions)', async () => {

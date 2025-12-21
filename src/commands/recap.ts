@@ -5,30 +5,10 @@
  * Skips config validation for fast startup.
  * Includes filePath in output so extension can set up file watcher.
  */
-import path from 'path'
-import os from 'os'
-import fs from 'fs-extra'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
-
-const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
-
-/**
- * Reuse MetadataManager.slugifyPath() algorithm
- *
- * Algorithm:
- * 1. Trim trailing slashes
- * 2. Replace all path separators (/ or \) with ___ (triple underscore)
- * 3. Replace any other non-alphanumeric characters (except _ and -) with -
- * 4. Append .json
- */
-function slugifyPath(loomPath: string): string {
-	let slug = loomPath.replace(/[/\\]+$/, '')
-	slug = slug.replace(/[/\\]/g, '___')
-	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
-	return `${slug}.json`
-}
+import { getRecapFilePath, readRecapFile } from '../utils/recap.js'
 
 export interface RecapCommandInput {
 	identifier?: string | undefined // Optional identifier (issue number, PR number, branch name)
@@ -43,19 +23,10 @@ export class RecapCommand {
 	async execute(input: RecapCommandInput): Promise<RecapOutput | void> {
 		// Resolve loom path from identifier or fall back to cwd
 		const loomPath = await this.resolveLoomPath(input.identifier)
-		const filePath = path.join(RECAPS_DIR, slugifyPath(loomPath))
+		const filePath = getRecapFilePath(loomPath)
 
 		// Read recap file (return empty object if not found)
-		let recap: RecapFile = {}
-		try {
-			if (await fs.pathExists(filePath)) {
-				const content = await fs.readFile(filePath, 'utf8')
-				recap = JSON.parse(content) as RecapFile
-			}
-		} catch {
-			// Graceful degradation - return empty recap on read error
-			// This is intentional for fast startup
-		}
+		const recap: RecapFile = (await readRecapFile(loomPath)) ?? {}
 
 		// Build output with filePath for file watching (provide defaults for optional fields)
 		const goal = recap.goal ?? null

@@ -35,6 +35,7 @@ export interface TemplateVariables {
 	BRANCH_NAME?: string      // Branch being finished
 	LOOM_TYPE?: string        // 'issue' or 'pr'
 	COMPACT_SUMMARIES?: string  // Extracted compact summaries from session transcript
+	RECAP_JSON?: string  // JSON recap context for session summary
 	// Draft PR mode variables - mutually exclusive with standard issue mode
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
@@ -215,6 +216,10 @@ export class PromptTemplateManager {
 			result = result.replace(/COMPACT_SUMMARIES/g, variables.COMPACT_SUMMARIES)
 		}
 
+		if (variables.RECAP_JSON !== undefined) {
+			result = result.replace(/RECAP_JSON/g, variables.RECAP_JSON)
+		}
+
 		// Draft PR mode variable substitution
 		if (variables.DRAFT_PR_NUMBER !== undefined) {
 			result = result.replace(/DRAFT_PR_NUMBER/g, String(variables.DRAFT_PR_NUMBER))
@@ -340,6 +345,17 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(compactSummariesRegex, '')
+		}
+
+		// Process RECAP_JSON conditionals
+		const recapJsonRegex = /\{\{#IF RECAP_JSON\}\}(.*?)\{\{\/IF RECAP_JSON\}\}/gs
+
+		if (variables.RECAP_JSON !== undefined && variables.RECAP_JSON !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(recapJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(recapJsonRegex, '')
 		}
 
 		// Process DRAFT_PR_MODE conditionals

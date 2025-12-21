@@ -11,6 +11,7 @@
 import { logger } from '../utils/logger.js'
 import { launchClaude, generateDeterministicSessionId } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
+import { readRecapForPrompt } from '../utils/recap.js'
 import { PromptTemplateManager } from './PromptTemplateManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
@@ -92,17 +93,26 @@ export class SessionSummaryService {
 				logger.debug('No compact summaries found in session transcript')
 			}
 
-			// 5. Load and process the session-summary template
+			// 5. Load recap context for summary generation
+			const recapJson = await readRecapForPrompt(input.worktreePath)
+			if (recapJson) {
+				logger.debug(`Found recap context (${recapJson.length} chars)`)
+			} else {
+				logger.debug('No recap context found for this loom')
+			}
+
+			// 6. Load and process the session-summary template
 			const prompt = await this.templateManager.getPrompt('session-summary', {
 				ISSUE_NUMBER: String(input.issueNumber),
 				BRANCH_NAME: input.branchName,
 				LOOM_TYPE: input.loomType,
 				COMPACT_SUMMARIES: compactSummaries ?? '',
+				RECAP_JSON: recapJson,
 			})
 
 			logger.debug('Session summary prompt:\n' + prompt)
 
-			// 6. Invoke Claude headless to generate summary
+			// 7. Invoke Claude headless to generate summary
 			// Use --resume with session ID so Claude knows which conversation to summarize
 			const summaryModel = this.settingsManager.getSummaryModel(settings)
 			const summaryResult = await launchClaude(prompt, {
@@ -118,13 +128,13 @@ export class SessionSummaryService {
 
 			const summary = summaryResult.trim()
 
-			// 7. Skip posting if summary is too short (likely failed generation)
+			// 8. Skip posting if summary is too short (likely failed generation)
 			if (summary.length < 100) {
 				logger.warn('Session summary too short, skipping post')
 				return
 			}
 
-			// 8. Post summary to issue or PR (PR takes priority when prNumber is provided)
+			// 9. Post summary to issue or PR (PR takes priority when prNumber is provided)
 			await this.postSummaryToIssue(input.issueNumber, summary, settings, input.worktreePath, input.prNumber)
 
 			const targetDescription = input.prNumber ? `PR #${input.prNumber}` : 'issue'
@@ -174,17 +184,26 @@ export class SessionSummaryService {
 			logger.debug('No compact summaries found in session transcript')
 		}
 
-		// 4. Load and process the session-summary template
+		// 4. Load recap context for summary generation
+		const recapJson = await readRecapForPrompt(worktreePath)
+		if (recapJson) {
+			logger.debug(`Found recap context (${recapJson.length} chars)`)
+		} else {
+			logger.debug('No recap context found for this loom')
+		}
+
+		// 5. Load and process the session-summary template
 		const prompt = await this.templateManager.getPrompt('session-summary', {
 			ISSUE_NUMBER: issueNumber !== undefined ? String(issueNumber) : '',
 			BRANCH_NAME: branchName,
 			LOOM_TYPE: loomType,
 			COMPACT_SUMMARIES: compactSummaries ?? '',
+			RECAP_JSON: recapJson,
 		})
 
 		logger.debug('Session summary prompt:\n' + prompt)
 
-		// 5. Invoke Claude headless to generate summary
+		// 6. Invoke Claude headless to generate summary
 		const summaryModel = this.settingsManager.getSummaryModel(settings)
 		const summaryResult = await launchClaude(prompt, {
 			headless: true,
@@ -198,7 +217,7 @@ export class SessionSummaryService {
 
 		const summary = summaryResult.trim()
 
-		// 6. Check if summary is too short (likely failed generation)
+		// 7. Check if summary is too short (likely failed generation)
 		if (summary.length < 100) {
 			throw new Error('Session summary too short - generation may have failed')
 		}
