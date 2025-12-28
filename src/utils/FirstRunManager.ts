@@ -98,6 +98,23 @@ export class FirstRunManager {
 		const resolvedPath = await this.resolveProjectPath(inputPath)
 		const markerPath = this.getProjectMarkerPath(resolvedPath)
 
+		// TEMP DEBUG: Throw if this looks like a worktree (has .git file instead of directory)
+		const gitPath = path.join(resolvedPath, '.git')
+		try {
+			const stat = await fs.stat(gitPath)
+			if (stat.isFile()) {
+				const content = await fs.readFile(gitPath, 'utf8')
+				if (content.trim().startsWith('gitdir:')) {
+					throw new Error(`🚨 TEMP DEBUG: Attempted to create marker for worktree: ${resolvedPath}`)
+				}
+			}
+		} catch (error) {
+			// Only rethrow if it's our debug error, ignore stat errors (e.g., .git doesn't exist)
+			if (error instanceof Error && error.message.includes('TEMP DEBUG')) {
+				throw error
+			}
+		}
+
 		// Idempotency check - skip if already configured
 		if (await this.isProjectConfigured(resolvedPath)) {
 			logger.debug('markProjectAsConfigured: Project already configured, skipping', { markerPath })

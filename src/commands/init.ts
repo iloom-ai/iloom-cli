@@ -51,7 +51,13 @@ export class InitCommand {
       // Only mark project as configured if guided init succeeded and not already marked
       // This enables VSCode extension detection and ensures project appears in `il projects` list
       if (guidedInitSucceeded) {
-        const projectRoot = await getRepoRoot() ?? process.cwd()
+        // TEMP DEBUG: Throw if getRepoRoot() returns null - we should never fall back to cwd
+        const repoRoot = await getRepoRoot()
+        if (!repoRoot) {
+          const cwd = process.cwd()
+          throw new Error(`🚨 TEMP DEBUG: getRepoRoot() returned null, was about to fall back to cwd: ${cwd}`)
+        }
+        const projectRoot = repoRoot
         const firstRunManager = new FirstRunManager()
         const alreadyConfigured = await firstRunManager.isProjectConfigured(projectRoot)
         if (!alreadyConfigured) {

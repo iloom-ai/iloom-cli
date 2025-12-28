@@ -17,9 +17,9 @@ async function getProjectRoot(): Promise<string> {
 		logger.debug(`getProjectRoot: Using git repo root: ${repoRoot}`)
 		return repoRoot
 	}
+	// TEMP DEBUG: Throw if getRepoRoot() returns null - we should never fall back to cwd
 	const cwd = process.cwd()
-	logger.debug(`getProjectRoot: Not in git repo, using cwd: ${cwd}`)
-	return cwd
+	throw new Error(`🚨 TEMP DEBUG: getProjectRoot() falling back to cwd: ${cwd}`)
 }
 
 /**
