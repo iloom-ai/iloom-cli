@@ -1,6 +1,6 @@
 {
   "name": "@iloom/cli",
-  "version": "0.5.5",
+  "version": "99.99.99-DEBUG",
   "description": "Control plane for maintaining alignment between you and Claude Code as you work across multiple issues using isolated environments, visible context, and multi-agent workflows to scale understanding, not just output",
   "keywords": [
     "ai",

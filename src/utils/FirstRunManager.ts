@@ -95,20 +95,43 @@ export class FirstRunManager {
 	 */
 	async markProjectAsConfigured(projectPath?: string): Promise<void> {
 		const inputPath = projectPath ?? process.cwd()
+
+		// TEMP DEBUG: Write to file partitioned by cwd basename
+		const cwdBasename = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_-]/g, '_')
+		const logFile = `/tmp/iloom-marker-debug-${cwdBasename}.log`
+		const debugLog = async (msg: string): Promise<void> => {
+			const timestamp = new Date().toISOString()
+			const line = `[${timestamp}] ${msg}\n`
+			try {
+				await fs.appendFile(logFile, line)
+			} catch { /* ignore */ }
+			console.error(msg)
+		}
+
+		await debugLog(`🚨🚨🚨 TEMP DEBUG markProjectAsConfigured called!`)
+		await debugLog(`🚨 inputPath: ${inputPath}`)
+		await debugLog(`🚨 projectPath arg: ${projectPath}`)
+		await debugLog(`🚨 process.cwd(): ${process.cwd()}`)
 		const resolvedPath = await this.resolveProjectPath(inputPath)
+		await debugLog(`🚨 resolvedPath: ${resolvedPath}`)
 		const markerPath = this.getProjectMarkerPath(resolvedPath)
+		await debugLog(`🚨 markerPath: ${markerPath}`)
 
 		// TEMP DEBUG: Throw if this looks like a worktree (has .git file instead of directory)
 		const gitPath = path.join(resolvedPath, '.git')
+		await debugLog(`🚨 Checking gitPath: ${gitPath}`)
 		try {
 			const stat = await fs.stat(gitPath)
+			await debugLog(`🚨 .git stat result: isFile=${stat.isFile()}, isDirectory=${stat.isDirectory()}`)
 			if (stat.isFile()) {
 				const content = await fs.readFile(gitPath, 'utf8')
+				await debugLog(`🚨 .git file content starts with: ${content.substring(0, 50)}`)
 				if (content.trim().startsWith('gitdir:')) {
 					throw new Error(`🚨 TEMP DEBUG: Attempted to create marker for worktree: ${resolvedPath}`)
 				}
 			}
 		} catch (error) {
+			await debugLog(`🚨 .git check error: ${error instanceof Error ? error.message : error}`)
 			// Only rethrow if it's our debug error, ignore stat errors (e.g., .git doesn't exist)
 			if (error instanceof Error && error.message.includes('TEMP DEBUG')) {
 				throw error
