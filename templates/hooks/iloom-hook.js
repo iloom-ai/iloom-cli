@@ -34,6 +34,12 @@
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+const os = require('os');
+const { execSync } = require('child_process');
+
+// Reaction polling configuration
+const REACTION_POLL_INTERVAL_MS = 5000; // 5 seconds between polls
+const REACTION_POLL_TIMEOUT_MS = 300000; // 5 minutes max wait
 
 // Debug logging - writes to /tmp/iloom-hook.log
 // Set ILOOM_HOOK_DEBUG=0 to disable (enabled by default for now)
@@ -52,6 +58,131 @@ function debug(message, data = {}) {
   } catch {
     // Ignore logging errors
   }
+}
+
+/**
+ * Convert workspace path to recap filename
+ * Same algorithm as MetadataManager.slugifyPath()
+ */
+function slugifyPath(loomPath) {
+  let slug = loomPath.replace(/[/\\]+$/, '');
+  slug = slug.replace(/[/\\]/g, '___');
+  slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-');
+  return `${slug}.json`;
+}
+
+/**
+ * Get the recap file path for a workspace
+ */
+function getRecapFilePath(cwd) {
+  const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps');
+  return path.join(recapsDir, slugifyPath(cwd));
+}
+
+/**
+ * Read recap file and get the most recent comment artifact
+ * Returns null if no comment artifacts found
+ */
+function getMostRecentCommentFromRecap(cwd) {
+  try {
+    const recapPath = getRecapFilePath(cwd);
+    if (!fs.existsSync(recapPath)) {
+      debug('Recap file not found', { recapPath });
+      return null;
+    }
+
+    const content = fs.readFileSync(recapPath, 'utf8');
+    const recap = JSON.parse(content);
+
+    if (!recap.artifacts || recap.artifacts.length === 0) {
+      debug('No artifacts in recap file');
+      return null;
+    }
+
+    // Filter to comment artifacts and sort by timestamp descending
+    const comments = recap.artifacts
+      .filter(a => a.type === 'comment')
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    if (comments.length === 0) {
+      debug('No comment artifacts found');
+      return null;
+    }
+
+    const mostRecent = comments[0];
+    debug('Found most recent comment', { url: mostRecent.primaryUrl });
+    return mostRecent;
+  } catch (error) {
+    debug('Error reading recap file', { error: error.message });
+    return null;
+  }
+}
+
+/**
+ * Extract numeric comment ID from GitHub comment URL
+ * URL format: https://github.com/owner/repo/issues/123#issuecomment-456789
+ */
+function extractCommentIdFromUrl(url) {
+  const match = url.match(/#issuecomment-(\d+)$/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extract owner/repo from GitHub comment URL
+ * URL format: https://github.com/owner/repo/issues/123#issuecomment-456789
+ */
+function extractRepoFromUrl(url) {
+  const match = url.match(/github\.com\/([^/]+\/[^/]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Check if a comment has a thumbs-up reaction
+ * Uses gh api to fetch reactions for the comment
+ * @returns {boolean} true if thumbs-up found, false otherwise
+ */
+function hasThumbsUpReaction(commentId, repo) {
+  try {
+    const apiPath = `repos/${repo}/issues/comments/${commentId}/reactions`;
+    const result = execSync(`gh api ${apiPath}`, {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const reactions = JSON.parse(result);
+
+    // Check if any reaction is a thumbs-up (+1)
+    const hasThumbsUp = reactions.some(r => r.content === '+1');
+    debug('Reaction check result', { commentId, hasThumbsUp, reactionCount: reactions.length });
+    return hasThumbsUp;
+  } catch (error) {
+    debug('Error checking reactions', { error: error.message });
+    return false;
+  }
+}
+
+/**
+ * Poll for thumbs-up reaction on a comment
+ * Returns true if thumbs-up detected within timeout, false otherwise
+ */
+async function pollForThumbsUp(commentId, repo) {
+  const startTime = Date.now();
+
+  debug('Starting reaction polling', { commentId, repo, timeoutMs: REACTION_POLL_TIMEOUT_MS });
+
+  while (Date.now() - startTime < REACTION_POLL_TIMEOUT_MS) {
+    if (hasThumbsUpReaction(commentId, repo)) {
+      debug('Thumbs-up detected!', { commentId, elapsedMs: Date.now() - startTime });
+      return true;
+    }
+
+    // Wait before next poll
+    await new Promise(resolve => setTimeout(resolve, REACTION_POLL_INTERVAL_MS));
+  }
+
+  debug('Polling timed out without thumbs-up', { commentId, elapsedMs: Date.now() - startTime });
+  return false;
 }
 
 /**
@@ -260,6 +391,46 @@ async function main() {
       console.log(JSON.stringify(output));
       debug('UserPromptSubmit: output additionalContext reminder');
       process.exit(0);
+    }
+
+    // Special handling for PermissionRequest on AskUserQuestion - poll for thumbs-up
+    if (status === 'waiting_for_approval' && hookData.tool_name === 'AskUserQuestion') {
+      debug('AskUserQuestion detected, attempting reaction polling');
+
+      const comment = getMostRecentCommentFromRecap(cwd);
+      if (comment && comment.primaryUrl) {
+        // Check if this is a GitHub URL (not Linear)
+        if (comment.primaryUrl.includes('github.com')) {
+          const commentId = extractCommentIdFromUrl(comment.primaryUrl);
+          const repo = extractRepoFromUrl(comment.primaryUrl);
+
+          if (commentId && repo) {
+            // Poll for thumbs-up in parallel with terminal prompt
+            // If detected, return permissionDecision to auto-approve
+            const hasApproval = await pollForThumbsUp(commentId, repo);
+
+            if (hasApproval) {
+              const output = {
+                hookSpecificOutput: {
+                  permissionDecision: 'allow'
+                }
+              };
+              console.log(JSON.stringify(output));
+              debug('Returning thumbs-up approval');
+              process.exit(0);
+            }
+          } else {
+            debug('Could not extract comment ID or repo from URL', { url: comment.primaryUrl });
+          }
+        } else {
+          debug('Non-GitHub URL, skipping reaction polling', { url: comment.primaryUrl });
+        }
+      } else {
+        debug('No recent comment found in recap');
+      }
+
+      // If no thumbs-up detected, fall through to normal broadcast
+      // Terminal prompt will handle approval
     }
 
     // Find all iloom sockets for broadcasting
