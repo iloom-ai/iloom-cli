@@ -75,8 +75,20 @@ export class PlanCommand {
 	 * @param yolo - Optional flag to enable autonomous mode (skip permission prompts)
 	 * @param planner - Optional planner provider (defaults to 'claude')
 	 * @param reviewer - Optional reviewer provider (defaults to 'none')
+	 * @param printOptions - Print mode options for headless/CI execution
 	 */
-	public async execute(prompt?: string, model?: string, yolo?: boolean, planner?: string, reviewer?: string): Promise<void> {
+	public async execute(
+		prompt?: string,
+		model?: string,
+		yolo?: boolean,
+		planner?: string,
+		reviewer?: string,
+		printOptions?: {
+			print?: boolean
+			outputFormat?: 'json' | 'stream-json' | 'text'
+			verbose?: boolean
+		}
+	): Promise<void> {
 		// Validate and normalize planner CLI argument
 		let normalizedPlanner: PlannerProvider | undefined
 		if (planner) {
@@ -384,14 +396,25 @@ export class PlanCommand {
 			'Bash(git show:*)',
 		]
 
+		// Determine if we're in print/headless mode
+		const isHeadless = printOptions?.print ?? false
+
 		// Build Claude options
-		const claudeOptions = {
+		const claudeOptions: Parameters<typeof launchClaude>[1] = {
 			model: effectiveModel,
-			headless: false,
+			headless: isHeadless,
 			appendSystemPrompt: architectPrompt,
 			mcpConfig,
 			addDir: process.cwd(),
 			allowedTools,
+		}
+
+		// Add output format and verbose options if provided (print mode only)
+		if (printOptions?.outputFormat !== undefined) {
+			claudeOptions.outputFormat = printOptions.outputFormat
+		}
+		if (printOptions?.verbose !== undefined) {
+			claudeOptions.verbose = printOptions.verbose
 		}
 
 		// Handle --yolo mode
@@ -410,6 +433,7 @@ export class PlanCommand {
 			hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
 			addDir: claudeOptions.addDir,
 			yolo,
+			print: isHeadless,
 		})
 
 		// Launch Claude in interactive mode
@@ -437,7 +461,7 @@ ${initialMessage}`
 
 		await launchClaude(initialMessage, {
 			...claudeOptions,
-			...(yolo && { permissionMode: 'bypassPermissions' as const }),
+			...(((yolo ?? false) || isHeadless) && { permissionMode: 'bypassPermissions' as const }),
 		})
 
 		logger.debug('Claude session completed')

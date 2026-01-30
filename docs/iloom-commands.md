@@ -489,6 +489,9 @@ il spin [options]
 |------|--------|-------------|
 | `--one-shot` | `noReview`, `bypassPermissions` | Automation level (same as `il start`) |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
+| `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
+| `--verbose` | | Enable verbose output (requires `--print`) |
 
 **Behavior:**
 
@@ -514,6 +517,12 @@ il spin --one-shot=bypassPermissions
 
 # Launch with full automation using shorthand
 il spin --yolo
+
+# Headless mode for CI/CD pipelines (outputs to stdout)
+il spin --print
+
+# Headless mode with JSON output format
+il spin --print --output-format=json
 ```
 
 ---
@@ -1068,6 +1077,9 @@ il plan <issue-number> [options]
 | `--yolo` | - | Autonomous mode: skip permission prompts and proceed automatically |
 | `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
+| `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
+| `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
+| `--verbose` | | Enable verbose output (requires `--print`) |
 
 **Behavior:**
 
@@ -1192,6 +1204,12 @@ il plan --yolo "Add GitLab integration"
 
 # Combine options
 il plan --yolo --planner gemini --model sonnet 42
+
+# Headless mode for CI/CD pipelines (outputs to stdout)
+il plan --print "Add feature X"
+
+# Headless mode with JSON output format
+il plan --print --output-format=json 42
 ```
 
 **Notes:**

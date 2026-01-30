@@ -346,6 +346,114 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('Print mode (--print flag)', () => {
+		it('should call launchClaude with headless=true when print option is enabled', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-test')
+
+			try {
+				await command.execute(undefined, { print: true })
+
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						headless: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should force bypassPermissions when print mode is enabled', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-test')
+
+			try {
+				await command.execute(undefined, { print: true })
+
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						headless: true,
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should forward outputFormat to launchClaude when provided', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-test')
+
+			try {
+				await command.execute(undefined, { print: true, outputFormat: 'json' })
+
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						headless: true,
+						outputFormat: 'json',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should forward verbose to launchClaude when provided', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-test')
+
+			try {
+				await command.execute(undefined, { print: true, verbose: false })
+
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						headless: true,
+						verbose: false,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should not set outputFormat or verbose when print mode is disabled', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__test')
+
+			try {
+				await command.execute()
+
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].headless).toBe(false)
+				expect(launchClaudeCall[1].outputFormat).toBeUndefined()
+				expect(launchClaudeCall[1].verbose).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('Error Handling', () => {
 		it('should handle git command failures gracefully', async () => {
 			// Spy on launchClaude

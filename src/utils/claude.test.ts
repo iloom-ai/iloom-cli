@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { execa, type ExecaReturnValue } from 'execa'
+import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId } from './claude.js'
 import { logger } from './logger.js'
@@ -34,7 +34,9 @@ vi.mock('./logger-context.js', () => ({
 	getLogger: vi.fn(() => mockLogger),
 }))
 
-type MockExecaReturn = Partial<ExecaReturnValue<string>>
+// Helper to mock execa - cast to any to bypass complex generic overloads
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockExeca = () => vi.mocked(execa) as any
 
 describe('claude utils', () => {
 	beforeEach(() => {
@@ -121,10 +123,10 @@ describe('claude utils', () => {
 
 	describe('detectClaudeCli', () => {
 		it('should return true when Claude CLI is found', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await detectClaudeCli()
 
@@ -136,7 +138,7 @@ describe('claude utils', () => {
 		})
 
 		it('should return false when Claude CLI is not found', async () => {
-			vi.mocked(execa).mockRejectedValueOnce({
+			mockExeca().mockRejectedValueOnce({
 				exitCode: 1,
 				stderr: 'command not found',
 			})
@@ -147,7 +149,7 @@ describe('claude utils', () => {
 		})
 
 		it('should return false when command times out', async () => {
-			vi.mocked(execa).mockRejectedValueOnce({
+			mockExeca().mockRejectedValueOnce({
 				message: 'Timeout',
 			})
 
@@ -160,10 +162,10 @@ describe('claude utils', () => {
 	describe('getClaudeVersion', () => {
 		it('should return version when Claude CLI is available', async () => {
 			const version = '1.2.3'
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: version,
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await getClaudeVersion()
 
@@ -174,7 +176,7 @@ describe('claude utils', () => {
 		})
 
 		it('should return null when Claude CLI is not available', async () => {
-			vi.mocked(execa).mockRejectedValueOnce({
+			mockExeca().mockRejectedValueOnce({
 				exitCode: 1,
 				stderr: 'command not found',
 			})
@@ -185,10 +187,10 @@ describe('claude utils', () => {
 		})
 
 		it('should trim whitespace from version string', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '  1.2.3\n',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await getClaudeVersion()
 
@@ -202,10 +204,10 @@ describe('claude utils', () => {
 				const prompt = 'Generate a branch name'
 				const output = 'feat/issue-123__new-feature'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: output,
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(prompt, { headless: true })
 
@@ -222,10 +224,10 @@ describe('claude utils', () => {
 
 			it('should include model flag when model is specified', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -241,10 +243,10 @@ describe('claude utils', () => {
 
 			it('should include permission mode when specified', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -260,10 +262,10 @@ describe('claude utils', () => {
 
 			it('should not include permission mode when set to default', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -280,10 +282,10 @@ describe('claude utils', () => {
 			it('should include add-dir flag when specified', async () => {
 				const prompt = 'Test prompt'
 				const workspacePath = '/path/to/workspace'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -300,10 +302,10 @@ describe('claude utils', () => {
 			it('should set cwd to addDir in headless mode when addDir is specified', async () => {
 				const prompt = 'Test prompt'
 				const workspacePath = '/path/to/workspace'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -323,10 +325,10 @@ describe('claude utils', () => {
 
 			it('should not set cwd in headless mode when addDir is not specified', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -342,7 +344,7 @@ describe('claude utils', () => {
 				)
 
 				// Ensure cwd is not in the options
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
 				expect(execaCall[2]).not.toHaveProperty('cwd')
 			})
 
@@ -352,10 +354,10 @@ describe('claude utils', () => {
 				// Mock logger to return true for debug enabled
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(true)
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(prompt, {
 					headless: true,
@@ -385,10 +387,10 @@ describe('claude utils', () => {
 				// Mock logger to return false for debug disabled (non-debug mode)
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '{"type":"result","result":"Hello World"}',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(prompt, {
 					headless: true,
@@ -415,7 +417,7 @@ describe('claude utils', () => {
 
 			it('should throw error with context when Claude CLI fails', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: 'API error',
 					message: 'Command failed',
 					exitCode: 1,
@@ -428,7 +430,7 @@ describe('claude utils', () => {
 
 			it('should use message when stderr is not available', async () => {
 				const prompt = 'Test prompt'
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					message: 'Network timeout',
 					exitCode: 1,
 				})
@@ -442,10 +444,10 @@ describe('claude utils', () => {
 		describe('interactive mode', () => {
 			it('should launch in interactive mode in current terminal with stdio inherit', async () => {
 				const prompt = 'Resolve conflicts'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(prompt, { headless: false })
 
@@ -463,10 +465,10 @@ describe('claude utils', () => {
 
 			it('should include model and permission-mode flags in interactive mode', async () => {
 				const prompt = 'Resolve conflicts'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -488,10 +490,10 @@ describe('claude utils', () => {
 			it('should set cwd to addDir in interactive mode when addDir is specified', async () => {
 				const prompt = 'Resolve conflicts'
 				const workspacePath = '/path/to/workspace'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -511,27 +513,27 @@ describe('claude utils', () => {
 
 			it('should not set cwd in interactive mode when addDir is not specified', async () => {
 				const prompt = 'Resolve conflicts'
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
 				})
 
 				// Verify cwd is not set
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
 				expect(execaCall[2]).not.toHaveProperty('cwd')
 			})
 
 			it('should use simple -- prompt format for interactive mode when appendSystemPrompt not provided', async () => {
 				const prompt = 'Resolve the merge conflicts'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -551,10 +553,10 @@ describe('claude utils', () => {
 				const prompt = 'Resolve conflicts'
 				const branchName = 'feat/issue-123__test'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -577,10 +579,10 @@ describe('claude utils', () => {
 				const systemPrompt = 'You are a helpful assistant. Follow these steps...'
 				const userPrompt = 'Go!'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(userPrompt, {
 					headless: false,
@@ -601,10 +603,10 @@ describe('claude utils', () => {
 				const systemPrompt = 'System instructions'
 				const userPrompt = 'Go!'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(userPrompt, {
 					headless: false,
@@ -636,10 +638,10 @@ describe('claude utils', () => {
 				const systemPrompt = 'Instructions with "quotes" and \'apostrophes\' and $variables'
 				const userPrompt = 'Go!'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(userPrompt, {
 					headless: false,
@@ -658,10 +660,10 @@ describe('claude utils', () => {
 				const systemPrompt = 'You are a branch name generator'
 				const userPrompt = 'Generate branch name'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'feat/issue-123__test',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(userPrompt, {
 					headless: true,
@@ -691,10 +693,10 @@ describe('claude utils', () => {
 			it('should still use simple format when appendSystemPrompt not provided', async () => {
 				const prompt = 'Resolve conflicts'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -731,10 +733,10 @@ describe('claude utils', () => {
 					}
 				]
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -768,10 +770,10 @@ describe('claude utils', () => {
 					}
 				]
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -795,10 +797,10 @@ describe('claude utils', () => {
 			it('should not add --mcp-config when array is empty', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -815,14 +817,14 @@ describe('claude utils', () => {
 			it('should not add --mcp-config when option not provided', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, { headless: true })
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--mcp-config')
 			})
 
@@ -838,10 +840,10 @@ describe('claude utils', () => {
 					}
 				]
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -865,10 +867,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const mcpConfigs = [{ server: { command: 'node', args: ['s.js'] } }]
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -901,10 +903,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const allowedTools = ['mcp__issue_management__create_comment', 'mcp__issue_management__update_comment']
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -929,10 +931,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const disallowedTools = ['Bash(gh api:*)']
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -958,10 +960,10 @@ describe('claude utils', () => {
 				const allowedTools = ['mcp__issue_management__create_comment', 'mcp__issue_management__update_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -987,48 +989,48 @@ describe('claude utils', () => {
 			it('should not add --allowed-tools when array is empty', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
 					allowedTools: [],
 				})
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--allowed-tools')
 			})
 
 			it('should not add --disallowed-tools when array is empty', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
 					disallowedTools: [],
 				})
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--disallowed-tools')
 			})
 
 			it('should not add tool filtering flags when options not provided', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, { headless: true })
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--allowed-tools')
 				expect(execaCall[1]).not.toContain('--disallowed-tools')
 			})
@@ -1038,10 +1040,10 @@ describe('claude utils', () => {
 				const allowedTools = ['mcp__issue_management__create_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -1069,10 +1071,10 @@ describe('claude utils', () => {
 				const allowedTools = ['mcp__issue_management__create_comment']
 				const disallowedTools = ['Bash(gh api:*)']
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1118,10 +1120,10 @@ describe('claude utils', () => {
 					},
 				}
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1138,14 +1140,14 @@ describe('claude utils', () => {
 			it('should omit --agents flag when agents not provided', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, { headless: true })
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--agents')
 			})
 
@@ -1168,10 +1170,10 @@ describe('claude utils', () => {
 					},
 				}
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1198,17 +1200,17 @@ describe('claude utils', () => {
 					},
 				}
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
 					agents,
 				})
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
 				const agentsArg = execaCall[1][execaCall[1].indexOf('--agents') + 1]
 				const parsedAgents = JSON.parse(agentsArg as string)
 
@@ -1227,10 +1229,10 @@ describe('claude utils', () => {
 					},
 				}
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -1260,10 +1262,10 @@ describe('claude utils', () => {
 					},
 				}
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1313,10 +1315,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const sessionId = '12345678-1234-5678-1234-567812345678'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1333,14 +1335,14 @@ describe('claude utils', () => {
 			it('should omit --session-id flag when sessionId not provided', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, { headless: true })
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--session-id')
 			})
 
@@ -1348,10 +1350,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const sessionId = '12345678-1234-5678-1234-567812345678'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -1372,10 +1374,10 @@ describe('claude utils', () => {
 				const sessionId = '12345678-1234-5678-1234-567812345678'
 				const agents = { 'test-agent': { description: 'Test', prompt: 'Test', tools: ['Read'], model: 'sonnet' } }
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1407,16 +1409,16 @@ describe('claude utils', () => {
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
 				// First call fails with "Session ID already in use"
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${sessionId} is already in use.`,
 					exitCode: 1,
 				})
 
 				// Retry with --resume succeeds
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'resumed output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				const result = await launchClaude(prompt, {
 					headless: true,
@@ -1449,16 +1451,16 @@ describe('claude utils', () => {
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
 				// First call fails with "Session ID already in use"
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${sessionId} is already in use.`,
 					exitCode: 1,
 				})
 
 				// Retry with --resume succeeds
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -1490,7 +1492,7 @@ describe('claude utils', () => {
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
 				// Call fails with "Session ID already in use" but sessionId option not provided
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${sessionId} is already in use.`,
 					exitCode: 1,
 				})
@@ -1507,13 +1509,13 @@ describe('claude utils', () => {
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
 				// First call fails with "Session ID already in use"
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${sessionId} is already in use.`,
 					exitCode: 1,
 				})
 
 				// Retry also fails
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: 'Some other error on retry',
 					exitCode: 1,
 				})
@@ -1532,16 +1534,16 @@ describe('claude utils', () => {
 				const errorSessionId = 'abcd1234-5678-90ab-cdef-1234567890ab'
 
 				// First call fails with different session ID in error
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${errorSessionId} is already in use.`,
 					exitCode: 1,
 				})
 
 				// Retry with extracted session ID succeeds
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1561,15 +1563,15 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
-				vi.mocked(execa).mockRejectedValueOnce({
+				mockExeca().mockRejectedValueOnce({
 					stderr: `Error: Session ID ${sessionId} is already in use.`,
 					exitCode: 1,
 				})
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1598,14 +1600,155 @@ describe('claude utils', () => {
 			})
 		})
 
+		describe('outputFormat parameter', () => {
+			it('should use user-provided outputFormat when headless=true', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					outputFormat: 'json',
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'json', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should default to stream-json when headless=true and no outputFormat provided', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, { headless: true })
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should support text output format', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					outputFormat: 'text',
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'text', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+		})
+
+		describe('verbose parameter', () => {
+			it('should use user-provided verbose=false to disable verbose output', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					verbose: false,
+				})
+
+				// Should NOT include --verbose
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should default to verbose=true when headless=true', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, { headless: true })
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should include --verbose when verbose=true is explicitly set', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					verbose: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should combine outputFormat and verbose options correctly', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					outputFormat: 'json',
+					verbose: false,
+				})
+
+				// Should use json format without --verbose
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'json', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+		})
+
 		describe('noSessionPersistence parameter', () => {
 			it('should add --no-session-persistence flag when noSessionPersistence is true', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1622,41 +1765,41 @@ describe('claude utils', () => {
 			it('should not add --no-session-persistence flag when noSessionPersistence is false', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
 					noSessionPersistence: false,
 				})
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--no-session-persistence')
 			})
 
 			it('should not add --no-session-persistence flag when noSessionPersistence is undefined', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, { headless: true })
 
-				const execaCall = vi.mocked(execa).mock.calls[0]
+				const execaCall = mockExeca().mock.calls[0]
 				expect(execaCall[1]).not.toContain('--no-session-persistence')
 			})
 
 			it('should NOT add noSessionPersistence in interactive mode (only works with --print)', async () => {
 				const prompt = 'Test prompt'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: '',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: false,
@@ -1677,10 +1820,10 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const sessionId = '12345678-1234-5678-1234-567812345678'
 
-				vi.mocked(execa).mockResolvedValueOnce({
+				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
-				} as MockExecaReturn)
+				})
 
 				await launchClaude(prompt, {
 					headless: true,
@@ -1714,15 +1857,15 @@ describe('claude utils', () => {
 			const prompt = 'Work on this issue'
 			const workspacePath = '/path/to/workspace'
 
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify osascript was called for terminal window with iloom spin command
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('iloom spin')
 			expect(execa).toHaveBeenCalledWith(
 				'osascript',
@@ -1743,15 +1886,15 @@ describe('claude utils', () => {
 			const workspacePath = '/path/to/workspace'
 			const branchName = 'feat/issue-123__test'
 
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath, branchName })
 
 			// Verify terminal window was opened with iloom spin
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('iloom spin')
 			expect(execa).toHaveBeenCalledWith(
 				'osascript',
@@ -1765,15 +1908,15 @@ describe('claude utils', () => {
 
 			// Mock .env file exists
 			vi.mocked(existsSync).mockReturnValue(true)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify .env sourcing is included and iloom spin is used
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('source .env')
 			expect(applescript).toContain('iloom spin')
 			expect(existsSync).toHaveBeenCalledWith('/path/to/workspace/.env')
@@ -1785,15 +1928,15 @@ describe('claude utils', () => {
 
 			// Mock .env file does not exist
 			vi.mocked(existsSync).mockReturnValue(false)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify .env sourcing is NOT included but iloom spin is used
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).not.toContain('source .env')
 			expect(applescript).toContain('iloom spin')
 		})
@@ -1802,15 +1945,15 @@ describe('claude utils', () => {
 			const prompt = "Fix the user's \"authentication\" issue"
 			const workspacePath = '/path/to/workspace'
 
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify simple iloom spin command is used, not complex claude command with prompt
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('iloom spin')
 			expect(applescript).not.toContain('--append-system-prompt')
 			expect(applescript).not.toContain(prompt)
@@ -1820,15 +1963,15 @@ describe('claude utils', () => {
 			const prompt = 'Work on this issue'
 			const workspacePath = '/path/to/workspace'
 
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify iloom spin is used, not claude with model/permission args
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('iloom spin')
 			expect(applescript).not.toContain('--model')
 			expect(applescript).not.toContain('--permission-mode')
@@ -1841,15 +1984,15 @@ describe('claude utils', () => {
 			const port = 3127
 
 			vi.mocked(existsSync).mockReturnValue(false)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath, port })
 
 			// Verify PORT export is included in AppleScript
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('export PORT=3127')
 			expect(applescript).toContain('iloom spin')
 		})
@@ -1859,15 +2002,15 @@ describe('claude utils', () => {
 			const workspacePath = '/path/to/workspace'
 
 			vi.mocked(existsSync).mockReturnValue(false)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath })
 
 			// Verify PORT export is NOT included
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).not.toContain('export PORT')
 		})
 
@@ -1877,15 +2020,15 @@ describe('claude utils', () => {
 			const port = 3127
 
 			vi.mocked(existsSync).mockReturnValue(true)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			await launchClaudeInNewTerminalWindow(prompt, { workspacePath, port })
 
 			// Verify both .env sourcing and PORT export
-			const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+			const applescript = mockExeca().mock.calls[0][1]?.[1] as string
 			expect(applescript).toContain('source .env')
 			expect(applescript).toContain('export PORT=3127')
 			expect(applescript).toContain('iloom spin')
@@ -1898,16 +2041,16 @@ describe('claude utils', () => {
 			const issueNumber = 123
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude response with full branch name
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: 'feat/issue-123__user-authentication',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
@@ -1926,7 +2069,7 @@ describe('claude utils', () => {
 			const issueNumber = 123
 
 			// Mock Claude CLI not found
-			vi.mocked(execa).mockRejectedValueOnce({
+			mockExeca().mockRejectedValueOnce({
 				exitCode: 1,
 			})
 
@@ -1940,16 +2083,16 @@ describe('claude utils', () => {
 			const issueNumber = 123
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude returning error message
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: 'API error: rate limit exceeded',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
@@ -1961,16 +2104,16 @@ describe('claude utils', () => {
 			const issueNumber = 123
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude returning empty string
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
@@ -1982,16 +2125,16 @@ describe('claude utils', () => {
 			const issueNumber = 123
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude returning properly formatted branch
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: 'fix/issue-123__authentication-bug',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
@@ -2003,16 +2146,16 @@ describe('claude utils', () => {
 			const issueNumber = 456
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude returning invalid format (no prefix)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: 'add-user-auth',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 
@@ -2024,13 +2167,13 @@ describe('claude utils', () => {
 			const issueNumber = 456
 
 			// Mock Claude CLI detection succeeds
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude execution fails
-			vi.mocked(execa).mockRejectedValueOnce({
+			mockExeca().mockRejectedValueOnce({
 				stderr: 'Claude error',
 				exitCode: 1,
 			})
@@ -2046,16 +2189,16 @@ describe('claude utils', () => {
 			const issueNumber = 'MARK-1' // Uppercase Linear issue ID
 
 			// Mock Claude CLI detection
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			// Mock Claude returning lowercase branch name (correct behavior)
-			vi.mocked(execa).mockResolvedValueOnce({
+			mockExeca().mockResolvedValueOnce({
 				stdout: 'feat/issue-mark-1__nextjs-vercel',
 				exitCode: 0,
-			} as MockExecaReturn)
+			})
 
 			const result = await generateBranchName(issueTitle, issueNumber)
 

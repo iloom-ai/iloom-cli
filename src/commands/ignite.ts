@@ -108,9 +108,25 @@ export class IgniteCommand {
 	}
 
 	/**
-	 * Main entry point for spin command
+	 * Print mode options for headless/CI execution
 	 */
-	async execute(oneShot?: OneShotMode): Promise<void> {
+	public printOptions: {
+		print?: boolean
+		outputFormat?: 'json' | 'stream-json' | 'text'
+		verbose?: boolean
+	} | undefined
+
+	/**
+	 * Main entry point for spin command
+	 * @param oneShot - One-shot automation mode
+	 * @param printOptions - Print mode options for headless/CI execution
+	 */
+	async execute(oneShot?: OneShotMode, printOptions?: {
+		print?: boolean
+		outputFormat?: 'json' | 'stream-json' | 'text'
+		verbose?: boolean
+	}): Promise<void> {
+		this.printOptions = printOptions
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -222,8 +238,11 @@ export class IgniteCommand {
 			}
 			logger.debug('Using session ID from metadata', { sessionId })
 
+			// Determine if we're in print/headless mode
+			const isHeadless = this.printOptions?.print ?? false
+
 			const claudeOptions: ClaudeCliOptions = {
-				headless: false, // Enable stdio: 'inherit' for current terminal
+				headless: isHeadless,
 				addDir: context.workspacePath,
 				sessionId, // Enable Claude Code session resume
 			}
@@ -234,8 +253,20 @@ export class IgniteCommand {
 			}
 
 			// Add permission mode if not default
+			// When print mode is enabled, force bypassPermissions for autonomous execution
+			if (isHeadless) {
+				permissionMode = 'bypassPermissions'
+			}
 			if (permissionMode !== undefined && permissionMode !== 'default') {
 				claudeOptions.permissionMode = permissionMode
+			}
+
+			// Add output format and verbose options if provided (print mode only)
+			if (this.printOptions?.outputFormat !== undefined) {
+				claudeOptions.outputFormat = this.printOptions.outputFormat
+			}
+			if (this.printOptions?.verbose !== undefined) {
+				claudeOptions.verbose = this.printOptions.verbose
 			}
 
 			// Add optional branch name for context

@@ -286,6 +286,64 @@ describe('PlanCommand', () => {
 		})
 	})
 
+	describe('Print mode (--print flag)', () => {
+		it('should call launchClaude with headless=true when print option is enabled', async () => {
+			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true })
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					headless: true,
+				})
+			)
+		})
+
+		it('should force bypassPermissions when print mode is enabled', async () => {
+			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true })
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					headless: true,
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
+
+		it('should forward outputFormat to launchClaude when provided', async () => {
+			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true, outputFormat: 'json' })
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					headless: true,
+					outputFormat: 'json',
+				})
+			)
+		})
+
+		it('should forward verbose to launchClaude when provided', async () => {
+			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true, verbose: false })
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					headless: true,
+					verbose: false,
+				})
+			)
+		})
+
+		it('should not set outputFormat or verbose when print mode is disabled', async () => {
+			await command.execute('test prompt')
+
+			const launchClaudeCall = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			expect(launchClaudeCall[1].headless).toBe(false)
+			expect(launchClaudeCall[1].outputFormat).toBeUndefined()
+			expect(launchClaudeCall[1].verbose).toBeUndefined()
+		})
+	})
+
 	describe('yolo mode', () => {
 		it('should add bypassPermissions when yolo is true', async () => {
 			await command.execute('test prompt', undefined, true)

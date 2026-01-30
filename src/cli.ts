@@ -674,7 +674,19 @@ program
       .choices(['default', 'noReview', 'bypassPermissions'])
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
-  .action(async (options: { oneShot?: import('./types/index.js').OneShotMode; yolo?: boolean }) => {
+  .option('-p, --print', 'Enable print/headless mode for CI/CD (uses bypassPermissions)')
+  .addOption(
+    new Option('--output-format <format>', 'Output format for Claude CLI (requires --print)')
+      .choices(['json', 'stream-json', 'text'])
+  )
+  .option('--verbose', 'Enable verbose output (requires --print)')
+  .action(async (options: {
+    oneShot?: import('./types/index.js').OneShotMode
+    yolo?: boolean
+    print?: boolean
+    outputFormat?: 'json' | 'stream-json' | 'text'
+    verbose?: boolean
+  }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
       options.oneShot = 'bypassPermissions'
@@ -682,7 +694,17 @@ program
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
-      await command.execute(options.oneShot)
+      // Only pass printOptions if any print-related option is set
+      // When --output-format or --verbose is provided, implicitly enable print/headless mode
+      const implicitPrint = options.outputFormat !== undefined || options.verbose !== undefined
+      const printOptions = options.print || implicitPrint
+        ? {
+            print: options.print ?? implicitPrint,
+            ...(options.outputFormat !== undefined && { outputFormat: options.outputFormat }),
+            ...(options.verbose !== undefined && { verbose: options.verbose }),
+          }
+        : undefined
+      await command.execute(options.oneShot, printOptions)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1311,11 +1333,35 @@ program
   .option('--yolo', 'Enable autonomous mode - Claude proceeds without user interaction')
   .option('--planner <provider>', 'AI provider for planning: claude, gemini, codex (default: claude)')
   .option('--reviewer <provider>', 'AI provider for review: claude, gemini, codex, none (default: none)')
-  .action(async (prompt?: string, options?: { model?: string; yolo?: boolean; planner?: string; reviewer?: string }) => {
+  .option('-p, --print', 'Enable print/headless mode for CI/CD (uses bypassPermissions)')
+  .addOption(
+    new Option('--output-format <format>', 'Output format for Claude CLI (requires --print)')
+      .choices(['json', 'stream-json', 'text'])
+  )
+  .option('--verbose', 'Enable verbose output (requires --print)')
+  .action(async (prompt?: string, options?: {
+    model?: string
+    yolo?: boolean
+    planner?: string
+    reviewer?: string
+    print?: boolean
+    outputFormat?: 'json' | 'stream-json' | 'text'
+    verbose?: boolean
+  }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
       const command = new PlanCommand()
-      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer)
+      // Only pass printOptions if any print-related option is set
+      // When --output-format or --verbose is provided, implicitly enable print/headless mode
+      const implicitPrint = options?.outputFormat !== undefined || options?.verbose !== undefined
+      const printOptions = options?.print || implicitPrint
+        ? {
+            print: options?.print ?? implicitPrint,
+            ...(options?.outputFormat !== undefined && { outputFormat: options.outputFormat }),
+            ...(options?.verbose !== undefined && { verbose: options.verbose }),
+          }
+        : undefined
+      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

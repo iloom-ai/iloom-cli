@@ -70,6 +70,8 @@ export interface ClaudeCliOptions {
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
 	sessionId?: string // Session ID for Claude Code resume support (must be valid UUID)
 	noSessionPersistence?: boolean // Prevent session data from being saved to disk (for utility operations)
+	outputFormat?: 'json' | 'stream-json' | 'text' // Output format for Claude CLI (headless mode)
+	verbose?: boolean // Enable verbose output (headless mode) - defaults to true when headless
 }
 
 /**
@@ -142,7 +144,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -151,9 +153,14 @@ export async function launchClaude(
 	if (headless) {
 		args.push('-p')
 
-		// Add JSON streaming output for progress tracking
-		args.push('--output-format', 'stream-json')
-		args.push('--verbose')
+		// Use user-provided outputFormat or default to stream-json for progress tracking
+		const effectiveOutputFormat = outputFormat ?? 'stream-json'
+		args.push('--output-format', effectiveOutputFormat)
+
+		// Use user-provided verbose setting or default to true
+		if (verbose !== false) {
+			args.push('--verbose')
+		}
 	}
 
 	if (model) {
