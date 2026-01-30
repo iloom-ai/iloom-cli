@@ -4,6 +4,7 @@ import os from 'os'
 import { z } from 'zod'
 import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
+import { DemoSettingsSchema, DemoSettingsSchemaNoDefaults } from './DemoSchema.js'
 
 /**
  * Valid project capability values for Zod enum validation.
@@ -424,6 +425,7 @@ export const IloomSettingsSchema = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	demo: DemoSettingsSchema.optional().describe('Demo verification configuration for web projects'),
 })
 
 /**
@@ -606,6 +608,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	demo: DemoSettingsSchemaNoDefaults.optional().describe('Demo verification configuration for web projects'),
 })
 
 /**

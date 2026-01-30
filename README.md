@@ -388,6 +388,36 @@ Note: Potentially destructive commands like `git reset` and `git checkout` are i
 - Your team requires PRs for all changes (no direct merges to main)
 - You want reviewers to see progress before the work is complete
 
+### Demo Verification (Experimental)
+
+Configure automated demo verification for web projects. This feature validates your web application through scripted browser interactions.
+
+**.iloom/settings.json**
+
+```json
+{
+  "demo": {
+    "enabled": true,
+    "headless": true,
+    "baseUrl": "http://localhost:3000",
+    "devServerCommand": "pnpm dev",
+    "videoDir": ".iloom/demos/",
+    "timeout": 30000
+  }
+}
+```
+
+| **Setting** | **Default** | **Description** |
+|-------------|-------------|-----------------|
+| `enabled` | `false` | Enable demo verification feature |
+| `headless` | `true` | Run browser in headless mode (no visible window) |
+| `baseUrl` | `http://localhost:3000` | Base URL for the web application. Security: Only localhost, 127.0.0.1, or relative paths allowed |
+| `devServerCommand` | - | Command to start the development server (optional) |
+| `videoDir` | `.iloom/demos/` | Directory for storing demo videos/screenshots |
+| `timeout` | `30000` | Default timeout for operations in milliseconds |
+
+**Security Note:** The `baseUrl` setting only accepts `localhost`, `127.0.0.1`, or relative paths to prevent scripts from navigating to external URLs.
+
 Integrations
 ------------
 

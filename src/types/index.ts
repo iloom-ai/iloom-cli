@@ -280,6 +280,9 @@ export * from './loom.js'
 // Cleanup types
 export * from './cleanup.js'
 
+// Demo types
+export * from './demo.js'
+
 // Process types (excluding Platform which is already defined above)
 export type { ProcessInfo } from './process.js'
 
