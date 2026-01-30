@@ -8,6 +8,7 @@ import { MetadataManager } from './MetadataManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
 import { calculatePortFromIdentifier } from '../utils/port.js'
+import { archiveRecap } from '../utils/recap-archiver.js'
 
 import type {
 	ResourceCleanupOptions,
@@ -237,6 +238,36 @@ export class ResourceCleanup {
 					message: `Failed to remove worktree`,
 					error: err.message,
 				})
+			}
+		}
+
+		// Step 4.5: Archive recap file
+		if (worktree) {
+			if (options.dryRun) {
+				operations.push({
+					type: 'recap',
+					success: true,
+					message: `[DRY RUN] Would archive recap file for: ${worktree.path}`,
+				})
+			} else {
+				try {
+					await archiveRecap(worktree.path)
+					operations.push({
+						type: 'recap',
+						success: true,
+						message: `Recap file archived`,
+					})
+				} catch (error) {
+					// Non-fatal: log warning but don't add to errors
+					const err = error instanceof Error ? error : new Error('Unknown error')
+					getLogger().warn(`Recap archival failed: ${err.message}`)
+					operations.push({
+						type: 'recap',
+						success: false,
+						message: 'Recap archival failed (non-fatal)',
+						error: err.message,
+					})
+				}
 			}
 		}
 

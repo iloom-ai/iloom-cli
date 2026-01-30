@@ -43,7 +43,7 @@ export interface CleanupResult {
  */
 export interface OperationResult {
 	/** Type of operation performed */
-	type: 'dev-server' | 'worktree' | 'branch' | 'database' | 'cli-symlinks'
+	type: 'dev-server' | 'worktree' | 'branch' | 'database' | 'cli-symlinks' | 'recap'
 	/** Whether operation succeeded */
 	success: boolean
 	/** Human-readable message */

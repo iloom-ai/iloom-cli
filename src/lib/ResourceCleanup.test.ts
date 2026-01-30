@@ -152,12 +152,13 @@ describe('ResourceCleanup', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.errors).toHaveLength(0)
-			expect(result.operations).toHaveLength(4) // dev-server, worktree, branch, database
+			expect(result.operations).toHaveLength(5) // dev-server, worktree, recap, branch, database
 			expect(result.operations[0]?.type).toBe('dev-server')
 			expect(result.operations[0]?.success).toBe(true)
 			expect(result.operations[1]?.type).toBe('worktree')
-			expect(result.operations[2]?.type).toBe('branch')
-			expect(result.operations[3]?.type).toBe('database')
+			expect(result.operations[2]?.type).toBe('recap')
+			expect(result.operations[3]?.type).toBe('branch')
+			expect(result.operations[4]?.type).toBe('database')
 		})
 
 		it('should pre-fetch merge target BEFORE worktree deletion (bug fix for issue #328)', async () => {
@@ -330,7 +331,7 @@ describe('ResourceCleanup', () => {
 				keepDatabase: true,
 			})
 
-			expect(result.operations).toHaveLength(2) // dev-server check + worktree removal
+			expect(result.operations).toHaveLength(3) // dev-server check + worktree removal + recap archival
 			expect(result.operations.every(op => 'type' in op)).toBe(true)
 			expect(result.operations.every(op => 'success' in op)).toBe(true)
 			expect(result.operations.every(op => 'message' in op)).toBe(true)
@@ -884,14 +885,14 @@ describe('ResourceCleanup', () => {
 		it('should gracefully degrade when DatabaseManager is unavailable', async () => {
 			const cleanupWithoutDB = new ResourceCleanup(mockGitWorktree, mockProcessManager)
 
-			const result = await cleanupWithoutDB.cleanupDatabase('feat/issue-25')
+			const result = await cleanupWithoutDB.cleanupDatabase('feat/issue-25', '/path/to/worktree')
 
 			expect(result).toBe(false)
 		})
 
 		it('should handle database cleanup when DatabaseManager is available', async () => {
 			// Currently returns false as DatabaseManager is not implemented
-			const result = await resourceCleanup.cleanupDatabase('feat/issue-25')
+			const result = await resourceCleanup.cleanupDatabase('feat/issue-25', '/path/to/worktree')
 
 			// Should return false since implementation is pending Issue #5
 			expect(result).toBe(false)
