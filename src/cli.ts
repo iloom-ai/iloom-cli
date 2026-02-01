@@ -694,12 +694,14 @@ program
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
-      // Only pass printOptions if any print-related option is set
-      // When --output-format or --verbose is provided, implicitly enable print/headless mode
-      const implicitPrint = options.outputFormat !== undefined || options.verbose !== undefined
-      const printOptions = options.print || implicitPrint
+      // If output-format or verbose specified without --print, warn and ignore
+      if (!options.print && (options.outputFormat !== undefined || options.verbose !== undefined)) {
+        logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      const printOptions = options.print
         ? {
-            print: options.print ?? implicitPrint,
+            print: true,
             ...(options.outputFormat !== undefined && { outputFormat: options.outputFormat }),
             ...(options.verbose !== undefined && { verbose: options.verbose }),
           }
@@ -1351,12 +1353,14 @@ program
     try {
       const { PlanCommand } = await import('./commands/plan.js')
       const command = new PlanCommand()
-      // Only pass printOptions if any print-related option is set
-      // When --output-format or --verbose is provided, implicitly enable print/headless mode
-      const implicitPrint = options?.outputFormat !== undefined || options?.verbose !== undefined
-      const printOptions = options?.print || implicitPrint
+      // If output-format or verbose specified without --print, warn and ignore
+      if (!options?.print && (options?.outputFormat !== undefined || options?.verbose !== undefined)) {
+        logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      const printOptions = options?.print
         ? {
-            print: options?.print ?? implicitPrint,
+            print: true,
             ...(options?.outputFormat !== undefined && { outputFormat: options.outputFormat }),
             ...(options?.verbose !== undefined && { verbose: options.verbose }),
           }
