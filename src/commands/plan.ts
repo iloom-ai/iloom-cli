@@ -456,9 +456,13 @@ export class PlanCommand {
 			claudeOptions.outputFormat = 'stream-json' // Force stream-json for streaming
 		}
 
+		// Force yolo mode when print mode is enabled (headless execution requires autonomous mode)
+		const effectiveYolo = (yolo ?? false) || isHeadless
+
 		// Handle --yolo mode
-		if (yolo) {
-			if (!prompt) {
+		if (effectiveYolo) {
+			// Only require prompt for explicit --yolo flag, not for print mode auto-yolo
+			if (yolo && !prompt) {
 				throw new Error('--yolo requires a prompt or issue identifier (e.g., il plan --yolo "add gitlab support" or il plan --yolo 42)')
 			}
 			logger.warn(
@@ -489,8 +493,8 @@ export class PlanCommand {
 			initialMessage = 'Help me plan a feature or decompose work into issues.'
 		}
 
-		// Apply yolo mode wrapper if enabled
-		if (yolo) {
+		// Apply yolo mode wrapper if enabled (includes print mode)
+		if (effectiveYolo) {
 			initialMessage = `[AUTONOMOUS MODE]
 Proceed through the flow without requiring user interaction. Make and document your assumptions and proceed to create the epic and child issues and dependencies if necessary. This guidance supersedes all previous guidance.
 
@@ -500,7 +504,7 @@ ${initialMessage}`
 
 		const claudeResult = await launchClaude(initialMessage, {
 			...claudeOptions,
-			...(((yolo ?? false) || isHeadless) && { permissionMode: 'bypassPermissions' as const }),
+			...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
 		})
 
 		// Output final JSON for --json mode (--json-stream already streamed to stdout)

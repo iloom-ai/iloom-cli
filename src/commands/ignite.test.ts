@@ -452,6 +452,72 @@ describe('IgniteCommand', () => {
 				launchClaudeSpy.mockRestore()
 			}
 		})
+
+		it('should force noReview oneShot mode when print mode is enabled', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-noreview')
+
+			try {
+				// Execute with print mode enabled - should force noReview behavior
+				await command.execute(undefined, { print: true })
+
+				// Verify the user prompt includes approval bypass instructions (noReview behavior)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				expect(userPrompt).toContain('without awaiting confirmation')
+				expect(userPrompt).toContain('This supersedes any other guidance')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should force noReview oneShot mode even when explicit default oneShot is passed with print mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-override')
+
+			try {
+				// Execute with explicit 'default' oneShot but print mode - print should win
+				await command.execute('default', { print: true })
+
+				// Verify the user prompt includes approval bypass instructions (noReview behavior)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				expect(userPrompt).toContain('without awaiting confirmation')
+				expect(userPrompt).toContain('This supersedes any other guidance')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should pass ONE_SHOT_MODE=true to template manager when print mode is enabled', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__print-template')
+
+			try {
+				await command.execute(undefined, { print: true })
+
+				// Verify template manager was called with ONE_SHOT_MODE=true
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						ONE_SHOT_MODE: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
 	})
 
 	describe('Error Handling', () => {

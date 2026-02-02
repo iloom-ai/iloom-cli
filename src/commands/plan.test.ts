@@ -342,6 +342,51 @@ describe('PlanCommand', () => {
 			expect(launchClaudeCall[1].outputFormat).toBeUndefined()
 			expect(launchClaudeCall[1].verbose).toBeUndefined()
 		})
+
+		it('should force yolo mode when print mode is enabled (AUTONOMOUS MODE prompt)', async () => {
+			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true })
+
+			// Print mode should automatically apply AUTONOMOUS MODE wrapper
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[AUTONOMOUS MODE]'),
+				expect.any(Object)
+			)
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[TOPIC]'),
+				expect.any(Object)
+			)
+		})
+
+		it('should not require prompt when print mode enables yolo', async () => {
+			// Print mode with no prompt should work (unlike explicit --yolo which requires prompt)
+			await command.execute(undefined, undefined, undefined, undefined, undefined, { print: true })
+
+			// Should still apply AUTONOMOUS MODE and use default message
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[AUTONOMOUS MODE]'),
+				expect.any(Object)
+			)
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('Help me plan a feature or decompose work into issues'),
+				expect.any(Object)
+			)
+		})
+
+		it('should force yolo even when explicit yolo=false is passed with print mode', async () => {
+			// Print mode should override explicit yolo=false
+			await command.execute('test prompt', undefined, false, undefined, undefined, { print: true })
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[AUTONOMOUS MODE]'),
+				expect.any(Object)
+			)
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
 	})
 
 	describe('yolo mode', () => {

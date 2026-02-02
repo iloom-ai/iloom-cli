@@ -195,11 +195,13 @@ export class IgniteCommand {
 				: undefined
 
 			// Step 2.0.4: Determine effective oneShot mode
+			// If print mode is enabled, force noReview to skip interactive reviews
 			// If oneShot is provided (any value including 'default'), use it
 			// If oneShot is undefined (not passed), use metadata or fallback to 'default'
 			// Note: metadata?.oneShot can be null (for legacy looms), so we need double nullish coalescing
 			const storedOneShot = metadata?.oneShot ?? 'default'
-			const effectiveOneShot: OneShotMode = oneShot ?? storedOneShot
+			const isHeadlessForOneShot = this.printOptions?.print ?? false
+			const effectiveOneShot: OneShotMode = isHeadlessForOneShot ? 'noReview' : (oneShot ?? storedOneShot)
 
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
