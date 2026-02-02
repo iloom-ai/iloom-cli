@@ -374,7 +374,7 @@ export class IgniteCommand {
 				hasMcpConfig: !!mcpConfig,
 			})
 
-			logger.info('✨ Launching Claude in current terminal...')
+			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
 			// Step 5: Launch Claude with system instructions appended and user prompt
 			await launchClaude(userPrompt, {
