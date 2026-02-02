@@ -1,4 +1,5 @@
-import { logger } from '../utils/logger.js'
+import { logger, createStderrLogger } from '../utils/logger.js'
+import { withLogger } from '../utils/logger-context.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
@@ -87,6 +88,35 @@ export class PlanCommand {
 			print?: boolean
 			outputFormat?: 'json' | 'stream-json' | 'text'
 			verbose?: boolean
+			json?: boolean
+			jsonStream?: boolean
+		}
+	): Promise<void> {
+		// Wrap execution in stderr logger for JSON modes to keep stdout clean
+		const isJsonMode = (printOptions?.json ?? false) || (printOptions?.jsonStream ?? false)
+		if (isJsonMode) {
+			const jsonLogger = createStderrLogger()
+			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions))
+		}
+
+		return this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions)
+	}
+
+	/**
+	 * Internal execution method (separated for withLogger wrapping)
+	 */
+	private async executeInternal(
+		prompt?: string,
+		model?: string,
+		yolo?: boolean,
+		planner?: string,
+		reviewer?: string,
+		printOptions?: {
+			print?: boolean
+			outputFormat?: 'json' | 'stream-json' | 'text'
+			verbose?: boolean
+			json?: boolean
+			jsonStream?: boolean
 		}
 	): Promise<void> {
 		// Validate and normalize planner CLI argument
@@ -417,6 +447,15 @@ export class PlanCommand {
 			claudeOptions.verbose = printOptions.verbose
 		}
 
+		// Add JSON mode if specified (requires print mode)
+		if (printOptions?.json) {
+			claudeOptions.jsonMode = 'json'
+			claudeOptions.outputFormat = 'stream-json' // Force stream-json for parsing
+		} else if (printOptions?.jsonStream) {
+			claudeOptions.jsonMode = 'stream'
+			claudeOptions.outputFormat = 'stream-json' // Force stream-json for streaming
+		}
+
 		// Handle --yolo mode
 		if (yolo) {
 			if (!prompt) {
@@ -459,10 +498,19 @@ Proceed through the flow without requiring user interaction. Make and document y
 ${initialMessage}`
 		}
 
-		await launchClaude(initialMessage, {
+		const claudeResult = await launchClaude(initialMessage, {
 			...claudeOptions,
 			...(((yolo ?? false) || isHeadless) && { permissionMode: 'bypassPermissions' as const }),
 		})
+
+		// Output final JSON for --json mode (--json-stream already streamed to stdout)
+		if (printOptions?.json) {
+			// eslint-disable-next-line no-console
+			console.log(JSON.stringify({
+				success: true,
+				output: claudeResult ?? ''
+			}))
+		}
 
 		logger.debug('Claude session completed')
 		logger.info(chalk.green('Planning session ended.'))

@@ -680,12 +680,16 @@ program
       .choices(['json', 'stream-json', 'text'])
   )
   .option('--verbose', 'Enable verbose output (requires --print)')
+  .option('--json', 'Output final result as JSON object (requires --print)')
+  .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
     print?: boolean
     outputFormat?: 'json' | 'stream-json' | 'text'
     verbose?: boolean
+    json?: boolean
+    jsonStream?: boolean
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -694,9 +698,21 @@ program
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
+
+      // Validate mutually exclusive flags
+      if (options.json && options.jsonStream) {
+        logger.error('--json and --json-stream are mutually exclusive')
+        process.exit(1)
+      }
+
       // If output-format or verbose specified without --print, warn and ignore
       if (!options.print && (options.outputFormat !== undefined || options.verbose !== undefined)) {
         logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      // If --json or --json-stream specified without --print, warn and ignore
+      if (!options.print && (options.json || options.jsonStream)) {
+        logger.warn('--json and --json-stream flags are ignored without --print')
       }
 
       const printOptions = options.print
@@ -704,6 +720,8 @@ program
             print: true,
             ...(options.outputFormat !== undefined && { outputFormat: options.outputFormat }),
             ...(options.verbose !== undefined && { verbose: options.verbose }),
+            ...(options.json && { json: true }),
+            ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
       await command.execute(options.oneShot, printOptions)
@@ -1341,6 +1359,8 @@ program
       .choices(['json', 'stream-json', 'text'])
   )
   .option('--verbose', 'Enable verbose output (requires --print)')
+  .option('--json', 'Output final result as JSON object (requires --print)')
+  .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .action(async (prompt?: string, options?: {
     model?: string
     yolo?: boolean
@@ -1349,13 +1369,27 @@ program
     print?: boolean
     outputFormat?: 'json' | 'stream-json' | 'text'
     verbose?: boolean
+    json?: boolean
+    jsonStream?: boolean
   }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
       const command = new PlanCommand()
+
+      // Validate mutually exclusive flags
+      if (options?.json && options?.jsonStream) {
+        logger.error('--json and --json-stream are mutually exclusive')
+        process.exit(1)
+      }
+
       // If output-format or verbose specified without --print, warn and ignore
       if (!options?.print && (options?.outputFormat !== undefined || options?.verbose !== undefined)) {
         logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      // If --json or --json-stream specified without --print, warn and ignore
+      if (!options?.print && (options?.json || options?.jsonStream)) {
+        logger.warn('--json and --json-stream flags are ignored without --print')
       }
 
       const printOptions = options?.print
@@ -1363,6 +1397,8 @@ program
             print: true,
             ...(options?.outputFormat !== undefined && { outputFormat: options.outputFormat }),
             ...(options?.verbose !== undefined && { verbose: options.verbose }),
+            ...(options?.json && { json: true }),
+            ...(options?.jsonStream && { jsonStream: true }),
           }
         : undefined
       await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions)

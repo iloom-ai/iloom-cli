@@ -72,6 +72,7 @@ export interface ClaudeCliOptions {
 	noSessionPersistence?: boolean // Prevent session data from being saved to disk (for utility operations)
 	outputFormat?: 'json' | 'stream-json' | 'text' // Output format for Claude CLI (headless mode)
 	verbose?: boolean // Enable verbose output (headless mode) - defaults to true when headless
+	jsonMode?: 'json' | 'stream' // JSON output mode: 'json' for final object, 'stream' for real-time JSONL
 }
 
 /**
@@ -144,7 +145,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -244,7 +245,13 @@ export async function launchClaude(
 					const text = chunk.toString()
 					outputBuffer += text
 
-					if (isDebugMode) {
+					if (jsonMode === 'stream') {
+						// --json-stream: Output raw JSONL to stdout immediately
+						process.stdout.write(text)
+					} else if (jsonMode === 'json') {
+						// --json: Suppress all progress output (will return final JSON)
+						// Do nothing - just accumulate in buffer
+					} else if (isDebugMode) {
 						log.stdout.write(text) // Full JSON streaming in debug mode
 					} else {
 						// Progress dots in non-debug mode with robot emoji prefix
@@ -264,8 +271,8 @@ export async function launchClaude(
 			if (isStreaming) {
 				const rawOutput = outputBuffer.trim()
 
-				// Clean up progress dots with newline in non-debug mode
-				if (!isDebugMode) {
+				// Clean up progress dots with newline in non-debug mode (skip for json modes)
+				if (!isDebugMode && !jsonMode) {
 					log.stdout.write('\n')
 				}
 
@@ -383,7 +390,11 @@ export async function launchClaude(
 						subprocess.stdout.on('data', (chunk: Buffer) => {
 							const text = chunk.toString()
 							outputBuffer += text
-							if (isDebugMode) {
+							if (jsonMode === 'stream') {
+								process.stdout.write(text)
+							} else if (jsonMode === 'json') {
+								// Suppress progress output for json mode
+							} else if (isDebugMode) {
 								log.stdout.write(text)
 							} else {
 								if (isFirstProgress) {
@@ -400,7 +411,7 @@ export async function launchClaude(
 
 					if (isStreaming) {
 						const rawOutput = outputBuffer.trim()
-						if (!isDebugMode) {
+						if (!isDebugMode && !jsonMode) {
 							log.stdout.write('\n')
 						}
 						return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput

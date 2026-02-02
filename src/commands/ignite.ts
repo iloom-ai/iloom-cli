@@ -1,5 +1,6 @@
 import path from 'path'
-import { logger } from '../utils/logger.js'
+import { logger, createStderrLogger } from '../utils/logger.js'
+import { withLogger } from '../utils/logger-context.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
@@ -114,6 +115,8 @@ export class IgniteCommand {
 		print?: boolean
 		outputFormat?: 'json' | 'stream-json' | 'text'
 		verbose?: boolean
+		json?: boolean      // --json flag: output final JSON object
+		jsonStream?: boolean // --json-stream flag: stream JSONL to stdout
 	} | undefined
 
 	/**
@@ -125,8 +128,25 @@ export class IgniteCommand {
 		print?: boolean
 		outputFormat?: 'json' | 'stream-json' | 'text'
 		verbose?: boolean
+		json?: boolean
+		jsonStream?: boolean
 	}): Promise<void> {
 		this.printOptions = printOptions
+
+		// Wrap execution in stderr logger for JSON modes to keep stdout clean
+		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
+		if (isJsonMode) {
+			const jsonLogger = createStderrLogger()
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot))
+		}
+
+		return this.executeInternal(oneShot)
+	}
+
+	/**
+	 * Internal execution method (separated for withLogger wrapping)
+	 */
+	private async executeInternal(oneShot?: OneShotMode): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -269,6 +289,15 @@ export class IgniteCommand {
 				claudeOptions.verbose = this.printOptions.verbose
 			}
 
+			// Add JSON mode if specified (requires print mode)
+			if (this.printOptions?.json) {
+				claudeOptions.jsonMode = 'json'
+				claudeOptions.outputFormat = 'stream-json' // Force stream-json for parsing
+			} else if (this.printOptions?.jsonStream) {
+				claudeOptions.jsonMode = 'stream'
+				claudeOptions.outputFormat = 'stream-json' // Force stream-json for streaming
+			}
+
 			// Add optional branch name for context
 			if (context.branchName !== undefined) {
 				claudeOptions.branchName = context.branchName
@@ -377,7 +406,7 @@ export class IgniteCommand {
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
 			// Step 5: Launch Claude with system instructions appended and user prompt
-			await launchClaude(userPrompt, {
+			const claudeResult = await launchClaude(userPrompt, {
 				...claudeOptions,
 				appendSystemPrompt: systemInstructions,
 				...(mcpConfig && { mcpConfig }),
@@ -386,13 +415,31 @@ export class IgniteCommand {
 				...(agents && { agents }),
 			})
 
+			// Output final JSON for --json mode (--json-stream already streamed to stdout)
+			if (this.printOptions?.json) {
+				// eslint-disable-next-line no-console
+				console.log(JSON.stringify({
+					success: true,
+					output: claudeResult ?? ''
+				}))
+			}
+
 			// Step 6: Mark as run after successful launch
 			if (isFirstRun) {
 				await this.firstRunManager.markAsRun()
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-			logger.error(`Failed to launch Claude: ${errorMessage}`)
+			// Output error as JSON for --json mode
+			if (this.printOptions?.json) {
+				// eslint-disable-next-line no-console
+				console.log(JSON.stringify({
+					success: false,
+					error: errorMessage
+				}))
+			} else {
+				logger.error(`Failed to launch Claude: ${errorMessage}`)
+			}
 			throw error
 		}
 	}
