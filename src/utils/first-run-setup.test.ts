@@ -39,6 +39,7 @@ vi.mock('../commands/init.js', () => ({
 // Mock prompt utilities
 vi.mock('./prompt.js', () => ({
 	waitForKeypress: vi.fn().mockResolvedValue('Enter'),
+	promptConfirmation: vi.fn().mockResolvedValue(true),
 }))
 
 describe('first-run-setup', () => {
@@ -172,42 +173,99 @@ describe('first-run-setup', () => {
 	})
 
 	describe('launchFirstRunSetup', () => {
-		it('should launch InitCommand with correct message', async () => {
-			const { InitCommand } = await import('../commands/init.js')
-			const { waitForKeypress } = await import('./prompt.js')
-			const { logger } = await import('./logger.js')
+		describe('zero setup flow', () => {
+			it('should display defaults and mark as configured when user accepts (Y)', async () => {
+				const { promptConfirmation } = await import('./prompt.js')
+				const { InitCommand } = await import('../commands/init.js')
+				const { logger } = await import('./logger.js')
 
-			await launchFirstRunSetup()
+				vi.mocked(promptConfirmation).mockResolvedValue(true)
 
-			// Verify info messages
-			expect(logger.info).toHaveBeenCalledWith(
-				'First-time project setup detected.'
-			)
-			expect(logger.info).toHaveBeenCalledWith(
-				'iloom will now launch an interactive configuration session with Claude.'
-			)
+				await launchFirstRunSetup()
 
-			// Verify keypress wait
-			expect(waitForKeypress).toHaveBeenCalledWith(
-				'Press any key to start configuration...'
-			)
+				// Verify promptConfirmation was called with correct args
+				expect(promptConfirmation).toHaveBeenCalledWith('Are these defaults OK?', true)
 
-			// Verify InitCommand execution
-			expect(InitCommand).toHaveBeenCalled()
-			const mockInstance = vi.mocked(InitCommand).mock.results[0].value
-			expect(mockInstance.execute).toHaveBeenCalledWith(
-				'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
-			)
+				// Verify markProjectAsConfigured was called
+				expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(mockRepoRoot)
 
-			// Verify completion message
-			expect(logger.info).toHaveBeenCalledWith(
-				'Configuration complete! Continuing with your original command...'
-			)
+				// Verify InitCommand was NOT called
+				expect(InitCommand).not.toHaveBeenCalled()
+
+				// Verify success message
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('Configuration complete! Using defaults.')
+				)
+				expect(logger.info).toHaveBeenCalledWith(
+					'You can run `il init` anytime to customize settings.'
+				)
+			})
+
+			it('should display formatted defaults box with correct values', async () => {
+				const { promptConfirmation } = await import('./prompt.js')
+				const { logger } = await import('./logger.js')
+
+				vi.mocked(promptConfirmation).mockResolvedValue(true)
+
+				await launchFirstRunSetup()
+
+				// Verify defaults are displayed (checking for key values in logged info)
+				const infoCalls = vi.mocked(logger.info).mock.calls.map(call => call[0])
+
+				// Check that key defaults are displayed
+				expect(infoCalls.some(call => call.includes('Main Branch:') && call.includes('main'))).toBe(true)
+				expect(infoCalls.some(call => call.includes('IDE:') && call.includes('vscode'))).toBe(true)
+				expect(infoCalls.some(call => call.includes('Issue Tracker:') && call.includes('GitHub Issues'))).toBe(true)
+				expect(infoCalls.some(call => call.includes('Merge Mode:') && call.includes('local'))).toBe(true)
+				expect(infoCalls.some(call => call.includes('Base Port:') && call.includes('3000'))).toBe(true)
+			})
+
+			it('should launch full wizard when user declines defaults (N)', async () => {
+				const { promptConfirmation, waitForKeypress } = await import('./prompt.js')
+				const { InitCommand } = await import('../commands/init.js')
+				const { logger } = await import('./logger.js')
+
+				vi.mocked(promptConfirmation).mockResolvedValue(false)
+
+				await launchFirstRunSetup()
+
+				// Verify InitCommand was called after declining
+				expect(InitCommand).toHaveBeenCalled()
+				const mockInstance = vi.mocked(InitCommand).mock.results[0].value
+				expect(mockInstance.execute).toHaveBeenCalledWith(
+					'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
+				)
+
+				// Verify waitForKeypress was called
+				expect(waitForKeypress).toHaveBeenCalledWith(
+					'Press any key to start configuration...'
+				)
+
+				// Verify completion message from wizard path
+				expect(logger.info).toHaveBeenCalledWith(
+					'Configuration complete! Continuing with your original command...'
+				)
+			})
+
+			it('should show wizard launch message when declining defaults', async () => {
+				const { promptConfirmation } = await import('./prompt.js')
+				const { logger } = await import('./logger.js')
+
+				vi.mocked(promptConfirmation).mockResolvedValue(false)
+
+				await launchFirstRunSetup()
+
+				expect(logger.info).toHaveBeenCalledWith(
+					'iloom will now launch an interactive configuration session with Claude.'
+				)
+			})
 		})
 
-		it('should delegate project marking to InitCommand.execute()', async () => {
-			// Note: markProjectAsConfigured is now called internally by InitCommand.execute()
-			// when the guided init completes successfully, not directly by launchFirstRunSetup()
+		it('should delegate project marking to InitCommand.execute() when wizard is launched', async () => {
+			const { promptConfirmation } = await import('./prompt.js')
+			// Decline defaults to trigger wizard path
+			vi.mocked(promptConfirmation).mockResolvedValue(false)
+
 			await launchFirstRunSetup()
 
 			// Verify InitCommand.execute() was called, which handles marking internally

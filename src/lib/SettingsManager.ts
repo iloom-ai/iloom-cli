@@ -346,6 +346,7 @@ export const IloomSettingsSchema = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
+			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 			provider: z.enum(['github', 'linear']).optional().default('github').describe('Issue tracker provider (github, linear)'),
 			github: z
 				.object({
@@ -376,6 +377,7 @@ export const IloomSettingsSchema = z.object({
 		.describe('Issue management configuration'),
 	mergeBehavior: z
 		.object({
+			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
 			remote: z.string().optional(),
 			autoCommitPush: z
@@ -389,6 +391,7 @@ export const IloomSettingsSchema = z.object({
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
 	ide: z
 		.object({
+			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 			type: z
 				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf', 'antigravity'])
 				.default('vscode')
@@ -927,6 +930,7 @@ export class SettingsManager {
 	 */
 	async getProtectedBranches(projectRoot?: string): Promise<string[]> {
 		const settings = await this.loadSettings(projectRoot)
+		// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 		const mainBranch = settings.mainBranch ?? 'main'
 
 		// Build protected branches list:

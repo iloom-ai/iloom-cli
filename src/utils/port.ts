@@ -64,6 +64,7 @@ export function generatePortOffsetFromBranchName(branchName: string): number {
  * @returns Port number
  * @throws Error if branchName is empty
  */
+// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 export function calculatePortForBranch(branchName: string, basePort: number = 3000): number {
 	const offset = generatePortOffsetFromBranchName(branchName)
 	const port = basePort + offset
@@ -86,6 +87,7 @@ export function calculatePortForBranch(branchName: string, basePort: number = 30
  * @param basePort - Base port (default: 3000)
  * @returns Port number in valid range
  */
+// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
 export function calculatePortFromIdentifier(
 	identifier: string | number,
 	basePort: number = 3000

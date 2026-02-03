@@ -1,10 +1,11 @@
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import path from 'path'
+import chalk from 'chalk'
 import { logger } from './logger.js'
 import { FirstRunManager } from './FirstRunManager.js'
 import { getRepoRoot } from './git.js'
-import { InitCommand } from '../commands/init.js'
+import { promptConfirmation, waitForKeypress } from './prompt.js'
 
 /**
  * Get the project root path for first-run tracking
@@ -71,17 +72,56 @@ async function hasNonEmptySettings(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Display default configuration values in a formatted box
+ */
+function displayDefaultsBox(): void {
+	logger.info(chalk.bold('Default Configuration:'))
+	logger.info('')
+	logger.info(`  ${chalk.cyan('Main Branch:')}     main`)
+	logger.info(`  ${chalk.cyan('IDE:')}             vscode`)
+	logger.info(`  ${chalk.cyan('Issue Tracker:')}   GitHub Issues`)
+	logger.info(`  ${chalk.cyan('Merge Mode:')}      local ${chalk.dim('(merge locally)')}`)
+	logger.info(`  ${chalk.cyan('Base Port:')}       3000`)
+}
+
+/**
  * Launch interactive first-run setup via InitCommand
+ * Shows defaults first, allows quick acceptance or full wizard
  */
 export async function launchFirstRunSetup(): Promise<void> {
 	logger.info('First-time project setup detected.')
-	logger.info(
-		'iloom will now launch an interactive configuration session with Claude.'
+	logger.info('')
+
+	// Display the defaults
+	displayDefaultsBox()
+
+	logger.info('')
+
+	// Import prompt utility
+
+	// Ask if defaults are OK (default to Yes)
+	const acceptDefaults = await promptConfirmation(
+		'Are these defaults OK?',
+		true  // default to true, so Enter accepts
 	)
 
-	const { waitForKeypress } = await import('./prompt.js')
+	if (acceptDefaults) {
+		// User accepted defaults - just mark as configured
+		const projectRoot = await getProjectRoot()
+		const firstRunManager = new FirstRunManager()
+		await firstRunManager.markProjectAsConfigured(projectRoot)
+		logger.info(chalk.green('Configuration complete! Using defaults.'))
+		logger.info('You can run `il init` anytime to customize settings.')
+		return
+	}
+
+	// User declined - launch full wizard
+	logger.info('')
+	logger.info('iloom will now launch an interactive configuration session with Claude.')
+
 	await waitForKeypress('Press any key to start configuration...')
 
+	const { InitCommand } = await import('../commands/init.js')
 	const initCommand = new InitCommand()
 	await initCommand.execute(
 		'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
