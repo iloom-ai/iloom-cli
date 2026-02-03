@@ -583,13 +583,13 @@ describe('DevServerManager', () => {
 	})
 
 	describe('default options', () => {
-		it('should use default timeout and interval if not specified', () => {
+		it('should use default timeout (180s) and interval if not specified', () => {
 			const defaultManager = new DevServerManager()
 
 			// Access private options through type assertion for testing
 			const options = (defaultManager as { options: Required<{ startupTimeout: number; checkInterval: number }> }).options
 
-			expect(options.startupTimeout).toBe(30000)
+			expect(options.startupTimeout).toBe(180000) // 180 seconds
 			expect(options.checkInterval).toBe(1000)
 		})
 
@@ -602,6 +602,76 @@ describe('DevServerManager', () => {
 
 			expect(options.startupTimeout).toBe(15000)
 			expect(options.checkInterval).toBe(1000) // Default
+		})
+
+		it('should use ILOOM_DEV_SERVER_TIMEOUT env var when set', () => {
+			const originalEnv = process.env.ILOOM_DEV_SERVER_TIMEOUT
+			try {
+				process.env.ILOOM_DEV_SERVER_TIMEOUT = '60000'
+				const envManager = new DevServerManager()
+				const options = (envManager as { options: Required<{ startupTimeout: number; checkInterval: number }> }).options
+
+				expect(options.startupTimeout).toBe(60000)
+			} finally {
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_DEV_SERVER_TIMEOUT
+				} else {
+					process.env.ILOOM_DEV_SERVER_TIMEOUT = originalEnv
+				}
+			}
+		})
+
+		it('should ignore invalid ILOOM_DEV_SERVER_TIMEOUT values and use default', () => {
+			const originalEnv = process.env.ILOOM_DEV_SERVER_TIMEOUT
+			try {
+				process.env.ILOOM_DEV_SERVER_TIMEOUT = 'invalid'
+				const envManager = new DevServerManager()
+				const options = (envManager as { options: Required<{ startupTimeout: number; checkInterval: number }> }).options
+
+				expect(options.startupTimeout).toBe(180000) // Default
+			} finally {
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_DEV_SERVER_TIMEOUT
+				} else {
+					process.env.ILOOM_DEV_SERVER_TIMEOUT = originalEnv
+				}
+			}
+		})
+
+		it('should ignore negative ILOOM_DEV_SERVER_TIMEOUT values and use default', () => {
+			const originalEnv = process.env.ILOOM_DEV_SERVER_TIMEOUT
+			try {
+				process.env.ILOOM_DEV_SERVER_TIMEOUT = '-5000'
+				const envManager = new DevServerManager()
+				const options = (envManager as { options: Required<{ startupTimeout: number; checkInterval: number }> }).options
+
+				expect(options.startupTimeout).toBe(180000) // Default
+			} finally {
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_DEV_SERVER_TIMEOUT
+				} else {
+					process.env.ILOOM_DEV_SERVER_TIMEOUT = originalEnv
+				}
+			}
+		})
+
+		it('should prefer explicit startupTimeout option over env var', () => {
+			const originalEnv = process.env.ILOOM_DEV_SERVER_TIMEOUT
+			try {
+				process.env.ILOOM_DEV_SERVER_TIMEOUT = '60000'
+				const customManager = new DevServerManager(undefined, {
+					startupTimeout: 30000,
+				})
+				const options = (customManager as { options: Required<{ startupTimeout: number; checkInterval: number }> }).options
+
+				expect(options.startupTimeout).toBe(30000) // Explicit option wins
+			} finally {
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_DEV_SERVER_TIMEOUT
+				} else {
+					process.env.ILOOM_DEV_SERVER_TIMEOUT = originalEnv
+				}
+			}
 		})
 	})
 })

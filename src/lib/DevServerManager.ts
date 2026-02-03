@@ -6,10 +6,28 @@ import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
 
+/**
+ * Default startup timeout in milliseconds (180 seconds)
+ * Can be overridden via ILOOM_DEV_SERVER_TIMEOUT environment variable
+ */
+const DEFAULT_STARTUP_TIMEOUT = 180000
+
+function getStartupTimeout(): number {
+	const envTimeout = process.env.ILOOM_DEV_SERVER_TIMEOUT
+	if (envTimeout) {
+		const parsed = parseInt(envTimeout, 10)
+		if (!isNaN(parsed) && parsed > 0) {
+			return parsed
+		}
+	}
+	return DEFAULT_STARTUP_TIMEOUT
+}
+
 export interface DevServerManagerOptions {
 	/**
 	 * Maximum time to wait for server to start (in milliseconds)
-	 * Default: 30000 (30 seconds)
+	 * Default: 180000 (180 seconds)
+	 * Can be overridden via ILOOM_DEV_SERVER_TIMEOUT environment variable
 	 */
 	startupTimeout?: number
 
@@ -35,7 +53,7 @@ export class DevServerManager {
 	) {
 		this.processManager = processManager ?? new ProcessManager()
 		this.options = {
-			startupTimeout: options.startupTimeout ?? 30000,
+			startupTimeout: options.startupTimeout ?? getStartupTimeout(),
 			checkInterval: options.checkInterval ?? 1000,
 		}
 	}

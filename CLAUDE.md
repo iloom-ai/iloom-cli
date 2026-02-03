@@ -16,16 +16,16 @@ iloom is a TypeScript CLI tool that converts existing bash workflow scripts into
 
 ### Documentation Requirements
 
-**IMPORTANT: When adding features or configuration options, you MUST update README.md**:
+**IMPORTANT: When adding features or configuration options, update the appropriate documentation file**:
 
-- **New CLI commands**: Add to the command reference section with usage examples
-- **New configuration options**: Document in the configuration section with default values and examples
-- **New environment variables**: Add to the environment variables section
-- **New flags or options**: Update the relevant command documentation
-- **Breaking changes**: Clearly mark and explain migration steps
-- **New dependencies or integrations**: Document setup and usage
+- **New CLI commands**: Add to `docs/iloom-commands.md` with usage examples
+- **New configuration options**: Document in `docs/iloom-commands.md` with default values and examples
+- **New environment variables**: Add to the Environment Variables section in `docs/iloom-commands.md`
+- **New flags or options**: Update the relevant command in `docs/iloom-commands.md`
+- **Breaking changes**: Clearly mark and explain migration steps in both README.md and `docs/iloom-commands.md`
+- **New dependencies or integrations**: Document setup in README.md, detailed usage in `docs/iloom-commands.md`
 
-The README.md is the primary user-facing documentation. Keeping it synchronized ensures users can discover and use new features without diving into the code.
+The `docs/iloom-commands.md` file is the comprehensive command reference. Use it for detailed documentation to avoid flooding README.md. The README.md should remain a concise overview and quick start guide.
 
 **Core Commands**:
 

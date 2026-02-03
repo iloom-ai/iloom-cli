@@ -1519,6 +1519,7 @@ iloom respects these environment variables:
 | `ILOOM_SETTINGS_PATH` | Override default settings file location | `~/.config/iloom-ai/settings.json` |
 | `ILOOM_NO_COLOR` | Disable colored output | `false` |
 | `ILOOM_DEBUG` | Enable debug logging | `false` |
+| `ILOOM_DEV_SERVER_TIMEOUT` | Dev server startup timeout in milliseconds | `180000` (180 seconds) |
 | `CLAUDE_API_KEY` | Claude API key (if not using Claude CLI) | - |
 
 ---
