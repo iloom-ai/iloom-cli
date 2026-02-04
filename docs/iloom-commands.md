@@ -640,6 +640,60 @@ il dev-server 25
 il dev-server feat/my-branch
 ```
 
+**Port Assignment:**
+
+Each loom workspace receives a unique port calculated as `basePort + issue/PR number`. For example, with the default `basePort` of `3000`, issue #42 would use port `3042`.
+
+**Port Flag Configuration:**
+
+Some frameworks (like Angular CLI) ignore the `PORT` environment variable and require an explicit CLI flag. Configure `capabilities.web.portFlag` in your `.iloom/settings.json`:
+
+```json
+{
+  "capabilities": {
+    "web": {
+      "basePort": 3000,
+      "portFlag": "--port"
+    }
+  }
+}
+```
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `capabilities.web.basePort` | `number` | Base port for dev servers (default: `3000`) |
+| `capabilities.web.portFlag` | `string` | CLI flag to pass port (e.g., `--port`, `-p`). When set, appends `<portFlag>=<port>` to the dev command |
+
+**Supported portFlag formats:**
+
+| Framework | portFlag Value | Resulting Command |
+|-----------|---------------|-------------------|
+| Angular | `--port` | `ng serve -- --port=3042` |
+| Vite | `--port` | `vite dev -- --port=3042` |
+| Next.js | `-p` | `next dev -- -p=3042` |
+| Custom | Any flag | `<dev-script> -- <flag>=<port>` |
+
+**Angular Auto-Detection:**
+
+For Angular projects, iloom automatically detects the presence of `angular.json` in the workspace root and applies `--port` flag without explicit configuration. This auto-detection is a fallback when `portFlag` is not explicitly set:
+
+1. If `portFlag` is explicitly configured, that value is used
+2. If `portFlag` is not set, iloom checks for `angular.json`
+3. If `angular.json` exists, `--port` is automatically applied
+4. Otherwise, only the `PORT` environment variable is set
+
+To explicitly opt out of port flag behavior (use only env var), set `portFlag` to an empty string:
+
+```json
+{
+  "capabilities": {
+    "web": {
+      "portFlag": ""
+    }
+  }
+}
+```
+
 **Notes:**
 - Runs in foreground to see server output and errors
 - Use Ctrl+C to stop the server
@@ -1359,6 +1413,7 @@ il init "configure neon database with project ID abc-123"
 - Permission modes
 - Project type (web app, CLI tool, etc.)
 - Base port for development servers
+- Port flag for dev server CLI arguments (e.g., `--port` for Angular)
 - Environment variable names
 
 ---

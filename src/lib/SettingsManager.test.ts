@@ -1339,6 +1339,130 @@ describe('SettingsManager', () => {
 		})
 	})
 
+	describe('capabilities.web.portFlag configuration', () => {
+		it('should accept valid portFlag string', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						portFlag: '--port',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.portFlag).toBe('--port')
+		})
+
+		it('should accept empty string portFlag (explicit opt-out)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						portFlag: '',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.portFlag).toBe('')
+		})
+
+		it('should default to undefined when portFlag is not specified', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 3000,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.portFlag).toBeUndefined()
+		})
+
+		it('should accept different portFlag formats (-p, --serve-port)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						portFlag: '-p',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.portFlag).toBe('-p')
+		})
+
+		it('should preserve both basePort and portFlag when both are configured', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 4200,
+						portFlag: '--port',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(4200)
+			expect(result.capabilities?.web?.portFlag).toBe('--port')
+		})
+	})
+
 	describe('WorkflowPermissionSchema - Component Launch Configuration', () => {
 		it('should validate workflow config with all component flags enabled', async () => {
 			const projectRoot = '/test/project'

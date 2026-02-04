@@ -49,7 +49,6 @@ describe('OpenCommand', () => {
 	let command: OpenCommand
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockCapabilityDetector: ProjectCapabilityDetector
-	let mockDevServerManager: DevServerManager
 	let mockIdentifierParser: IdentifierParser
 
 	const mockWorktree: GitWorktree = {
@@ -62,17 +61,19 @@ describe('OpenCommand', () => {
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockCapabilityDetector = new ProjectCapabilityDetector()
-		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 
 		// Mock DevServerManager to always return true (server ready)
-		vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+		// Note: DevServerManager is now created dynamically in openWebBrowser,
+		// so we mock at the prototype level
+		vi.mocked(DevServerManager.prototype.ensureServerRunning).mockResolvedValue(true)
+		vi.mocked(DevServerManager.prototype.isServerRunning).mockResolvedValue(false)
 
+		// Constructor no longer takes devServerManager - it's created dynamically with portFlag
 		command = new OpenCommand(
 			mockGitWorktreeManager,
 			mockCapabilityDetector,
-			mockIdentifierParser,
-			mockDevServerManager
+			mockIdentifierParser
 		)
 
 		// Reset all mocks
@@ -651,11 +652,12 @@ describe('OpenCommand', () => {
 
 		it('should auto-start dev server when opening browser', async () => {
 			// Mock server not running, then started
-			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+			// Note: DevServerManager is created dynamically in openWebBrowser with portFlag support
+			vi.mocked(DevServerManager.prototype.ensureServerRunning).mockResolvedValue(true)
 
 			await command.execute({ identifier: '87' })
 
-			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087
 			)
@@ -663,7 +665,7 @@ describe('OpenCommand', () => {
 
 		it('should open browser even if server fails to start', async () => {
 			// Mock server failed to start
-			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(false)
+			vi.mocked(DevServerManager.prototype.ensureServerRunning).mockResolvedValue(false)
 
 			await command.execute({ identifier: '87' })
 
@@ -680,12 +682,12 @@ describe('OpenCommand', () => {
 				mockWorktree,
 			])
 
-			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+			vi.mocked(DevServerManager.prototype.ensureServerRunning).mockResolvedValue(true)
 
 			await command.execute({ identifier: '87' })
 
 			// Should calculate port as 3000 + 87 = 3087
-			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087
 			)
@@ -696,12 +698,12 @@ describe('OpenCommand', () => {
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=4500\n')
 
-			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+			vi.mocked(DevServerManager.prototype.ensureServerRunning).mockResolvedValue(true)
 
 			await command.execute({ identifier: '87' })
 
 			// Should use PORT from .env
-			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				4500
 			)
@@ -722,7 +724,7 @@ describe('OpenCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			// Should not call ensureServerRunning for CLI-only projects
-			expect(mockDevServerManager.ensureServerRunning).not.toHaveBeenCalled()
+			expect(DevServerManager.prototype.ensureServerRunning).not.toHaveBeenCalled()
 		})
 	})
 })

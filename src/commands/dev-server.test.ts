@@ -41,7 +41,6 @@ describe('DevServerCommand', () => {
 	let command: DevServerCommand
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockCapabilityDetector: ProjectCapabilityDetector
-	let mockDevServerManager: DevServerManager
 	let mockIdentifierParser: IdentifierParser
 	let mockSettingsManager: SettingsManager
 
@@ -55,13 +54,12 @@ describe('DevServerCommand', () => {
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockCapabilityDetector = new ProjectCapabilityDetector()
-		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 		mockSettingsManager = new SettingsManager()
 
-		// Mock DevServerManager methods
-		vi.mocked(mockDevServerManager.isServerRunning).mockResolvedValue(false)
-		vi.mocked(mockDevServerManager.runServerForeground).mockImplementation(
+		// Mock DevServerManager methods - DevServerManager is now created dynamically with portFlag
+		vi.mocked(DevServerManager.prototype.isServerRunning).mockResolvedValue(false)
+		vi.mocked(DevServerManager.prototype.runServerForeground).mockImplementation(
 			async (_path, _port, _redirect, onProcessStarted) => {
 				// Call the callback with the mock PID if provided
 				if (onProcessStarted) {
@@ -78,11 +76,11 @@ describe('DevServerCommand', () => {
 		vi.mocked(loadWorkspaceEnv).mockReturnValue({ parsed: {} })
 		vi.mocked(isNoEnvFilesFoundError).mockReturnValue(false)
 
+		// Constructor no longer takes devServerManager - it's created dynamically with portFlag
 		command = new DevServerCommand(
 			mockGitWorktreeManager,
 			mockCapabilityDetector,
 			mockIdentifierParser,
-			mockDevServerManager,
 			mockSettingsManager
 		)
 	})
@@ -204,7 +202,7 @@ describe('DevServerCommand', () => {
 			expect(result.status).toBe('started')
 			expect(result.url).toBe('http://localhost:3087')
 			expect(result.port).toBe(3087)
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -224,7 +222,7 @@ describe('DevServerCommand', () => {
 
 			expect(result.status).toBe('no_web_capability')
 			expect(result.message).toContain('No web capability detected')
-			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+			expect(DevServerManager.prototype.runServerForeground).not.toHaveBeenCalled()
 		})
 
 		it('should return gracefully for project with no capabilities', async () => {
@@ -238,7 +236,7 @@ describe('DevServerCommand', () => {
 
 			expect(result.status).toBe('no_web_capability')
 			expect(result.message).toContain('No web capability detected')
-			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+			expect(DevServerManager.prototype.runServerForeground).not.toHaveBeenCalled()
 		})
 	})
 
@@ -260,18 +258,18 @@ describe('DevServerCommand', () => {
 		})
 
 		it('should start server when not running', async () => {
-			vi.mocked(mockDevServerManager.isServerRunning).mockResolvedValue(false)
+			vi.mocked(DevServerManager.prototype.isServerRunning).mockResolvedValue(false)
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
 
 			const result = await command.execute({ identifier: '87' })
 
 			expect(result.status).toBe('started')
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalled()
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalled()
 		})
 
 		it('should silently succeed when server already running', async () => {
-			vi.mocked(mockDevServerManager.isServerRunning).mockResolvedValue(true)
+			vi.mocked(DevServerManager.prototype.isServerRunning).mockResolvedValue(true)
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
 
@@ -279,7 +277,7 @@ describe('DevServerCommand', () => {
 
 			expect(result.status).toBe('already_running')
 			expect(result.url).toBe('http://localhost:3087')
-			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+			expect(DevServerManager.prototype.runServerForeground).not.toHaveBeenCalled()
 		})
 
 		it('should use PORT from .env if available', async () => {
@@ -288,7 +286,7 @@ describe('DevServerCommand', () => {
 
 			await command.execute({ identifier: '87' })
 
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				4500,
 				false,
@@ -310,7 +308,7 @@ describe('DevServerCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			// Should calculate port as 3000 + 87 = 3087
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -397,7 +395,7 @@ describe('DevServerCommand', () => {
 
 			await command.execute({ identifier: '87' })
 
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -412,7 +410,7 @@ describe('DevServerCommand', () => {
 
 			await command.execute({ identifier: '87', json: true })
 
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				true,
@@ -453,7 +451,7 @@ describe('DevServerCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			expect(loadWorkspaceEnv).toHaveBeenCalledWith(mockWorktree.path)
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -470,7 +468,7 @@ describe('DevServerCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			expect(loadWorkspaceEnv).not.toHaveBeenCalled()
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -485,7 +483,7 @@ describe('DevServerCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			expect(loadWorkspaceEnv).not.toHaveBeenCalled()
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -508,7 +506,7 @@ describe('DevServerCommand', () => {
 			const result = await command.execute({ identifier: '87' })
 
 			expect(result.status).toBe('started')
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
 				false,
@@ -530,7 +528,7 @@ describe('DevServerCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			// Should proceed without warning since "no env files" is harmless
-			expect(mockDevServerManager.runServerForeground).toHaveBeenCalled()
+			expect(DevServerManager.prototype.runServerForeground).toHaveBeenCalled()
 		})
 	})
 })

@@ -181,6 +181,10 @@ export const CapabilitiesSettingsSchema = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				portFlag: z
+					.string()
+					.optional()
+					.describe('CLI flag to pass port to dev server (e.g., "--port"). When set, appends <portFlag>=<port> to dev command.'),
 			})
 			.optional(),
 		database: z
@@ -214,6 +218,10 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				portFlag: z
+					.string()
+					.optional()
+					.describe('CLI flag to pass port to dev server (e.g., "--port"). When set, appends <portFlag>=<port> to dev command.'),
 			})
 			.optional(),
 		database: z

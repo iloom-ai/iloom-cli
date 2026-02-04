@@ -41,7 +41,6 @@ export class DevServerCommand {
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private capabilityDetector = new ProjectCapabilityDetector(),
 		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
-		private devServerManager = new DevServerManager(),
 		private settingsManager = new SettingsManager()
 	) {}
 
@@ -105,7 +104,7 @@ export class DevServerCommand {
 			}
 		}
 
-		// 5. Get port for workspace
+		// 5. Get port and portFlag for workspace
 		const cliOverrides = extractSettingsOverrides()
 		const settingsForPort = await this.settingsManager.loadSettings(undefined, cliOverrides)
 		const port = await getWorkspacePort({
@@ -114,10 +113,17 @@ export class DevServerCommand {
 			basePort: settingsForPort.capabilities?.web?.basePort,
 			checkEnvFile: true,
 		})
+		const portFlag = settingsForPort.capabilities?.web?.portFlag
 		const url = `http://localhost:${port}`
 
+		// Create DevServerManager with portFlag support
+		const devServerManagerWithPortFlag = new DevServerManager(
+			undefined,
+			portFlag ? { portFlag } : {}
+		)
+
 		// 6. Check if server already running
-		const isRunning = await this.devServerManager.isServerRunning(port)
+		const isRunning = await devServerManagerWithPortFlag.isServerRunning(port)
 
 		if (isRunning) {
 			const message = `Dev server already running at ${url}`
@@ -154,7 +160,7 @@ export class DevServerCommand {
 
 		// This will block until user stops the server (Ctrl+C)
 		// In JSON mode, redirect npm output to stderr so JSON can go to stdout
-		const processInfo = await this.devServerManager.runServerForeground(
+		const processInfo = await devServerManagerWithPortFlag.runServerForeground(
 			worktree.path,
 			port,
 			!!input.json,

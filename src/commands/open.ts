@@ -35,7 +35,6 @@ export class OpenCommand {
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private capabilityDetector = new ProjectCapabilityDetector(),
 		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
-		private devServerManager = new DevServerManager(),
 		private settingsManager = new SettingsManager()
 	) {}
 
@@ -224,9 +223,16 @@ export class OpenCommand {
 			basePort: settings.capabilities?.web?.basePort,
 			checkEnvFile: true,
 		})
+		const portFlag = settings.capabilities?.web?.portFlag
+
+		// Create DevServerManager with portFlag support
+		const devServerManagerWithPortFlag = new DevServerManager(
+			undefined,
+			portFlag ? { portFlag } : {}
+		)
 
 		// Ensure dev server is running on the port
-		const serverReady = await this.devServerManager.ensureServerRunning(
+		const serverReady = await devServerManagerWithPortFlag.ensureServerRunning(
 			worktree.path,
 			port
 		)

@@ -11,7 +11,14 @@ import * as packageJsonUtils from '../utils/package-json.js'
 vi.mock('execa')
 vi.mock('timers/promises')
 vi.mock('./process/ProcessManager.js')
-vi.mock('../utils/dev-server.js')
+vi.mock('../utils/dev-server.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof devServerUtils>()
+	return {
+		...actual,
+		buildDevServerCommand: vi.fn(),
+		detectAngularProject: vi.fn(),
+	}
+})
 vi.mock('../utils/package-manager.js')
 vi.mock('../utils/package-json.js')
 
@@ -45,6 +52,9 @@ describe('DevServerManager', () => {
 		vi.mocked(packageJsonUtils.getPackageScripts).mockResolvedValue({
 			dev: { command: 'pnpm dev', source: 'package-manager' },
 		})
+
+		// Default: mock detectAngularProject to return false (not Angular project)
+		vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(false)
 	})
 
 	afterEach(async () => {
@@ -104,7 +114,9 @@ describe('DevServerManager', () => {
 			const result = await manager.ensureServerRunning(mockWorktreePath, port)
 
 			expect(result).toBe(true)
-			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath)
+			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath, {
+				port,
+			})
 			expect(execa).toHaveBeenCalledWith(
 				'sh',
 				['-c', 'pnpm dev'],
@@ -407,7 +419,9 @@ describe('DevServerManager', () => {
 				{ DATABASE_URL: 'postgres://test', CUSTOM_VAR: 'value' }
 			)
 
-			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath)
+			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath, {
+				port,
+			})
 			expect(execa).toHaveBeenCalledWith(
 				'sh',
 				['-c', 'pnpm dev'],
@@ -672,6 +686,226 @@ describe('DevServerManager', () => {
 					process.env.ILOOM_DEV_SERVER_TIMEOUT = originalEnv
 				}
 			}
+		})
+	})
+
+	describe('portFlag support', () => {
+		it('should pass portFlag to buildDevServerCommand in startDevServer', async () => {
+			const port = 3087
+
+			// Create manager with portFlag option
+			const managerWithPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+				portFlag: '--port',
+			})
+
+			// Mock server not running, then running
+			vi.mocked(mockProcessManager.detectDevServer)
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce({
+					pid: 12345,
+					name: 'node',
+					command: 'pnpm dev',
+					port,
+					isDevServer: true,
+				})
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev -- --port=3087')
+
+			const mockProcess = {
+				unref: vi.fn(),
+				kill: vi.fn(),
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			vi.mocked(setTimeout).mockResolvedValue(undefined)
+
+			await managerWithPortFlag.ensureServerRunning(mockWorktreePath, port)
+
+			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath, {
+				port,
+				portFlag: '--port',
+			})
+
+			await managerWithPortFlag.cleanup()
+		})
+
+		it('should pass portFlag to buildDevServerCommand in runServerForeground redirectToStderr mode', async () => {
+			const port = 3087
+
+			// Create manager with portFlag option
+			const managerWithPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+				portFlag: '--port',
+			})
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev -- --port=3087')
+
+			const mockProcess = {
+				pid: 12345,
+				then: (resolve: (value: unknown) => void) => {
+					resolve(undefined)
+					return mockProcess
+				},
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			await managerWithPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				true  // redirectToStderr = true
+			)
+
+			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath, {
+				port,
+				portFlag: '--port',
+			})
+
+			await managerWithPortFlag.cleanup()
+		})
+
+		it('should pass portFlag args to runScript in runServerForeground normal mode', async () => {
+			const port = 3087
+
+			// Create manager with portFlag option
+			const managerWithPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+				portFlag: '--port',
+			})
+
+			// Mock Angular detection to return false (not Angular project)
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(false)
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await managerWithPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false  // redirectToStderr = false
+			)
+
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				['--', '--port=3087'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+					foreground: true,
+					noCi: true,
+				})
+			)
+
+			await managerWithPortFlag.cleanup()
+		})
+
+		it('should use auto-detected Angular portFlag when explicit portFlag not provided', async () => {
+			const port = 4200
+
+			// Create manager without portFlag option
+			const managerNoPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+			})
+
+			// Mock Angular detection to return true
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await managerNoPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false
+			)
+
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				['--', '--port=4200'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '4200',
+					}),
+				})
+			)
+
+			await managerNoPortFlag.cleanup()
+		})
+
+		it('should prefer explicit portFlag over Angular auto-detection', async () => {
+			const port = 4200
+
+			// Create manager with custom portFlag
+			const managerWithCustomPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+				portFlag: '-p',
+			})
+
+			// Mock Angular detection to return true (would use --port if no explicit flag)
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await managerWithCustomPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false
+			)
+
+			// Should use explicit -p, not auto-detected --port
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				['--', '-p=4200'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '4200',
+					}),
+				})
+			)
+
+			await managerWithCustomPortFlag.cleanup()
+		})
+
+		it('should not add port flag args when neither explicit portFlag nor Angular project', async () => {
+			const port = 3087
+
+			// Create manager without portFlag option
+			const managerNoPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+			})
+
+			// Mock Angular detection to return false
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(false)
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await managerNoPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false
+			)
+
+			// Should pass empty args array (no port flag)
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				[],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+				})
+			)
+
+			await managerNoPortFlag.cleanup()
 		})
 	})
 })

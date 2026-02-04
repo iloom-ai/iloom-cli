@@ -1,13 +1,30 @@
+import fs from 'fs-extra'
+import path from 'path'
 import { detectPackageManager } from './package-manager.js'
 import { logger } from './logger.js'
 import type { Capability } from '../types/loom.js'
+
+export interface BuildDevServerCommandOptions {
+	port?: number
+	portFlag?: string
+}
+
+/**
+ * Detect if workspace is an Angular project
+ * Checks for angular.json in workspace root
+ */
+export async function detectAngularProject(workspacePath: string): Promise<boolean> {
+	const angularJsonPath = path.join(workspacePath, 'angular.json')
+	return fs.pathExists(angularJsonPath)
+}
 
 /**
  * Build dev server command for workspace
  * Detects package manager and constructs appropriate command
  */
 export async function buildDevServerCommand(
-	workspacePath: string
+	workspacePath: string,
+	options?: BuildDevServerCommandOptions
 ): Promise<string> {
 	const packageManager = await detectPackageManager(workspacePath)
 
@@ -27,6 +44,20 @@ export async function buildDevServerCommand(
 			// Fallback to npm (handles bun and other package managers)
 			logger.warn(`Unknown or unsupported package manager: ${packageManager}, defaulting to npm`)
 			devCommand = 'npm run dev'
+	}
+
+	// Determine effective portFlag
+	let effectivePortFlag = options?.portFlag
+	if (effectivePortFlag === undefined && options?.port !== undefined) {
+		// Auto-detect Angular
+		if (await detectAngularProject(workspacePath)) {
+			effectivePortFlag = '--port'
+		}
+	}
+
+	// Append port flag if both are present
+	if (effectivePortFlag && options?.port !== undefined) {
+		devCommand += ` -- ${effectivePortFlag}=${options.port}`
 	}
 
 	logger.debug(`Dev server command: ${devCommand}`)

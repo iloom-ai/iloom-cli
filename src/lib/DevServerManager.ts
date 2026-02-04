@@ -1,7 +1,7 @@
 import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import { ProcessManager } from './process/ProcessManager.js'
-import { buildDevServerCommand } from '../utils/dev-server.js'
+import { buildDevServerCommand, detectAngularProject } from '../utils/dev-server.js'
 import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
@@ -36,6 +36,11 @@ export interface DevServerManagerOptions {
 	 * Default: 1000 (1 second)
 	 */
 	checkInterval?: number
+
+	/**
+	 * CLI flag to pass port (e.g., '--port'). Auto-detected for Angular if not provided.
+	 */
+	portFlag?: string
 }
 
 /**
@@ -44,7 +49,7 @@ export interface DevServerManagerOptions {
  */
 export class DevServerManager {
 	private readonly processManager: ProcessManager
-	private readonly options: Required<DevServerManagerOptions>
+	private readonly options: Required<Pick<DevServerManagerOptions, 'startupTimeout' | 'checkInterval'>> & { portFlag: string | undefined }
 	private runningServers: Map<number, ExecaChildProcess> = new Map()
 
 	constructor(
@@ -55,6 +60,7 @@ export class DevServerManager {
 		this.options = {
 			startupTimeout: options.startupTimeout ?? getStartupTimeout(),
 			checkInterval: options.checkInterval ?? 1000,
+			portFlag: options.portFlag,
 		}
 	}
 
@@ -103,8 +109,11 @@ export class DevServerManager {
 			return
 		}
 
-		// Build dev server command
-		const devCommand = await buildDevServerCommand(worktreePath)
+		// Build dev server command with port flag support
+		const devCommand = await buildDevServerCommand(worktreePath, {
+			port,
+			...(this.options.portFlag !== undefined && { portFlag: this.options.portFlag }),
+		})
 		logger.debug(`Starting dev server with command: ${devCommand}`)
 
 		// Start server in background
@@ -182,6 +191,23 @@ export class DevServerManager {
 	}
 
 	/**
+	 * Get the effective port flag, using explicit config or auto-detecting for Angular projects
+	 * @param worktreePath - Path to check for Angular project
+	 * @returns The port flag to use, or undefined if none
+	 */
+	private async getEffectivePortFlag(worktreePath: string): Promise<string | undefined> {
+		// Explicit config takes precedence (including empty string for opt-out)
+		if (this.options.portFlag !== undefined) {
+			return this.options.portFlag || undefined // Convert empty string to undefined (opt-out)
+		}
+		// Auto-detect Angular projects
+		if (await detectAngularProject(worktreePath)) {
+			return '--port'
+		}
+		return undefined
+	}
+
+	/**
 	 * Run dev server in foreground mode (blocking)
 	 * This method blocks until the server is stopped (e.g., via Ctrl+C)
 	 *
@@ -204,7 +230,10 @@ export class DevServerManager {
 		// Note: redirectToStderr is handled via custom execa call when needed
 		if (redirectToStderr) {
 			// For redirectToStderr, we still need direct execa control for custom stdio
-			const devCommand = await buildDevServerCommand(worktreePath)
+			const devCommand = await buildDevServerCommand(worktreePath, {
+				port,
+				...(this.options.portFlag !== undefined && { portFlag: this.options.portFlag }),
+			})
 			logger.debug(`Starting dev server with command: ${devCommand}`)
 
 			const serverProcess = execa('sh', ['-c', devCommand], {
@@ -227,8 +256,15 @@ export class DevServerManager {
 			return processInfo
 		}
 
+		// Build args array for port flag (for runScript path)
+		const portFlagArgs: string[] = []
+		const effectivePortFlag = await this.getEffectivePortFlag(worktreePath)
+		if (effectivePortFlag) {
+			portFlagArgs.push('--', `${effectivePortFlag}=${port}`)
+		}
+
 		// Use runScript for standard foreground mode
-		return await runScript('dev', worktreePath, [], {
+		return await runScript('dev', worktreePath, portFlagArgs, {
 			env: {
 				...envOverrides,
 				PORT: port.toString(),
