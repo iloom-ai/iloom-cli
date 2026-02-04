@@ -69,17 +69,18 @@ Use `gh pr create` with a clear title and summary body. Include:
 - Summary of changes (bullet points)
 - Test plan if applicable
 
-### 8. Merge Pull Request
+### 8. Return to Original Directory and Remove Worktree
 
-```bash
-gh pr merge <pr-number> --squash --delete-branch
-```
-
-### 9. Return to Original Directory and Cleanup
-
+Return to original directory and remove the worktree before merging (to avoid branch conflicts):
 ```bash
 cd <original-directory>
 git worktree remove ../<repo-name>_quick-fix_<branch-name>
+```
+
+### 9. Merge Pull Request
+
+```bash
+gh pr merge <pr-number> --squash --delete-branch
 git pull --prune
 ```
 
