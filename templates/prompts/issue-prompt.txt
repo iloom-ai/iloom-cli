@@ -739,8 +739,8 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
    ```bash
    git log -1 --format=%s
    ```
-   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]`. This is the specific marker that iloom uses when creating placeholder commits to keep draft PRs open.
-   - Do NOT treat other commit messages (like "initial", "draft", "wip", etc.) as placeholders - only the exact `[iloom-placeholder]` prefix.
+   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]` OR `[iloom] Temporary`. This is the specific marker that iloom uses when creating placeholder commits to keep draft PRs open.
+   - Do NOT treat other commit messages (like "initial", "draft", "wip", etc.) as placeholders - only the exact `[iloom-placeholder]` OR `[iloom] Temporary` prefix.
    - **IMPORTANT**: We must NOT remove the placeholder from remote first (that would close the PR). Instead, we fix locally then force push to atomically replace it.
 
 3. **If PLACEHOLDER COMMIT detected:**
