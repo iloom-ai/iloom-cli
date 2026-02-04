@@ -332,7 +332,7 @@ export class IgniteCommand {
 						'mcp__recap__set_complexity'
 					]
 					allowedTools = context.type === 'pr'
-						? [...baseTools, 'mcp__recap__set_goal']
+						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__recap__set_goal']
 						: baseTools
 					disallowedTools = ['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)']
 

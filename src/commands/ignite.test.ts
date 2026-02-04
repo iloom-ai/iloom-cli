@@ -1011,7 +1011,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
-				// For PR workflows, set_goal is included at the end (user's purpose unclear)
+				// For PR workflows, get_pr and set_goal are included (user's purpose unclear)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
 					'mcp__issue_management__get_issue',
 					'mcp__issue_management__get_comment',
@@ -1022,6 +1022,7 @@ describe('IgniteCommand', () => {
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__issue_management__get_pr',
 					'mcp__recap__set_goal',
 				])
 			} finally {
@@ -1114,6 +1115,50 @@ describe('IgniteCommand', () => {
 					'mcp__recap__set_complexity',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should include mcp__issue_management__get_pr in allowedTools for PR workflows', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feature_pr_789')
+
+			try {
+				await command.execute()
+
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].allowedTools).toContain('mcp__issue_management__get_pr')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should NOT include mcp__issue_management__get_pr in allowedTools for issue workflows', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+
+			try {
+				await command.execute()
+
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].allowedTools).not.toContain('mcp__issue_management__get_pr')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
