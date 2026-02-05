@@ -314,12 +314,12 @@ Get your Gemini API key from [Google AI Studio](https://aistudio.google.com/apik
 
 **Step 2: Configure the Code Review Agent**
 
-Add the `iloom-issue-reviewer` agent configuration to `.iloom/settings.json`:
+Add the `iloom-code-reviewer` agent configuration to `.iloom/settings.json`:
 
 ```json
 {
   "agents": {
-    "iloom-issue-reviewer": {
+    "iloom-code-reviewer": {
       "providers": {
         "gemini": "gemini-3-pro-preview"
       }
