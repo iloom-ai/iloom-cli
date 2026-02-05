@@ -316,9 +316,11 @@ async function main() {
 | Bug investigation / analysis - ESPECIALLY INVOLVING 3rd PARTY APIs/LIBRARIES | \`@agent-iloom-issue-analyzer\` → present findings → offer to fix |
 | Code changes | \`@agent-iloom-issue-implementer\` - TELL THE AGENT NOT TO MAKE/UPDATE ISSUE COMMENTS TO AVOID POLLUTION |
 | On 3rd repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
-| On 4rd or more repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyzer\` → if approved, \`@agent-iloom-issue-planner\` → if approved, \`@agent-iloom-issue-implementer\`  - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
-| New features / complex changes | \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` |
-| Deep questions (how/why something works) | \`@agent-iloom-issue-analyzer\` |`;
+| On 4rd or more repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyzer\` → if approved, \`@agent-iloom-issue-planner\` → if approved, \`@agent-iloom-issue-implementer\`  - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
+| New features / complex changes | \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
+| Deep questions (how/why something works) | \`@agent-iloom-issue-analyzer\` |
+
+Regarding creating/updating comments - if it's a trivial fix or quick answer, DO NOT create or update issue comments to avoid polluting the issue history. Only create/update comments for complex changes or new features as outlined above.`;
 
       const output = {
         hookSpecificOutput: {
