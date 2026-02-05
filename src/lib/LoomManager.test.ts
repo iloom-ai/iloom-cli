@@ -118,6 +118,7 @@ vi.mock('./LoomLauncher.js', () => ({
 // Shared mock functions for verification in tests
 const mockCreateDraftPR = vi.fn()
 const mockCheckForExistingPR = vi.fn()
+let mockIssuePrefix = '#'
 vi.mock('./PRManager.js', () => {
   // Use a class-like factory that creates fresh instances
   // This avoids issues with mockReset clearing the constructor implementation
@@ -125,6 +126,7 @@ vi.mock('./PRManager.js', () => {
     PRManager: class MockPRManager {
       createDraftPR = mockCreateDraftPR
       checkForExistingPR = mockCheckForExistingPR
+      get issuePrefix() { return mockIssuePrefix }
     },
   }
 })
@@ -146,6 +148,7 @@ describe('LoomManager', () => {
   let mockSettings: vi.Mocked<SettingsManager>
 
   beforeEach(() => {
+    mockIssuePrefix = '#' // Reset to GitHub default
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     mockGitHub = new GitHubService() as vi.Mocked<GitHubService>
     mockBranchNaming = new DefaultBranchNamingService() as vi.Mocked<DefaultBranchNamingService>
@@ -492,6 +495,7 @@ describe('LoomManager', () => {
       // Configure Linear provider (doesn't support PRs natively)
       mockGitHub.supportsPullRequests = false
       mockGitHub.providerName = 'linear'
+      mockIssuePrefix = '' // Linear issues use empty prefix (identifier already includes team key)
 
       // Mock settings with github-draft-pr mode
       // (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
@@ -527,10 +531,11 @@ describe('LoomManager', () => {
       expect(result.type).toBe('issue')
 
       // Verify draft PR was created via PRManager (not Linear's issue tracker)
+      // Linear identifier is 123 with empty prefix, so body contains "Fixes 123"
       expect(mockCreateDraftPR).toHaveBeenCalledWith(
         expect.any(String), // branch name
         'Test Linear Issue', // PR title from issue
-        expect.stringContaining('PR for issue'), // PR body
+        expect.stringContaining('Fixes 123'), // PR body with Fixes keyword (no prefix for Linear)
         expectedPath // worktree path
       )
 

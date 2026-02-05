@@ -276,9 +276,13 @@ export class LoomManager {
         // For issue mode: use issue title and reference issue number
         // For branch mode: use branch name and generic description
         const prTitle = issueData?.title ?? `Work on ${branchName}`
-        const prBody = input.type === 'issue'
-          ? `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
-          : `Branch: ${branchName}\n\nThis PR was created automatically by iloom.`
+        let prBody: string
+        if (input.type === 'issue') {
+          const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
+          prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
+        } else {
+          prBody = `Branch: ${branchName}\n\n---\n*This PR was created automatically by iloom.*`
+        }
 
         // Create draft PR
         getLogger().info('Creating draft PR...')
