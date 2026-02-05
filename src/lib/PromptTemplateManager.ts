@@ -56,7 +56,7 @@ export interface TemplateVariables {
 	// Multi-language support variables - mutually exclusive
 	HAS_PACKAGE_JSON?: boolean  // True when project has package.json
 	NO_PACKAGE_JSON?: boolean   // True when project does not have package.json (non-Node.js projects)
-	// Review agent configuration variables
+	// Review agent configuration variables (code reviewer)
 	REVIEW_ENABLED?: boolean               // True if review is enabled (defaults to true)
 	REVIEW_CLAUDE_MODEL?: string           // Claude model if configured (defaults to 'sonnet')
 	REVIEW_GEMINI_MODEL?: string           // Gemini model if configured
@@ -64,6 +64,21 @@ export interface TemplateVariables {
 	HAS_REVIEW_CLAUDE?: boolean            // True if claude provider configured (defaults to true)
 	HAS_REVIEW_GEMINI?: boolean            // True if gemini provider configured
 	HAS_REVIEW_CODEX?: boolean             // True if codex provider configured
+	// Artifact reviewer configuration variables
+	ARTIFACT_REVIEW_ENABLED?: boolean               // True if artifact review is enabled (defaults to true)
+	ARTIFACT_REVIEW_CLAUDE_MODEL?: string           // Claude model if configured (defaults to 'sonnet')
+	ARTIFACT_REVIEW_GEMINI_MODEL?: string           // Gemini model if configured
+	ARTIFACT_REVIEW_CODEX_MODEL?: string            // Codex model if configured
+	HAS_ARTIFACT_REVIEW_CLAUDE?: boolean            // True if claude provider configured (defaults to true)
+	HAS_ARTIFACT_REVIEW_GEMINI?: boolean            // True if gemini provider configured
+	HAS_ARTIFACT_REVIEW_CODEX?: boolean             // True if codex provider configured
+	// Per-agent review flags (whether artifacts should be reviewed before posting)
+	ENHANCER_REVIEW_ENABLED?: boolean               // True if enhancer artifacts should be reviewed
+	ANALYZER_REVIEW_ENABLED?: boolean               // True if analyzer artifacts should be reviewed
+	PLANNER_REVIEW_ENABLED?: boolean                // True if planner artifacts should be reviewed
+	ANALYZE_AND_PLAN_REVIEW_ENABLED?: boolean       // True if analyze-and-plan artifacts should be reviewed
+	IMPLEMENTER_REVIEW_ENABLED?: boolean            // True if implementer artifacts should be reviewed
+	COMPLEXITY_REVIEW_ENABLED?: boolean             // True if complexity evaluator artifacts should be reviewed
 	// Planning mode variables - mutually exclusive
 	EXISTING_ISSUE_MODE?: boolean   // True when decomposing an existing issue (il plan 42)
 	FRESH_PLANNING_MODE?: boolean   // True when starting fresh planning session (il plan "feature idea")

@@ -2983,4 +2983,107 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('none')
 		})
 	})
+
+	describe('AgentSettingsSchema review field', () => {
+		it('should accept review: true', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-issue-enhancer': {
+						review: true,
+					},
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-issue-enhancer']?.review).toBe(true)
+		})
+
+		it('should accept review: false', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-issue-enhancer': {
+						review: false,
+					},
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-issue-enhancer']?.review).toBe(false)
+		})
+
+		it('should default review to undefined when omitted (defaults to false at runtime)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-issue-enhancer': {
+						model: 'sonnet',
+					},
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			// review is undefined in schema (defaults to false at runtime)
+			expect(result.agents?.['iloom-issue-enhancer']?.review).toBeUndefined()
+		})
+
+		it('should coexist with other fields (model, enabled, providers)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-issue-planner': {
+						model: 'opus',
+						enabled: true,
+						providers: {
+							claude: 'sonnet',
+						},
+						review: true,
+					},
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-issue-planner']?.model).toBe('opus')
+			expect(result.agents?.['iloom-issue-planner']?.enabled).toBe(true)
+			expect(result.agents?.['iloom-issue-planner']?.providers?.claude).toBe('sonnet')
+			expect(result.agents?.['iloom-issue-planner']?.review).toBe(true)
+		})
+	})
 })

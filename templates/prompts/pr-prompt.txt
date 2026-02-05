@@ -123,6 +123,70 @@ After handling each request, summarize what was done and confirm you're still av
 
 Use `recap.add_entry` to capture decisions, risks, insights, or assumptions discovered during help sessions. Do not log status updates or task completions.
 
+{{#if ARTIFACT_REVIEW_ENABLED}}
+---
+
+## Artifact Review Checkpoints
+
+When workflow agents complete their tasks and produce artifacts, check if artifact review is enabled for that agent:
+
+{{#if ANALYZER_REVIEW_ENABLED}}
+**After @agent-iloom-issue-analyzer completes:**
+1. Capture the analyzer's output before presenting to user
+2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for PR #{{PR_NUMBER}}: [ANALYZER_OUTPUT]"
+3. Wait for review results
+4. If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+   b. Automatically re-run analyzer with the reviewer's feedback
+{{else}}
+   a. Present review findings to user
+   b. Ask: "The artifact reviewer suggests improvements to the analysis. How would you like to proceed?"
+      - Options: "Accept analysis as-is", "Regenerate with feedback", "Manually edit"
+   c. If regenerate: Re-run analyzer with feedback
+   d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+5. If review approves: Present results to user
+{{/if}}
+
+{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
+**After @agent-iloom-issue-analyze-and-plan completes:**
+1. Capture the agent's output before presenting to user
+2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for PR #{{PR_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+3. Wait for review results
+4. If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+   b. Automatically re-run analyze-and-plan with the reviewer's feedback
+{{else}}
+   a. Present review findings to user
+   b. Ask: "The artifact reviewer suggests improvements to the plan. How would you like to proceed?"
+      - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
+   c. If regenerate: Re-run analyze-and-plan with feedback
+   d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+5. If review approves: Proceed to implementation
+{{/if}}
+
+{{#if IMPLEMENTER_REVIEW_ENABLED}}
+**After @agent-iloom-issue-implementer completes:**
+1. Capture the implementer's summary output
+2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for PR #{{PR_NUMBER}}: [IMPLEMENTER_OUTPUT]"
+3. Wait for review results
+4. If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+   b. Automatically re-run implementer with the reviewer's feedback
+{{else}}
+   a. Present review findings to user
+   b. Ask: "The artifact reviewer suggests improvements. How would you like to proceed?"
+      - Options: "Accept implementation as-is", "Address feedback", "Manually edit"
+   c. If address feedback: Re-run implementer with feedback
+{{/if}}
+5. If review approves: Proceed to code review
+{{/if}}
+{{/if}}
+
 ---
 
 ## Code Review

@@ -140,6 +140,12 @@ Configure model preferences for different agent types. This allows you to use mo
 - `iloom-issue-implementer` - Implements GitHub issues exactly as specified
 - `iloom-issue-planner` - Creates detailed implementation plans for issues
 - `iloom-code-reviewer` - Reviews uncommitted code changes
+- `iloom-artifact-reviewer` - Reviews workflow artifacts (enhancements, analyses, plans) before posting
+
+**Agent Configuration Options**:
+- `model` - Claude model to use (sonnet, opus, haiku)
+- `review` - Enable artifact review before posting (true/false) - only for workflow agents
+- `providers` - Multi-provider configuration for reviewer agents (see below)
 
 **Budget-friendly configuration**:
 
@@ -150,6 +156,8 @@ iloom config "make my settings more budget friendly"
 ```
 
 Or manually configure specific agents:
+
+**Basic Example**:
 ```json
 {
   "agents": {
@@ -179,6 +187,46 @@ Or manually configure specific agents:
 ```
 
 This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
+
+**Artifact Review Configuration**:
+
+The artifact reviewer can validate workflow outputs before they are posted to issues. To enable artifact review:
+
+1. Configure the artifact reviewer with providers
+2. Enable `review: true` on workflow agents whose output you want reviewed
+
+```json
+{
+  "agents": {
+    "iloom-artifact-reviewer": {
+      "enabled": true,
+      "providers": {
+        "claude": "sonnet",
+        "gemini": "gemini-3-pro-preview"
+      }
+    },
+    "iloom-issue-planner": {
+      "review": true
+    },
+    "iloom-issue-analyzer": {
+      "review": true
+    }
+  }
+}
+```
+
+**Provider options for reviewers**:
+- `claude` - Use Claude for review (sonnet, opus, haiku)
+- `gemini` - Use Gemini via MCP (requires Gemini MCP server configured)
+- `codex` - Use Codex via MCP (requires Codex MCP server configured)
+
+**Workflow agents that support the `review` flag**:
+- `iloom-issue-enhancer`
+- `iloom-issue-analyzer`
+- `iloom-issue-planner`
+- `iloom-issue-analyze-and-plan`
+- `iloom-issue-implementer`
+- `iloom-issue-complexity-evaluator`
 
 #### capabilities.web.basePort (optional)
 Configure the base port number for web workspace port calculations. Each workspace gets a unique port calculated as `basePort + identifier`.

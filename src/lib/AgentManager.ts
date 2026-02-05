@@ -133,6 +133,40 @@ export class AgentManager {
 				templateVariables.HAS_REVIEW_CODEX = !!providers.codex
 			}
 
+			// Extract artifact reviewer config from settings with defaults
+			const artifactReviewerSettings = settings?.agents?.['iloom-artifact-reviewer']
+			const artifactReviewEnabled = artifactReviewerSettings?.enabled !== false  // Default to true
+
+			templateVariables.ARTIFACT_REVIEW_ENABLED = artifactReviewEnabled
+
+			if (artifactReviewEnabled) {
+				const artifactProviders = artifactReviewerSettings?.providers ?? {}
+				const hasAnyArtifactProvider = Object.keys(artifactProviders).length > 0
+
+				// Default to Claude if no providers specified
+				const artifactClaudeModel = artifactProviders.claude ?? (hasAnyArtifactProvider ? undefined : 'sonnet')
+				if (artifactClaudeModel) {
+					templateVariables.ARTIFACT_REVIEW_CLAUDE_MODEL = artifactClaudeModel
+				}
+				if (artifactProviders.gemini) {
+					templateVariables.ARTIFACT_REVIEW_GEMINI_MODEL = artifactProviders.gemini
+				}
+				if (artifactProviders.codex) {
+					templateVariables.ARTIFACT_REVIEW_CODEX_MODEL = artifactProviders.codex
+				}
+				templateVariables.HAS_ARTIFACT_REVIEW_CLAUDE = !!artifactClaudeModel
+				templateVariables.HAS_ARTIFACT_REVIEW_GEMINI = !!artifactProviders.gemini
+				templateVariables.HAS_ARTIFACT_REVIEW_CODEX = !!artifactProviders.codex
+			}
+
+			// Extract per-agent review flags (defaults to false for each)
+			templateVariables.ENHANCER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-enhancer']?.review === true
+			templateVariables.ANALYZER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-analyzer']?.review === true
+			templateVariables.PLANNER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-planner']?.review === true
+			templateVariables.ANALYZE_AND_PLAN_REVIEW_ENABLED = settings?.agents?.['iloom-issue-analyze-and-plan']?.review === true
+			templateVariables.IMPLEMENTER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-implementer']?.review === true
+			templateVariables.COMPLEXITY_REVIEW_ENABLED = settings?.agents?.['iloom-issue-complexity-evaluator']?.review === true
+
 			for (const [agentName, agentConfig] of Object.entries(agents)) {
 				agents[agentName] = {
 					...agentConfig,

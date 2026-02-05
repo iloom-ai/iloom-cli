@@ -30,6 +30,10 @@ export const AgentSettingsSchema = z.object({
 		)
 		.optional()
 		.describe('Map of review providers to model names. Keys: claude, gemini, codex. Values: model name strings (e.g., "sonnet", "gemini-3-pro-preview", "gpt-5.2-codex")'),
+	review: z
+		.boolean()
+		.optional()
+		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
 })
 
 /**
@@ -331,7 +335,8 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
-				'iloom-code-reviewer (reviews code changes against requirements)',
+				'iloom-code-reviewer (reviews code changes against requirements), ' +
+				'iloom-artifact-reviewer (reviews artifacts before posting)',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -509,7 +514,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
-				'iloom-code-reviewer (reviews code changes against requirements)',
+				'iloom-code-reviewer (reviews code changes against requirements), ' +
+				'iloom-artifact-reviewer (reviews artifacts before posting)',
 		),
 	spin: z
 		.object({

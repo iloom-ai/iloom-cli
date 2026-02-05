@@ -328,6 +328,26 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
 {{/if}}
+{{#if ENHANCER_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+2.6. Artifact Review (Enhancement):
+   - The enhancer output should be reviewed before posting
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+     b. Automatically re-run @agent-iloom-issue-enhancer with the reviewer's feedback, return to step 2
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
+        - Options: "Accept enhancement as-is", "Regenerate with feedback", "Manually edit"
+     c. If regenerate: Re-run @agent-iloom-issue-enhancer with feedback, return to step 2
+     d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to step 3
+{{/if}}
+{{/if}}
 3. Mark todo #2 and #3 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. See results at: [issue comment URL]. How would you like to proceed?"
@@ -378,6 +398,26 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
+{{/if}}
+{{#if COMPLEXITY_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+2.6. Artifact Review (Complexity Evaluation):
+   - The complexity evaluator output should be reviewed before posting
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+     b. Automatically re-run @agent-iloom-issue-complexity-evaluator with the reviewer's feedback, return to step 2
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
+        - Options: "Accept evaluation as-is", "Regenerate with feedback", "Manually edit"
+     c. If regenerate: Re-run @agent-iloom-issue-complexity-evaluator with feedback, return to step 2
+     d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to step 3
+{{/if}}
 {{/if}}
 3. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
@@ -447,6 +487,26 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
+{{/if}}
+{{#if ANALYZER_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+2.6. Artifact Review (Analysis):
+   - The analyzer output should be reviewed before posting
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+     b. Automatically re-run @agent-iloom-issue-analyzer with the reviewer's feedback, return to step 2
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
+        - Options: "Accept analysis as-is", "Regenerate with feedback", "Manually edit"
+     c. If regenerate: Re-run @agent-iloom-issue-analyzer with feedback, return to step 2
+     d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to step 3
+{{/if}}
 {{/if}}
 3. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
 4. Use AskUserQuestion tool with a single question:
@@ -528,6 +588,26 @@ Execute combined analyze-and-plan agent:
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
 {{/if}}
+{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+3.6. Artifact Review (Analysis and Plan):
+   - The analyze-and-plan output should be reviewed before posting
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+     b. Automatically re-run @agent-iloom-issue-analyze-and-plan with the reviewer's feedback, return to step 2
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
+        - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
+     c. If regenerate: Re-run @agent-iloom-issue-analyze-and-plan with feedback, return to step 2
+     d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to step 4
+{{/if}}
+{{/if}}
 4. Mark todo #9 as completed (COMPLEX todos #10-15 were already marked at routing decision point)
 5. Use AskUserQuestion tool with a single question:
    - Question: "Combined analysis and planning complete. See results at: [issue comment URL]. How would you like to proceed?"
@@ -569,6 +649,26 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
+{{/if}}
+{{#if PLANNER_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+2.6. Artifact Review (Plan):
+   - The planner output should be reviewed before posting
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
+     b. Automatically re-run @agent-iloom-issue-planner with the reviewer's feedback, return to step 2
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
+        - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
+     c. If regenerate: Re-run @agent-iloom-issue-planner with feedback, return to step 2
+     d. If manually edit: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to step 3
+{{/if}}
 {{/if}}
 3. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
 4. Use AskUserQuestion tool with a single question:

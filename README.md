@@ -372,6 +372,50 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 | `github-pr` | Push branch and create a GitHub PR on `il finish`. Worktree cleanup is optional. |
 | `github-draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
 
+### Artifact Review
+
+iloom can optionally review workflow artifacts (enhancements, analyses, implementation plans) before posting them to issues. This helps catch quality issues early and ensures artifacts meet project standards.
+
+**Supported Agents for Review:**
+
+| Agent | Artifact Type |
+|-------|---------------|
+| `iloom-issue-enhancer` | Issue enhancements |
+| `iloom-issue-analyzer` | Technical analyses |
+| `iloom-issue-planner` | Implementation plans |
+| `iloom-issue-analyze-and-plan` | Combined analysis and plans |
+| `iloom-issue-implementer` | Implementation summaries |
+| `iloom-issue-complexity-evaluator` | Complexity assessments |
+
+**Configuration:**
+
+```json
+{
+  "agents": {
+    "iloom-artifact-reviewer": {
+      "enabled": true,
+      "providers": {
+        "claude": "sonnet",
+        "gemini": "gemini-3-pro-preview"
+      }
+    },
+    "iloom-issue-planner": {
+      "review": true
+    },
+    "iloom-issue-analyzer": {
+      "review": true
+    }
+  }
+}
+```
+
+- `iloom-artifact-reviewer.providers`: Configure which AI providers to use for review (claude, gemini, codex)
+- `review: true` on workflow agents: Enable artifact review for that agent's output
+
+When review is enabled, the artifact reviewer validates quality and completeness against artifact-specific criteria before posting. If issues are found, you can choose to revise or proceed.
+
+**Tip:** For high-stakes projects, enable review on `iloom-issue-planner` to catch issues in implementation plans before development begins.
+
 ### Rebase Conflict Resolution
 
 When `il finish` or `il rebase` encounter rebase conflicts, iloom automatically launches Claude to help resolve them. During conflict resolution, the following git commands are **auto-approved** so Claude can work efficiently without requiring manual permission for each command:
