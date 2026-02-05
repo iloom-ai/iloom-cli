@@ -395,6 +395,12 @@ export class LoomManager {
     }
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
+    // If a draft PR was created, add its number to pr_numbers
+    // This ensures pr_numbers and prUrls are consistent (fixes #555)
+    if (draftPrNumber && !pr_numbers.includes(String(draftPrNumber))) {
+      pr_numbers.push(String(draftPrNumber))
+    }
+
     // Generate random session ID for Claude Code resume support
     // Each loom gets a unique session ID, enabling fresh Claude sessions
     const sessionId = generateRandomSessionId()

@@ -539,6 +539,8 @@ describe('LoomManager', () => {
         expectedPath,
         expect.objectContaining({
           draftPrNumber: 99,
+          pr_numbers: ['99'],
+          prUrls: { '99': 'https://github.com/owner/repo/pull/99' },
         })
       )
     })
@@ -585,11 +587,13 @@ describe('LoomManager', () => {
         expectedPath // worktree path
       )
 
-      // Verify draft PR number was stored in metadata
+      // Verify draft PR number was stored in metadata with pr_numbers populated
       expect(mockWriteMetadata).toHaveBeenCalledWith(
         expectedPath,
         expect.objectContaining({
           draftPrNumber: 99,
+          pr_numbers: ['99'],
+          prUrls: { '99': 'https://github.com/owner/repo/pull/99' },
         })
       )
     })
@@ -642,11 +646,13 @@ describe('LoomManager', () => {
       // Verify createDraftPR was NOT called since we're reusing existing PR
       expect(mockCreateDraftPR).not.toHaveBeenCalled()
 
-      // Verify existing PR number was stored in metadata
+      // Verify existing PR number was stored in metadata with pr_numbers populated
       expect(mockWriteMetadata).toHaveBeenCalledWith(
         expectedPath,
         expect.objectContaining({
           draftPrNumber: 42,
+          pr_numbers: ['42'],
+          prUrls: { '42': 'https://github.com/owner/repo/pull/42' },
         })
       )
     })
