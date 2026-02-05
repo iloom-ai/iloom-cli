@@ -5,6 +5,7 @@ import { buildDevServerCommand, detectAngularProject } from '../utils/dev-server
 import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
+import { createNgShim, type NgShimResult } from '../utils/ng-shim.js'
 
 /**
  * Default startup timeout in milliseconds (180 seconds)
@@ -51,6 +52,7 @@ export class DevServerManager {
 	private readonly processManager: ProcessManager
 	private readonly options: Required<Pick<DevServerManagerOptions, 'startupTimeout' | 'checkInterval'>> & { portFlag: string | undefined }
 	private runningServers: Map<number, ExecaChildProcess> = new Map()
+	private shimCleanups: Array<() => Promise<void>> = []
 
 	constructor(
 		processManager?: ProcessManager,
@@ -256,30 +258,73 @@ export class DevServerManager {
 			return processInfo
 		}
 
-		// Build args array for port flag (for runScript path)
-		const portFlagArgs: string[] = []
-		const effectivePortFlag = await this.getEffectivePortFlag(worktreePath)
-		if (effectivePortFlag) {
-			portFlagArgs.push('--', `${effectivePortFlag}=${port}`)
+		// Check if we should use the PATH shim approach for Angular
+		// PATH shim is used when:
+		// 1. No explicit portFlag is configured (auto-detection mode)
+		// 2. Angular project is detected
+		const usePathShim = this.options.portFlag === undefined && await detectAngularProject(worktreePath)
+
+		let ngShim: NgShimResult | undefined
+		let shimEnv: Record<string, string> = {}
+
+		if (usePathShim) {
+			logger.debug('Angular project detected, using PATH shim for port injection')
+			ngShim = await createNgShim(port, worktreePath)
+			this.shimCleanups.push(ngShim.cleanup)
+
+			// Prepend shim directory to PATH and set environment variables for the shim
+			const currentPath = process.env.PATH ?? ''
+			shimEnv = {
+				PATH: `${ngShim.shimDir}:${currentPath}`,
+				ILOOM_WORKSPACE_PATH: worktreePath,
+				ILOOM_TARGET_PORT: port.toString(),
+				// Suppress Angular CLI interactive prompts (autocompletion setup, analytics, etc.)
+				NG_CLI_ANALYTICS: 'ci',
+			}
+			logger.info(`[DEBUG] Shim dir: ${ngShim.shimDir}`)
+			logger.info(`[DEBUG] PATH starts with: ${shimEnv.PATH?.substring(0, 200)}...`)
 		}
 
-		// Use runScript for standard foreground mode
-		return await runScript('dev', worktreePath, portFlagArgs, {
-			env: {
-				...envOverrides,
-				PORT: port.toString(),
-			},
-			foreground: true,
-			...(onProcessStarted && { onStart: onProcessStarted }),
-			noCi: true, // Dev servers should not have CI=true
-		})
+		// Build args array for port flag (for non-Angular projects with explicit portFlag)
+		const portFlagArgs: string[] = []
+		if (!usePathShim) {
+			const effectivePortFlag = await this.getEffectivePortFlag(worktreePath)
+			if (effectivePortFlag) {
+				portFlagArgs.push('--', `${effectivePortFlag}=${port}`)
+			}
+		}
+
+		try {
+			// Use runScript for standard foreground mode
+			return await runScript('dev', worktreePath, portFlagArgs, {
+				env: {
+					...shimEnv,
+					...envOverrides,
+					PORT: port.toString(),
+				},
+				foreground: true,
+				...(onProcessStarted && { onStart: onProcessStarted }),
+				noCi: true, // Dev servers should not have CI=true
+			})
+		} finally {
+			// Clean up the shim when the process exits
+			if (ngShim) {
+				await ngShim.cleanup()
+				// Remove from cleanup list since we've already cleaned up
+				const index = this.shimCleanups.indexOf(ngShim.cleanup)
+				if (index !== -1) {
+					this.shimCleanups.splice(index, 1)
+				}
+			}
+		}
 	}
 
 	/**
-	 * Clean up all running server processes
+	 * Clean up all running server processes and shim directories
 	 * This should be called when the manager is being disposed
 	 */
 	async cleanup(): Promise<void> {
+		// Clean up running servers
 		for (const [port, serverProcess] of this.runningServers.entries()) {
 			try {
 				logger.debug(`Cleaning up server process on port ${port}`)
@@ -291,5 +336,17 @@ export class DevServerManager {
 			}
 		}
 		this.runningServers.clear()
+
+		// Clean up any remaining shim directories
+		for (const cleanupFn of this.shimCleanups) {
+			try {
+				await cleanupFn()
+			} catch (error) {
+				logger.warn(
+					`Failed to cleanup shim directory: ${error instanceof Error ? error.message : 'Unknown error'}`
+				)
+			}
+		}
+		this.shimCleanups = []
 	}
 }

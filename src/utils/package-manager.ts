@@ -4,6 +4,16 @@ import { getPackageScripts } from './package-json.js'
 import fs from 'fs-extra'
 import path from 'path'
 
+/**
+ * Escape a string for safe use in shell commands
+ * Wraps in single quotes and escapes any single quotes within
+ */
+function shellEscape(arg: string): string {
+  // Wrap in single quotes and escape any single quotes within
+  // 'foo'bar' becomes 'foo'\''bar'
+  return `'${arg.replace(/'/g, "'\\''")}'`
+}
+
 export type PackageManager = 'pnpm' | 'npm' | 'yarn'
 
 /**
@@ -211,28 +221,66 @@ export async function runScript(
 
     if (scriptConfig.source === 'iloom-config') {
       // Execute directly as shell command (for non-Node.js projects)
-      // Use "$@" pattern to properly handle argument escaping via the shell
-      getLogger().debug(`Executing shell command: ${scriptConfig.command} with args: ${args.join(' ')}`)
+      // npm 10+ has issues with '--' separator, so if command starts with npm and has '--' in args,
+      // we need to build a fully escaped command string instead of using "$@"
+      const isNpmCommand = scriptConfig.command.startsWith('npm ')
+      const hasArgSeparator = args.includes('--')
 
-      execaProcess = execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
-        cwd,
-        stdio,
-        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
-        env,
-        verbose: isDebugMode,
-      })
+      if (isNpmCommand && hasArgSeparator && args.length > 0) {
+        // Build fully escaped command for npm
+        const escapedArgs = args.map(shellEscape).join(' ')
+        const fullCommand = `${scriptConfig.command} ${escapedArgs}`
+        getLogger().debug(`Executing npm iloom-config command via shell: ${fullCommand}`)
+        execaProcess = execa('sh', ['-c', fullCommand], {
+          cwd,
+          stdio,
+          ...(!options.foreground && { timeout: 600000 }),
+          env,
+          verbose: isDebugMode,
+        })
+      } else {
+        // Use "$@" pattern for non-npm commands or when no args
+        getLogger().debug(`Executing shell command: ${scriptConfig.command} with args: ${args.join(' ')}`)
+        execaProcess = execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
+          cwd,
+          stdio,
+          ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+          env,
+          verbose: isDebugMode,
+        })
+      }
     } else {
       // Execute via package manager (for Node.js projects)
       const packageManager = await detectPackageManager(cwd)
       const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
 
-      execaProcess = execa(packageManager, [...command, ...args], {
-        cwd,
-        stdio,
-        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
-        env,
-        verbose: isDebugMode,
-      })
+      // npm 10+ has issues with '--' separator when args are passed as discrete elements
+      // Use shell mode for npm when args contain '--' separator to ensure proper parsing
+      const hasArgSeparator = args.includes('--')
+      const useShellForNpm = packageManager === 'npm' && hasArgSeparator
+
+      if (useShellForNpm) {
+        // Build command string for shell execution with proper escaping
+        // Each argument is escaped to prevent command injection
+        const escapedParts = [packageManager, ...command, ...args].map(shellEscape)
+        const fullCommand = escapedParts.join(' ')
+        getLogger().debug(`Executing npm command via shell: ${fullCommand}`)
+        execaProcess = execa('sh', ['-c', fullCommand], {
+          cwd,
+          stdio,
+          ...(!options.foreground && { timeout: 600000 }),
+          env,
+          verbose: isDebugMode,
+        })
+      } else {
+        execaProcess = execa(packageManager, [...command, ...args], {
+          cwd,
+          stdio,
+          ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+          env,
+          verbose: isDebugMode,
+        })
+      }
     }
 
     // For foreground mode, get PID and call onStart callback immediately

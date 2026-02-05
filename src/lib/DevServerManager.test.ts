@@ -6,6 +6,7 @@ import { setTimeout } from 'timers/promises'
 import * as devServerUtils from '../utils/dev-server.js'
 import * as packageManagerUtils from '../utils/package-manager.js'
 import * as packageJsonUtils from '../utils/package-json.js'
+import * as ngShimUtils from '../utils/ng-shim.js'
 
 // Mock dependencies
 vi.mock('execa')
@@ -21,6 +22,7 @@ vi.mock('../utils/dev-server.js', async (importOriginal) => {
 })
 vi.mock('../utils/package-manager.js')
 vi.mock('../utils/package-json.js')
+vi.mock('../utils/ng-shim.js')
 
 // Mock the logger
 vi.mock('../utils/logger.js', () => ({
@@ -803,8 +805,10 @@ describe('DevServerManager', () => {
 			await managerWithPortFlag.cleanup()
 		})
 
-		it('should use auto-detected Angular portFlag when explicit portFlag not provided', async () => {
+		it('should use PATH shim for Angular projects when no explicit portFlag', async () => {
 			const port = 4200
+			const mockShimDir = '/tmp/iloom-ng-shim-abc123'
+			const mockCleanup = vi.fn().mockResolvedValue(undefined)
 
 			// Create manager without portFlag option
 			const managerNoPortFlag = new DevServerManager(mockProcessManager, {
@@ -815,6 +819,12 @@ describe('DevServerManager', () => {
 			// Mock Angular detection to return true
 			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
 
+			// Mock ng shim creation
+			vi.mocked(ngShimUtils.createNgShim).mockResolvedValue({
+				shimDir: mockShimDir,
+				cleanup: mockCleanup,
+			})
+
 			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
 
 			await managerNoPortFlag.runServerForeground(
@@ -823,21 +833,31 @@ describe('DevServerManager', () => {
 				false
 			)
 
+			// Should create the ng shim
+			expect(ngShimUtils.createNgShim).toHaveBeenCalledWith(port, mockWorktreePath)
+
+			// Should pass empty args (no -- --port=X) and include shim env vars
 			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
 				'dev',
 				mockWorktreePath,
-				['--', '--port=4200'],
+				[], // No port flag args - shim handles it
 				expect.objectContaining({
 					env: expect.objectContaining({
 						PORT: '4200',
+						PATH: expect.stringContaining(mockShimDir),
+						ILOOM_WORKSPACE_PATH: mockWorktreePath,
+						ILOOM_TARGET_PORT: '4200',
 					}),
 				})
 			)
 
+			// Should cleanup the shim after process exits
+			expect(mockCleanup).toHaveBeenCalled()
+
 			await managerNoPortFlag.cleanup()
 		})
 
-		it('should prefer explicit portFlag over Angular auto-detection', async () => {
+		it('should prefer explicit portFlag over Angular PATH shim', async () => {
 			const port = 4200
 
 			// Create manager with custom portFlag
@@ -847,7 +867,7 @@ describe('DevServerManager', () => {
 				portFlag: '-p',
 			})
 
-			// Mock Angular detection to return true (would use --port if no explicit flag)
+			// Mock Angular detection to return true (would use PATH shim if no explicit flag)
 			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
 
 			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
@@ -858,7 +878,10 @@ describe('DevServerManager', () => {
 				false
 			)
 
-			// Should use explicit -p, not auto-detected --port
+			// Should NOT create the ng shim when explicit portFlag is set
+			expect(ngShimUtils.createNgShim).not.toHaveBeenCalled()
+
+			// Should use explicit -p via args, not PATH shim
 			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
 				'dev',
 				mockWorktreePath,
@@ -904,6 +927,77 @@ describe('DevServerManager', () => {
 					}),
 				})
 			)
+
+			// Should NOT create ng shim for non-Angular projects
+			expect(ngShimUtils.createNgShim).not.toHaveBeenCalled()
+
+			await managerNoPortFlag.cleanup()
+		})
+
+		it('should cleanup ng shim even if runScript throws', async () => {
+			const port = 4200
+			const mockShimDir = '/tmp/iloom-ng-shim-abc123'
+			const mockCleanup = vi.fn().mockResolvedValue(undefined)
+
+			const managerNoPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+			})
+
+			// Mock Angular detection to return true
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
+
+			// Mock ng shim creation
+			vi.mocked(ngShimUtils.createNgShim).mockResolvedValue({
+				shimDir: mockShimDir,
+				cleanup: mockCleanup,
+			})
+
+			// Mock runScript to throw an error
+			vi.mocked(packageManagerUtils.runScript).mockRejectedValue(new Error('Process failed'))
+
+			await expect(managerNoPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false
+			)).rejects.toThrow('Process failed')
+
+			// Cleanup should still be called
+			expect(mockCleanup).toHaveBeenCalled()
+
+			await managerNoPortFlag.cleanup()
+		})
+
+		it('should prepend shim directory to existing PATH', async () => {
+			const port = 4200
+			const mockShimDir = '/tmp/iloom-ng-shim-abc123'
+			const mockCleanup = vi.fn().mockResolvedValue(undefined)
+			const originalPath = process.env.PATH
+
+			const managerNoPortFlag = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+			})
+
+			vi.mocked(devServerUtils.detectAngularProject).mockResolvedValue(true)
+			vi.mocked(ngShimUtils.createNgShim).mockResolvedValue({
+				shimDir: mockShimDir,
+				cleanup: mockCleanup,
+			})
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await managerNoPortFlag.runServerForeground(
+				mockWorktreePath,
+				port,
+				false
+			)
+
+			// PATH should start with shim dir followed by original PATH
+			const callEnv = vi.mocked(packageManagerUtils.runScript).mock.calls[0][3]?.env
+			expect(callEnv?.PATH).toMatch(new RegExp(`^${mockShimDir}:`))
+			if (originalPath) {
+				expect(callEnv?.PATH).toContain(originalPath)
+			}
 
 			await managerNoPortFlag.cleanup()
 		})
