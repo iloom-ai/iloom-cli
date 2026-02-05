@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DevServerManager } from './DevServerManager.js'
+import { DevServerManager, type DockerConfig } from './DevServerManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
+import { DockerManager } from './DockerManager.js'
 import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import * as devServerUtils from '../utils/dev-server.js'
@@ -11,6 +12,7 @@ import * as packageJsonUtils from '../utils/package-json.js'
 vi.mock('execa')
 vi.mock('timers/promises')
 vi.mock('./process/ProcessManager.js')
+vi.mock('./DockerManager.js')
 vi.mock('../utils/dev-server.js')
 vi.mock('../utils/package-manager.js')
 vi.mock('../utils/package-json.js')
@@ -579,6 +581,397 @@ describe('DevServerManager', () => {
 
 			// Cleanup should not throw
 			await expect(manager.cleanup()).resolves.not.toThrow()
+		})
+	})
+
+	describe('Docker mode', () => {
+		const dockerConfig: DockerConfig = {
+			dockerFile: './Dockerfile',
+			containerPort: 4200,
+			identifier: '548',
+		}
+
+		beforeEach(() => {
+			// Set up default return values for DockerManager static methods
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-548')
+			vi.mocked(DockerManager.buildImageName).mockReturnValue('iloom-dev-548')
+		})
+
+		describe('ensureServerRunning', () => {
+			it('should detect running container and skip start', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(true)
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-548')
+				expect(DockerManager.buildImage).not.toHaveBeenCalled()
+			})
+
+			it('should build image then run container in background when not running', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runDetached).mockResolvedValue('abc123')
+
+				// Server becomes ready on first poll
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
+					pid: 12345,
+					name: 'docker-proxy',
+					command: 'docker',
+					port,
+					isDevServer: true,
+				})
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(DockerManager.buildImage).toHaveBeenCalledWith(
+					mockWorktreePath,
+					'iloom-dev-548',
+					'./Dockerfile',
+					undefined
+				)
+				expect(DockerManager.resolveContainerPort).toHaveBeenCalledWith(
+					4200,
+					expect.stringContaining('Dockerfile'),
+					'iloom-dev-548'
+				)
+				expect(DockerManager.runDetached).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					4200,
+					undefined
+				)
+			})
+
+			it('should return false when Docker build fails', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockRejectedValue(new Error('Build failed'))
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				expect(result).toBe(false)
+			})
+
+			it('should clean up container and return false when server fails to start within timeout', async () => {
+				const port = 3548
+
+				manager = new DevServerManager(mockProcessManager, {
+					startupTimeout: 500,
+					checkInterval: 100,
+				})
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runDetached).mockResolvedValue('abc123')
+				vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValue(true)
+
+				// Server never starts
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
+				vi.mocked(setTimeout).mockResolvedValue(undefined)
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				expect(result).toBe(false)
+				// Should clean up the container on timeout
+				expect(DockerManager.stopAndRemoveContainer).toHaveBeenCalledWith('iloom-dev-548')
+			})
+
+			it('should pass build args and run args to Docker', async () => {
+				const port = 3548
+				const configWithArgs: DockerConfig = {
+					...dockerConfig,
+					dockerBuildArgs: { NODE_ENV: 'development' },
+					dockerRunArgs: ['-v', './src:/app/src'],
+				}
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runDetached).mockResolvedValue('abc123')
+
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
+					pid: 12345,
+					name: 'docker-proxy',
+					command: 'docker',
+					port,
+					isDevServer: true,
+				})
+
+				await manager.ensureServerRunning(mockWorktreePath, port, configWithArgs)
+
+				expect(DockerManager.buildImage).toHaveBeenCalledWith(
+					mockWorktreePath,
+					'iloom-dev-548',
+					'./Dockerfile',
+					{ NODE_ENV: 'development' }
+				)
+				expect(DockerManager.runDetached).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					4200,
+					['-v', './src:/app/src']
+				)
+			})
+
+			it('should not use process-based detection in Docker mode', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(true)
+
+				await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				// Process-based detection should NOT be called in Docker mode
+				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('isServerRunning', () => {
+			it('should check Docker container status when dockerConfig provided', async () => {
+				const port = 3548
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(true)
+
+				const result = await manager.isServerRunning(port, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(DockerManager.buildContainerName).toHaveBeenCalledWith('548')
+				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+			})
+
+			it('should return false when Docker container is not running', async () => {
+				const port = 3548
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+
+				const result = await manager.isServerRunning(port, dockerConfig)
+
+				expect(result).toBe(false)
+			})
+
+			it('should fall back to process detection when no dockerConfig', async () => {
+				const port = 3548
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue({
+					pid: 12345,
+					name: 'node',
+					command: 'pnpm dev',
+					port,
+					isDevServer: true,
+				})
+
+				const result = await manager.isServerRunning(port)
+
+				expect(result).toBe(true)
+				expect(mockProcessManager.detectDevServer).toHaveBeenCalledWith(port)
+				expect(DockerManager.isContainerRunning).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('runServerForeground', () => {
+			it('should build image then run container in foreground', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				const result = await manager.runServerForeground(
+					mockWorktreePath, port, false, undefined, undefined, dockerConfig
+				)
+
+				expect(result).toEqual({})
+				expect(DockerManager.buildImage).toHaveBeenCalledWith(
+					mockWorktreePath,
+					'iloom-dev-548',
+					'./Dockerfile',
+					undefined
+				)
+				expect(DockerManager.runForeground).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					4200,
+					undefined,
+					false
+				)
+			})
+
+			it('should pass redirectToStderr to DockerManager.runForeground', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, true, undefined, undefined, dockerConfig
+				)
+
+				expect(DockerManager.runForeground).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					4200,
+					undefined,
+					true
+				)
+			})
+
+			it('should pass dockerRunArgs to container', async () => {
+				const port = 3548
+				const configWithRunArgs: DockerConfig = {
+					...dockerConfig,
+					dockerRunArgs: ['-v', './src:/app/src', '--env', 'DEBUG=true'],
+				}
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, false, undefined, undefined, configWithRunArgs
+				)
+
+				expect(DockerManager.runForeground).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					4200,
+					['-v', './src:/app/src', '--env', 'DEBUG=true'],
+					false
+				)
+			})
+
+			it('should use containerPort from config or Dockerfile EXPOSE', async () => {
+				const port = 3548
+				const configWithoutPort: DockerConfig = {
+					dockerFile: './Dockerfile',
+					identifier: '548',
+				}
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(8080)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, false, undefined, undefined, configWithoutPort
+				)
+
+				// resolveContainerPort should receive undefined for containerPort
+				expect(DockerManager.resolveContainerPort).toHaveBeenCalledWith(
+					undefined,
+					expect.stringContaining('Dockerfile'),
+					'iloom-dev-548'
+				)
+				// runForeground should use the resolved port
+				expect(DockerManager.runForeground).toHaveBeenCalledWith(
+					'iloom-dev-548',
+					'iloom-dev-548',
+					port,
+					8080,
+					undefined,
+					false
+				)
+			})
+
+			it('should call onProcessStarted with undefined pid in Docker mode', async () => {
+				const port = 3548
+				const onStart = vi.fn()
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, false, onStart, undefined, dockerConfig
+				)
+
+				// Docker containers don't have a host PID to report
+				expect(onStart).toHaveBeenCalledWith(undefined)
+			})
+
+			it('should not use runScript or buildDevServerCommand in Docker mode', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runForeground).mockResolvedValue(undefined)
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, false, undefined, undefined, dockerConfig
+				)
+
+				expect(packageManagerUtils.runScript).not.toHaveBeenCalled()
+				expect(devServerUtils.buildDevServerCommand).not.toHaveBeenCalled()
+				expect(execa).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('cleanup', () => {
+			it('should stop and remove tracked Docker containers', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runDetached).mockResolvedValue('abc123')
+				vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValue(true)
+
+				// Server becomes ready
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
+					pid: 12345,
+					name: 'docker-proxy',
+					command: 'docker',
+					port,
+					isDevServer: true,
+				})
+
+				await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				// Reset mock to track cleanup call
+				vi.mocked(DockerManager.stopAndRemoveContainer).mockClear()
+				vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValue(true)
+
+				await manager.cleanup()
+
+				expect(DockerManager.stopAndRemoveContainer).toHaveBeenCalledWith('iloom-dev-548')
+			})
+
+			it('should handle Docker cleanup errors gracefully', async () => {
+				const port = 3548
+
+				vi.mocked(DockerManager.isContainerRunning).mockResolvedValue(false)
+				vi.mocked(DockerManager.buildImage).mockResolvedValue(undefined)
+				vi.mocked(DockerManager.resolveContainerPort).mockResolvedValue(4200)
+				vi.mocked(DockerManager.runDetached).mockResolvedValue('abc123')
+
+				// Server becomes ready
+				vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
+					pid: 12345,
+					name: 'docker-proxy',
+					command: 'docker',
+					port,
+					isDevServer: true,
+				})
+
+				await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig)
+
+				// Make cleanup fail
+				vi.mocked(DockerManager.stopAndRemoveContainer).mockRejectedValue(
+					new Error('Docker daemon not responding')
+				)
+
+				// Should not throw
+				await expect(manager.cleanup()).resolves.not.toThrow()
+			})
 		})
 	})
 

@@ -654,6 +654,79 @@ il dev-server feat/my-branch
 - Use Ctrl+C to stop the server
 - Respects `sourceEnvOnStart` setting for environment loading
 
+#### Docker Dev Server Mode
+
+By default, `il dev-server` runs your dev server as a native process. For frameworks that ignore the `PORT` environment variable (e.g., Angular CLI), you can use Docker mode to remap ports via Docker's `-p` flag.
+
+**Requirements:**
+- Docker must be installed and the Docker daemon must be running
+- A `Dockerfile` in your project (or a custom path configured)
+
+**Configuration:**
+
+Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
+
+```json
+{
+  "capabilities": {
+    "web": {
+      "devServer": "docker",
+      "dockerFile": "./Dockerfile",
+      "containerPort": 4200,
+      "dockerBuildArgs": {
+        "NODE_ENV": "development"
+      },
+      "dockerRunArgs": ["-v", "./src:/app/src"]
+    }
+  }
+}
+```
+
+**Configuration Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `devServer` | `"process"` \| `"docker"` | `"process"` | Dev server execution mode. `"process"` runs natively, `"docker"` runs inside a Docker container with port mapping. |
+| `dockerFile` | `string` | `"./Dockerfile"` | Path to the Dockerfile relative to the worktree root. Only used when `devServer` is `"docker"`. |
+| `containerPort` | `number` | Auto-detected | Port the application listens on inside the Docker container. If not set, iloom attempts to detect it from `EXPOSE` directives in the built Docker image (via `docker image inspect`), falling back to Dockerfile parsing. |
+| `dockerBuildArgs` | `Record<string, string>` | - | Build arguments passed to `docker build` (e.g., `{"NODE_ENV": "development"}`). |
+| `dockerRunArgs` | `string[]` | - | Additional flags passed to `docker run`. Use this for volume mounts, environment variables, user mapping, and other Docker options. |
+
+**How Port Mapping Works:**
+
+Each loom workspace gets a unique port calculated as `basePort + issue/PR number` (e.g., issue #25 gets port 3025). In Docker mode:
+
+1. The Docker image is built from your Dockerfile
+2. The container runs with `-p <workspace-port>:<container-port>`
+3. Your app runs on `containerPort` inside the container (e.g., 4200 for Angular)
+4. Docker maps that to the workspace port on the host (e.g., 3025)
+5. You access the app at `http://localhost:3025` as usual
+
+This means frameworks that hardcode their listen port work correctly -- Docker handles the port translation transparently.
+
+**Container Naming:**
+
+Containers are named `iloom-dev-<identifier>` where the identifier is derived from the issue/PR number or branch name. Special characters (slashes, etc.) are replaced with hyphens.
+
+**Known Limitations:**
+
+- **macOS volume mount performance:** Docker Desktop on macOS has known slow file-watching performance through bind mounts. This can affect hot reload when using volume mounts via `dockerRunArgs`. Consider using tools like `mutagen` or Docker's `synchronized` file sharing if performance is an issue.
+- **Linux file permissions:** Docker containers typically run as root, so files created by the container via volume mounts may be owned by root on the host. Mitigate by passing `--user` via `dockerRunArgs`:
+  ```json
+  {
+    "dockerRunArgs": ["--user", "1000:1000"]
+  }
+  ```
+- **Container orphaning on crash:** If the `il dev-server` process is killed ungracefully (e.g., SIGKILL), the Docker container may keep running. Use `docker stop` to clean up orphaned containers:
+  ```bash
+  # List any orphaned iloom containers
+  docker ps --filter "name=iloom-dev-"
+
+  # Stop all orphaned iloom containers
+  docker stop $(docker ps -q --filter "name=iloom-dev-")
+  ```
+  Normal cleanup via `il cleanup`, `il finish`, or Ctrl+C handles container shutdown automatically.
+
 ---
 
 ### il build

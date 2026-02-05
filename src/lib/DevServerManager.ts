@@ -1,6 +1,8 @@
 import { execa, type ExecaChildProcess } from 'execa'
+import path from 'path'
 import { setTimeout } from 'timers/promises'
 import { ProcessManager } from './process/ProcessManager.js'
+import { DockerManager, type DockerConfig } from './DockerManager.js'
 import { buildDevServerCommand } from '../utils/dev-server.js'
 import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
@@ -38,6 +40,9 @@ export interface DevServerManagerOptions {
 	checkInterval?: number
 }
 
+// Re-export DockerConfig from DockerManager for backward compatibility
+export type { DockerConfig } from './DockerManager.js'
+
 /**
  * DevServerManager handles auto-starting and monitoring dev servers
  * Used by open/run commands to ensure dev server is running before opening browser
@@ -46,6 +51,7 @@ export class DevServerManager {
 	private readonly processManager: ProcessManager
 	private readonly options: Required<DevServerManagerOptions>
 	private runningServers: Map<number, ExecaChildProcess> = new Map()
+	private runningDockerContainers: Map<number, string> = new Map()
 
 	constructor(
 		processManager?: ProcessManager,
@@ -64,12 +70,34 @@ export class DevServerManager {
 	 *
 	 * @param worktreePath - Path to the worktree
 	 * @param port - Port the server should run on
+	 * @param dockerConfig - Optional Docker configuration for container-based server
 	 * @returns true if server is ready, false if startup failed/timed out
 	 */
-	async ensureServerRunning(worktreePath: string, port: number): Promise<boolean> {
+	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig): Promise<boolean> {
 		logger.debug(`Checking if dev server is running on port ${port}...`)
 
-		// Check if already running
+		// Docker mode: check if container is already running
+		if (dockerConfig) {
+			const containerName = DockerManager.buildContainerName(dockerConfig.identifier)
+			const isRunning = await DockerManager.isContainerRunning(containerName)
+			if (isRunning) {
+				logger.debug(`Docker container "${containerName}" already running on port ${port}`)
+				return true
+			}
+
+			logger.info(`Docker dev server not running on port ${port}, starting...`)
+			try {
+				await this.startDockerServer(worktreePath, port, dockerConfig)
+				return true
+			} catch (error) {
+				logger.error(
+					`Failed to start Docker dev server: ${error instanceof Error ? error.message : 'Unknown error'}`
+				)
+				return false
+			}
+		}
+
+		// Process mode: check if a process is listening on the port
 		const existingProcess = await this.processManager.detectDevServer(port)
 		if (existingProcess) {
 			logger.debug(
@@ -140,6 +168,59 @@ export class DevServerManager {
 	}
 
 	/**
+	 * Start dev server in Docker container (background) and wait for it to be ready.
+	 * Builds the image, resolves the container port, starts the container detached,
+	 * and polls the host port for readiness.
+	 */
+	private async startDockerServer(worktreePath: string, port: number, dockerConfig: DockerConfig): Promise<void> {
+		const imageName = DockerManager.buildImageName(dockerConfig.identifier)
+		const containerName = DockerManager.buildContainerName(dockerConfig.identifier)
+		const dockerfilePath = path.resolve(worktreePath, dockerConfig.dockerFile)
+
+		// Build image
+		await DockerManager.buildImage(
+			worktreePath,
+			imageName,
+			dockerConfig.dockerFile,
+			dockerConfig.dockerBuildArgs
+		)
+
+		// Resolve container port (config > image inspect > Dockerfile EXPOSE)
+		const containerPort = await DockerManager.resolveContainerPort(
+			dockerConfig.containerPort,
+			dockerfilePath,
+			imageName
+		)
+
+		// Run container detached
+		await DockerManager.runDetached(
+			imageName,
+			containerName,
+			port,
+			containerPort,
+			dockerConfig.dockerRunArgs
+		)
+
+		// Track for cleanup
+		this.runningDockerContainers.set(port, containerName)
+
+		// Wait for server to be ready (Docker proxy listens on host port)
+		logger.info(`Waiting for Docker dev server to start on port ${port}...`)
+		const ready = await this.waitForServerReady(port)
+
+		if (!ready) {
+			// Clean up the container if startup failed
+			await DockerManager.stopAndRemoveContainer(containerName)
+			this.runningDockerContainers.delete(port)
+			throw new Error(
+				`Docker dev server failed to start within ${this.options.startupTimeout}ms timeout`
+			)
+		}
+
+		logger.success(`Docker dev server started successfully on port ${port}`)
+	}
+
+	/**
 	 * Wait for server to be ready by polling the port
 	 */
 	private async waitForServerReady(port: number): Promise<boolean> {
@@ -174,9 +255,14 @@ export class DevServerManager {
 	 * Check if a dev server is running on the specified port
 	 *
 	 * @param port - Port to check
+	 * @param dockerConfig - Optional Docker configuration; when provided, checks container status
 	 * @returns true if server is running, false otherwise
 	 */
-	async isServerRunning(port: number): Promise<boolean> {
+	async isServerRunning(port: number, dockerConfig?: DockerConfig): Promise<boolean> {
+		if (dockerConfig) {
+			const containerName = DockerManager.buildContainerName(dockerConfig.identifier)
+			return DockerManager.isContainerRunning(containerName)
+		}
 		const existingProcess = await this.processManager.detectDevServer(port)
 		return existingProcess !== null
 	}
@@ -196,8 +282,56 @@ export class DevServerManager {
 		port: number,
 		redirectToStderr = false,
 		onProcessStarted?: (pid?: number) => void,
-		envOverrides?: Record<string, string>
+		envOverrides?: Record<string, string>,
+		dockerConfig?: DockerConfig
 	): Promise<{ pid?: number }> {
+		// Docker mode: build image and run container in foreground
+		if (dockerConfig) {
+			logger.debug(`Starting Docker dev server in foreground on port ${port}`)
+
+			const imageName = DockerManager.buildImageName(dockerConfig.identifier)
+			const containerName = DockerManager.buildContainerName(dockerConfig.identifier)
+			const dockerfilePath = path.resolve(worktreePath, dockerConfig.dockerFile)
+
+			// Build image
+			await DockerManager.buildImage(
+				worktreePath,
+				imageName,
+				dockerConfig.dockerFile,
+				dockerConfig.dockerBuildArgs
+			)
+
+			// Resolve container port
+			const containerPort = await DockerManager.resolveContainerPort(
+				dockerConfig.containerPort,
+				dockerfilePath,
+				imageName
+			)
+
+			if (onProcessStarted) {
+				onProcessStarted(undefined)
+			}
+
+			// Track container for cleanup
+			this.runningDockerContainers.set(port, containerName)
+			try {
+				// Run container in foreground (blocks until stopped)
+				// DockerManager.runForeground handles signal forwarding internally
+				await DockerManager.runForeground(
+					imageName,
+					containerName,
+					port,
+					containerPort,
+					dockerConfig.dockerRunArgs,
+					redirectToStderr
+				)
+			} finally {
+				this.runningDockerContainers.delete(port)
+			}
+
+			return {}
+		}
+
 		logger.debug(`Starting dev server in foreground on port ${port}`)
 
 		// Use runScript for foreground mode to support multi-language projects
@@ -244,6 +378,7 @@ export class DevServerManager {
 	 * This should be called when the manager is being disposed
 	 */
 	async cleanup(): Promise<void> {
+		// Clean up process-based servers
 		for (const [port, serverProcess] of this.runningServers.entries()) {
 			try {
 				logger.debug(`Cleaning up server process on port ${port}`)
@@ -255,5 +390,18 @@ export class DevServerManager {
 			}
 		}
 		this.runningServers.clear()
+
+		// Clean up Docker containers
+		for (const [port, containerName] of this.runningDockerContainers.entries()) {
+			try {
+				logger.debug(`Cleaning up Docker container "${containerName}" on port ${port}`)
+				await DockerManager.stopAndRemoveContainer(containerName)
+			} catch (error) {
+				logger.warn(
+					`Failed to stop Docker container "${containerName}" on port ${port}: ${error instanceof Error ? error.message : 'Unknown error'}`
+				)
+			}
+		}
+		this.runningDockerContainers.clear()
 	}
 }

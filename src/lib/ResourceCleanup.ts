@@ -5,6 +5,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
+import { DockerManager } from './DockerManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
 import { calculatePortFromIdentifier } from '../utils/port.js'
@@ -56,15 +57,20 @@ export class ResourceCleanup {
 		const displayIdentifier = parsed.branchName ?? parsed.number?.toString() ?? parsed.originalInput
 		getLogger().info(`Starting cleanup for: ${displayIdentifier}`)
 
-		// Extract number from ParsedInput for port calculation
-		const number = parsed.number
+		// Derive identifier for port calculation and Docker container lookup
+		// Uses the same fallback logic as dev-server.ts: number > branchName > originalInput
+		const portIdentifier = parsed.number ?? parsed.branchName ?? parsed.originalInput
 
 		// Step 1: Terminate dev server if applicable
-		if (number !== undefined) {
-			// Load settings to get basePort
+		{
+			// Load settings to get basePort and Docker mode
 			const settings = await this.settingsManager.loadSettings()
 			const basePort = settings?.capabilities?.web?.basePort ?? 3000
-			const port = calculatePortFromIdentifier(number, basePort)
+			const port = calculatePortFromIdentifier(portIdentifier, basePort)
+			const devServerMode = settings?.capabilities?.web?.devServer ?? 'process'
+			const dockerIdentifier = devServerMode === 'docker'
+				? (parsed.number?.toString() ?? parsed.branchName ?? parsed.originalInput)
+				: undefined
 
 			if (options.dryRun) {
 				operations.push({
@@ -74,7 +80,7 @@ export class ResourceCleanup {
 				})
 			} else {
 				try {
-					const terminated = await this.terminateDevServer(port)
+					const terminated = await this.terminateDevServer(port, dockerIdentifier)
 					operations.push({
 						type: 'dev-server',
 						success: true,
@@ -472,11 +478,29 @@ export class ResourceCleanup {
 	}
 
 	/**
-	 * Terminate dev server on specified port
+	 * Terminate dev server on specified port.
+	 * When a dockerIdentifier is provided, attempts Docker container cleanup first
+	 * before falling back to process-based detection.
+	 *
+	 * @param port - Port the dev server is running on
+	 * @param dockerIdentifier - Optional identifier for Docker container lookup (issue number, branch name, etc.)
 	 */
-	async terminateDevServer(port: number): Promise<boolean> {
+	async terminateDevServer(port: number, dockerIdentifier?: string | number): Promise<boolean> {
 	getLogger().debug(`Checking for dev server on port ${port}`)
 
+		// Try Docker container cleanup first if identifier provided
+		if (dockerIdentifier !== undefined) {
+			const containerName = DockerManager.buildContainerName(dockerIdentifier)
+			const isRunning = await DockerManager.isContainerRunning(containerName)
+			if (isRunning) {
+				getLogger().info(`Terminating Docker container: ${containerName}`)
+				await DockerManager.stopAndRemoveContainer(containerName)
+				return true
+			}
+			getLogger().debug(`No Docker container found with name "${containerName}", falling back to process detection`)
+		}
+
+		// Existing process-based detection
 		const processInfo = await this.processManager.detectDevServer(port)
 
 		if (!processInfo) {

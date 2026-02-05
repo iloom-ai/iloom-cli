@@ -657,7 +657,8 @@ describe('OpenCommand', () => {
 
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
-				3087
+				3087,
+				undefined
 			)
 		})
 
@@ -687,7 +688,8 @@ describe('OpenCommand', () => {
 			// Should calculate port as 3000 + 87 = 3087
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
-				3087
+				3087,
+				undefined
 			)
 		})
 
@@ -703,7 +705,8 @@ describe('OpenCommand', () => {
 			// Should use PORT from .env
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
-				4500
+				4500,
+				undefined
 			)
 		})
 

@@ -181,6 +181,28 @@ export const CapabilitiesSettingsSchema = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				devServer: z
+					.enum(['process', 'docker'])
+					.default('process')
+					.describe('Dev server mode: "process" runs natively, "docker" runs inside a Docker container with port mapping'),
+				dockerFile: z
+					.string()
+					.default('./Dockerfile')
+					.describe('Path to Dockerfile relative to worktree root (only used when devServer is "docker")'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+				dockerBuildArgs: z
+					.record(z.string())
+					.optional()
+					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerRunArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
 			})
 			.optional(),
 		database: z
@@ -214,6 +236,28 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				devServer: z
+					.enum(['process', 'docker'])
+					.optional()
+					.describe('Dev server mode: "process" runs natively, "docker" runs inside a Docker container with port mapping'),
+				dockerFile: z
+					.string()
+					.optional()
+					.describe('Path to Dockerfile relative to worktree root (only used when devServer is "docker")'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+				dockerBuildArgs: z
+					.record(z.string())
+					.optional()
+					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerRunArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
 			})
 			.optional(),
 		database: z

@@ -4,6 +4,7 @@ import { execa } from 'execa'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { DockerManager } from '../lib/DockerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
@@ -267,10 +268,24 @@ export class RunCommand {
 			checkEnvFile: true,
 		})
 
+		// Extract Docker configuration if Docker mode is enabled
+		const issueNumber = extractIssueNumber(worktree.branch)
+		const dockerIdentifier = issueNumber?.toString() ?? worktree.branch
+		const dockerConfig = DockerManager.buildDockerConfigFromSettings(
+			settings.capabilities?.web,
+			dockerIdentifier
+		)
+
+		if (dockerConfig) {
+			await DockerManager.assertAvailable()
+			logger.debug(`Docker mode enabled with config: ${JSON.stringify(dockerConfig)}`)
+		}
+
 		// Ensure dev server is running on the port
 		const serverReady = await this.devServerManager.ensureServerRunning(
 			worktree.path,
-			port
+			port,
+			dockerConfig
 		)
 
 		if (!serverReady) {
