@@ -11,10 +11,11 @@
   },
   "agents": {
     "iloom-issue-analyzer": { "model": "opus" },
-    "iloom-issue-planner": { "model": "opus" },
+    "iloom-issue-planner": { "model": "opus", "review": true },
     "iloom-issue-analyze-and-plan": { "model": "opus" },
     "iloom-issue-implementer": { "model": "opus" },
-    "iloom-code-reviewer": { "providers": { "gemini": "gemini-3-pro-preview" } }
+    "iloom-code-reviewer": { "providers": { "gemini": "gemini-3-pro-preview" } },
+    "iloom-artifact-reviewer": { "enabled": true, "providers": { "gemini": "gemini-3-pro-preview" } }
   },
   "colors": {
     "terminal": true,
