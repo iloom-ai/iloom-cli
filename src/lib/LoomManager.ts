@@ -443,6 +443,8 @@ export class LoomManager {
       capabilities,
       ...(draftPrNumber && { draftPrNumber }),
       ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
+      ...(input.options?.isEpic && { isEpic: input.options.isEpic }),
+      ...(input.options?.swarmStatus && { swarmStatus: input.options.swarmStatus }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)

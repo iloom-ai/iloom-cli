@@ -154,6 +154,9 @@ export interface StartOptions {
   body?: string
   // Output result as JSON
   json?: boolean
+  // Swarm mode flags
+  swarm?: boolean
+  maxAgents?: number
 }
 
 export interface AddIssueOptions {
@@ -233,6 +236,8 @@ export interface StartResult {
   identifier: string | number
   title?: string
   capabilities?: string[]
+  isEpic?: boolean
+  swarmStatus?: 'pending' | 'active' | 'completed'
 }
 
 export interface FinishResult {

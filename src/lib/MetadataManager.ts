@@ -29,6 +29,8 @@ export interface MetadataFile {
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
   swarmAgent?: boolean // Whether this loom was created for a swarm agent
+  isEpic?: boolean // Whether this loom is an epic (parent of swarm children)
+  swarmStatus?: 'pending' | 'active' | 'completed' // Swarm orchestration status
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -60,6 +62,8 @@ export interface WriteMetadataInput {
   oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   swarmAgent?: boolean // Whether this loom was created for a swarm agent
+  isEpic?: boolean // Whether this loom is an epic (parent of swarm children)
+  swarmStatus?: 'pending' | 'active' | 'completed' // Swarm orchestration status
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -92,6 +96,8 @@ export interface LoomMetadata {
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   swarmAgent: boolean // Whether this loom was created for a swarm agent
+  isEpic: boolean // Whether this loom is an epic (parent of swarm children)
+  swarmStatus: 'pending' | 'active' | 'completed' | null // Swarm orchestration status
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -143,6 +149,8 @@ export class MetadataManager {
       oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
       swarmAgent: data.swarmAgent ?? false,
+      isEpic: data.isEpic ?? false,
+      swarmStatus: data.swarmStatus ?? null,
       parentLoom: data.parentLoom ?? null,
     }
   }
@@ -222,6 +230,8 @@ export class MetadataManager {
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
         ...(input.swarmAgent && { swarmAgent: input.swarmAgent }),
+        ...(input.isEpic && { isEpic: input.isEpic }),
+        ...(input.swarmStatus && { swarmStatus: input.swarmStatus }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 
