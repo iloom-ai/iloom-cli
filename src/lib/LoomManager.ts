@@ -19,7 +19,7 @@ import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorD
 import { detectDarkMode } from '../utils/terminal.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { loadEnvIntoProcess, findEnvFileForDatabaseUrl, isNoEnvFilesFoundError } from '../utils/env.js'
-import type { Loom, CreateLoomInput } from '../types/loom.js'
+import type { Loom, CreateLoomInput, ProjectCapability } from '../types/loom.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
@@ -137,6 +137,12 @@ export class LoomManager {
     let port = basePort // default
     if (capabilities.includes('web')) {
       port = await this.setupPortForWeb(worktreePath, input, basePort)
+    }
+
+    // SWARM MODE: Fast path - skip dependency install, database, CLI isolation,
+    // draft PR, color sync, issue status update, and launching
+    if (input.options?.swarmMode) {
+      return await this.finishSwarmLoom(input, issueData, branchName, worktreePath, port, capabilities)
     }
 
     // 9. Install dependencies AFTER environment setup (like bash script line 757-769)
@@ -1168,6 +1174,82 @@ export class LoomManager {
         lastAccessed: new Date(),
       }
     }))
+  }
+
+  /**
+   * Swarm mode fast path: write metadata and return loom data.
+   * Called after worktree, env files, settings, and port are set up.
+   * Skips: dependency install, database, CLI isolation, draft PR, color sync, issue status, launching.
+   */
+  private async finishSwarmLoom(
+    input: CreateLoomInput,
+    issueData: Issue | PullRequest | null,
+    branchName: string,
+    worktreePath: string,
+    port: number,
+    capabilities: ProjectCapability[],
+  ): Promise<Loom> {
+    const description = issueData?.title ?? branchName
+
+    // Build issue/pr numbers arrays
+    let issue_numbers: string[] = []
+    if (input.type === 'issue') {
+      issue_numbers = [String(input.identifier)]
+    }
+    const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
+
+    const sessionId = generateRandomSessionId()
+
+    let issueUrls: Record<string, string> = {}
+    if (input.type === 'issue' && issueData?.url) {
+      issueUrls = { [String(input.identifier)]: issueData.url }
+    }
+    const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
+      ? { [String(input.identifier)]: issueData.url }
+      : {}
+
+    const metadataInput: WriteMetadataInput = {
+      description,
+      branchName,
+      worktreePath,
+      issueType: input.type,
+      issue_numbers,
+      pr_numbers,
+      issueTracker: this.issueTracker.providerName,
+      colorHex: '#888888', // Neutral color for swarm agents (no visual components)
+      sessionId,
+      projectPath: this.gitWorktree.workingDirectory,
+      issueUrls,
+      prUrls,
+      capabilities,
+      swarmAgent: true,
+      ...(input.parentLoom && { parentLoom: input.parentLoom }),
+    }
+    await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+
+    const loom: Loom = {
+      id: this.generateLoomId(input),
+      path: worktreePath,
+      branch: branchName,
+      type: input.type,
+      identifier: input.identifier,
+      port,
+      description,
+      createdAt: new Date(),
+      lastAccessed: new Date(),
+      ...(capabilities.length > 0 && { capabilities }),
+      ...(issueData !== null && {
+        issueData: {
+          title: issueData.title,
+          body: issueData.body,
+          url: issueData.url,
+          state: issueData.state,
+        },
+      }),
+    }
+
+    getLogger().success(`Created swarm loom: ${loom.id} at ${loom.path}`)
+    return loom
   }
 
   /**

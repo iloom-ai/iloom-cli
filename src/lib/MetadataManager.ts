@@ -28,6 +28,7 @@ export interface MetadataFile {
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
+  swarmAgent?: boolean // Whether this loom was created for a swarm agent
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -58,6 +59,7 @@ export interface WriteMetadataInput {
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
   oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
+  swarmAgent?: boolean // Whether this loom was created for a swarm agent
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -89,6 +91,7 @@ export interface LoomMetadata {
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
+  swarmAgent: boolean // Whether this loom was created for a swarm agent
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -139,6 +142,7 @@ export class MetadataManager {
       draftPrNumber: data.draftPrNumber ?? null,
       oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
+      swarmAgent: data.swarmAgent ?? false,
       parentLoom: data.parentLoom ?? null,
     }
   }
@@ -217,6 +221,7 @@ export class MetadataManager {
         capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
+        ...(input.swarmAgent && { swarmAgent: input.swarmAgent }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 

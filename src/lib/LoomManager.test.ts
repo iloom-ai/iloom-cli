@@ -939,6 +939,223 @@ describe('LoomManager', () => {
         )
       })
     })
+
+    describe('swarmMode', () => {
+      it('should create loom with minimal setup when swarmMode is true', async () => {
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          baseBranch: 'feat/epic-branch',
+          parentLoom: {
+            type: 'issue',
+            identifier: 557,
+            branchName: 'feat/epic-branch',
+            worktreePath: '/test/epic-worktree',
+          },
+          options: {
+            swarmMode: true,
+          },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Child Issue for Swarm',
+          body: 'Implement feature X',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        const expectedPath = '/test/epic-looms/issue-560'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+        vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+          capabilities: ['web'],
+          binEntries: {},
+        })
+
+        const result = await manager.createIloom(swarmInput)
+
+        expect(result.id).toBe('issue-560')
+        expect(result.path).toBe(expectedPath)
+        expect(result.branch).toBeDefined()
+        expect(result.port).toBe(3560)
+        expect(result.type).toBe('issue')
+        expect(result.identifier).toBe(560)
+        expect(result.description).toBe('Child Issue for Swarm')
+        expect(result.issueData?.title).toBe('Child Issue for Swarm')
+      })
+
+      it('should skip dependency installation in swarm mode', async () => {
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          options: { swarmMode: true },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Test',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+
+        await manager.createIloom(swarmInput)
+
+        expect(installDependencies).not.toHaveBeenCalled()
+      })
+
+      it('should write metadata with swarmAgent flag', async () => {
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          parentLoom: {
+            type: 'issue',
+            identifier: 557,
+            branchName: 'feat/epic-branch',
+            worktreePath: '/test/epic-worktree',
+          },
+          options: { swarmMode: true },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Test',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        const expectedPath = '/test/path'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+
+        await manager.createIloom(swarmInput)
+
+        expect(mockWriteMetadata).toHaveBeenCalledWith(
+          expectedPath,
+          expect.objectContaining({
+            swarmAgent: true,
+            parentLoom: {
+              type: 'issue',
+              identifier: 557,
+              branchName: 'feat/epic-branch',
+              worktreePath: '/test/epic-worktree',
+            },
+          })
+        )
+      })
+
+      it('should not launch any workspace components in swarm mode', async () => {
+        const { LoomLauncher } = await import('./LoomLauncher.js')
+
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          options: { swarmMode: true },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Test',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+
+        await manager.createIloom(swarmInput)
+
+        // LoomLauncher should not have been instantiated
+        expect(LoomLauncher).not.toHaveBeenCalled()
+      })
+
+      it('should still create worktree and copy environment files in swarm mode', async () => {
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          options: { swarmMode: true },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Test',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        const expectedPath = '/test/path'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+
+        await manager.createIloom(swarmInput)
+
+        // Worktree should be created
+        expect(mockGitWorktree.createWorktree).toHaveBeenCalled()
+
+        // Environment files should be copied (copyIfExists is called for env files)
+        // We verify by checking metadata was written (which proves we got past env copy)
+        expect(mockWriteMetadata).toHaveBeenCalled()
+      })
+
+      it('should not create draft PR in swarm mode even with github-draft-pr merge behavior', async () => {
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mergeBehavior: { mode: 'github-draft-pr' },
+        })
+
+        const swarmInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 560,
+          originalInput: '560',
+          options: { swarmMode: true },
+        }
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 560,
+          title: 'Test',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/560',
+        })
+
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3560)
+
+        await manager.createIloom(swarmInput)
+
+        expect(mockCreateDraftPR).not.toHaveBeenCalled()
+        expect(mockCheckForExistingPR).not.toHaveBeenCalled()
+      })
+    })
   })
 
   describe('listLooms', () => {

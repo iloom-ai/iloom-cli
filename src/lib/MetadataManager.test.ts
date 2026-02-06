@@ -324,6 +324,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['web'],
+        swarmAgent: false,
         parentLoom: null,
       })
     })
@@ -419,6 +420,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: [],
+        swarmAgent: false,
         parentLoom: null,
       })
     })
@@ -739,6 +741,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['cli'],
+        swarmAgent: false,
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -758,6 +761,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['web'],
+        swarmAgent: false,
         parentLoom: null,
       })
     })
@@ -861,6 +865,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: [],
+        swarmAgent: false,
         parentLoom: null,
       })
     })
