@@ -458,6 +458,37 @@ export class ResourceCleanup {
 			}
 		}
 
+		// Step 7: Delete metadata file
+		if (worktree) {
+			if (options.dryRun) {
+				operations.push({
+					type: 'metadata',
+					success: true,
+					message: `[DRY RUN] Would delete metadata for worktree: ${worktree.path}`,
+				})
+			} else {
+				try {
+					await this.metadataManager.deleteMetadata(worktree.path)
+					getLogger().info(`Metadata deleted for worktree: ${worktree.path}`)
+					operations.push({
+						type: 'metadata',
+						success: true,
+						message: 'Metadata deleted',
+					})
+				} catch (error) {
+					const err = error instanceof Error ? error : new Error(String(error))
+					errors.push(err)
+					getLogger().warn(`Metadata deletion failed: ${err.message}`)
+					operations.push({
+						type: 'metadata',
+						success: false,
+						message: 'Metadata deletion failed (non-fatal)',
+						error: err.message,
+					})
+				}
+			}
+		}
+
 		// Calculate overall success
 		const success = errors.length === 0
 

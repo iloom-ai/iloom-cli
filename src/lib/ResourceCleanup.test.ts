@@ -152,13 +152,14 @@ describe('ResourceCleanup', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.errors).toHaveLength(0)
-			expect(result.operations).toHaveLength(5) // dev-server, worktree, recap, branch, database
+			expect(result.operations).toHaveLength(6) // dev-server, worktree, recap, branch, database, metadata
 			expect(result.operations[0]?.type).toBe('dev-server')
 			expect(result.operations[0]?.success).toBe(true)
 			expect(result.operations[1]?.type).toBe('worktree')
 			expect(result.operations[2]?.type).toBe('recap')
 			expect(result.operations[3]?.type).toBe('branch')
 			expect(result.operations[4]?.type).toBe('database')
+			expect(result.operations[5]?.type).toBe('metadata')
 		})
 
 		it('should pre-fetch merge target BEFORE worktree deletion (bug fix for issue #328)', async () => {
@@ -331,7 +332,7 @@ describe('ResourceCleanup', () => {
 				keepDatabase: true,
 			})
 
-			expect(result.operations).toHaveLength(3) // dev-server check + worktree removal + recap archival
+			expect(result.operations).toHaveLength(4) // dev-server check + worktree removal + recap archival + metadata
 			expect(result.operations.every(op => 'type' in op)).toBe(true)
 			expect(result.operations.every(op => 'success' in op)).toBe(true)
 			expect(result.operations.every(op => 'message' in op)).toBe(true)
