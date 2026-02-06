@@ -54,6 +54,8 @@ export interface CreateLoomInput {
     executablePath?: string
     // Control .env sourcing in terminal launches
     sourceEnvOnStart?: boolean
+    // Minimal setup for swarm agents: worktree + branch + env + metadata + port only
+    swarmMode?: boolean
   }
 }
 
