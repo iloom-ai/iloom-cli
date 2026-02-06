@@ -6,6 +6,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { BeadsManager, BeadsError } from '../lib/BeadsManager.js'
 import { SwarmSupervisor } from '../lib/SwarmSupervisor.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
+import { promptConfirmation } from '../utils/prompt.js'
 
 // Mock all external dependencies
 vi.mock('../lib/GitHubService.js')
@@ -299,8 +300,6 @@ describe('StartCommand - Swarm Mode Integration', () => {
 			})
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(epicIssue)
 			vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
-
-			const { promptConfirmation } = await import('../utils/prompt.js')
 
 			const command = new StartCommand(
 				mockGitHubService,

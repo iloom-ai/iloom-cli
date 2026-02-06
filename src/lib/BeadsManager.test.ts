@@ -144,7 +144,18 @@ describe('BeadsManager', () => {
 			)
 		})
 
-		it('should auto-install in non-interactive mode', async () => {
+		it('should throw in non-interactive mode when autoInstall is false', async () => {
+			vi.mocked(execa).mockRejectedValueOnce(new Error('not found'))
+			vi.mocked(isInteractiveEnvironment).mockReturnValue(false)
+
+			await expect(beadsManager.ensureInstalled(false)).rejects.toThrow(
+				'Beads CLI is required for swarm mode but is not installed',
+			)
+
+			expect(promptConfirmation).not.toHaveBeenCalled()
+		})
+
+		it('should auto-install in non-interactive mode when autoInstall is true', async () => {
 			vi.mocked(execa).mockRejectedValueOnce(new Error('not found'))
 			vi.mocked(isInteractiveEnvironment).mockReturnValue(false)
 			// Install
@@ -152,7 +163,7 @@ describe('BeadsManager', () => {
 			// Verify
 			vi.mocked(execa).mockResolvedValueOnce({ stdout: '/usr/local/bin/bd' } as never)
 
-			await beadsManager.ensureInstalled(false)
+			await beadsManager.ensureInstalled(true)
 
 			expect(promptConfirmation).not.toHaveBeenCalled()
 		})
@@ -276,14 +287,14 @@ describe('BeadsManager', () => {
 			expect(result).toEqual(tasks)
 		})
 
-		it('should return empty array when output is not valid JSON', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
+		it('should throw BeadsError when output is not valid JSON', async () => {
+			vi.mocked(execa).mockResolvedValue({
 				stdout: 'not json',
 				stderr: '',
 			} as never)
 
-			const result = await beadsManager.ready()
-			expect(result).toEqual([])
+			await expect(beadsManager.ready()).rejects.toThrow(BeadsError)
+			await expect(beadsManager.ready()).rejects.toThrow('Failed to parse bd ready output as JSON')
 		})
 	})
 
@@ -356,6 +367,63 @@ describe('BeadsManager', () => {
 					}),
 				}),
 			)
+		})
+
+		it('should only pass allowed environment variables to bd subprocess', async () => {
+			// Set a secret env var that should NOT be passed through
+			process.env.SECRET_API_KEY = 'super-secret'
+			process.env.BD_CUSTOM = 'bd-value'
+
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '[]', stderr: '' } as never)
+
+			await beadsManager.ready()
+
+			const callArgs = vi.mocked(execa).mock.calls[0]
+			const env = (callArgs[2] as { env: Record<string, string> }).env
+
+			// Should NOT include arbitrary env vars
+			expect(env).not.toHaveProperty('SECRET_API_KEY')
+			// Should include BD_* prefixed vars
+			expect(env.BD_CUSTOM).toBe('bd-value')
+			// Should include required vars
+			expect(env.BEADS_DIR).toBe(beadsManager.getBeadsDir())
+			expect(env.BEADS_NO_DAEMON).toBe('1')
+
+			// Clean up
+			delete process.env.SECRET_API_KEY
+			delete process.env.BD_CUSTOM
+		})
+	})
+
+	describe('list', () => {
+		it('should return parsed tasks', async () => {
+			const tasks = [
+				{ id: '1', title: 'Task A', status: 'open' },
+				{ id: '2', title: 'Task B', status: 'claimed' },
+			]
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify(tasks),
+				stderr: '',
+			} as never)
+
+			const result = await beadsManager.list()
+
+			expect(execa).toHaveBeenCalledWith(
+				'bd',
+				['list', '--json'],
+				expect.anything(),
+			)
+			expect(result).toEqual(tasks)
+		})
+
+		it('should throw BeadsError when output is not valid JSON', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'not json',
+				stderr: '',
+			} as never)
+
+			await expect(beadsManager.list()).rejects.toThrow(BeadsError)
+			await expect(beadsManager.list()).rejects.toThrow('Failed to parse bd list output as JSON')
 		})
 	})
 })

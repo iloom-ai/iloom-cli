@@ -24,6 +24,7 @@ function createMockBeadsManager(): {
 		create: vi.fn().mockResolvedValue(''),
 		addDependency: vi.fn().mockResolvedValue(undefined),
 		ready: vi.fn().mockResolvedValue([]),
+		list: vi.fn().mockResolvedValue([]),
 		claim: vi.fn().mockResolvedValue(undefined),
 		close: vi.fn().mockResolvedValue(undefined),
 		releaseClaim: vi.fn().mockResolvedValue(undefined),
@@ -31,9 +32,11 @@ function createMockBeadsManager(): {
 }
 
 function createMockIssueProvider(): {
-	[K in keyof IssueManagementProvider]: ReturnType<typeof vi.fn>
+	[K in keyof IssueManagementProvider]: K extends 'providerName' | 'issuePrefix' ? string : ReturnType<typeof vi.fn>
 } {
 	return {
+		providerName: 'github',
+		issuePrefix: '#',
 		getIssue: vi.fn(),
 		getPR: vi.fn(),
 		getComment: vi.fn(),
@@ -95,7 +98,7 @@ describe('BeadsSyncService', () => {
 			expect(result.created).toHaveLength(1)
 		})
 
-		it('should skip tasks that already exist in Beads ready list', async () => {
+		it('should skip tasks that already exist in Beads task list', async () => {
 			const children: ChildIssueResult[] = [
 				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
 				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
@@ -104,7 +107,7 @@ describe('BeadsSyncService', () => {
 				{ id: '101', title: 'Task A', status: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
-			mockBeadsManager.ready.mockResolvedValue(existingTasks)
+			mockBeadsManager.list.mockResolvedValue(existingTasks)
 			mockBeadsManager.create.mockResolvedValueOnce('102')
 
 			const result = await syncService.syncEpicToBeads('100')
@@ -181,12 +184,12 @@ describe('BeadsSyncService', () => {
 			expect(result.dependenciesCreated).toBe(0)
 		})
 
-		it('should handle ready() failure gracefully when checking existing tasks', async () => {
+		it('should handle list() failure gracefully when checking existing tasks', async () => {
 			const children: ChildIssueResult[] = [
 				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
-			mockBeadsManager.ready.mockRejectedValue(new Error('No tasks'))
+			mockBeadsManager.list.mockRejectedValue(new Error('No tasks'))
 			mockBeadsManager.create.mockResolvedValueOnce('101')
 
 			const result = await syncService.syncEpicToBeads('100')

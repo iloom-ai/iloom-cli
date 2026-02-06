@@ -99,17 +99,23 @@ export class EpicDetector {
 			}
 		}
 
-		// Fetch dependencies for each child to determine ready vs blocked
+		// Fetch dependencies for all children in parallel
 		let hasDependencies = false
 		let readyCount = 0
 		let blockedCount = 0
 
-		for (const child of openChildren) {
-			try {
-				const deps: DependenciesResult = await this.issueProvider.getDependencies({
+		const depResults = await Promise.allSettled(
+			openChildren.map(child =>
+				this.issueProvider.getDependencies({
 					number: child.id,
 					direction: 'blocked_by',
 				})
+			)
+		)
+
+		for (const [i, result] of depResults.entries()) {
+			if (result.status === 'fulfilled') {
+				const deps: DependenciesResult = result.value
 
 				// A child has dependencies if it is blocked by at least one issue
 				const openBlockers = deps.blockedBy.filter(
@@ -125,10 +131,12 @@ export class EpicDetector {
 				} else {
 					readyCount++
 				}
-			} catch (error) {
+			} else {
 				// If dependencies can't be fetched, treat the child as ready
+				const childId = openChildren[i]?.id ?? `index-${i}`
+				const reason = result.reason instanceof Error ? result.reason.message : 'Unknown error'
 				getLogger().debug(
-					`Failed to fetch dependencies for child ${child.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
+					`Failed to fetch dependencies for child ${childId}: ${reason}`
 				)
 				readyCount++
 			}

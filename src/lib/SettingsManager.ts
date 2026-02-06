@@ -248,7 +248,7 @@ export const SwarmSettingsSchema = z.object({
 		.min(0)
 		.max(5)
 		.default(1)
-		.describe('Maximum retries for failed swarm tasks'),
+		.describe('Maximum total attempts for a failed swarm task (1 = single attempt with no retries, 2 = one retry after initial failure)'),
 	maxConflictRetries: z
 		.number()
 		.min(0)

@@ -541,9 +541,19 @@ export class IgniteCommand {
 			variables.SWARM_MODE = true
 			if (process.env.ILOOM_EPIC_BRANCH) {
 				variables.EPIC_BRANCH = process.env.ILOOM_EPIC_BRANCH
+			} else {
+				throw new Error('ILOOM_EPIC_BRANCH is required when ILOOM_SWARM_MODE is enabled')
 			}
 			if (process.env.ILOOM_EPIC_ISSUE) {
 				variables.EPIC_ISSUE_NUMBER = process.env.ILOOM_EPIC_ISSUE
+			}
+			// Ensure GIT_REMOTE is set for swarm mode (needed for git push)
+			if (!variables.GIT_REMOTE) {
+				const remote = this.settings?.mergeBehavior?.remote ?? 'origin'
+				if (!/^[a-zA-Z0-9_-]+$/.test(remote)) {
+					throw new Error(`Invalid git remote name: "${remote}". Remote names can only contain alphanumeric characters, underscores, and hyphens.`)
+				}
+				variables.GIT_REMOTE = remote
 			}
 		}
 

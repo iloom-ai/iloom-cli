@@ -105,6 +105,16 @@ describe('StartCommand', () => {
 		// Set IssueTracker interface properties
 		mockGitHubService.supportsPullRequests = true
 		mockGitHubService.providerName = 'github'
+		// Default fetchIssue mock returns an issue with no labels (needed for epic detection)
+		vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+			number: 123,
+			title: 'Test Issue',
+			body: '',
+			state: 'open',
+			labels: [],
+			assignees: [],
+			url: 'https://github.com/owner/repo/issues/123',
+		})
 		command = new StartCommand(mockGitHubService)
 	})
 
@@ -1574,7 +1584,15 @@ describe('StartCommand', () => {
 				supportsPullRequests: false,
 				providerName: 'linear',
 				detectInputType: vi.fn(),
-				fetchIssue: vi.fn(),
+				fetchIssue: vi.fn().mockResolvedValue({
+					number: 123,
+					title: 'Test Linear Issue',
+					body: '',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://linear.app/team/ENG-123',
+				}),
 				validateIssueState: vi.fn(),
 				// Linear does NOT have fetchPR or validatePRState
 			}

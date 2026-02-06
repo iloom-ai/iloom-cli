@@ -50,6 +50,9 @@ export interface BeadsCreateOptions {
  */
 export class BeadsManager {
 	private readonly beadsDir: string
+	// TODO(security): This install script is fetched from an unpinned `main` branch via curl|bash.
+	// There is no integrity verification (e.g., checksum or GPG signature). Pin to a specific
+	// release tag or commit SHA when one becomes available to mitigate supply-chain risk.
 	private readonly installScript = 'https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh'
 
 	constructor(
@@ -119,10 +122,30 @@ export class BeadsManager {
 					'User declined installation',
 				)
 			}
+		} else if (!autoInstall && !isInteractiveEnvironment()) {
+			throw new BeadsError(
+				'Beads CLI is required for swarm mode but is not installed. Install it manually or set autoInstallBeads: true in settings.',
+				undefined,
+				'Non-interactive environment requires autoInstallBeads or manual installation',
+			)
 		}
 
 		logger.info('Installing Beads CLI...')
 		await this.runInstallScript()
+
+		// Append common install locations to PATH so isInstalled() can find the
+		// newly installed binary without requiring a shell restart.
+		const homeDir = os.homedir()
+		const candidatePaths = [
+			path.join(homeDir, '.local', 'bin'),
+			path.join(homeDir, '.cargo', 'bin'),
+			'/usr/local/bin',
+		]
+		const currentPath = process.env.PATH ?? ''
+		const newPaths = candidatePaths.filter(p => !currentPath.split(path.delimiter).includes(p))
+		if (newPaths.length > 0) {
+			process.env.PATH = `${currentPath}${path.delimiter}${newPaths.join(path.delimiter)}`
+		}
 
 		// Verify installation succeeded
 		if (!(await this.isInstalled())) {
@@ -202,10 +225,12 @@ export class BeadsManager {
 		const result = await this.execBd(['ready', '--json'])
 		try {
 			return JSON.parse(result.stdout) as BeadsTask[]
-		} catch {
-			// If JSON parsing fails, return empty array
-			logger.debug('Failed to parse bd ready output, returning empty', { stdout: result.stdout })
-			return []
+		} catch (error) {
+			throw new BeadsError(
+				`Failed to parse bd ready output as JSON: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				undefined,
+				`stdout: ${result.stdout}`,
+			)
 		}
 	}
 
@@ -257,9 +282,12 @@ export class BeadsManager {
 		const result = await this.execBd(['list', '--json'])
 		try {
 			return JSON.parse(result.stdout) as BeadsTask[]
-		} catch {
-			logger.debug('Failed to parse bd list output, returning empty', { stdout: result.stdout })
-			return []
+		} catch (error) {
+			throw new BeadsError(
+				`Failed to parse bd list output as JSON: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				undefined,
+				`stdout: ${result.stdout}`,
+			)
 		}
 	}
 
@@ -271,8 +299,23 @@ export class BeadsManager {
 		args: string[],
 		options?: { cwd?: string },
 	): Promise<{ stdout: string; stderr: string }> {
+		// Only pass necessary environment variables to the bd subprocess to
+		// avoid leaking secrets (e.g., API keys, tokens) from the parent process.
+		const allowedKeys = ['PATH', 'HOME', 'SHELL', 'TERM', 'USER', 'LANG', 'LC_ALL']
+		const filteredEnv: Record<string, string> = {}
+		for (const key of allowedKeys) {
+			if (process.env[key] !== undefined) {
+				filteredEnv[key] = process.env[key] as string
+			}
+		}
+		// Include any BD_* or BEADS_* prefixed vars that bd may need
+		for (const [key, value] of Object.entries(process.env)) {
+			if ((key.startsWith('BD_') || key.startsWith('BEADS_')) && value !== undefined) {
+				filteredEnv[key] = value
+			}
+		}
 		const env = {
-			...process.env,
+			...filteredEnv,
 			BEADS_DIR: this.beadsDir,
 			BEADS_NO_DAEMON: '1',
 		}

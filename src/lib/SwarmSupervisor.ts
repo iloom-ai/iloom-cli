@@ -32,6 +32,8 @@ export interface ActiveAgent {
 	beadsTaskId: string
 	/** Set when the process exits. Null means still running. */
 	exitCode: number | null
+	/** Write stream for agent log file; closed when agent completes */
+	logStream: { end: () => void }
 }
 
 /**
@@ -41,6 +43,8 @@ export interface MergeQueueEntry {
 	issueId: string
 	prNumber: number
 	beadsTaskId: string
+	/** Path to the child worktree for this task, used by conflict resolver */
+	loomPath: string
 }
 
 /**
@@ -152,10 +156,17 @@ export class SwarmSupervisor {
 	private taskCompleteTimes: Map<string, string> = new Map()
 	/** Tracks which tasks have been permanently failed (exhausted retries) */
 	private permanentlyFailed: Set<string> = new Set()
+	/**
+	 * Tracks tasks whose claims have been released but may not yet appear in ready().
+	 * Prevents premature exit when Beads has internal delay re-surfacing released tasks.
+	 */
+	private pendingReleases: number = 0
 	/** Start time for progress reporting */
 	private startedAt: string = ''
 	/** Log directory path */
 	private logDir: string = ''
+	/** Maps task IDs to their child worktree paths (retained after agent completes for merge queue use) */
+	private taskLoomPaths: Map<string, string> = new Map()
 
 	constructor(
 		private readonly beadsManager: BeadsManager,
@@ -253,7 +264,10 @@ export class SwarmSupervisor {
 				await this.writeProgress(epicLoom, result, 'running')
 
 				// 5g: Check if we're done
-				if (readyTasks.length === 0 && this.activeAgents.size === 0 && this.mergeQueue.length === 0) {
+				// Filter out permanently failed tasks - they will never be actioned and should
+				// not prevent the supervisor from exiting when all actionable work is complete.
+				const actionableReadyTasks = readyTasks.filter(t => !this.permanentlyFailed.has(t.id))
+				if (actionableReadyTasks.length === 0 && this.activeAgents.size === 0 && this.mergeQueue.length === 0 && this.pendingReleases === 0) {
 					break
 				}
 
@@ -356,6 +370,10 @@ export class SwarmSupervisor {
 
 		// Atomically claim the task
 		await this.beadsManager.claim(task.id)
+		// If this task was pending release from a previous failure, clear the counter
+		if (this.pendingReleases > 0 && attempt > 1) {
+			this.pendingReleases--
+		}
 		logger.info(`Claimed task ${task.id}: ${task.title} (attempt ${attempt})`)
 
 		// Store title for progress reporting
@@ -377,6 +395,9 @@ export class SwarmSupervisor {
 				swarmMode: true,
 			},
 		})
+
+		// Store loom path for later use by conflict resolver (after agent is removed from activeAgents)
+		this.taskLoomPaths.set(task.id, loom.path)
 
 		// Set up log file
 		const logFile = path.join(logDir, `${task.id}.log`)
@@ -408,6 +429,7 @@ export class SwarmSupervisor {
 			process: childProcess,
 			beadsTaskId: task.id,
 			exitCode: null,
+			logStream,
 		}
 
 		// Track process completion via callback
@@ -435,11 +457,25 @@ export class SwarmSupervisor {
 
 			this.activeAgents.delete(issueId)
 
+			// Close the log file stream to avoid leaking file descriptors
+			try {
+				agent.logStream.end()
+			} catch {
+				// Ignore errors closing log stream
+			}
+
 			if (agent.exitCode === 0) {
 				logger.info(`Agent for issue ${issueId} completed successfully`)
 
 				// Find the PR created by the agent
-				const prNumber = await this.findPRForBranch(issueId, epicLoom)
+				let prNumber: number | null = null
+				try {
+					prNumber = await this.findPRForBranch(issueId, epicLoom)
+				} catch (prSearchError) {
+					// findPRForBranch only throws on unexpected errors (network, auth, rate limit).
+					// Log the error and treat as "no PR found" to avoid losing the agent's work.
+					logger.error(`Failed to search for PR for issue ${issueId}: ${prSearchError instanceof Error ? prSearchError.message : 'Unknown error'}`)
+				}
 
 				if (prNumber) {
 					this.taskPRNumbers.set(issueId, prNumber)
@@ -447,6 +483,7 @@ export class SwarmSupervisor {
 						issueId,
 						prNumber,
 						beadsTaskId: agent.beadsTaskId,
+						loomPath: agent.loomPath,
 					})
 					logger.info(`Enqueued PR #${prNumber} for merge (issue ${issueId})`)
 				} else {
@@ -464,6 +501,10 @@ export class SwarmSupervisor {
 
 	/**
 	 * Handle a failed agent by releasing its claim and retrying if below maxRetries.
+	 *
+	 * Note on maxRetries semantics: maxRetries represents the total number of attempts allowed
+	 * (not additional retries after the first). e.g., maxRetries=1 means 1 total attempt (no retries),
+	 * maxRetries=2 means 2 total attempts (1 retry).
 	 */
 	private async handleAgentFailure(
 		agent: ActiveAgent,
@@ -488,6 +529,9 @@ export class SwarmSupervisor {
 			logger.info(`Retrying task ${issueId} (attempt ${attempts + 1} of ${this.settings.maxRetries})...`)
 			// The task's claim was released, so it will appear in ready() on the next loop iteration
 			// and be re-claimed and re-spawned. The attempt counter is already incremented.
+			// Track as pending release so the supervisor doesn't exit prematurely before Beads
+			// re-surfaces the task in ready().
+			this.pendingReleases++
 		} else {
 			// Exhausted retries - mark as permanently failed
 			logger.error(`Task ${issueId} failed after ${attempts} attempt(s). Marking as permanently failed.`)
@@ -646,9 +690,10 @@ export class SwarmSupervisor {
 		entry: MergeQueueEntry,
 		epicLoom: EpicLoomContext,
 	): Promise<void> {
-		// Find the worktree for this issue's agent
-		const agent = this.activeAgents.get(entry.issueId)
-		const cwd = agent?.loomPath ?? epicLoom.epicLoomPath
+		// Use the stored loom path for this task. By the time a task reaches the merge queue,
+		// the agent has already been removed from activeAgents, so we use the loomPath stored
+		// directly on the merge queue entry, or fall back to the taskLoomPaths map.
+		const cwd = entry.loomPath ?? this.taskLoomPaths.get(entry.issueId) ?? epicLoom.epicLoomPath
 
 		const resolverProcess = execa('il', ['spin', '-p'], {
 			cwd,
@@ -713,16 +758,36 @@ export class SwarmSupervisor {
 	 */
 	private async findPRForBranch(issueId: string, _epicLoom: EpicLoomContext): Promise<number | null> {
 		try {
-			const prList = await executeGhCommand<Array<{ number: number }>>(
-				['pr', 'list', '--state', 'open', '--json', 'number', '--search', `is:pr is:open ${issueId} in:title`],
+			// Note: Searching by `issueId in:title` may match unrelated PRs if the issue ID
+			// appears in other PR titles. A more robust approach would filter by head branch
+			// pattern, but GitHub's search API doesn't support exact branch matching via `gh pr list --search`.
+			const prList = await executeGhCommand<Array<{ number: number; headRefName: string }>>(
+				['pr', 'list', '--state', 'open', '--json', 'number,headRefName', '--search', `is:pr is:open ${issueId} in:title`],
 			)
+
+			// Prefer PRs whose branch name contains the issue ID for more precise matching
+			const exactMatch = prList.find(pr => pr.headRefName.includes(issueId))
+			if (exactMatch) {
+				return exactMatch.number
+			}
 
 			if (prList.length > 0 && prList[0]) {
 				return prList[0].number
 			}
 			return null
-		} catch {
-			return null
+		} catch (error: unknown) {
+			// Only return null for "no PR found" scenarios (empty result from gh pr list).
+			// gh pr list with --json returns exit code 0 with an empty array when no PRs match,
+			// so a caught error here indicates an unexpected failure (network, auth, rate limit, etc.).
+			// Propagate unexpected errors so callers can handle them appropriately.
+			if (error instanceof Error) {
+				// gh cli returns exit code 1 with no stderr for genuinely empty results in some edge cases
+				const msg = error.message.toLowerCase()
+				if (msg.includes('no pull requests match') || msg.includes('no open pull requests')) {
+					return null
+				}
+			}
+			throw error
 		}
 	}
 
@@ -734,11 +799,31 @@ export class SwarmSupervisor {
 		result: SwarmResult,
 		epicLoom: EpicLoomContext,
 	): Promise<void> {
+		const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 30_000
+		const shutdownDeadline = Date.now() + GRACEFUL_SHUTDOWN_TIMEOUT_MS
+
 		while (this.activeAgents.size > 0) {
 			await this.checkCompletedAgents(result, epicLoom)
 			await this.processMergeQueue(result, epicLoom)
 
 			if (this.activeAgents.size > 0) {
+				if (Date.now() >= shutdownDeadline) {
+					logger.warn(`Graceful shutdown timed out after ${GRACEFUL_SHUTDOWN_TIMEOUT_MS / 1000}s. Force-killing ${this.activeAgents.size} remaining agent(s).`)
+					for (const [, agent] of this.activeAgents) {
+						try {
+							agent.process.kill('SIGTERM')
+						} catch {
+							// Process may have already exited
+						}
+						try {
+							agent.logStream.end()
+						} catch {
+							// Ignore log stream close errors
+						}
+					}
+					this.activeAgents.clear()
+					break
+				}
 				await sleep(2000)
 			}
 		}
@@ -756,8 +841,12 @@ export class SwarmSupervisor {
 	 * Task IDs may be numeric (GitHub) or alphanumeric (Linear).
 	 */
 	private parseIssueIdentifier(taskId: string): string | number {
-		const numericId = parseInt(taskId, 10)
-		return isNaN(numericId) ? taskId : numericId
+		// Use strict regex to avoid parseInt truncating mixed-format IDs
+		// e.g., parseInt("100-fix-login", 10) returns 100, which is wrong
+		if (/^\d+$/.test(taskId)) {
+			return parseInt(taskId, 10)
+		}
+		return taskId
 	}
 
 	/**
@@ -841,7 +930,11 @@ export class SwarmSupervisor {
 				failures: [...this.failures],
 			}
 
-			await fs.writeJson(progressFile, progress, { spaces: 2 })
+			// Write atomically: write to a temp file, then rename (atomic on POSIX).
+			// This prevents readers from seeing partial JSON if they read mid-write.
+			const tmpFile = progressFile + '.tmp'
+			await fs.writeJson(tmpFile, progress, { spaces: 2 })
+			await fs.rename(tmpFile, progressFile)
 		} catch (error) {
 			// Progress file writing should never fail the swarm
 			logger.debug(`Failed to write progress file: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -884,8 +977,23 @@ export class SwarmSupervisor {
 	 */
 	private handleSignal(): void {
 		if (this.shuttingDown) {
-			logger.warn('Forced shutdown requested. Exiting immediately.')
-			process.exit(1)
+			logger.warn('Forced shutdown requested. Killing child processes and exiting.')
+			// Attempt to kill all active agent child processes before force exit
+			for (const [, agent] of this.activeAgents) {
+				try {
+					agent.process.kill('SIGTERM')
+				} catch {
+					// Process may have already exited
+				}
+				try {
+					agent.logStream.end()
+				} catch {
+					// Ignore log stream close errors
+				}
+			}
+			// Brief grace period then force exit
+			global.setTimeout(() => process.exit(1), 2000)
+			return
 		}
 
 		this.shuttingDown = true

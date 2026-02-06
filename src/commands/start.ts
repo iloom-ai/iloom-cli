@@ -219,12 +219,12 @@ export class StartCommand {
 			let epicDetection: EpicDetectionResult | null = null
 
 			if (parsed.type === 'issue' && parsed.number !== undefined) {
-				epicDetection = await this.detectEpic(parsed.number)
+				epicDetection = await this.detectEpic(parsed.number, initialSettings)
 			}
 
-			// If --swarm on non-epic issue, silently ignore
-			if (input.options.swarm && epicDetection && !epicDetection.isEpic) {
-				getLogger().debug('--swarm flag provided but issue is not an epic (ignored)')
+			// If --swarm on non-epic issue, warn the user
+			if (input.options.swarm && !epicDetection?.isEpic) {
+				getLogger().warn('--swarm flag provided but issue is not detected as an epic. Proceeding as normal issue.')
 			}
 
 			// Step 2.5: Handle description input - create GitHub issue
@@ -704,6 +704,7 @@ export class StartCommand {
 	 */
 	private async detectEpic(
 		issueNumber: string | number,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
 	): Promise<EpicDetectionResult | null> {
 		try {
 			// Fetch the issue to check labels
@@ -719,7 +720,6 @@ export class StartCommand {
 			}
 
 			// Create issue management provider for child/dependency queries
-			const settings = await this.settingsManager.loadSettings()
 			const providerName = settings.issueManagement?.provider ?? 'github'
 			const issueProvider = IssueManagementProviderFactory.create(providerName)
 			const detector = new EpicDetector(issueProvider)
@@ -733,8 +733,25 @@ export class StartCommand {
 
 			return result
 		} catch (error) {
-			getLogger().debug(`Epic detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-			return null
+			// Only catch expected API/network errors. Re-throw unexpected ones.
+			if (error instanceof Error) {
+				const msg = error.message.toLowerCase()
+				if (
+					msg.includes('not found') ||
+					msg.includes('404') ||
+					msg.includes('could not resolve') ||
+					msg.includes('enotfound') ||
+					msg.includes('econnrefused') ||
+					msg.includes('etimedout') ||
+					msg.includes('fetch failed') ||
+					msg.includes('graphql') ||
+					msg.includes('rate limit')
+				) {
+					getLogger().debug(`Epic detection failed (expected): ${error.message}`)
+					return null
+				}
+			}
+			throw error
 		}
 	}
 
@@ -876,9 +893,9 @@ export class StartCommand {
 		const maxAgents = options.maxAgents ?? settings.swarm?.maxConcurrent ?? 3
 		const { promptConfirmation } = await import('../utils/prompt.js')
 		const confirmed = await promptConfirmation(
-			`Issue #${epicDetection.totalChildren > 0
-				? `is an epic with ${epicDetection.totalChildren} child issue${epicDetection.totalChildren === 1 ? '' : 's'} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked).\nStart swarm mode? Max ${maxAgents} concurrent agents.`
-				: 'is an epic. Start swarm mode?'}`,
+			epicDetection.totalChildren > 0
+				? `Issue is an epic with ${epicDetection.totalChildren} child issue${epicDetection.totalChildren === 1 ? '' : 's'} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked).\nStart swarm mode? Max ${maxAgents} concurrent agents.`
+				: 'Issue is an epic. Start swarm mode?',
 			true
 		)
 
