@@ -234,6 +234,38 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 	.optional()
 
 /**
+ * Zod schema for swarm mode settings
+ */
+export const SwarmSettingsSchema = z.object({
+	maxConcurrent: z
+		.number()
+		.min(1)
+		.max(10)
+		.default(3)
+		.describe('Maximum number of concurrent swarm agents'),
+	maxRetries: z
+		.number()
+		.min(0)
+		.max(5)
+		.default(1)
+		.describe('Maximum retries for failed swarm tasks'),
+	maxConflictRetries: z
+		.number()
+		.min(0)
+		.max(10)
+		.default(3)
+		.describe('Maximum retries for merge conflict resolution'),
+	beadsDir: z
+		.string()
+		.default('~/.config/iloom-ai/beads')
+		.describe('Directory for Beads DAG state files'),
+	autoInstallBeads: z
+		.boolean()
+		.default(false)
+		.describe('Automatically install Beads CLI without prompting'),
+})
+
+/**
  * Zod schema for Neon database provider settings
  */
 export const NeonSettingsSchema = z.object({
@@ -429,6 +461,9 @@ export const IloomSettingsSchema = z.object({
 		})
 		.optional()
 		.describe('Color synchronization settings for workspace identification'),
+	swarm: SwarmSettingsSchema.optional().describe(
+		'Swarm mode configuration for parallel agent execution with Beads DAG engine',
+	),
 	attribution: z
 		.enum(['off', 'upstreamOnly', 'on'])
 		.default('upstreamOnly')
@@ -618,6 +653,16 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Color synchronization settings for workspace identification'),
+	swarm: z
+		.object({
+			maxConcurrent: z.number().min(1).max(10).optional(),
+			maxRetries: z.number().min(0).max(5).optional(),
+			maxConflictRetries: z.number().min(0).max(10).optional(),
+			beadsDir: z.string().optional(),
+			autoInstallBeads: z.boolean().optional(),
+		})
+		.optional()
+		.describe('Swarm mode configuration'),
 	attribution: z
 		.enum(['off', 'upstreamOnly', 'on'])
 		.optional()
@@ -628,6 +673,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'"on" - always show attribution.'
 		),
 })
+
+/**
+ * TypeScript type for swarm settings derived from Zod schema
+ */
+export type SwarmSettings = z.infer<typeof SwarmSettingsSchema>
 
 /**
  * TypeScript type for Neon settings derived from Zod schema
