@@ -66,7 +66,7 @@ Codex review configured with model: {{REVIEW_CODEX_MODEL}}
 
 **ORCHESTRATOR: Execute the following steps:**
 
-1. Gather context: Run `git diff` and read all CLAUDE.md files
+1. Gather context: Run `git status` to identify all changes, then run `git diff` for tracked file changes, then read all CLAUDE.md files. **IMPORTANT:** `git diff` does NOT show untracked (new) files. For any new untracked files listed by `git status`, you MUST read them directly using the Read tool to include their contents in the review.
 2. Execute 5 parallel Task agents (below) with the git diff and CLAUDE.md content
 
 ### Agent 1: Compliance Review
@@ -242,9 +242,10 @@ Summary: X critical, Y warnings, Z suggestions
 
 ### Step 1 - Gather Context
 
-1. Run `git status` to see all uncommitted changes
-2. Run `git diff` to get the full diff of changes (save this - you will need it)
-3. Search for CLAUDE.md files in the repository for project guidelines using Glob tool
+1. Run `git status` to see all uncommitted changes (including untracked new files)
+2. Run `git diff` to get the full diff of tracked file changes (save this - you will need it)
+3. **IMPORTANT:** `git diff` does NOT show untracked (new) files. For any new untracked files listed by `git status`, read them directly using the Read tool and include their contents alongside the diff for review.
+4. Search for CLAUDE.md files in the repository for project guidelines using Glob tool
 
 ### Step 2 - Execute Gemini Review
 
@@ -483,9 +484,10 @@ If ANY critical issues (95-100 confidence) are found from Gemini review:
 
 ### Step 1 - Gather Context
 
-1. Run `git status` to see all uncommitted changes
-2. Run `git diff` to get the full diff of changes (save this - you will need it)
-3. Search for CLAUDE.md files in the repository for project guidelines using Glob tool
+1. Run `git status` to see all uncommitted changes (including untracked new files)
+2. Run `git diff` to get the full diff of tracked file changes (save this - you will need it)
+3. **IMPORTANT:** `git diff` does NOT show untracked (new) files. For any new untracked files listed by `git status`, read them directly using the Read tool and include their contents alongside the diff for review.
+4. Search for CLAUDE.md files in the repository for project guidelines using Glob tool
 
 ### Step 2 - Execute Codex Review
 
