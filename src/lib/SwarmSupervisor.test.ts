@@ -25,6 +25,7 @@ vi.mock('fs-extra', () => ({
 			end: vi.fn(),
 		})),
 		writeJson: vi.fn(),
+		rename: vi.fn(),
 	},
 }))
 
@@ -295,7 +296,7 @@ describe('SwarmSupervisor', () => {
 
 			// Mock PR search - found a PR, then merge, then issue close
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)  // PR search
 				.mockResolvedValueOnce(undefined as never)          // PR merge
 				.mockResolvedValueOnce(undefined as never)          // issue close
 
@@ -472,7 +473,7 @@ describe('SwarmSupervisor', () => {
 			vi.mocked(execa).mockReturnValue(mockProcess as never)
 
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)  // PR search
 				.mockResolvedValueOnce(undefined as never)          // PR merge
 				.mockResolvedValueOnce(undefined as never)          // issue close
 
@@ -665,7 +666,7 @@ describe('SwarmSupervisor', () => {
 			})
 
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)           // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)           // PR search
 				.mockRejectedValueOnce(new Error('merge conflict'))          // first merge attempt fails
 				.mockResolvedValueOnce(undefined as never)                   // retry merge succeeds
 				.mockResolvedValueOnce(undefined as never)                   // issue close
@@ -718,7 +719,7 @@ describe('SwarmSupervisor', () => {
 			})
 
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)           // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)           // PR search
 				.mockRejectedValueOnce(new Error('merge conflict'))          // first merge fails
 				.mockRejectedValueOnce(new Error('merge conflict'))          // retry after resolution also fails
 				.mockRejectedValueOnce(new Error('merge conflict'))          // conflicts exhausted
@@ -759,7 +760,7 @@ describe('SwarmSupervisor', () => {
 
 			// Test "CONFLICT" pattern
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)             // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)             // PR search
 				.mockRejectedValueOnce(new Error('CONFLICT in file.ts'))       // merge with CONFLICT
 				.mockResolvedValueOnce(undefined as never)                     // retry merge succeeds
 				.mockResolvedValueOnce(undefined as never)                     // issue close
@@ -790,7 +791,7 @@ describe('SwarmSupervisor', () => {
 
 			// Non-conflict error
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)     // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)     // PR search
 				.mockRejectedValueOnce(new Error('Authentication failed'))  // non-conflict error
 
 			const result = await supervisor.run(epicLoom)
@@ -1073,8 +1074,9 @@ describe('SwarmSupervisor', () => {
 			expect(beadsManager.claim).not.toHaveBeenCalled()
 		})
 
-		it('should handle double SIGINT by process.exit', () => {
+		it('should handle double SIGINT by killing agents and scheduling exit', () => {
 			const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+			const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(() => 0 as unknown as NodeJS.Timeout)
 
 			const handler = (supervisor as unknown as { handleSignal: () => void }).handleSignal.bind(supervisor)
 
@@ -1082,11 +1084,17 @@ describe('SwarmSupervisor', () => {
 			handler()
 			expect((supervisor as unknown as { shuttingDown: boolean }).shuttingDown).toBe(true)
 
-			// Second signal: force exit
+			// Second signal: schedules force exit after grace period
 			handler()
+			expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000)
+
+			// Invoke the scheduled callback to verify it calls process.exit(1)
+			const scheduledCallback = setTimeoutSpy.mock.calls[0][0] as () => void
+			scheduledCallback()
 			expect(exitSpy).toHaveBeenCalledWith(1)
 
 			exitSpy.mockRestore()
+			setTimeoutSpy.mockRestore()
 		})
 	})
 
@@ -1111,7 +1119,7 @@ describe('SwarmSupervisor', () => {
 			vi.mocked(execa).mockReturnValue(mockProcess as never)
 
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)  // PR search
 				.mockResolvedValueOnce(undefined as never)          // PR merge succeeds
 				.mockRejectedValueOnce(new Error('Cannot close'))   // issue close fails
 
@@ -1146,7 +1154,7 @@ describe('SwarmSupervisor', () => {
 			vi.mocked(execa).mockReturnValue(mockProcess as never)
 
 			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
+				.mockResolvedValueOnce([{ number: 42, headRefName: 'feat/issue-100' }] as never)  // PR search
 				.mockResolvedValueOnce(undefined as never)          // PR merge
 				.mockResolvedValueOnce(undefined as never)          // issue close
 

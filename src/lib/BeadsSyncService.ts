@@ -54,13 +54,15 @@ export class BeadsSyncService {
 		const openChildren = children.filter(child => child.state === 'open' || child.state === 'OPEN')
 		logger.debug('Open child issues', { count: openChildren.length })
 
-		// Step 2: Get existing Beads tasks to detect already-synced issues
+		// Step 2: Get existing Beads tasks to detect already-synced issues.
+		// Uses list() instead of ready() to include tasks in all states
+		// (blocked, claimed, completed), preventing re-creation attempts on re-sync.
 		let existingTaskIds: Set<string>
 		try {
-			const readyTasks = await this.beadsManager.ready()
-			existingTaskIds = new Set(readyTasks.map(t => t.id))
+			const allTasks = await this.beadsManager.list()
+			existingTaskIds = new Set(allTasks.map(t => t.id))
 		} catch {
-			// If ready() fails (e.g., no tasks yet), start with empty set
+			// If list() fails (e.g., no tasks yet), start with empty set
 			existingTaskIds = new Set()
 		}
 

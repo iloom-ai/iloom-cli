@@ -2837,7 +2837,7 @@ describe('IgniteCommand', () => {
 	})
 
 	describe('SWARM_MODE template variables', () => {
-		it('should set SWARM_MODE, EPIC_BRANCH, and EPIC_ISSUE_NUMBER when env vars are set', async () => {
+		it('should set SWARM_MODE, EPIC_BRANCH, EPIC_ISSUE_NUMBER, and GIT_REMOTE when env vars are set', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -2860,6 +2860,7 @@ describe('IgniteCommand', () => {
 						SWARM_MODE: true,
 						EPIC_BRANCH: 'issue-42-swarm-mode',
 						EPIC_ISSUE_NUMBER: '42',
+						GIT_REMOTE: 'origin',
 					})
 				)
 			} finally {
@@ -2922,7 +2923,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should set SWARM_MODE without EPIC_BRANCH or EPIC_ISSUE_NUMBER when those env vars are missing', async () => {
+		it('should throw error when ILOOM_SWARM_MODE is set but ILOOM_EPIC_BRANCH is missing', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -2936,12 +2937,12 @@ describe('IgniteCommand', () => {
 			delete process.env.ILOOM_EPIC_ISSUE
 
 			try {
-				await command.execute()
+				await expect(command.execute()).rejects.toThrow(
+					'ILOOM_EPIC_BRANCH is required when ILOOM_SWARM_MODE is enabled'
+				)
 
-				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
-				expect(templateCall[1].SWARM_MODE).toBe(true)
-				expect(templateCall[1].EPIC_BRANCH).toBeUndefined()
-				expect(templateCall[1].EPIC_ISSUE_NUMBER).toBeUndefined()
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()

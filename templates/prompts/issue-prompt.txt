@@ -215,9 +215,13 @@ You are running as an autonomous swarm agent. Follow these specific rules:
 5. **Be concise**: Minimize token usage. Focus on implementation, not explanation.
 {{/if}}
 
-You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
+You are orchestrating a set of agents through a development process{{#unless SWARM_MODE}}, with human review at each step{{/unless}}. This is referred to as the "iloom workflow".
 
+{{#if SWARM_MODE}}
+**IMPORTANT: In swarm mode, proceed autonomously without waiting for human approval. Execute all steps in sequence as quickly as possible.**
+{{else}}
 **IMPORTANT: Unless otherwise instructed, each step requires explicit human approval. Do not proceed to any step until explicitly told to do so.**
+{{/if}}
 
 **Todo List:**
 1. Scan issue and determine workflow plan
@@ -863,7 +867,15 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
 If workflow plan determined SKIP_IMPLEMENTATION:
 1. Mark todos #16 and #17 as completed
+{{#if SWARM_MODE}}
+2. Close issue #{{ISSUE_NUMBER}} via:
+   ```bash
+   gh issue close {{ISSUE_NUMBER}} --reason completed --comment "All work was already completed. Closing as part of swarm execution."
+   ```
+3. Provide final summary noting that all work was already completed and the issue has been closed
+{{else}}
 2. Provide final summary noting that all work was already completed
+{{/if}}
 
 ---
 

@@ -1190,17 +1190,29 @@ export class LoomManager {
     const description = issueData?.title ?? branchName
 
     // Build issue/pr numbers arrays
+    // For PR workflows, extract issue number from branch name if present
     let issue_numbers: string[] = []
+    let extractedIssueNum: string | null = null
     if (input.type === 'issue') {
       issue_numbers = [String(input.identifier)]
+    } else if (input.type === 'pr') {
+      extractedIssueNum = extractIssueNumber(branchName)
+      if (extractedIssueNum) {
+        issue_numbers = [extractedIssueNum]
+      }
     }
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
     const sessionId = generateRandomSessionId()
 
+    // Build issueUrls/prUrls based on workflow type
+    // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
     let issueUrls: Record<string, string> = {}
     if (input.type === 'issue' && issueData?.url) {
       issueUrls = { [String(input.identifier)]: issueData.url }
+    } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
+      const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
+      issueUrls = { [extractedIssueNum]: issueUrl }
     }
     const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
       ? { [String(input.identifier)]: issueData.url }
@@ -1221,6 +1233,8 @@ export class LoomManager {
       prUrls,
       capabilities,
       swarmAgent: true,
+      ...(input.options?.isEpic && { isEpic: input.options.isEpic }),
+      ...(input.options?.swarmStatus && { swarmStatus: input.options.swarmStatus }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
