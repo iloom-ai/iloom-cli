@@ -813,6 +813,31 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    - Call `mcp__recap__add_artifact` again with the same `primaryUrl` but updated `description` reflecting the completed state (this replaces the original "in progress" artifact)
 
 5. Mark todo #16 as completed
+{{#if IMPLEMENTER_REVIEW_ENABLED}}
+{{#if ARTIFACT_REVIEW_ENABLED}}
+5.5. Artifact Review (Implementation):
+   - The implementer output should be reviewed for plan alignment before code review
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+   - Wait for review results
+   - If review suggests improvements:
+{{#if ONE_SHOT_MODE}}
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-implementer from scratch with the reviewer's feedback
+{{else}}
+     a. Present review findings to user
+     b. Use AskUserQuestion tool: "The artifact reviewer found plan alignment issues. How would you like to proceed?"
+        - Options: "Accept implementation as-is", "Address feedback", "Manually fix"
+     c. If address feedback: Re-run @agent-iloom-issue-implementer with feedback
+     d. If manually fix: Wait for user edits, then proceed
+{{/if}}
+   - If review approves: Proceed to STEP 5 - Review Phase
+{{/if}}
+{{/if}}
 6. After implementation completes, proceed to STEP 5 - Review Phase (do NOT skip to Post-Workflow Help)
 
 If workflow plan determined SKIP_IMPLEMENTATION:
