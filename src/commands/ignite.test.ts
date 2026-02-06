@@ -2836,6 +2836,125 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('SWARM_MODE template variables', () => {
+		it('should set SWARM_MODE, EPIC_BRANCH, and EPIC_ISSUE_NUMBER when env vars are set', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__swarm-test')
+
+			// Set swarm env vars
+			const originalSwarmMode = process.env.ILOOM_SWARM_MODE
+			const originalEpicBranch = process.env.ILOOM_EPIC_BRANCH
+			const originalEpicIssue = process.env.ILOOM_EPIC_ISSUE
+			process.env.ILOOM_SWARM_MODE = '1'
+			process.env.ILOOM_EPIC_BRANCH = 'issue-42-swarm-mode'
+			process.env.ILOOM_EPIC_ISSUE = '42'
+
+			try {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_MODE: true,
+						EPIC_BRANCH: 'issue-42-swarm-mode',
+						EPIC_ISSUE_NUMBER: '42',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				// Restore env vars
+				if (originalSwarmMode === undefined) delete process.env.ILOOM_SWARM_MODE
+				else process.env.ILOOM_SWARM_MODE = originalSwarmMode
+				if (originalEpicBranch === undefined) delete process.env.ILOOM_EPIC_BRANCH
+				else process.env.ILOOM_EPIC_BRANCH = originalEpicBranch
+				if (originalEpicIssue === undefined) delete process.env.ILOOM_EPIC_ISSUE
+				else process.env.ILOOM_EPIC_ISSUE = originalEpicIssue
+			}
+		})
+
+		it('should not set SWARM_MODE when ILOOM_SWARM_MODE env var is not set', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-101__no-swarm')
+
+			// Ensure swarm env vars are not set
+			const originalSwarmMode = process.env.ILOOM_SWARM_MODE
+			delete process.env.ILOOM_SWARM_MODE
+
+			try {
+				await command.execute()
+
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].SWARM_MODE).toBeUndefined()
+				expect(templateCall[1].EPIC_BRANCH).toBeUndefined()
+				expect(templateCall[1].EPIC_ISSUE_NUMBER).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalSwarmMode === undefined) delete process.env.ILOOM_SWARM_MODE
+				else process.env.ILOOM_SWARM_MODE = originalSwarmMode
+			}
+		})
+
+		it('should not set SWARM_MODE when ILOOM_SWARM_MODE is not "1"', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-102__swarm-false')
+
+			const originalSwarmMode = process.env.ILOOM_SWARM_MODE
+			process.env.ILOOM_SWARM_MODE = 'false'
+
+			try {
+				await command.execute()
+
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].SWARM_MODE).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalSwarmMode === undefined) delete process.env.ILOOM_SWARM_MODE
+				else process.env.ILOOM_SWARM_MODE = originalSwarmMode
+			}
+		})
+
+		it('should set SWARM_MODE without EPIC_BRANCH or EPIC_ISSUE_NUMBER when those env vars are missing', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-103__swarm-minimal')
+
+			const originalSwarmMode = process.env.ILOOM_SWARM_MODE
+			const originalEpicBranch = process.env.ILOOM_EPIC_BRANCH
+			const originalEpicIssue = process.env.ILOOM_EPIC_ISSUE
+			process.env.ILOOM_SWARM_MODE = '1'
+			delete process.env.ILOOM_EPIC_BRANCH
+			delete process.env.ILOOM_EPIC_ISSUE
+
+			try {
+				await command.execute()
+
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].SWARM_MODE).toBe(true)
+				expect(templateCall[1].EPIC_BRANCH).toBeUndefined()
+				expect(templateCall[1].EPIC_ISSUE_NUMBER).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalSwarmMode === undefined) delete process.env.ILOOM_SWARM_MODE
+				else process.env.ILOOM_SWARM_MODE = originalSwarmMode
+				if (originalEpicBranch === undefined) delete process.env.ILOOM_EPIC_BRANCH
+				else process.env.ILOOM_EPIC_BRANCH = originalEpicBranch
+				if (originalEpicIssue === undefined) delete process.env.ILOOM_EPIC_ISSUE
+				else process.env.ILOOM_EPIC_ISSUE = originalEpicIssue
+			}
+		})
+	})
+
 	describe('Main worktree validation', () => {
 		it('should throw WorktreeValidationError when running from main worktree', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)

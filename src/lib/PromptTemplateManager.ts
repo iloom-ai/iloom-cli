@@ -102,6 +102,10 @@ export interface TemplateVariables {
 	HAS_REVIEWER?: boolean
 	// Git remote configuration
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
+	// Swarm mode variables
+	SWARM_MODE?: boolean          // True when running as a swarm agent
+	EPIC_BRANCH?: string          // Epic integration branch name (e.g., 'issue-42-swarm-mode')
+	EPIC_ISSUE_NUMBER?: string    // Parent epic's issue number
 }
 
 /**

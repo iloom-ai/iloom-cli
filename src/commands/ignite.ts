@@ -536,6 +536,17 @@ export class IgniteCommand {
 			variables.STANDARD_ISSUE_MODE = true
 		}
 
+		// Set swarm mode variables from environment
+		if (process.env.ILOOM_SWARM_MODE === '1') {
+			variables.SWARM_MODE = true
+			if (process.env.ILOOM_EPIC_BRANCH) {
+				variables.EPIC_BRANCH = process.env.ILOOM_EPIC_BRANCH
+			}
+			if (process.env.ILOOM_EPIC_ISSUE) {
+				variables.EPIC_ISSUE_NUMBER = process.env.ILOOM_EPIC_ISSUE
+			}
+		}
+
 		return variables
 	}
 
