@@ -528,6 +528,34 @@ il plan --yolo "Add GitLab integration"
 
 See the [Complete Command Reference](docs/iloom-commands.md#il-plan) for all options including `--model`, `--planner`, and `--reviewer` flags.
 
+### Swarm Mode (Autonomous Epic Execution)
+
+For issues labeled `iloom-epic`, `il start` can enter swarm mode -- launching multiple Claude agents in parallel to work through all child issues automatically.
+
+```bash
+# Start swarm on an epic (interactive confirmation)
+il start 50
+
+# Skip confirmation with --swarm flag
+il start 50 --swarm
+
+# Limit concurrent agents
+il start 50 --swarm --max-agents 5
+```
+
+Swarm mode uses the [Beads](https://github.com/steveyegge/beads) DAG engine for dependency-aware task ordering and atomic claiming. Each child issue gets its own minimal worktree. PRs are merged sequentially into the epic's integration branch to prevent conflicts.
+
+Configure via `.iloom.yml`:
+
+```yaml
+swarm:
+  maxConcurrent: 3     # Default: 3
+  maxRetries: 1         # Default: 1
+  autoInstallBeads: false
+```
+
+See the [Complete Command Reference](docs/iloom-commands.md#il-start) for details.
+
 System Requirements & Limitations
 ---------------------------------
 

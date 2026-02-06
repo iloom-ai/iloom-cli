@@ -70,6 +70,8 @@ il start "<issue-description>"
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
 | `--terminal` / `--no-terminal` | - | Enable/disable terminal without dev server (default: disabled) |
 | `--body` | `<text>` | Body text for issue (skips AI enhancement) |
+| `--swarm` | - | Bypass epic confirmation and start swarm mode immediately |
+| `--max-agents` | `<n>` | Maximum concurrent agents for swarm mode (overrides `swarm.maxConcurrent` setting) |
 
 **One-Shot Modes:**
 - `default` - Standard behavior with approval prompts at each phase
@@ -113,6 +115,36 @@ il start 42 --child-loom
 
 # Create independent loom even when inside another loom
 il start 99 --no-child-loom
+
+# Start swarm mode on an epic (skip confirmation prompt)
+il start 50 --swarm
+
+# Start swarm with custom concurrency
+il start 50 --swarm --max-agents 5
+```
+
+**Swarm Mode:**
+
+When `il start` is run on an issue with the `iloom-epic` label, it detects the issue as an epic and offers to enter swarm mode. In swarm mode, iloom:
+
+1. Creates an integration branch (epic loom) with no interactive components
+2. Initializes the Beads DAG engine to track child issue dependencies
+3. Syncs all child issues and their dependency graph into the DAG
+4. Launches a supervisor that concurrently spawns Claude agents for ready tasks
+5. Merges completed PRs sequentially into the epic branch
+6. Reports aggregate results on completion
+
+The `--swarm` flag skips the confirmation prompt for automated workflows. The `--max-agents` flag overrides the `swarm.maxConcurrent` setting. In non-interactive environments, `--swarm` is required to enter swarm mode. In JSON mode (`--json`), the command returns the epic loom metadata without running the supervisor.
+
+Swarm behavior is configured via the `swarm` section in `.iloom.yml`:
+
+```yaml
+swarm:
+  maxConcurrent: 3        # Max concurrent agents (default: 3)
+  maxRetries: 1            # Retries per failed task (default: 1)
+  maxConflictRetries: 3    # Merge conflict resolution retries (default: 3)
+  beadsDir: ~/.config/iloom-ai/beads  # Beads state directory
+  autoInstallBeads: false  # Auto-install Beads CLI without prompting
 ```
 
 **Notes:**

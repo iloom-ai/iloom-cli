@@ -10,8 +10,13 @@ import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import type { SwarmSettings } from '../lib/SettingsManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
+import { BeadsManager } from '../lib/BeadsManager.js'
+import { BeadsSyncService } from '../lib/BeadsSyncService.js'
+import { SwarmSupervisor } from '../lib/SwarmSupervisor.js'
+import type { SwarmResult } from '../lib/SwarmSupervisor.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
@@ -325,6 +330,21 @@ export class StartCommand {
 						isEpic: true,
 						swarmStatus: 'pending',
 					}
+				}
+
+				// Step 5: Wire up swarm supervisor and run
+				const swarmResult = await this.runSwarmSupervisor(
+					loom,
+					settings,
+					input.options,
+					loomManager,
+				)
+
+				// Step 6: Report results and set exit code
+				this.reportSwarmResult(swarmResult)
+
+				if (swarmResult.failed > 0 && swarmResult.completed === 0) {
+					process.exitCode = 1
 				}
 			} else {
 				// Normal loom creation
@@ -715,6 +735,97 @@ export class StartCommand {
 		} catch (error) {
 			getLogger().debug(`Epic detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			return null
+		}
+	}
+
+	/**
+	 * Wire up and run the SwarmSupervisor with all dependencies.
+	 *
+	 * Initializes BeadsManager, syncs epic children via BeadsSyncService,
+	 * and launches the supervisor loop as a foreground process.
+	 *
+	 * @param loom - The created epic loom
+	 * @param settings - Loaded iloom settings
+	 * @param options - Start command options (for --max-agents override)
+	 * @param loomManager - LoomManager instance for child loom creation
+	 * @returns SwarmResult with completion stats
+	 */
+	private async runSwarmSupervisor(
+		loom: import('../types/loom.js').Loom,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+		options: StartOptions,
+		loomManager: LoomManager,
+	): Promise<SwarmResult> {
+		const mainWorktreePath = await findMainWorktreePathWithSettings()
+
+		// Build SwarmSettings with --max-agents override
+		const swarmSettings: SwarmSettings = {
+			maxConcurrent: options.maxAgents ?? settings.swarm?.maxConcurrent ?? 3,
+			maxRetries: settings.swarm?.maxRetries ?? 1,
+			maxConflictRetries: settings.swarm?.maxConflictRetries ?? 3,
+			beadsDir: settings.swarm?.beadsDir ?? '~/.config/iloom-ai/beads',
+			autoInstallBeads: settings.swarm?.autoInstallBeads ?? false,
+		}
+
+		// Initialize BeadsManager
+		const beadsManager = new BeadsManager(mainWorktreePath, swarmSettings)
+
+		// Ensure Beads CLI is installed
+		getLogger().info('Checking Beads CLI availability...')
+		await beadsManager.ensureInstalled(swarmSettings.autoInstallBeads)
+
+		// Create issue management provider for BeadsSyncService
+		const providerName = settings.issueManagement?.provider ?? 'github'
+		const issueProvider = IssueManagementProviderFactory.create(providerName)
+		const syncService = new BeadsSyncService(beadsManager, issueProvider)
+
+		// Create SwarmSupervisor
+		const supervisor = new SwarmSupervisor(
+			beadsManager,
+			syncService,
+			loomManager,
+			swarmSettings,
+		)
+
+		// Run the supervisor loop
+		getLogger().info(`Starting swarm supervisor (max ${swarmSettings.maxConcurrent} concurrent agents)...`)
+		return supervisor.run({
+			epicIssueNumber: String(loom.identifier),
+			epicBranch: loom.branch,
+			epicLoomPath: loom.path,
+			projectPath: mainWorktreePath,
+		})
+	}
+
+	/**
+	 * Report swarm completion results to the user.
+	 */
+	private reportSwarmResult(result: SwarmResult): void {
+		const durationSeconds = Math.round(result.duration / 1000)
+		const durationMinutes = Math.floor(durationSeconds / 60)
+		const remainingSeconds = durationSeconds % 60
+		const durationStr = durationMinutes > 0
+			? `${durationMinutes}m ${remainingSeconds}s`
+			: `${durationSeconds}s`
+
+		getLogger().info('')
+		getLogger().info('--- Swarm Results ---')
+		getLogger().info(`   Total tasks:   ${result.totalTasks}`)
+		getLogger().info(`   Completed:     ${result.completed}`)
+		getLogger().info(`   Failed:        ${result.failed}`)
+		getLogger().info(`   PRs merged:    ${result.mergedPRs}`)
+		if (result.failedMerges > 0) {
+			getLogger().info(`   Failed merges: ${result.failedMerges}`)
+		}
+		getLogger().info(`   Duration:      ${durationStr}`)
+		getLogger().info('---------------------')
+
+		if (result.failed === 0) {
+			getLogger().success('Swarm completed successfully!')
+		} else if (result.completed > 0) {
+			getLogger().warn(`Swarm completed with ${result.failed} failure(s). Check agent logs for details.`)
+		} else {
+			getLogger().error('Swarm failed. No tasks completed. Check agent logs for details.')
 		}
 	}
 
