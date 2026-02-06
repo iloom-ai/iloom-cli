@@ -247,6 +247,23 @@ export class BeadsManager {
 	}
 
 	/**
+	 * List all tasks in the Beads DAG regardless of status.
+	 * Returns parsed JSON array of all tasks.
+	 *
+	 * @returns Array of all tasks
+	 * @throws BeadsError if the command fails
+	 */
+	async list(): Promise<BeadsTask[]> {
+		const result = await this.execBd(['list', '--json'])
+		try {
+			return JSON.parse(result.stdout) as BeadsTask[]
+		} catch {
+			logger.debug('Failed to parse bd list output, returning empty', { stdout: result.stdout })
+			return []
+		}
+	}
+
+	/**
 	 * Execute a bd CLI command with proper environment variables set.
 	 * All bd commands must have BEADS_DIR and BEADS_NO_DAEMON=1.
 	 */

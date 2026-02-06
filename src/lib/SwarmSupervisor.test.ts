@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SwarmSupervisor, type EpicLoomContext } from './SwarmSupervisor.js'
+import { SwarmSupervisor, type EpicLoomContext, type SwarmProgress } from './SwarmSupervisor.js'
 import type { BeadsManager, BeadsTask } from './BeadsManager.js'
 import type { BeadsSyncService, SyncResult } from './BeadsSyncService.js'
 import type { LoomManager } from './LoomManager.js'
@@ -24,6 +24,7 @@ vi.mock('fs-extra', () => ({
 			write: vi.fn(),
 			end: vi.fn(),
 		})),
+		writeJson: vi.fn(),
 	},
 }))
 
@@ -44,6 +45,7 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 import { execa } from 'execa'
+import fs from 'fs-extra'
 import { executeGhCommand } from '../utils/github.js'
 import { logger } from '../utils/logger.js'
 
@@ -61,6 +63,7 @@ function createMockBeadsManager(): BeadsManager {
 		ensureInstalled: vi.fn().mockResolvedValue(undefined),
 		isInstalled: vi.fn().mockResolvedValue(true),
 		getBeadsDir: vi.fn().mockReturnValue('/tmp/beads'),
+		list: vi.fn().mockResolvedValue([]),
 	} as unknown as BeadsManager
 }
 
@@ -108,8 +111,8 @@ function createEpicLoomContext(): EpicLoomContext {
 	}
 }
 
-function createBeadsTask(id: string, title: string): BeadsTask {
-	return { id, title, status: 'ready' }
+function createBeadsTask(id: string, title: string, status = 'ready'): BeadsTask {
+	return { id, title, status }
 }
 
 /**
@@ -271,33 +274,6 @@ describe('SwarmSupervisor', () => {
 			expect(beadsManager.claim).toHaveBeenCalledWith('101')
 		})
 
-		it('should handle failed agents by releasing their claim', async () => {
-			const task1 = createBeadsTask('100', 'Failing task')
-
-			let readyCallCount = 0
-			vi.mocked(beadsManager.ready).mockImplementation(async () => {
-				readyCallCount++
-				if (readyCallCount === 1) return [task1]
-				return []
-			})
-
-			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
-				created: [{ issueId: '100', beadsTaskId: '100', title: 'Failing task' }],
-				skipped: [],
-				dependenciesCreated: 0,
-			})
-
-			// Mock agent that exits with failure
-			const mockProcess = createMockChildProcess(1)
-			vi.mocked(execa).mockReturnValue(mockProcess as never)
-
-			const result = await supervisor.run(epicLoom)
-
-			expect(beadsManager.releaseClaim).toHaveBeenCalledWith('100')
-			expect(result.failed).toBe(1)
-			expect(result.completed).toBe(0)
-		})
-
 		it('should enqueue and merge PRs sequentially on success', async () => {
 			const task1 = createBeadsTask('100', 'Task with PR')
 
@@ -331,106 +307,6 @@ describe('SwarmSupervisor', () => {
 			)
 			expect(result.mergedPRs).toBe(1)
 			expect(result.completed).toBe(1)
-		})
-
-		it('should handle merge failures', async () => {
-			const task1 = createBeadsTask('100', 'Task with failing merge')
-
-			let readyCallCount = 0
-			vi.mocked(beadsManager.ready).mockImplementation(async () => {
-				readyCallCount++
-				if (readyCallCount === 1) return [task1]
-				return []
-			})
-
-			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
-				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task' }],
-				skipped: [],
-				dependenciesCreated: 0,
-			})
-
-			const mockProcess = createMockChildProcess(0)
-			vi.mocked(execa).mockReturnValue(mockProcess as never)
-
-			// PR search finds PR, but merge fails
-			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
-				.mockRejectedValueOnce(new Error('Merge conflict'))  // PR merge fails
-
-			const result = await supervisor.run(epicLoom)
-
-			expect(result.failedMerges).toBe(1)
-			expect(result.failed).toBe(1)
-		})
-
-		it('should close Beads task and issue after successful merge', async () => {
-			const task1 = createBeadsTask('100', 'Complete task')
-
-			let readyCallCount = 0
-			vi.mocked(beadsManager.ready).mockImplementation(async () => {
-				readyCallCount++
-				if (readyCallCount === 1) return [task1]
-				return []
-			})
-
-			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
-				created: [{ issueId: '100', beadsTaskId: '100', title: 'Complete task' }],
-				skipped: [],
-				dependenciesCreated: 0,
-			})
-
-			const mockProcess = createMockChildProcess(0)
-			vi.mocked(execa).mockReturnValue(mockProcess as never)
-
-			vi.mocked(executeGhCommand)
-				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
-				.mockResolvedValueOnce(undefined as never)          // PR merge
-				.mockResolvedValueOnce(undefined as never)          // issue close
-
-			await supervisor.run(epicLoom)
-
-			expect(beadsManager.close).toHaveBeenCalledWith('100', 'merged PR #42')
-			expect(executeGhCommand).toHaveBeenCalledWith(
-				['issue', 'close', '100'],
-			)
-		})
-
-		it('should set swarm environment variables when spawning agents', async () => {
-			const task1 = createBeadsTask('100', 'Task 1')
-
-			let readyCallCount = 0
-			vi.mocked(beadsManager.ready).mockImplementation(async () => {
-				readyCallCount++
-				if (readyCallCount === 1) return [task1]
-				return []
-			})
-
-			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
-				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task 1' }],
-				skipped: [],
-				dependenciesCreated: 0,
-			})
-
-			const mockProcess = createMockChildProcess(0)
-			vi.mocked(execa).mockReturnValue(mockProcess as never)
-			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
-
-			await supervisor.run(epicLoom)
-
-			expect(execa).toHaveBeenCalledWith(
-				'il',
-				['spin', '-p'],
-				expect.objectContaining({
-					cwd: '/tmp/worktree/issue-100',
-					env: expect.objectContaining({
-						ILOOM_SWARM_MODE: '1',
-						ILOOM_EPIC_BRANCH: 'feat/epic-50',
-						ILOOM_EPIC_ISSUE: '50',
-					}),
-					reject: false,
-					all: true,
-				}),
-			)
 		})
 
 		it('should handle claim failures gracefully', async () => {
@@ -536,6 +412,637 @@ describe('SwarmSupervisor', () => {
 					identifier: 'ENG-123',
 				}),
 			)
+		})
+
+		it('should set swarm environment variables when spawning agents', async () => {
+			const task1 = createBeadsTask('100', 'Task 1')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task 1' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			await supervisor.run(epicLoom)
+
+			expect(execa).toHaveBeenCalledWith(
+				'il',
+				['spin', '-p'],
+				expect.objectContaining({
+					cwd: '/tmp/worktree/issue-100',
+					env: expect.objectContaining({
+						ILOOM_SWARM_MODE: '1',
+						ILOOM_EPIC_BRANCH: 'feat/epic-50',
+						ILOOM_EPIC_ISSUE: '50',
+					}),
+					reject: false,
+					all: true,
+				}),
+			)
+		})
+
+		it('should close Beads task and issue after successful merge', async () => {
+			const task1 = createBeadsTask('100', 'Complete task')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Complete task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			vi.mocked(executeGhCommand)
+				.mockResolvedValueOnce([{ number: 42 }] as never)  // PR search
+				.mockResolvedValueOnce(undefined as never)          // PR merge
+				.mockResolvedValueOnce(undefined as never)          // issue close
+
+			await supervisor.run(epicLoom)
+
+			expect(beadsManager.close).toHaveBeenCalledWith('100', 'merged PR #42')
+			expect(executeGhCommand).toHaveBeenCalledWith(
+				['issue', 'close', '100'],
+			)
+		})
+	})
+
+	describe('failure handling and retry', () => {
+		it('should retry a failed task when below maxRetries', async () => {
+			settings.maxRetries = 2
+
+			const task1 = createBeadsTask('100', 'Flaky task')
+			let readyCallCount = 0
+			let execaCallCount = 0
+
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				// First call: return the task (initial attempt)
+				if (readyCallCount === 1) return [task1]
+				// Second call: task re-appears after claim release (retry)
+				if (readyCallCount === 2) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Flaky task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			vi.mocked(execa).mockImplementation(() => {
+				execaCallCount++
+				// First attempt fails, second succeeds
+				if (execaCallCount === 1) return createMockChildProcess(1) as never
+				return createMockChildProcess(0) as never
+			})
+
+			vi.mocked(loomManager.createIloom)
+				.mockResolvedValueOnce({
+					id: 'issue-100', path: '/tmp/worktree/issue-100', branch: 'feat/100',
+					type: 'issue', identifier: 100, port: 3100,
+					createdAt: new Date(), lastAccessed: new Date(),
+				} as Loom)
+				.mockResolvedValueOnce({
+					id: 'issue-100-retry', path: '/tmp/worktree/issue-100-retry', branch: 'feat/100',
+					type: 'issue', identifier: 100, port: 3100,
+					createdAt: new Date(), lastAccessed: new Date(),
+				} as Loom)
+
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			// Claim released after first failure, then re-claimed on retry
+			expect(beadsManager.releaseClaim).toHaveBeenCalledWith('100')
+			expect(beadsManager.claim).toHaveBeenCalledTimes(2)
+			// Second attempt succeeded
+			expect(result.completed).toBe(1)
+			expect(result.failed).toBe(0)
+
+			// Should log the retry
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('Retrying task 100'),
+			)
+		})
+
+		it('should permanently fail a task after exhausting maxRetries', async () => {
+			settings.maxRetries = 1
+
+			const task1 = createBeadsTask('100', 'Permanently failing')
+			let readyCallCount = 0
+
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Permanently failing' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(1)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(result.failed).toBe(1)
+			expect(result.completed).toBe(0)
+			// Should close the task in Beads as failed
+			expect(beadsManager.close).toHaveBeenCalledWith(
+				'100',
+				expect.stringContaining('failed after 1 attempts'),
+			)
+		})
+
+		it('should not retry when maxRetries is 0', async () => {
+			settings.maxRetries = 0
+
+			const task1 = createBeadsTask('100', 'No retry task')
+			let readyCallCount = 0
+
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'No retry task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(1)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			// Should fail immediately without retry since maxRetries=0 means 0 retries allowed,
+			// but the first attempt still counts as attempt 1
+			// With maxRetries=0, attempt (1) >= maxRetries (0) should trigger permanent failure
+			expect(result.failed).toBe(1)
+			expect(beadsManager.claim).toHaveBeenCalledTimes(1)
+		})
+
+		it('should skip permanently failed tasks even if they appear in ready()', async () => {
+			settings.maxRetries = 1
+
+			const task1 = createBeadsTask('100', 'Failing task')
+			let readyCallCount = 0
+
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				// Task keeps appearing in ready() even after permanent failure
+				if (readyCallCount <= 3) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Failing task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(1)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			// Should only have claimed once (first attempt fails and gets permanently failed)
+			expect(beadsManager.claim).toHaveBeenCalledTimes(1)
+			expect(result.failed).toBe(1)
+		})
+	})
+
+	describe('merge conflict resolution', () => {
+		it('should spawn a conflict resolver when merge conflict detected', async () => {
+			const task1 = createBeadsTask('100', 'Task with conflict')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task with conflict' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			// First execa call: agent process (succeeds)
+			// Second execa call: conflict resolver (succeeds)
+			const agentProcess = createMockChildProcess(0, 1001)
+			const resolverProcess = createMockChildProcess(0, 2001)
+			let execaCallCount = 0
+			vi.mocked(execa).mockImplementation(() => {
+				execaCallCount++
+				if (execaCallCount === 1) return agentProcess as never
+				return resolverProcess as never
+			})
+
+			vi.mocked(executeGhCommand)
+				.mockResolvedValueOnce([{ number: 42 }] as never)           // PR search
+				.mockRejectedValueOnce(new Error('merge conflict'))          // first merge attempt fails
+				.mockResolvedValueOnce(undefined as never)                   // retry merge succeeds
+				.mockResolvedValueOnce(undefined as never)                   // issue close
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('Merge conflict detected for PR #42'),
+			)
+			// Resolver spawned with conflict env vars
+			expect(execa).toHaveBeenCalledWith(
+				'il',
+				['spin', '-p'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						ILOOM_CONFLICT_RESOLUTION: '1',
+						ILOOM_CONFLICT_PR: '42',
+					}),
+				}),
+			)
+			expect(result.mergedPRs).toBe(1)
+			expect(result.completed).toBe(1)
+		})
+
+		it('should fail after exhausting maxConflictRetries', async () => {
+			settings.maxConflictRetries = 1
+
+			const task1 = createBeadsTask('100', 'Unresolvable conflict')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Unresolvable conflict' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const agentProcess = createMockChildProcess(0, 1001)
+			const resolverProcess = createMockChildProcess(0, 2001)
+			let execaCallCount = 0
+			vi.mocked(execa).mockImplementation(() => {
+				execaCallCount++
+				if (execaCallCount === 1) return agentProcess as never
+				return resolverProcess as never
+			})
+
+			vi.mocked(executeGhCommand)
+				.mockResolvedValueOnce([{ number: 42 }] as never)           // PR search
+				.mockRejectedValueOnce(new Error('merge conflict'))          // first merge fails
+				.mockRejectedValueOnce(new Error('merge conflict'))          // retry after resolution also fails
+				.mockRejectedValueOnce(new Error('merge conflict'))          // conflicts exhausted
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(result.failedMerges).toBe(1)
+			expect(result.failed).toBe(1)
+			expect(logger.error).toHaveBeenCalledWith(
+				expect.stringContaining('could not be resolved after'),
+			)
+		})
+
+		it('should detect various conflict error messages', async () => {
+			const task1 = createBeadsTask('100', 'Task')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			const resolverProcess = createMockChildProcess(0)
+			let execaCallCount = 0
+			vi.mocked(execa).mockImplementation(() => {
+				execaCallCount++
+				if (execaCallCount === 1) return mockProcess as never
+				return resolverProcess as never
+			})
+
+			// Test "CONFLICT" pattern
+			vi.mocked(executeGhCommand)
+				.mockResolvedValueOnce([{ number: 42 }] as never)             // PR search
+				.mockRejectedValueOnce(new Error('CONFLICT in file.ts'))       // merge with CONFLICT
+				.mockResolvedValueOnce(undefined as never)                     // retry merge succeeds
+				.mockResolvedValueOnce(undefined as never)                     // issue close
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(result.mergedPRs).toBe(1)
+		})
+
+		it('should handle non-conflict merge failures without spawning resolver', async () => {
+			const task1 = createBeadsTask('100', 'Task with auth failure')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task with auth failure' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			// Non-conflict error
+			vi.mocked(executeGhCommand)
+				.mockResolvedValueOnce([{ number: 42 }] as never)     // PR search
+				.mockRejectedValueOnce(new Error('Authentication failed'))  // non-conflict error
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(result.failedMerges).toBe(1)
+			expect(result.failed).toBe(1)
+			// Should NOT have spawned a resolver (only one execa call for the agent)
+			expect(execa).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	describe('resume support', () => {
+		it('should skip completed tasks on resume', async () => {
+			// Mock list() returning some completed tasks
+			vi.mocked(beadsManager.list).mockResolvedValue([
+				createBeadsTask('100', 'Done task', 'closed'),
+				createBeadsTask('101', 'Ready task', 'ready'),
+			])
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [],
+				skipped: ['100', '101'],
+				dependenciesCreated: 0,
+			})
+
+			// Mock ready() to return only the non-closed task on first call, then none
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [createBeadsTask('101', 'Ready task')]
+				return []
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			// completed=1 from resume + 1 from agent completing
+			expect(result.completed).toBe(2)
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('Resuming swarm'),
+			)
+		})
+
+		it('should release stale in_progress claims on resume', async () => {
+			vi.mocked(beadsManager.list).mockResolvedValue([
+				createBeadsTask('100', 'Stale task', 'in_progress'),
+			])
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [],
+				skipped: ['100'],
+				dependenciesCreated: 0,
+			})
+
+			// After claim release, the task shows up as ready
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [createBeadsTask('100', 'Stale task')]
+				return []
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			const result = await supervisor.run(epicLoom)
+
+			// Stale claim should have been released
+			expect(beadsManager.releaseClaim).toHaveBeenCalledWith('100')
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('Released stale claim on task 100'),
+			)
+			// Task was re-attempted and completed
+			expect(result.completed).toBe(1)
+		})
+
+		it('should not resume when list returns empty', async () => {
+			vi.mocked(beadsManager.list).mockResolvedValue([])
+
+			const result = await supervisor.run(epicLoom)
+
+			expect(logger.info).not.toHaveBeenCalledWith(
+				expect.stringContaining('Resuming swarm'),
+			)
+			expect(result.completed).toBe(0)
+		})
+
+		it('should handle list() failure gracefully', async () => {
+			vi.mocked(beadsManager.list).mockRejectedValue(new Error('DB error'))
+
+			const result = await supervisor.run(epicLoom)
+
+			// Should not crash, just continue without resume
+			expect(result.completed).toBe(0)
+			expect(result.failed).toBe(0)
+		})
+	})
+
+	describe('progress reporting', () => {
+		it('should write progress file on state changes', async () => {
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			await supervisor.run(epicLoom)
+
+			// Should have written progress at least twice (initial + final)
+			expect(fs.writeJson).toHaveBeenCalled()
+		})
+
+		it('should write correct progress structure', async () => {
+			const task1 = createBeadsTask('100', 'Task 1')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task 1' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			await supervisor.run(epicLoom)
+
+			// Get the last call to writeJson to check the final progress
+			const writeJsonCalls = vi.mocked(fs.writeJson).mock.calls
+			const lastCall = writeJsonCalls[writeJsonCalls.length - 1]
+			const progress = lastCall[1] as SwarmProgress
+
+			expect(progress.epicIssue).toBe('50')
+			expect(progress.epicBranch).toBe('feat/epic-50')
+			expect(progress.status).toBe('completed')
+			expect(progress.startedAt).toBeTruthy()
+			expect(progress.updatedAt).toBeTruthy()
+			expect(progress.dag).toBeDefined()
+			expect(progress.stats).toBeDefined()
+			expect(progress.stats.total).toBe(1)
+			expect(progress.stats.completed).toBe(1)
+			expect(progress.failures).toEqual([])
+		})
+
+		it('should include failures in progress file', async () => {
+			settings.maxRetries = 1
+
+			const task1 = createBeadsTask('100', 'Failing task')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Failing task' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(1)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			await supervisor.run(epicLoom)
+
+			const writeJsonCalls = vi.mocked(fs.writeJson).mock.calls
+			const lastCall = writeJsonCalls[writeJsonCalls.length - 1]
+			const progress = lastCall[1] as SwarmProgress
+
+			expect(progress.failures.length).toBe(1)
+			expect(progress.failures[0].issue).toBe('100')
+			expect(progress.failures[0].reason).toContain('Agent exited with code 1')
+		})
+
+		it('should log progress summary during loop', async () => {
+			const task1 = createBeadsTask('100', 'Task 1')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Task 1' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(0)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+			vi.mocked(executeGhCommand).mockResolvedValue([] as never)
+
+			await supervisor.run(epicLoom)
+
+			// Should have logged a progress summary at least once
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('Active:'),
+			)
+		})
+
+		it('should set status to failed when all tasks fail', async () => {
+			settings.maxRetries = 1
+
+			const task1 = createBeadsTask('100', 'Fail')
+
+			let readyCallCount = 0
+			vi.mocked(beadsManager.ready).mockImplementation(async () => {
+				readyCallCount++
+				if (readyCallCount === 1) return [task1]
+				return []
+			})
+
+			vi.mocked(syncService.syncEpicToBeads).mockResolvedValue({
+				created: [{ issueId: '100', beadsTaskId: '100', title: 'Fail' }],
+				skipped: [],
+				dependenciesCreated: 0,
+			})
+
+			const mockProcess = createMockChildProcess(1)
+			vi.mocked(execa).mockReturnValue(mockProcess as never)
+
+			await supervisor.run(epicLoom)
+
+			const writeJsonCalls = vi.mocked(fs.writeJson).mock.calls
+			const lastCall = writeJsonCalls[writeJsonCalls.length - 1]
+			const progress = lastCall[1] as SwarmProgress
+
+			expect(progress.status).toBe('failed')
+		})
+
+		it('should not crash when progress file write fails', async () => {
+			vi.mocked(fs.writeJson).mockRejectedValue(new Error('disk full'))
+
+			const result = await supervisor.run(epicLoom)
+
+			// Should complete without error
+			expect(result.duration).toBeGreaterThanOrEqual(0)
 		})
 	})
 

@@ -1,4 +1,5 @@
 import path from 'path'
+import os from 'os'
 import fs from 'fs-extra'
 import { setTimeout as sleep } from 'timers/promises'
 import { execa, type ExecaChildProcess } from 'execa'
@@ -55,22 +56,106 @@ export interface SwarmResult {
 }
 
 /**
+ * Tracks failure information for a specific task
+ */
+export interface TaskFailure {
+	issue: string
+	reason: string
+	attempts: number
+}
+
+/**
+ * Node in the progress DAG
+ */
+export interface ProgressNode {
+	issue: string
+	title: string
+	status: 'completed' | 'in_progress' | 'blocked' | 'ready' | 'failed'
+	agentPid: number | null
+	logFile: string | null
+	attempts: number
+	prNumber: number | null
+	startedAt: string | null
+	completedAt: string | null
+}
+
+/**
+ * Edge in the progress DAG
+ */
+export interface ProgressEdge {
+	from: string
+	to: string
+}
+
+/**
+ * Progress file structure written to disk on every state change
+ */
+export interface SwarmProgress {
+	epicIssue: string
+	epicBranch: string
+	status: 'running' | 'completed' | 'failed' | 'paused'
+	startedAt: string
+	updatedAt: string
+	dag: {
+		nodes: ProgressNode[]
+		edges: ProgressEdge[]
+	}
+	stats: {
+		total: number
+		completed: number
+		inProgress: number
+		failed: number
+		blocked: number
+		ready: number
+	}
+	failures: TaskFailure[]
+}
+
+/**
  * Orchestrates headless Claude agents working on an epic's child issues.
  *
  * Uses Beads for DAG-based task ordering and atomic claiming.
  * Spawns `il spin -p` as child processes in minimal worktrees.
  * Merges PRs sequentially into the epic branch to prevent race conditions.
  *
+ * Resilience features:
+ * - Failure handling with configurable retries
+ * - Merge conflict resolution via lightweight resolver agents
+ * - Resume support: detects existing Beads state and picks up where left off
+ * - Progress reporting: terminal output + JSON progress file
+ *
  * Lifecycle:
  * 1. Init Beads and sync epic children into DAG
- * 2. Loop: claim ready tasks, spawn agents, monitor, merge PRs
- * 3. Complete when DAG is empty and no agents are running
+ * 2. Resume check: skip completed, recover dead in-progress tasks
+ * 3. Loop: claim ready tasks, spawn agents, monitor, merge PRs
+ * 4. Complete when DAG is empty and no agents are running
  */
 export class SwarmSupervisor {
 	private activeAgents: Map<string, ActiveAgent> = new Map()
 	private mergeQueue: MergeQueueEntry[] = []
 	private shuttingDown = false
 	private signalHandlersInstalled = false
+
+	/** Tracks how many times each task has been attempted (for retry logic) */
+	private taskAttempts: Map<string, number> = new Map()
+	/** Tracks how many times conflict resolution has been attempted for a PR */
+	private conflictRetries: Map<string, number> = new Map()
+	/** Records of all task failures for progress reporting */
+	private failures: TaskFailure[] = []
+	/** Maps task IDs to their titles for progress reporting */
+	private taskTitles: Map<string, string> = new Map()
+	/** Maps task IDs to PR numbers discovered during merging */
+	private taskPRNumbers: Map<string, number> = new Map()
+	/** Maps task IDs to their start times */
+	private taskStartTimes: Map<string, string> = new Map()
+	/** Maps task IDs to their completion times */
+	private taskCompleteTimes: Map<string, string> = new Map()
+	/** Tracks which tasks have been permanently failed (exhausted retries) */
+	private permanentlyFailed: Set<string> = new Set()
+	/** Start time for progress reporting */
+	private startedAt: string = ''
+	/** Log directory path */
+	private logDir: string = ''
 
 	constructor(
 		private readonly beadsManager: BeadsManager,
@@ -82,11 +167,12 @@ export class SwarmSupervisor {
 	/**
 	 * Run the swarm supervisor loop.
 	 *
-	 * Orchestrates the full lifecycle: init, sync, claim, spawn, monitor, merge.
+	 * Orchestrates the full lifecycle: init, sync, resume, claim, spawn, monitor, merge.
 	 * Returns aggregate stats when all tasks are complete or shutdown is requested.
 	 */
 	async run(epicLoom: EpicLoomContext): Promise<SwarmResult> {
 		const startTime = Date.now()
+		this.startedAt = new Date().toISOString()
 		const result: SwarmResult = {
 			totalTasks: 0,
 			completed: 0,
@@ -109,23 +195,44 @@ export class SwarmSupervisor {
 			result.totalTasks = syncResult.created.length + syncResult.skipped.length
 			logger.info(`Synced ${result.totalTasks} tasks (${syncResult.created.length} new, ${syncResult.skipped.length} existing)`)
 
-			// Step 3: Ensure agent-logs directory exists
-			const logDir = path.join(epicLoom.epicLoomPath, 'agent-logs')
-			await fs.ensureDir(logDir)
+			// Store task titles for progress reporting
+			for (const mapping of syncResult.created) {
+				this.taskTitles.set(mapping.issueId, mapping.title)
+			}
 
-			// Step 4: Main supervisor loop
+			// Step 3: Ensure agent-logs directory exists
+			this.logDir = path.join(epicLoom.epicLoomPath, 'agent-logs')
+			await fs.ensureDir(this.logDir)
+
+			// Step 4: Resume check - recover state from previous run
+			const resumeResult = await this.resumeFromExistingState(epicLoom, result)
+			if (resumeResult.resumed) {
+				logger.info(
+					`Resuming swarm: ${resumeResult.completed} completed, ${resumeResult.inProgress} in progress, ${resumeResult.remaining} remaining`,
+				)
+			}
+
+			// Write initial progress
+			await this.writeProgress(epicLoom, result, 'running')
+
+			// Step 5: Main supervisor loop
 			while (!this.isComplete()) {
-				// 4a: Query ready tasks
+				// 5a: Query ready tasks
 				const readyTasks = await this.beadsManager.ready()
 
-				// 4b: Claim and spawn agents for unblocked tasks
+				// 5b: Claim and spawn agents for unblocked tasks
 				if (!this.shuttingDown) {
 					const slotsAvailable = this.settings.maxConcurrent - this.activeAgents.size
 					const tasksToClaim = readyTasks.slice(0, slotsAvailable)
 
 					for (const task of tasksToClaim) {
+						// Skip tasks that have been permanently failed
+						if (this.permanentlyFailed.has(task.id)) {
+							continue
+						}
+
 						try {
-							await this.claimAndSpawnAgent(task, epicLoom, logDir)
+							await this.claimAndSpawnAgent(task, epicLoom, this.logDir)
 						} catch (error) {
 							logger.error(`Failed to claim/spawn agent for task ${task.id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
 							result.failed++
@@ -133,13 +240,19 @@ export class SwarmSupervisor {
 					}
 				}
 
-				// 4c: Check for completed agents
+				// 5c: Check for completed agents
 				await this.checkCompletedAgents(result, epicLoom)
 
-				// 4d: Process merge queue
+				// 5d: Process merge queue
 				await this.processMergeQueue(result, epicLoom)
 
-				// 4e: Check if we're done
+				// 5e: Log periodic progress summary
+				this.logProgressSummary(result)
+
+				// 5f: Write progress file
+				await this.writeProgress(epicLoom, result, 'running')
+
+				// 5g: Check if we're done
 				if (readyTasks.length === 0 && this.activeAgents.size === 0 && this.mergeQueue.length === 0) {
 					break
 				}
@@ -156,10 +269,76 @@ export class SwarmSupervisor {
 		} finally {
 			this.removeSignalHandlers()
 			result.duration = Date.now() - startTime
+
+			// Write final progress
+			const finalStatus = result.failed > 0 && result.completed === 0 ? 'failed' : 'completed'
+			await this.writeProgress(epicLoom, result, finalStatus)
 		}
 
 		logger.info(`Swarm complete: ${result.completed} completed, ${result.failed} failed, ${result.mergedPRs} PRs merged`)
 		return result
+	}
+
+	/**
+	 * Attempt to resume from existing Beads state.
+	 *
+	 * When the supervisor starts and detects existing Beads state:
+	 * 1. Read all task statuses via `beadsManager.list()`
+	 * 2. Skip tasks marked as `closed` (already completed)
+	 * 3. For tasks `in_progress`: release claim, treat as failure (retry applies)
+	 * 4. For tasks `open`/`ready`: proceed normally
+	 */
+	private async resumeFromExistingState(
+		_epicLoom: EpicLoomContext,
+		result: SwarmResult,
+	): Promise<{ resumed: boolean; completed: number; inProgress: number; remaining: number }> {
+		let allTasks: BeadsTask[]
+		try {
+			allTasks = await this.beadsManager.list()
+		} catch {
+			// No existing state to resume from
+			return { resumed: false, completed: 0, inProgress: 0, remaining: 0 }
+		}
+
+		if (allTasks.length === 0) {
+			return { resumed: false, completed: 0, inProgress: 0, remaining: 0 }
+		}
+
+		let completed = 0
+		let inProgress = 0
+		let remaining = 0
+
+		for (const task of allTasks) {
+			// Store title for progress reporting
+			if (task.title) {
+				this.taskTitles.set(task.id, task.title)
+			}
+
+			if (task.status === 'closed') {
+				completed++
+				result.completed++
+				this.taskCompleteTimes.set(task.id, new Date().toISOString())
+			} else if (task.status === 'in_progress') {
+				inProgress++
+				// The process from a previous run is dead - release claim and let retry logic handle it
+				try {
+					await this.beadsManager.releaseClaim(task.id)
+					logger.info(`Released stale claim on task ${task.id}`)
+				} catch (releaseError) {
+					logger.warn(`Failed to release stale claim for task ${task.id}: ${releaseError instanceof Error ? releaseError.message : 'Unknown error'}`)
+				}
+				// Increment attempt counter so retry limit is respected
+				const currentAttempts = this.taskAttempts.get(task.id) ?? 0
+				this.taskAttempts.set(task.id, currentAttempts + 1)
+				remaining++
+			} else {
+				// open / ready
+				remaining++
+			}
+		}
+
+		const hasExistingState = completed > 0 || inProgress > 0
+		return { resumed: hasExistingState, completed, inProgress, remaining }
 	}
 
 	/**
@@ -170,9 +349,17 @@ export class SwarmSupervisor {
 		epicLoom: EpicLoomContext,
 		logDir: string,
 	): Promise<void> {
+		// Track attempt
+		const attempt = (this.taskAttempts.get(task.id) ?? 0) + 1
+		this.taskAttempts.set(task.id, attempt)
+		this.taskStartTimes.set(task.id, new Date().toISOString())
+
 		// Atomically claim the task
 		await this.beadsManager.claim(task.id)
-		logger.info(`Claimed task ${task.id}: ${task.title}`)
+		logger.info(`Claimed task ${task.id}: ${task.title} (attempt ${attempt})`)
+
+		// Store title for progress reporting
+		this.taskTitles.set(task.id, task.title)
 
 		// Create child loom (minimal worktree)
 		const loom = await this.loomManager.createIloom({
@@ -235,6 +422,7 @@ export class SwarmSupervisor {
 
 	/**
 	 * Check for completed agent processes and handle their results.
+	 * Includes retry logic for failed agents.
 	 */
 	private async checkCompletedAgents(
 		result: SwarmResult,
@@ -254,6 +442,7 @@ export class SwarmSupervisor {
 				const prNumber = await this.findPRForBranch(issueId, epicLoom)
 
 				if (prNumber) {
+					this.taskPRNumbers.set(issueId, prNumber)
 					this.mergeQueue.push({
 						issueId,
 						prNumber,
@@ -264,27 +453,66 @@ export class SwarmSupervisor {
 					// Agent succeeded but no PR found - still mark as complete
 					logger.warn(`Agent for issue ${issueId} completed but no PR found, marking task as closed`)
 					await this.closeTask(agent.beadsTaskId, 'completed without PR')
+					this.taskCompleteTimes.set(issueId, new Date().toISOString())
 					result.completed++
 				}
 			} else {
-				logger.error(`Agent for issue ${issueId} failed with exit code ${agent.exitCode}. See log: ${agent.logFile}`)
-				result.failed++
-				// Release claim so task can be retried (failure handling in #563)
-				try {
-					await this.beadsManager.releaseClaim(agent.beadsTaskId)
-				} catch (releaseError) {
-					logger.error(`Failed to release claim for task ${agent.beadsTaskId}: ${releaseError instanceof Error ? releaseError.message : 'Unknown error'}`)
-				}
+				await this.handleAgentFailure(agent, result, epicLoom)
 			}
 		}
 	}
 
 	/**
+	 * Handle a failed agent by releasing its claim and retrying if below maxRetries.
+	 */
+	private async handleAgentFailure(
+		agent: ActiveAgent,
+		result: SwarmResult,
+		_epicLoom: EpicLoomContext,
+	): Promise<void> {
+		const issueId = agent.issueId
+		const attempts = this.taskAttempts.get(issueId) ?? 1
+		const failureReason = `Agent exited with code ${agent.exitCode}`
+
+		logger.error(`Agent for issue ${issueId} failed with exit code ${agent.exitCode}. See log: ${agent.logFile}`)
+
+		// Release the Beads claim
+		try {
+			await this.beadsManager.releaseClaim(agent.beadsTaskId)
+		} catch (releaseError) {
+			logger.error(`Failed to release claim for task ${agent.beadsTaskId}: ${releaseError instanceof Error ? releaseError.message : 'Unknown error'}`)
+		}
+
+		// Check if we should retry
+		if (attempts < this.settings.maxRetries) {
+			logger.info(`Retrying task ${issueId} (attempt ${attempts + 1} of ${this.settings.maxRetries})...`)
+			// The task's claim was released, so it will appear in ready() on the next loop iteration
+			// and be re-claimed and re-spawned. The attempt counter is already incremented.
+		} else {
+			// Exhausted retries - mark as permanently failed
+			logger.error(`Task ${issueId} failed after ${attempts} attempt(s). Marking as permanently failed.`)
+			this.permanentlyFailed.add(issueId)
+
+			// Mark as failed in Beads
+			await this.closeTask(agent.beadsTaskId, `failed after ${attempts} attempts: ${failureReason}`)
+
+			this.failures.push({
+				issue: issueId,
+				reason: failureReason,
+				attempts,
+			})
+
+			result.failed++
+		}
+	}
+
+	/**
 	 * Process the merge queue sequentially - one PR at a time.
+	 * Includes conflict detection and resolution.
 	 */
 	private async processMergeQueue(
 		result: SwarmResult,
-		_epicLoom: EpicLoomContext,
+		epicLoom: EpicLoomContext,
 	): Promise<void> {
 		while (this.mergeQueue.length > 0) {
 			const entry = this.mergeQueue.shift()
@@ -301,13 +529,146 @@ export class SwarmSupervisor {
 				// Close the issue via GitHub
 				await this.closeIssue(entry.issueId)
 
+				this.taskCompleteTimes.set(entry.issueId, new Date().toISOString())
+				this.conflictRetries.delete(entry.issueId)
 				result.mergedPRs++
 				result.completed++
 			} catch (error) {
-				logger.error(`Failed to merge PR #${entry.prNumber} for issue ${entry.issueId}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+				const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+				// Check if this is a merge conflict
+				if (this.isMergeConflict(errorMessage)) {
+					await this.handleMergeConflict(entry, result, epicLoom)
+				} else {
+					logger.error(`Failed to merge PR #${entry.prNumber} for issue ${entry.issueId}: ${errorMessage}`)
+					result.failedMerges++
+					result.failed++
+					this.failures.push({
+						issue: entry.issueId,
+						reason: `Merge failed: ${errorMessage}`,
+						attempts: this.taskAttempts.get(entry.issueId) ?? 1,
+					})
+				}
+			}
+		}
+	}
+
+	/**
+	 * Detect whether a merge error is a conflict.
+	 */
+	private isMergeConflict(errorMessage: string): boolean {
+		const conflictPatterns = [
+			'merge conflict',
+			'CONFLICT',
+			'could not merge',
+			'not possible to fast-forward',
+			'conflicts',
+		]
+		const lowerMessage = errorMessage.toLowerCase()
+		return conflictPatterns.some(pattern => lowerMessage.includes(pattern.toLowerCase()))
+	}
+
+	/**
+	 * Handle a merge conflict by spawning a resolver agent.
+	 *
+	 * 1. Detect merge failure
+	 * 2. Spawn a lightweight Claude Code agent to rebase and resolve
+	 * 3. Retry merge after resolution
+	 * 4. If still failing after maxConflictRetries, mark as failed
+	 */
+	private async handleMergeConflict(
+		entry: MergeQueueEntry,
+		result: SwarmResult,
+		epicLoom: EpicLoomContext,
+	): Promise<void> {
+		const retries = this.conflictRetries.get(entry.issueId) ?? 0
+
+		if (retries >= this.settings.maxConflictRetries) {
+			logger.error(
+				`Merge conflict for PR #${entry.prNumber} (issue ${entry.issueId}) could not be resolved after ${retries} attempt(s). Marking as failed.`,
+			)
+			result.failedMerges++
+			result.failed++
+			this.permanentlyFailed.add(entry.issueId)
+			this.failures.push({
+				issue: entry.issueId,
+				reason: `Unresolvable merge conflict after ${retries} resolution attempts`,
+				attempts: this.taskAttempts.get(entry.issueId) ?? 1,
+			})
+			return
+		}
+
+		this.conflictRetries.set(entry.issueId, retries + 1)
+		logger.info(`Merge conflict detected for PR #${entry.prNumber}. Spawning resolver (attempt ${retries + 1} of ${this.settings.maxConflictRetries})...`)
+
+		try {
+			await this.spawnConflictResolver(entry, epicLoom)
+
+			// Retry the merge after conflict resolution
+			logger.info(`Retrying merge for PR #${entry.prNumber} after conflict resolution...`)
+			await this.mergePR(entry.prNumber)
+			logger.info(`Successfully merged PR #${entry.prNumber} after conflict resolution`)
+
+			await this.closeTask(entry.beadsTaskId, `merged PR #${entry.prNumber} (after conflict resolution)`)
+			await this.closeIssue(entry.issueId)
+
+			this.taskCompleteTimes.set(entry.issueId, new Date().toISOString())
+			this.conflictRetries.delete(entry.issueId)
+			result.mergedPRs++
+			result.completed++
+		} catch (retryError) {
+			const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error'
+
+			if (this.isMergeConflict(retryMessage)) {
+				// Still conflicting - re-enqueue for another attempt
+				logger.warn(`PR #${entry.prNumber} still has conflicts after resolution attempt ${retries + 1}`)
+				this.mergeQueue.push(entry)
+			} else {
+				logger.error(`Merge failed for PR #${entry.prNumber} after conflict resolution: ${retryMessage}`)
 				result.failedMerges++
 				result.failed++
+				this.failures.push({
+					issue: entry.issueId,
+					reason: `Merge failed after conflict resolution: ${retryMessage}`,
+					attempts: this.taskAttempts.get(entry.issueId) ?? 1,
+				})
 			}
+		}
+	}
+
+	/**
+	 * Spawn a lightweight Claude Code agent to resolve merge conflicts.
+	 *
+	 * The resolver rebases the branch onto the epic branch, resolves conflicts,
+	 * and force-pushes.
+	 */
+	private async spawnConflictResolver(
+		entry: MergeQueueEntry,
+		epicLoom: EpicLoomContext,
+	): Promise<void> {
+		// Find the worktree for this issue's agent
+		const agent = this.activeAgents.get(entry.issueId)
+		const cwd = agent?.loomPath ?? epicLoom.epicLoomPath
+
+		const resolverProcess = execa('il', ['spin', '-p'], {
+			cwd,
+			env: {
+				...process.env,
+				ILOOM_SWARM_MODE: '1',
+				ILOOM_EPIC_BRANCH: epicLoom.epicBranch,
+				ILOOM_EPIC_ISSUE: epicLoom.epicIssueNumber,
+				ILOOM_CONFLICT_RESOLUTION: '1',
+				ILOOM_CONFLICT_PR: String(entry.prNumber),
+			},
+			reject: false,
+			all: true,
+			timeout: 300000, // 5 minute timeout for conflict resolution
+		})
+
+		const resolverResult = await resolverProcess
+
+		if (resolverResult.exitCode !== 0) {
+			throw new Error(`Conflict resolver exited with code ${resolverResult.exitCode}`)
 		}
 	}
 
@@ -397,6 +758,102 @@ export class SwarmSupervisor {
 	private parseIssueIdentifier(taskId: string): string | number {
 		const numericId = parseInt(taskId, 10)
 		return isNaN(numericId) ? taskId : numericId
+	}
+
+	/**
+	 * Log a periodic progress summary to the terminal.
+	 */
+	private logProgressSummary(result: SwarmResult): void {
+		logger.info(
+			`Active: ${this.activeAgents.size}/${this.settings.maxConcurrent} | Completed: ${result.completed}/${result.totalTasks} | Failed: ${result.failed} | Blocked: ${this.permanentlyFailed.size}`,
+		)
+	}
+
+	/**
+	 * Write a progress file to disk. Called on every state change.
+	 *
+	 * Written to ~/.config/iloom-ai/looms/<epicLoomId>/swarm-progress.json
+	 * where epicLoomId is derived from the epicLoomPath directory name.
+	 */
+	private async writeProgress(
+		epicLoom: EpicLoomContext,
+		result: SwarmResult,
+		status: 'running' | 'completed' | 'failed' | 'paused',
+	): Promise<void> {
+		try {
+			const progressDir = this.getProgressDir(epicLoom)
+			await fs.ensureDir(progressDir)
+
+			const progressFile = path.join(progressDir, 'swarm-progress.json')
+
+			// Build DAG nodes from all known tasks
+			const nodes: ProgressNode[] = []
+			for (const [taskId, title] of this.taskTitles) {
+				const agent = this.activeAgents.get(taskId)
+				let taskStatus: ProgressNode['status'] = 'ready'
+
+				if (this.taskCompleteTimes.has(taskId)) {
+					taskStatus = 'completed'
+				} else if (this.permanentlyFailed.has(taskId)) {
+					taskStatus = 'failed'
+				} else if (agent) {
+					taskStatus = 'in_progress'
+				} else if (this.mergeQueue.some(e => e.issueId === taskId)) {
+					taskStatus = 'in_progress'
+				}
+
+				nodes.push({
+					issue: taskId,
+					title,
+					status: taskStatus,
+					agentPid: agent?.pid ?? null,
+					logFile: agent?.logFile ?? (this.logDir ? path.join(this.logDir, `${taskId}.log`) : null),
+					attempts: this.taskAttempts.get(taskId) ?? 0,
+					prNumber: this.taskPRNumbers.get(taskId) ?? null,
+					startedAt: this.taskStartTimes.get(taskId) ?? null,
+					completedAt: this.taskCompleteTimes.get(taskId) ?? null,
+				})
+			}
+
+			const inProgressCount = this.activeAgents.size + this.mergeQueue.length
+			const failedCount = this.permanentlyFailed.size
+			const completedCount = result.completed
+			const readyCount = Math.max(0, result.totalTasks - completedCount - inProgressCount - failedCount)
+
+			const progress: SwarmProgress = {
+				epicIssue: epicLoom.epicIssueNumber,
+				epicBranch: epicLoom.epicBranch,
+				status,
+				startedAt: this.startedAt,
+				updatedAt: new Date().toISOString(),
+				dag: {
+					nodes,
+					edges: [], // Edges could be populated from Beads dependency data in the future
+				},
+				stats: {
+					total: result.totalTasks,
+					completed: completedCount,
+					inProgress: inProgressCount,
+					failed: failedCount,
+					blocked: 0, // Tasks blocked by failed dependencies
+					ready: readyCount,
+				},
+				failures: [...this.failures],
+			}
+
+			await fs.writeJson(progressFile, progress, { spaces: 2 })
+		} catch (error) {
+			// Progress file writing should never fail the swarm
+			logger.debug(`Failed to write progress file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+	}
+
+	/**
+	 * Get the progress directory for this epic.
+	 */
+	private getProgressDir(epicLoom: EpicLoomContext): string {
+		const loomId = path.basename(epicLoom.epicLoomPath)
+		return path.join(os.homedir(), '.config', 'iloom-ai', 'looms', loomId)
 	}
 
 	/**
