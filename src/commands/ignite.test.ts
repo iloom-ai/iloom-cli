@@ -1622,6 +1622,73 @@ describe('IgniteCommand', () => {
 				getRepoInfoSpy.mockRestore()
 			}
 		})
+
+		it('should include review template variables in prompt when agents have review config', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettings = {
+				agents: {
+					'iloom-artifact-reviewer': {
+						enabled: true,
+						providers: {
+							claude: 'opus',
+							gemini: 'gemini-3-pro',
+						},
+					},
+					'iloom-issue-planner': { review: true },
+					'iloom-issue-analyzer': { review: true },
+				},
+			}
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+
+			const commandWithReview = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithReview.execute()
+
+				// Verify template manager received review variables
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						REVIEW_ENABLED: true,
+						ARTIFACT_REVIEW_ENABLED: true,
+						HAS_ARTIFACT_REVIEW_CLAUDE: true,
+						HAS_ARTIFACT_REVIEW_GEMINI: true,
+						ARTIFACT_REVIEW_CLAUDE_MODEL: 'opus',
+						ARTIFACT_REVIEW_GEMINI_MODEL: 'gemini-3-pro',
+						PLANNER_REVIEW_ENABLED: true,
+						ANALYZER_REVIEW_ENABLED: true,
+						ENHANCER_REVIEW_ENABLED: false,
+						IMPLEMENTER_REVIEW_ENABLED: false,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
 	})
 
 	describe('One-Shot Mode User Prompt Generation', () => {

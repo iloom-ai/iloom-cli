@@ -137,8 +137,13 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-   b. Automatically re-run analyzer with the reviewer's feedback
+   a. If verdict is SUGGEST_IMPROVEMENTS:
+      - Log: "Artifact review suggests improvements: [summary]"
+      - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+      - After update, proceed to next step (do not re-review)
+   b. If verdict is RECOMMEND_REGENERATION:
+      - Log: "Artifact review recommends regeneration: [summary]"
+      - Re-run analyzer from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements to the analysis. How would you like to proceed?"
@@ -156,8 +161,13 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-   b. Automatically re-run analyze-and-plan with the reviewer's feedback
+   a. If verdict is SUGGEST_IMPROVEMENTS:
+      - Log: "Artifact review suggests improvements: [summary]"
+      - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+      - After update, proceed to next step (do not re-review)
+   b. If verdict is RECOMMEND_REGENERATION:
+      - Log: "Artifact review recommends regeneration: [summary]"
+      - Re-run analyze-and-plan from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements to the plan. How would you like to proceed?"
@@ -175,8 +185,13 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-   a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-   b. Automatically re-run implementer with the reviewer's feedback
+   a. If verdict is SUGGEST_IMPROVEMENTS:
+      - Log: "Artifact review suggests improvements: [summary]"
+      - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements: [REVIEWER_FEEDBACK]"
+      - After update, proceed to next step (do not re-review)
+   b. If verdict is RECOMMEND_REGENERATION:
+      - Log: "Artifact review recommends regeneration: [summary]"
+      - Re-run implementer from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements. How would you like to proceed?"

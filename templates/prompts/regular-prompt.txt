@@ -189,21 +189,39 @@ You are orchestrating a set of agents through a development process, with human 
 **Todo List:**
 1. Gather problem statement from user
 2. Run enhancement using @agent-iloom-issue-enhancer (adapted for branch mode)
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
+2a. Run artifact review on enhancement output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 3. Display enhanced specification to user
 4. WAIT for human confirmation of enhanced specification before proceeding
 5. Run complexity evaluation using @agent-iloom-issue-complexity-evaluator (adapted for branch mode)
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
+5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 6. Display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE or COMPLEX)
 9. If TRIVIAL: Skip to implementation directly (no analysis or planning needed)
 10. If SIMPLE: Run combined analysis and planning using @agent-iloom-issue-analyze-and-plan
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
+10a. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 11. If COMPLEX: Run separate analysis using @agent-iloom-issue-analyzer
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
+11a. If COMPLEX: Run artifact review on analysis output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 12. Display analysis results to user
 13. WAIT for human review and approval to continue, or process their other feedback
 14. If COMPLEX: Run planning using @agent-iloom-issue-planner
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
+14a. If COMPLEX: Run artifact review on plan output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 15. If COMPLEX: Display plan to user
 16. If COMPLEX: WAIT for human review of planning results and approval to continue
 17. Run implementation using @agent-iloom-issue-implementer
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
+17a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer
+{{/if}}{{/if}}
 18. Run code review using @agent-iloom-code-reviewer
 19. Provide final summary. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analysis or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
@@ -278,10 +296,15 @@ You are orchestrating a set of agents through a development process, with human 
    - The enhancer output should be reviewed before acceptance
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact: [ENHANCER_OUTPUT]"
    - Wait for review results
-   - If review suggests improvements (verdict is SUGGEST_IMPROVEMENTS or RECOMMEND_REGENERATION):
+   - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-     b. Automatically re-run @agent-iloom-issue-enhancer with the reviewer's feedback, return to step 2
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-enhancer with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-enhancer from scratch with the reviewer's feedback, return to step 2
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -339,10 +362,15 @@ You are orchestrating a set of agents through a development process, with human 
    - The complexity evaluation output should be reviewed before acceptance
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact (complexity evaluation): [COMPLEXITY_OUTPUT]"
    - Wait for review results
-   - If review suggests improvements (verdict is SUGGEST_IMPROVEMENTS or RECOMMEND_REGENERATION):
+   - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-     b. Automatically re-run @agent-iloom-issue-complexity-evaluator with the reviewer's feedback, return to step 1
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-complexity-evaluator with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-complexity-evaluator from scratch with the reviewer's feedback, return to step 1
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements to the complexity evaluation. How would you like to proceed?"
@@ -457,10 +485,15 @@ Execute combined analyze-and-plan agent:
    - The analyze-and-plan output should be reviewed before acceptance
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact (combined analysis and plan): [ANALYZE_AND_PLAN_OUTPUT]"
    - Wait for review results
-   - If review suggests improvements (verdict is SUGGEST_IMPROVEMENTS or RECOMMEND_REGENERATION):
+   - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-     b. Automatically re-run @agent-iloom-issue-analyze-and-plan with the reviewer's feedback, return to step 2
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-analyze-and-plan from scratch with the reviewer's feedback, return to step 2
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements to the analysis and plan. How would you like to proceed?"
@@ -520,10 +553,15 @@ Execute combined analyze-and-plan agent:
    - The analysis output should be reviewed before acceptance
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact: [ANALYZER_OUTPUT]"
    - Wait for review results
-   - If review suggests improvements (verdict is SUGGEST_IMPROVEMENTS or RECOMMEND_REGENERATION):
+   - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-     b. Automatically re-run @agent-iloom-issue-analyzer with the reviewer's feedback, return to step 1
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-analyzer from scratch with the reviewer's feedback, return to step 1
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements to the analysis. How would you like to proceed?"
@@ -584,10 +622,15 @@ Execute combined analyze-and-plan agent:
    - The planning output should be reviewed before acceptance
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact: [PLANNER_OUTPUT]"
    - Wait for review results
-   - If review suggests improvements (verdict is SUGGEST_IMPROVEMENTS or RECOMMEND_REGENERATION):
+   - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
-     a. Log review findings briefly: "Artifact review suggests: [summary of feedback]"
-     b. Automatically re-run @agent-iloom-issue-planner with the reviewer's feedback, return to step 1
+     a. If verdict is SUGGEST_IMPROVEMENTS:
+        - Log: "Artifact review suggests improvements: [summary]"
+        - Re-invoke @agent-iloom-issue-planner with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+        - After update, proceed to next step (do not re-review)
+     b. If verdict is RECOMMEND_REGENERATION:
+        - Log: "Artifact review recommends regeneration: [summary]"
+        - Re-run @agent-iloom-issue-planner from scratch with the reviewer's feedback, return to step 1
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements to the plan. How would you like to proceed?"

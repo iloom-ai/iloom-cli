@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
 import type { IloomSettings } from './SettingsManager.js'
-import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
+import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from './PromptTemplateManager.js'
 
 // Agent schema interface
 export interface AgentConfig {
@@ -106,66 +106,8 @@ export class AgentManager {
 
 		// Apply template variable substitution to agent prompts if variables provided
 		if (templateVariables) {
-			// Extract review config from settings with defaults and add to template variables
-			const reviewerSettings = settings?.agents?.['iloom-code-reviewer']
-			const reviewEnabled = reviewerSettings?.enabled !== false  // Default to true
-
-			templateVariables.REVIEW_ENABLED = reviewEnabled
-
-			if (reviewEnabled) {
-				const providers = reviewerSettings?.providers ?? {}
-				// Default to Claude if no providers specified
-				const hasAnyProvider = Object.keys(providers).length > 0
-
-				// Determine Claude model: use configured, or default to 'sonnet' if no providers specified
-				const claudeModel = providers.claude ?? (hasAnyProvider ? undefined : 'sonnet')
-				if (claudeModel) {
-					templateVariables.REVIEW_CLAUDE_MODEL = claudeModel
-				}
-				if (providers.gemini) {
-					templateVariables.REVIEW_GEMINI_MODEL = providers.gemini
-				}
-				if (providers.codex) {
-					templateVariables.REVIEW_CODEX_MODEL = providers.codex
-				}
-				templateVariables.HAS_REVIEW_CLAUDE = !!claudeModel
-				templateVariables.HAS_REVIEW_GEMINI = !!providers.gemini
-				templateVariables.HAS_REVIEW_CODEX = !!providers.codex
-			}
-
-			// Extract artifact reviewer config from settings with defaults
-			const artifactReviewerSettings = settings?.agents?.['iloom-artifact-reviewer']
-			const artifactReviewEnabled = artifactReviewerSettings?.enabled !== false  // Default to true
-
-			templateVariables.ARTIFACT_REVIEW_ENABLED = artifactReviewEnabled
-
-			if (artifactReviewEnabled) {
-				const artifactProviders = artifactReviewerSettings?.providers ?? {}
-				const hasAnyArtifactProvider = Object.keys(artifactProviders).length > 0
-
-				// Default to Claude if no providers specified
-				const artifactClaudeModel = artifactProviders.claude ?? (hasAnyArtifactProvider ? undefined : 'sonnet')
-				if (artifactClaudeModel) {
-					templateVariables.ARTIFACT_REVIEW_CLAUDE_MODEL = artifactClaudeModel
-				}
-				if (artifactProviders.gemini) {
-					templateVariables.ARTIFACT_REVIEW_GEMINI_MODEL = artifactProviders.gemini
-				}
-				if (artifactProviders.codex) {
-					templateVariables.ARTIFACT_REVIEW_CODEX_MODEL = artifactProviders.codex
-				}
-				templateVariables.HAS_ARTIFACT_REVIEW_CLAUDE = !!artifactClaudeModel
-				templateVariables.HAS_ARTIFACT_REVIEW_GEMINI = !!artifactProviders.gemini
-				templateVariables.HAS_ARTIFACT_REVIEW_CODEX = !!artifactProviders.codex
-			}
-
-			// Extract per-agent review flags (defaults to false for each)
-			templateVariables.ENHANCER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-enhancer']?.review === true
-			templateVariables.ANALYZER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-analyzer']?.review === true
-			templateVariables.PLANNER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-planner']?.review === true
-			templateVariables.ANALYZE_AND_PLAN_REVIEW_ENABLED = settings?.agents?.['iloom-issue-analyze-and-plan']?.review === true
-			templateVariables.IMPLEMENTER_REVIEW_ENABLED = settings?.agents?.['iloom-issue-implementer']?.review === true
-			templateVariables.COMPLEXITY_REVIEW_ENABLED = settings?.agents?.['iloom-issue-complexity-evaluator']?.review === true
+			// Extract review config from settings and add to template variables
+			Object.assign(templateVariables, buildReviewTemplateVariables(settings?.agents))
 
 			for (const [agentName, agentConfig] of Object.entries(agents)) {
 				agents[agentName] = {

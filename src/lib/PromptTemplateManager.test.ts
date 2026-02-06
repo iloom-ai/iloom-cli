@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
+import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from './PromptTemplateManager.js'
 import { readFile } from 'fs/promises'
 
 vi.mock('fs/promises')
@@ -533,6 +533,237 @@ const obj = { key: "value" }
 			const result = await manager.getPrompt('issue', variables)
 
 			expect(result).toBe('Issue 123')
+		})
+	})
+})
+
+describe('buildReviewTemplateVariables', () => {
+	describe('code reviewer', () => {
+		it('should default REVIEW_ENABLED to true when no iloom-code-reviewer settings', () => {
+			const result = buildReviewTemplateVariables({})
+
+			expect(result.REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should set REVIEW_ENABLED to false when iloom-code-reviewer is disabled', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-code-reviewer': { enabled: false },
+			})
+
+			expect(result.REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should not set provider flags when review is disabled', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-code-reviewer': { enabled: false },
+			})
+
+			expect(result.HAS_REVIEW_CLAUDE).toBeUndefined()
+			expect(result.HAS_REVIEW_GEMINI).toBeUndefined()
+			expect(result.HAS_REVIEW_CODEX).toBeUndefined()
+			expect(result.REVIEW_CLAUDE_MODEL).toBeUndefined()
+		})
+
+		it('should default to Claude with sonnet model when no providers specified', () => {
+			const result = buildReviewTemplateVariables({})
+
+			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
+			expect(result.REVIEW_CLAUDE_MODEL).toBe('sonnet')
+			expect(result.HAS_REVIEW_GEMINI).toBe(false)
+			expect(result.HAS_REVIEW_CODEX).toBe(false)
+		})
+
+		it('should set provider flags based on configured providers', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-code-reviewer': {
+					providers: {
+						claude: 'opus',
+						gemini: 'gemini-3-pro',
+					},
+				},
+			})
+
+			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
+			expect(result.REVIEW_CLAUDE_MODEL).toBe('opus')
+			expect(result.HAS_REVIEW_GEMINI).toBe(true)
+			expect(result.REVIEW_GEMINI_MODEL).toBe('gemini-3-pro')
+			expect(result.HAS_REVIEW_CODEX).toBe(false)
+			expect(result.REVIEW_CODEX_MODEL).toBeUndefined()
+		})
+
+		it('should not default to Claude when other providers are specified without claude', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-code-reviewer': {
+					providers: {
+						gemini: 'gemini-3-flash',
+					},
+				},
+			})
+
+			expect(result.HAS_REVIEW_CLAUDE).toBe(false)
+			expect(result.REVIEW_CLAUDE_MODEL).toBeUndefined()
+			expect(result.HAS_REVIEW_GEMINI).toBe(true)
+			expect(result.REVIEW_GEMINI_MODEL).toBe('gemini-3-flash')
+		})
+
+		it('should set codex provider flags when configured', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-code-reviewer': {
+					providers: {
+						codex: 'gpt-5.1-codex',
+					},
+				},
+			})
+
+			expect(result.HAS_REVIEW_CODEX).toBe(true)
+			expect(result.REVIEW_CODEX_MODEL).toBe('gpt-5.1-codex')
+			expect(result.HAS_REVIEW_CLAUDE).toBe(false)
+		})
+	})
+
+	describe('artifact reviewer', () => {
+		it('should default ARTIFACT_REVIEW_ENABLED to true when no iloom-artifact-reviewer settings', () => {
+			const result = buildReviewTemplateVariables({})
+
+			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should set ARTIFACT_REVIEW_ENABLED to false when disabled', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-artifact-reviewer': { enabled: false },
+			})
+
+			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should not set artifact provider flags when disabled', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-artifact-reviewer': { enabled: false },
+			})
+
+			expect(result.HAS_ARTIFACT_REVIEW_CLAUDE).toBeUndefined()
+			expect(result.HAS_ARTIFACT_REVIEW_GEMINI).toBeUndefined()
+			expect(result.HAS_ARTIFACT_REVIEW_CODEX).toBeUndefined()
+		})
+
+		it('should default to Claude with sonnet model when no providers specified', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-artifact-reviewer': { enabled: true },
+			})
+
+			expect(result.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
+			expect(result.ARTIFACT_REVIEW_CLAUDE_MODEL).toBe('sonnet')
+			expect(result.HAS_ARTIFACT_REVIEW_GEMINI).toBe(false)
+			expect(result.HAS_ARTIFACT_REVIEW_CODEX).toBe(false)
+		})
+
+		it('should set artifact provider flags based on configured providers', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-artifact-reviewer': {
+					enabled: true,
+					providers: {
+						claude: 'sonnet',
+						gemini: 'gemini-3-pro',
+					},
+				},
+			})
+
+			expect(result.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
+			expect(result.ARTIFACT_REVIEW_CLAUDE_MODEL).toBe('sonnet')
+			expect(result.HAS_ARTIFACT_REVIEW_GEMINI).toBe(true)
+			expect(result.ARTIFACT_REVIEW_GEMINI_MODEL).toBe('gemini-3-pro')
+			expect(result.HAS_ARTIFACT_REVIEW_CODEX).toBe(false)
+		})
+
+		it('should not default to Claude when other providers are specified without claude', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-artifact-reviewer': {
+					providers: {
+						codex: 'gpt-5.1-codex',
+					},
+				},
+			})
+
+			expect(result.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(false)
+			expect(result.ARTIFACT_REVIEW_CLAUDE_MODEL).toBeUndefined()
+			expect(result.HAS_ARTIFACT_REVIEW_CODEX).toBe(true)
+			expect(result.ARTIFACT_REVIEW_CODEX_MODEL).toBe('gpt-5.1-codex')
+		})
+	})
+
+	describe('per-agent review flags', () => {
+		it('should set per-agent review flags when review is true', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-issue-enhancer': { review: true },
+				'iloom-issue-analyzer': { review: true },
+				'iloom-issue-planner': { review: true },
+				'iloom-issue-analyze-and-plan': { review: true },
+				'iloom-issue-implementer': { review: true },
+				'iloom-issue-complexity-evaluator': { review: true },
+			})
+
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(true)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(true)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+			expect(result.ANALYZE_AND_PLAN_REVIEW_ENABLED).toBe(true)
+			expect(result.IMPLEMENTER_REVIEW_ENABLED).toBe(true)
+			expect(result.COMPLEXITY_REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should default per-agent review flags to false when not configured', () => {
+			const result = buildReviewTemplateVariables({})
+
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(false)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZE_AND_PLAN_REVIEW_ENABLED).toBe(false)
+			expect(result.IMPLEMENTER_REVIEW_ENABLED).toBe(false)
+			expect(result.COMPLEXITY_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should set individual per-agent flags independently', () => {
+			const result = buildReviewTemplateVariables({
+				'iloom-issue-enhancer': { review: true },
+				'iloom-issue-planner': { review: true },
+				'iloom-issue-analyzer': { review: false },
+			})
+
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(true)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(false)
+			expect(result.IMPLEMENTER_REVIEW_ENABLED).toBe(false)
+		})
+	})
+
+	describe('null and undefined agents', () => {
+		it('should handle null agents parameter', () => {
+			const result = buildReviewTemplateVariables(null)
+
+			expect(result.REVIEW_ENABLED).toBe(true)
+			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
+			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
+			expect(result.REVIEW_CLAUDE_MODEL).toBe('sonnet')
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(false)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should handle undefined agents parameter', () => {
+			const result = buildReviewTemplateVariables(undefined)
+
+			expect(result.REVIEW_ENABLED).toBe(true)
+			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
+			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
+			expect(result.REVIEW_CLAUDE_MODEL).toBe('sonnet')
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should handle calling with no arguments', () => {
+			const result = buildReviewTemplateVariables()
+
+			expect(result.REVIEW_ENABLED).toBe(true)
+			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
+			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
 		})
 	})
 })

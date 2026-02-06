@@ -915,94 +915,8 @@ Prompt`
 		})
 	})
 
-	describe('loadAgents with artifact reviewer settings', () => {
-		it('should set ARTIFACT_REVIEW_ENABLED to true when artifact reviewer is enabled', async () => {
-			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
-
-			const mockMd = `---
-name: test-agent
-description: Test
-tools: Read
-model: sonnet
----
-
-Prompt with {{ARTIFACT_REVIEW_ENABLED}}`
-
-			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
-
-			const settings = {
-				agents: {
-					'iloom-artifact-reviewer': {
-						enabled: true,
-					},
-				},
-			}
-
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			expect(templateVariables.ARTIFACT_REVIEW_ENABLED).toBe(true)
-		})
-
-		it('should set ARTIFACT_REVIEW_ENABLED to false when artifact reviewer is disabled', async () => {
-			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
-
-			const mockMd = `---
-name: test-agent
-description: Test
-tools: Read
-model: sonnet
----
-
-Prompt`
-
-			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
-
-			const settings = {
-				agents: {
-					'iloom-artifact-reviewer': {
-						enabled: false,
-					},
-				},
-			}
-
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			expect(templateVariables.ARTIFACT_REVIEW_ENABLED).toBe(false)
-		})
-
-		it('should extract per-agent review flags to template variables', async () => {
-			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
-
-			const mockMd = `---
-name: test-agent
-description: Test
-tools: Read
-model: sonnet
----
-
-Prompt`
-
-			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
-
-			const settings = {
-				agents: {
-					'iloom-issue-enhancer': { review: true },
-					'iloom-issue-planner': { review: true },
-					'iloom-issue-analyzer': { review: false },
-				},
-			}
-
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			expect(templateVariables.ENHANCER_REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.ANALYZER_REVIEW_ENABLED).toBe(false)
-		})
-
-		it('should set HAS_ARTIFACT_REVIEW_* flags based on providers', async () => {
+	describe('loadAgents delegates review variables to buildReviewTemplateVariables', () => {
+		it('should populate template variables with review fields from settings', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
@@ -1025,20 +939,25 @@ Prompt`
 							gemini: 'gemini-3-pro',
 						},
 					},
+					'iloom-issue-enhancer': { review: true },
+					'iloom-issue-planner': { review: true },
 				},
 			}
 
 			const templateVariables = {} as Record<string, unknown>
 			await manager.loadAgents(settings as never, templateVariables)
 
+			// Verify key review fields are populated (detailed logic tested in PromptTemplateManager.test.ts)
+			expect(templateVariables.REVIEW_ENABLED).toBe(true)
+			expect(templateVariables.ARTIFACT_REVIEW_ENABLED).toBe(true)
 			expect(templateVariables.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
 			expect(templateVariables.HAS_ARTIFACT_REVIEW_GEMINI).toBe(true)
-			expect(templateVariables.HAS_ARTIFACT_REVIEW_CODEX).toBe(false)
-			expect(templateVariables.ARTIFACT_REVIEW_CLAUDE_MODEL).toBe('sonnet')
-			expect(templateVariables.ARTIFACT_REVIEW_GEMINI_MODEL).toBe('gemini-3-pro')
+			expect(templateVariables.ENHANCER_REVIEW_ENABLED).toBe(true)
+			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(true)
+			expect(templateVariables.ANALYZER_REVIEW_ENABLED).toBe(false)
 		})
 
-		it('should default to Claude when no providers specified for artifact reviewer', async () => {
+		it('should not populate review fields when templateVariables is not provided', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
@@ -1054,71 +973,13 @@ Prompt`
 
 			const settings = {
 				agents: {
-					'iloom-artifact-reviewer': {
-						enabled: true,
-					},
+					'iloom-artifact-reviewer': { enabled: false },
 				},
 			}
 
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			expect(templateVariables.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
-			expect(templateVariables.ARTIFACT_REVIEW_CLAUDE_MODEL).toBe('sonnet')
-		})
-
-		it('should default per-agent review flags to false when not configured', async () => {
-			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
-
-			const mockMd = `---
-name: test-agent
-description: Test
-tools: Read
-model: sonnet
----
-
-Prompt`
-
-			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
-
-			const settings = {
-				agents: {},
-			}
-
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			expect(templateVariables.ENHANCER_REVIEW_ENABLED).toBe(false)
-			expect(templateVariables.ANALYZER_REVIEW_ENABLED).toBe(false)
-			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(false)
-			expect(templateVariables.ANALYZE_AND_PLAN_REVIEW_ENABLED).toBe(false)
-			expect(templateVariables.IMPLEMENTER_REVIEW_ENABLED).toBe(false)
-			expect(templateVariables.COMPLEXITY_REVIEW_ENABLED).toBe(false)
-		})
-
-		it('should default ARTIFACT_REVIEW_ENABLED to true when no artifact reviewer settings', async () => {
-			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
-
-			const mockMd = `---
-name: test-agent
-description: Test
-tools: Read
-model: sonnet
----
-
-Prompt`
-
-			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
-
-			const settings = {
-				agents: {},
-			}
-
-			const templateVariables = {} as Record<string, unknown>
-			await manager.loadAgents(settings as never, templateVariables)
-
-			// Default to true when enabled is not explicitly false
-			expect(templateVariables.ARTIFACT_REVIEW_ENABLED).toBe(true)
+			// loadAgents without templateVariables should not throw
+			const result = await manager.loadAgents(settings as never)
+			expect(result['test-agent']).toBeDefined()
 		})
 	})
 })

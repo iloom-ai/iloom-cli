@@ -4,7 +4,7 @@ import { withLogger } from '../utils/logger-context.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
-import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
+import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
@@ -507,31 +507,8 @@ export class IgniteCommand {
 			variables.INTERACTIVE_MODE = true
 		}
 
-		// Set review configuration variables (same logic as AgentManager)
-		const reviewerSettings = this.settings?.agents?.['iloom-code-reviewer']
-		const reviewEnabled = reviewerSettings?.enabled !== false // Default to true
-		variables.REVIEW_ENABLED = reviewEnabled
-
-		if (reviewEnabled) {
-			const providers = reviewerSettings?.providers ?? {}
-			// Default to Claude if no providers specified
-			const hasAnyProvider = Object.keys(providers).length > 0
-
-			// Determine Claude model: use configured, or default to 'sonnet' if no providers specified
-			const claudeModel = providers.claude ?? (hasAnyProvider ? undefined : 'sonnet')
-			if (claudeModel) {
-				variables.REVIEW_CLAUDE_MODEL = claudeModel
-			}
-			if (providers.gemini) {
-				variables.REVIEW_GEMINI_MODEL = providers.gemini
-			}
-			if (providers.codex) {
-				variables.REVIEW_CODEX_MODEL = providers.codex
-			}
-			variables.HAS_REVIEW_CLAUDE = !!claudeModel
-			variables.HAS_REVIEW_GEMINI = !!providers.gemini
-			variables.HAS_REVIEW_CODEX = !!providers.codex
-		}
+		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
+		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
 
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode

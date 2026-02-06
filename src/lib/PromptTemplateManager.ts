@@ -103,6 +103,72 @@ export interface TemplateVariables {
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
 }
 
+/**
+ * Build review-related template variables from settings.
+ * Used by both the ignite command (for prompt templates) and AgentManager (for agent prompts).
+ */
+export function buildReviewTemplateVariables(agents?: Record<string, any> | null): Partial<TemplateVariables> {
+	const variables: Partial<TemplateVariables> = {}
+
+	// Code reviewer configuration
+	const reviewerSettings = agents?.['iloom-code-reviewer']
+	const reviewEnabled = reviewerSettings?.enabled !== false // Default to true
+	variables.REVIEW_ENABLED = reviewEnabled
+
+	if (reviewEnabled) {
+		const providers = reviewerSettings?.providers ?? {}
+		const hasAnyProvider = Object.keys(providers).length > 0
+
+		const claudeModel = providers.claude ?? (hasAnyProvider ? undefined : 'sonnet')
+		if (claudeModel) {
+			variables.REVIEW_CLAUDE_MODEL = claudeModel
+		}
+		if (providers.gemini) {
+			variables.REVIEW_GEMINI_MODEL = providers.gemini
+		}
+		if (providers.codex) {
+			variables.REVIEW_CODEX_MODEL = providers.codex
+		}
+		variables.HAS_REVIEW_CLAUDE = !!claudeModel
+		variables.HAS_REVIEW_GEMINI = !!providers.gemini
+		variables.HAS_REVIEW_CODEX = !!providers.codex
+	}
+
+	// Artifact reviewer configuration
+	const artifactReviewerSettings = agents?.['iloom-artifact-reviewer']
+	const artifactReviewEnabled = artifactReviewerSettings?.enabled !== false // Default to true
+	variables.ARTIFACT_REVIEW_ENABLED = artifactReviewEnabled
+
+	if (artifactReviewEnabled) {
+		const artifactProviders = artifactReviewerSettings?.providers ?? {}
+		const hasAnyArtifactProvider = Object.keys(artifactProviders).length > 0
+
+		const artifactClaudeModel = artifactProviders.claude ?? (hasAnyArtifactProvider ? undefined : 'sonnet')
+		if (artifactClaudeModel) {
+			variables.ARTIFACT_REVIEW_CLAUDE_MODEL = artifactClaudeModel
+		}
+		if (artifactProviders.gemini) {
+			variables.ARTIFACT_REVIEW_GEMINI_MODEL = artifactProviders.gemini
+		}
+		if (artifactProviders.codex) {
+			variables.ARTIFACT_REVIEW_CODEX_MODEL = artifactProviders.codex
+		}
+		variables.HAS_ARTIFACT_REVIEW_CLAUDE = !!artifactClaudeModel
+		variables.HAS_ARTIFACT_REVIEW_GEMINI = !!artifactProviders.gemini
+		variables.HAS_ARTIFACT_REVIEW_CODEX = !!artifactProviders.codex
+	}
+
+	// Per-agent review flags (defaults to false for each)
+	variables.ENHANCER_REVIEW_ENABLED = agents?.['iloom-issue-enhancer']?.review === true
+	variables.ANALYZER_REVIEW_ENABLED = agents?.['iloom-issue-analyzer']?.review === true
+	variables.PLANNER_REVIEW_ENABLED = agents?.['iloom-issue-planner']?.review === true
+	variables.ANALYZE_AND_PLAN_REVIEW_ENABLED = agents?.['iloom-issue-analyze-and-plan']?.review === true
+	variables.IMPLEMENTER_REVIEW_ENABLED = agents?.['iloom-issue-implementer']?.review === true
+	variables.COMPLEXITY_REVIEW_ENABLED = agents?.['iloom-issue-complexity-evaluator']?.review === true
+
+	return variables
+}
+
 export class PromptTemplateManager {
 	private templateDir: string
 
