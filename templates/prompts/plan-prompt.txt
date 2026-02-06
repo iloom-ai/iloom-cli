@@ -277,6 +277,9 @@ Task(
 Wait for the subagent to complete, then present its summary to the user for planning decisions.
 
 **Creation Order:**
+1. **Ensure the parent epic has the `iloom-epic` label**
+   - This label enables swarm mode detection for automated parallel execution
+   - If the parent issue does not already have it, the planning tool should note this for the user
 1. **Create child issues using the existing issue as parent**
    - Use `create_child_issue` with `parentId: {{PARENT_ISSUE_NUMBER}}`
    - Each child represents one focused unit of work (1 loom = 1 PR)
@@ -299,6 +302,7 @@ Wait for the subagent to complete, then present its summary to the user for plan
 1. **Create the parent epic issue first** (using `create_issue`)
    - This is the top-level issue describing the overall feature or initiative
    - Title format: "Epic: [Feature Name]" or "[Feature Name] Implementation"
+   - **IMPORTANT**: Always include the `iloom-epic` label when creating the parent epic issue. Pass `labels: ["iloom-epic"]` to the create_issue tool. This label enables swarm mode detection for automated parallel execution.
 2. **Create all child issues linked to the parent** (using `create_child_issue`)
    - Pass the parent epic's issue number as `parentId`
    - Each child represents one focused unit of work (1 loom = 1 PR)
