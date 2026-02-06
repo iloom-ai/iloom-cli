@@ -56,6 +56,9 @@ export interface CreateLoomInput {
     sourceEnvOnStart?: boolean
     // Minimal setup for swarm agents: worktree + branch + env + metadata + port only
     swarmMode?: boolean
+    // Epic metadata for swarm orchestration
+    isEpic?: boolean
+    swarmStatus?: 'pending' | 'active' | 'completed'
   }
 }
 

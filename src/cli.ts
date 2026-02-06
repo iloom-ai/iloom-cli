@@ -380,7 +380,9 @@ program
       .default('default')
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
-  .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
+  .option('--swarm', 'Bypass epic confirmation and start swarm mode immediately')
+  .option('--max-agents <n>', 'Maximum concurrent agents for swarm mode (overrides swarm.maxConcurrent setting)', parseInt)
+  .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean; maxAgents?: number }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
       options.oneShot = 'bypassPermissions'

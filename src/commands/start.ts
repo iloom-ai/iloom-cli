@@ -22,6 +22,9 @@ import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions, StartResult } from '../types/index.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { EpicDetector } from '../lib/EpicDetector.js'
+import type { EpicDetectionResult } from '../lib/EpicDetector.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -207,6 +210,18 @@ export class StartCommand {
 			}
 			// Note: --no-child-loom when no parent is a no-op (already independent)
 
+			// Step 2.45: Epic detection for swarm mode
+			let epicDetection: EpicDetectionResult | null = null
+
+			if (parsed.type === 'issue' && parsed.number !== undefined) {
+				epicDetection = await this.detectEpic(parsed.number)
+			}
+
+			// If --swarm on non-epic issue, silently ignore
+			if (input.options.swarm && epicDetection && !epicDetection.isEpic) {
+				getLogger().debug('--swarm flag provided but issue is not an epic (ignored)')
+			}
+
 			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
 				getLogger().info('Creating GitHub issue from description...')
@@ -246,6 +261,14 @@ export class StartCommand {
 			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type
 			const workflowConfig = settings.workflows?.[workflowType]
 
+			// Step 2.85: Confirm swarm mode for detected epics
+			const enterSwarmMode = await this.confirmSwarmMode(
+				epicDetection,
+				input.options,
+				settings,
+				isJsonMode,
+			)
+
 			// Step 2.9: Extract raw --set arguments and executable path for forwarding to spin
 			const { extractRawSetArguments, getExecutablePath } = await import('../utils/cli-overrides.js')
 			const setArguments = extractRawSetArguments()
@@ -260,56 +283,102 @@ export class StartCommand {
 					? parsed.branchName ?? ''
 					: parsed.number ?? 0
 
-			// Apply configuration precedence: CLI flags > workflow config > defaults (true)
-			const enableClaude = input.options.claude ?? workflowConfig?.startAiAgent ?? true
-			const enableCode = input.options.code ?? workflowConfig?.startIde ?? true
-			const enableDevServer = input.options.devServer ?? workflowConfig?.startDevServer ?? true
-			const enableTerminal = input.options.terminal ?? workflowConfig?.startTerminal ?? false
+			if (enterSwarmMode) {
+				// Epic loom creation: integration branch with no interactive components
+				getLogger().info('Creating epic loom (integration branch for swarm mode)...')
 
-			getLogger().debug('Final workflow config values:', {
-				enableClaude,
-				enableCode,
-				enableDevServer,
-				enableTerminal,
-			})
+				const loom = await loomManager.createIloom({
+					type: parsed.type,
+					identifier,
+					originalInput: parsed.originalInput,
+					...(parentLoom && { parentLoom }),
+					options: {
+						enableClaude: false,
+						enableCode: false,
+						enableDevServer: false,
+						enableTerminal: false,
+						isEpic: true,
+						swarmStatus: 'pending',
+					},
+				})
 
-			const loom = await loomManager.createIloom({
-				type: parsed.type,
-				identifier,
-				originalInput: parsed.originalInput,
-				...(parentLoom && { parentLoom }),
-				options: {
+				getLogger().success(`Created epic loom: ${loom.id} at ${loom.path}`)
+				getLogger().info(`   Branch: ${loom.branch}`)
+				getLogger().info(`   Mode: Swarm (integration branch)`)
+				if (epicDetection) {
+					getLogger().info(`   Child issues: ${epicDetection.totalChildren} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked)`)
+				}
+				if (loom.issueData?.title) {
+					getLogger().info(`   Title: ${loom.issueData.title}`)
+				}
+
+				if (isJsonMode) {
+					return {
+						id: loom.id,
+						path: loom.path,
+						branch: loom.branch,
+						type: parsed.type,
+						identifier: loom.identifier,
+						...(loom.port !== undefined && { port: loom.port }),
+						...(loom.issueData?.title && { title: loom.issueData.title }),
+						...(loom.capabilities && { capabilities: loom.capabilities }),
+						isEpic: true,
+						swarmStatus: 'pending',
+					}
+				}
+			} else {
+				// Normal loom creation
+				// Apply configuration precedence: CLI flags > workflow config > defaults (true)
+				const enableClaude = input.options.claude ?? workflowConfig?.startAiAgent ?? true
+				const enableCode = input.options.code ?? workflowConfig?.startIde ?? true
+				const enableDevServer = input.options.devServer ?? workflowConfig?.startDevServer ?? true
+				const enableTerminal = input.options.terminal ?? workflowConfig?.startTerminal ?? false
+
+				getLogger().debug('Final workflow config values:', {
 					enableClaude,
 					enableCode,
 					enableDevServer,
 					enableTerminal,
-					...(input.options.oneShot && { oneShot: input.options.oneShot }),
-					...(setArguments.length > 0 && { setArguments }),
-					...(executablePath && { executablePath }),
-				},
-			})
+				})
 
-			getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
-			getLogger().info(`   Branch: ${loom.branch}`)
-			// Only show port for web projects
-			if (loom.capabilities?.includes('web')) {
-				getLogger().info(`   Port: ${loom.port}`)
-			}
-			if (loom.issueData?.title) {
-				getLogger().info(`   Title: ${loom.issueData.title}`)
-			}
-
-			// Return StartResult in JSON mode
-			if (isJsonMode) {
-				return {
-					id: loom.id,
-					path: loom.path,
-					branch: loom.branch,
+				const loom = await loomManager.createIloom({
 					type: parsed.type,
-					identifier: loom.identifier,
-					...(loom.port !== undefined && { port: loom.port }),
-					...(loom.issueData?.title && { title: loom.issueData.title }),
-					...(loom.capabilities && { capabilities: loom.capabilities }),
+					identifier,
+					originalInput: parsed.originalInput,
+					...(parentLoom && { parentLoom }),
+					options: {
+						enableClaude,
+						enableCode,
+						enableDevServer,
+						enableTerminal,
+						...(input.options.oneShot && { oneShot: input.options.oneShot }),
+						...(setArguments.length > 0 && { setArguments }),
+						...(executablePath && { executablePath }),
+					},
+				})
+
+				getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
+				getLogger().info(`   Branch: ${loom.branch}`)
+				// Only show port for web projects
+				if (loom.capabilities?.includes('web')) {
+					getLogger().info(`   Port: ${loom.port}`)
+				}
+				if (loom.issueData?.title) {
+					getLogger().info(`   Title: ${loom.issueData.title}`)
+				}
+
+				// Return StartResult in JSON mode
+				if (isJsonMode) {
+					return {
+						id: loom.id,
+						path: loom.path,
+						branch: loom.branch,
+						type: parsed.type,
+						identifier: loom.identifier,
+						...(loom.port !== undefined && { port: loom.port }),
+						...(loom.issueData?.title && { title: loom.issueData.title }),
+						...(loom.capabilities && { capabilities: loom.capabilities }),
+					}
 				}
 			}
 		} catch (error) {
@@ -605,6 +674,104 @@ export class StartCommand {
 			getLogger().debug(`Failed to detect parent loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			return null
 		}
+	}
+
+	/**
+	 * Detect if an issue is an epic suitable for swarm mode.
+	 *
+	 * Checks for the iloom-epic label, child issues, and dependencies.
+	 * Only runs for issue-type inputs. Returns null for non-issues.
+	 */
+	private async detectEpic(
+		issueNumber: string | number,
+	): Promise<EpicDetectionResult | null> {
+		try {
+			// Fetch the issue to check labels
+			const issue = await this.issueTracker.fetchIssue(issueNumber)
+
+			// Check if issue has the epic label
+			const hasEpicLabel = issue.labels.some(
+				label => label.toLowerCase() === 'iloom-epic'
+			)
+
+			if (!hasEpicLabel) {
+				return { isEpic: false, totalChildren: 0, readyChildren: 0, blockedChildren: 0, hasDependencies: false }
+			}
+
+			// Create issue management provider for child/dependency queries
+			const settings = await this.settingsManager.loadSettings()
+			const providerName = settings.issueManagement?.provider ?? 'github'
+			const issueProvider = IssueManagementProviderFactory.create(providerName)
+			const detector = new EpicDetector(issueProvider)
+
+			const result = await detector.detect(issue, String(issueNumber))
+
+			// Log warnings if any
+			if (result.warning) {
+				getLogger().warn(result.warning)
+			}
+
+			return result
+		} catch (error) {
+			getLogger().debug(`Epic detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			return null
+		}
+	}
+
+	/**
+	 * Confirm swarm mode entry with the user.
+	 *
+	 * Decision logic:
+	 * - --swarm flag: bypass confirmation, auto-confirm swarm
+	 * - --swarm on non-epic: silently ignored (handled by caller)
+	 * - Non-interactive (no TTY): skip (require --swarm flag)
+	 * - Interactive: show prompt, respect answer
+	 * - Already have an active epic loom: offer to resume
+	 *
+	 * @returns true if swarm mode should be entered, false otherwise
+	 */
+	private async confirmSwarmMode(
+		epicDetection: EpicDetectionResult | null,
+		options: StartOptions,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+		isJsonMode: boolean,
+	): Promise<boolean> {
+		// Not an epic, or detection failed
+		if (!epicDetection?.isEpic) {
+			return false
+		}
+
+		// --swarm flag bypasses confirmation
+		if (options.swarm) {
+			const maxAgents = options.maxAgents ?? settings.swarm?.maxConcurrent ?? 3
+			getLogger().info(`Starting swarm mode (--swarm flag). Max agents: ${maxAgents}`)
+			return true
+		}
+
+		// JSON mode requires explicit --swarm flag
+		if (isJsonMode) {
+			getLogger().debug('Epic detected in JSON mode but --swarm flag not provided, proceeding as normal issue')
+			return false
+		}
+
+		// Non-interactive environment requires --swarm flag
+		const { isInteractiveEnvironment } = await import('../utils/prompt.js')
+		if (!isInteractiveEnvironment()) {
+			getLogger().debug('Epic detected in non-interactive environment but --swarm flag not provided, proceeding as normal issue')
+			return false
+		}
+
+		// Interactive: show confirmation prompt
+		const maxAgents = options.maxAgents ?? settings.swarm?.maxConcurrent ?? 3
+		const { promptConfirmation } = await import('../utils/prompt.js')
+		const confirmed = await promptConfirmation(
+			`Issue #${epicDetection.totalChildren > 0
+				? `is an epic with ${epicDetection.totalChildren} child issue${epicDetection.totalChildren === 1 ? '' : 's'} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked).\nStart swarm mode? Max ${maxAgents} concurrent agents.`
+				: 'is an epic. Start swarm mode?'}`,
+			true
+		)
+
+		return confirmed
 	}
 
 }
