@@ -134,6 +134,7 @@ export class ResourceCleanup {
 		// Step 2.5: Validate safety before proceeding with cleanup (unless force flag is set)
 		// Check merge safety if: deleteBranch is true AND checkMergeSafety is not explicitly false
 		// This prevents the scenario where worktree is deleted but branch deletion fails
+		let safetyCheckPassed = false
 		if (!options.force) {
 			const shouldCheckMergeSafety = options.checkMergeSafety ?? (options.deleteBranch === true)
 			const shouldCheckRemoteBranch = options.checkRemoteBranch ?? false
@@ -144,6 +145,8 @@ export class ResourceCleanup {
 				const blockerMessage = safety.blockers.join('\n\n')
 				throw new Error(`Cannot cleanup:\n\n${blockerMessage}`)
 			}
+
+			safetyCheckPassed = true
 
 			// Log warnings if any
 			if (safety.warnings.length > 0) {
@@ -283,6 +286,7 @@ export class ResourceCleanup {
 				try {
 					const branchOptions: BranchDeleteOptions = {
 						dryRun: false,
+						safetyVerified: safetyCheckPassed,
 					}
 					// Pass pre-fetched merge target (fetched in Step 3.6 before worktree deletion)
 					if (mergeTargetBranch !== null) {
@@ -576,10 +580,11 @@ export class ResourceCleanup {
 		}
 
 		// Execute git branch deletion
+		// deleteCwd is declared outside try so it's accessible in the catch block for safetyVerified retry
+		let deleteCwd = workingDir  // Default: main worktree
 		try {
 			// Determine the correct delete flag and working directory
 			let deleteFlag = '-d'  // Default: safe delete
-			let deleteCwd = workingDir  // Default: main worktree
 
 			if (options.force) {
 				// User explicitly requested force delete
@@ -661,6 +666,13 @@ export class ResourceCleanup {
 
 			// Git error for unmerged branch typically contains "not fully merged"
 			if (errorMessage.includes('not fully merged')) {
+				if (options.safetyVerified) {
+					// Safety check already confirmed no data loss - retry with force delete
+					getLogger().info(`Branch '${branchName}' not merged into HEAD but safety verified - using force delete`)
+					await executeGitCommand(['branch', '-D', branchName], { cwd: deleteCwd })
+					getLogger().info(`Branch deleted: ${branchName}`)
+					return true
+				}
 				throw new Error(
 					`Cannot delete unmerged branch '${branchName}'. Use --force to delete anyway.`
 				)

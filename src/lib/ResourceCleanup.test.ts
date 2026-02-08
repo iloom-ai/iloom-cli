@@ -535,6 +535,40 @@ describe('ResourceCleanup', () => {
 			)
 		})
 
+		it('should use force delete (-D) when safetyVerified is true and branch is not fully merged', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockRejectedValueOnce(new Error('branch not fully merged')) // branch -d fails
+				.mockResolvedValueOnce('') // branch -D succeeds
+
+			const result = await resourceCleanup.deleteBranch('feat/unmerged-branch', {
+				safetyVerified: true,
+			})
+
+			expect(result).toBe(true)
+			// Verify: first attempt was -d, then retry with -D
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-d', 'feat/unmerged-branch'],
+				{ cwd: '/path/to/main' }
+			)
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-D', 'feat/unmerged-branch'],
+				{ cwd: '/path/to/main' }
+			)
+		})
+
+		it('should still throw for unmerged branch when safetyVerified is NOT set', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockRejectedValueOnce(new Error('branch not fully merged')) // branch -d fails
+
+			await expect(
+				resourceCleanup.deleteBranch('feat/unmerged-branch', {})
+			).rejects.toThrow(/Cannot delete unmerged branch/)
+		})
+
 		it('should support dry-run mode', async () => {
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			// Mock branch existence check succeeds
@@ -1450,6 +1484,53 @@ describe('ResourceCleanup', () => {
 				'feat/issue-25',
 				'develop',
 				'/path/to/worktree'
+			)
+		})
+
+		it('should pass safetyVerified to deleteBranch when safety check passes, enabling force delete for unmerged branches (issue #575)', async () => {
+			// This test verifies the fix for issue #575:
+			// When safety check passes (remote exists, no data loss), but git branch -d
+			// fails with "not fully merged" (e.g. draft PR mode), the cleanup should
+			// succeed by retrying with -D since safety is already verified.
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			// Safety check: remote exists, local is up-to-date (scenario 2 - safe)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// getMergeTargetBranch called in Step 3.6 (pre-fetch) and in safety check
+			vi.mocked(getMergeTargetBranch).mockResolvedValue('main')
+			// findWorktreeForBranch called in deleteBranch to find where 'main' is checked out
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/main-worktree')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockRejectedValueOnce(new Error('branch not fully merged')) // -d fails
+				.mockResolvedValueOnce('') // -D succeeds (safetyVerified retry)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+
+			expect(result.success).toBe(true)
+			// Verify the branch operation succeeded
+			const branchOp = result.operations.find(op => op.type === 'branch')
+			expect(branchOp?.success).toBe(true)
+			// Verify force delete was used as retry after -d failed with "not fully merged"
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-D', 'feat/issue-25'],
+				{ cwd: '/path/to/main-worktree' }
 			)
 		})
 	})

@@ -81,6 +81,9 @@ export interface BranchDeleteOptions {
 	/** Pre-fetched merge target branch (parent branch for child looms, main branch for others).
 	 * This must be fetched BEFORE worktree deletion since metadata won't be readable after deletion. */
 	mergeTargetBranch?: string
+	/** Safety check has verified no data loss risk. When true, allows force delete
+	 * if git branch -d fails with "not fully merged" since safety is already confirmed. */
+	safetyVerified?: boolean
 }
 
 /**
