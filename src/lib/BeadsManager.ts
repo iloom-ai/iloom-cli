@@ -161,19 +161,28 @@ export class BeadsManager {
 
 	/**
 	 * Initialize Beads for this project.
-	 * Idempotent - safe to re-run.
+	 * Idempotent - safe to re-run. If the database already exists,
+	 * the "already initialized" error is caught and treated as success.
 	 *
-	 * @throws BeadsError if init fails
+	 * @throws BeadsError if init fails for reasons other than already being initialized
 	 */
 	async init(): Promise<void> {
 		logger.debug('Initializing Beads', { beadsDir: this.beadsDir, projectPath: this.projectPath })
 
-		await this.execBd([
-			'init',
-			'--quiet',
-			'--skip-hooks',
-			'--skip-merge-driver',
-		], { cwd: this.projectPath })
+		try {
+			await this.execBd([
+				'init',
+				'--quiet',
+				'--skip-hooks',
+				'--skip-merge-driver',
+			], { cwd: this.projectPath })
+		} catch (error) {
+			if (error instanceof BeadsError && error.stderr.includes('already initialized')) {
+				logger.debug('Beads already initialized, skipping')
+				return
+			}
+			throw error
+		}
 
 		logger.debug('Beads initialized successfully')
 	}
@@ -326,6 +335,7 @@ export class BeadsManager {
 				timeout: 30000,
 				encoding: 'utf8',
 				env,
+				extendEnv: false,
 			})
 			return { stdout: result.stdout, stderr: result.stderr }
 		} catch (error) {

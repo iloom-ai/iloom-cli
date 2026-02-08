@@ -24,6 +24,7 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
+import { logger } from '../utils/logger.js'
 
 describe('BeadsManager', () => {
 	let beadsManager: BeadsManager
@@ -207,6 +208,42 @@ describe('BeadsManager', () => {
 			vi.mocked(execa).mockRejectedValueOnce(error)
 
 			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
+		})
+
+		it('should succeed silently when beads is already initialized', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'This workspace is already initialized.'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).resolves.toBeUndefined()
+			expect(logger.debug).toHaveBeenCalledWith('Beads already initialized, skipping')
+		})
+
+		it('should re-throw non-"already initialized" BeadsErrors', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'Permission denied: /some/path'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
+		})
+
+		it('should re-throw non-"already initialized" errors even if not ExecaError', async () => {
+			vi.mocked(execa).mockRejectedValueOnce(new TypeError('unexpected type error'))
+
+			// execBd wraps all errors as BeadsError, so init() sees a BeadsError
+			// whose stderr does not contain "already initialized" and re-throws it
+			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
+		})
+
+		it('should handle stderr containing "already initialized" anywhere in the message', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'Found existing database: /path/to/beads.db\n\nThis workspace is already initialized.\n\nTo use the existing database...'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).resolves.toBeUndefined()
 		})
 	})
 
