@@ -1269,6 +1269,95 @@ export class LoomManager {
   }
 
   /**
+   * Swarm mode fast path for REUSED worktrees: write metadata and return loom data.
+   * Called when an existing worktree is found and swarmMode is true.
+   * Skips: color sync, issue status update, launching (IDE, terminal, dev server, Claude).
+   * Mirrors finishSwarmLoom() but for the reuse path.
+   */
+  private async finishSwarmLoomReuse(
+    input: CreateLoomInput,
+    issueData: Issue | PullRequest | null,
+    branchName: string,
+    worktreePath: string,
+    port: number,
+    capabilities: ProjectCapability[],
+  ): Promise<Loom> {
+    const description = issueData?.title ?? branchName
+
+    // Build issue/pr numbers arrays
+    let issue_numbers: string[] = []
+    let extractedIssueNum: string | null = null
+    if (input.type === 'issue') {
+      issue_numbers = [String(input.identifier)]
+    } else if (input.type === 'pr') {
+      extractedIssueNum = extractIssueNumber(branchName)
+      if (extractedIssueNum) {
+        issue_numbers = [extractedIssueNum]
+      }
+    }
+    const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
+
+    const sessionId = generateRandomSessionId()
+
+    // Build issueUrls/prUrls based on workflow type
+    let issueUrls: Record<string, string> = {}
+    if (input.type === 'issue' && issueData?.url) {
+      issueUrls = { [String(input.identifier)]: issueData.url }
+    } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
+      const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
+      issueUrls = { [extractedIssueNum]: issueUrl }
+    }
+    const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
+      ? { [String(input.identifier)]: issueData.url }
+      : {}
+
+    const metadataInput: WriteMetadataInput = {
+      description,
+      branchName,
+      worktreePath,
+      issueType: input.type,
+      issue_numbers,
+      pr_numbers,
+      issueTracker: this.issueTracker.providerName,
+      colorHex: '#888888', // Neutral color for swarm agents (no visual components)
+      sessionId,
+      projectPath: this.gitWorktree.workingDirectory,
+      issueUrls,
+      prUrls,
+      capabilities,
+      swarmAgent: true,
+      ...(input.options?.isEpic && { isEpic: input.options.isEpic }),
+      ...(input.options?.swarmStatus && { swarmStatus: input.options.swarmStatus }),
+      ...(input.parentLoom && { parentLoom: input.parentLoom }),
+    }
+    await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+
+    const loom: Loom = {
+      id: this.generateLoomId(input),
+      path: worktreePath,
+      branch: branchName,
+      type: input.type,
+      identifier: input.identifier,
+      port,
+      description,
+      createdAt: new Date(),
+      lastAccessed: new Date(),
+      ...(capabilities.length > 0 && { capabilities }),
+      ...(issueData !== null && {
+        issueData: {
+          title: issueData.title,
+          body: issueData.body,
+          url: issueData.url,
+          state: issueData.state,
+        },
+      }),
+    }
+
+    getLogger().success(`Reused swarm loom: ${loom.id} at ${loom.path}`)
+    return loom
+  }
+
+  /**
    * NEW: Find existing loom for the given input
    * Checks for worktrees matching the issue/PR identifier
    */
@@ -1325,6 +1414,12 @@ export class LoomManager {
     let port = basePort
     if (capabilities.includes('web')) {
       port = await this.setupPortForWeb(worktreePath, input, basePort)
+    }
+
+    // SWARM MODE: Fast path for reused worktrees - skip color sync, issue status,
+    // and launching (same as finishSwarmLoom() for new worktrees)
+    if (input.options?.swarmMode) {
+      return await this.finishSwarmLoomReuse(input, issueData, branchName, worktreePath, port, capabilities)
     }
 
     // 5. Skip database branch creation for existing worktrees

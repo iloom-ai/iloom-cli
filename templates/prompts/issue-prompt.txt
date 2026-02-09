@@ -892,7 +892,7 @@ If workflow plan determined SKIP_IMPLEMENTATION:
 
 2. **Push to remote:**
    ```bash
-   git push {{GIT_REMOTE}} HEAD
+   git push -u {{GIT_REMOTE}} HEAD
    ```
    If push fails due to non-fast-forward, stop and report the error.
 

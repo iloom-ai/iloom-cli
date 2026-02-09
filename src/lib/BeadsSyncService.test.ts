@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { BeadsSyncService } from './BeadsSyncService.js'
+import { BeadsSyncService, toBeadsId, fromBeadsId } from './BeadsSyncService.js'
 import type { BeadsManager, BeadsTask } from './BeadsManager.js'
 import type { IssueManagementProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 
@@ -12,6 +12,10 @@ vi.mock('../utils/logger.js', () => ({
 		error: vi.fn(),
 	},
 }))
+
+import { logger } from '../utils/logger.js'
+
+const TEST_PREFIX = 'iloom-test-project'
 
 function createMockBeadsManager(): {
 	[K in keyof BeadsManager]: ReturnType<typeof vi.fn>
@@ -62,24 +66,27 @@ describe('BeadsSyncService', () => {
 		syncService = new BeadsSyncService(
 			mockBeadsManager as unknown as BeadsManager,
 			mockIssueProvider as unknown as IssueManagementProvider,
+			TEST_PREFIX,
 		)
 	})
 
 	describe('syncEpicToBeads', () => {
-		it('should sync open child issues to Beads', async () => {
+		it('should sync open child issues to Beads with repo-prefixed IDs', async () => {
 			const children: ChildIssueResult[] = [
 				{ id: '101', title: 'Task A', url: 'https://github.com/org/repo/issues/101', state: 'open' },
 				{ id: '102', title: 'Task B', url: 'https://github.com/org/repo/issues/102', state: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
-			mockBeadsManager.create.mockResolvedValueOnce('101').mockResolvedValueOnce('102')
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
 
 			const result = await syncService.syncEpicToBeads('100')
 
 			expect(mockIssueProvider.getChildIssues).toHaveBeenCalledWith({ number: '100' })
 			expect(mockBeadsManager.create).toHaveBeenCalledTimes(2)
-			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task A', { id: '101' })
-			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task B', { id: '102' })
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task A', { id: `${TEST_PREFIX}-101` })
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task B', { id: `${TEST_PREFIX}-102` })
 			expect(result.created).toHaveLength(2)
 			expect(result.skipped).toHaveLength(0)
 		})
@@ -90,7 +97,7 @@ describe('BeadsSyncService', () => {
 				{ id: '102', title: 'Task B', url: 'url', state: 'closed' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
-			mockBeadsManager.create.mockResolvedValueOnce('101')
+			mockBeadsManager.create.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
 
 			const result = await syncService.syncEpicToBeads('100')
 
@@ -104,16 +111,16 @@ describe('BeadsSyncService', () => {
 				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
 			]
 			const existingTasks: BeadsTask[] = [
-				{ id: '101', title: 'Task A', status: 'open' },
+				{ id: `${TEST_PREFIX}-101`, title: 'Task A', status: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
 			mockBeadsManager.list.mockResolvedValue(existingTasks)
-			mockBeadsManager.create.mockResolvedValueOnce('102')
+			mockBeadsManager.create.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
 
 			const result = await syncService.syncEpicToBeads('100')
 
 			expect(mockBeadsManager.create).toHaveBeenCalledTimes(1)
-			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task B', { id: '102' })
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task B', { id: `${TEST_PREFIX}-102` })
 			expect(result.created).toHaveLength(1)
 			expect(result.skipped).toEqual(['101'])
 		})
@@ -131,15 +138,15 @@ describe('BeadsSyncService', () => {
 			expect(result.skipped).toEqual(['101'])
 		})
 
-		it('should sync dependencies between child issues', async () => {
+		it('should sync dependencies between child issues with repo-prefixed IDs', async () => {
 			const children: ChildIssueResult[] = [
 				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
 				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
 			mockBeadsManager.create
-				.mockResolvedValueOnce('101')
-				.mockResolvedValueOnce('102')
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
 
 			// Task 102 is blocked by 101
 			mockIssueProvider.getDependencies
@@ -151,7 +158,10 @@ describe('BeadsSyncService', () => {
 
 			const result = await syncService.syncEpicToBeads('100')
 
-			expect(mockBeadsManager.addDependency).toHaveBeenCalledWith('102', '101')
+			expect(mockBeadsManager.addDependency).toHaveBeenCalledWith(
+				`${TEST_PREFIX}-102`,
+				`${TEST_PREFIX}-101`,
+			)
 			expect(result.dependenciesCreated).toBe(1)
 		})
 
@@ -160,7 +170,7 @@ describe('BeadsSyncService', () => {
 				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
-			mockBeadsManager.create.mockResolvedValueOnce('101')
+			mockBeadsManager.create.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
 
 			// Task 101 is blocked by issue 999 (not part of this epic)
 			mockIssueProvider.getDependencies.mockResolvedValueOnce({
@@ -190,7 +200,7 @@ describe('BeadsSyncService', () => {
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
 			mockBeadsManager.list.mockRejectedValue(new Error('No tasks'))
-			mockBeadsManager.create.mockResolvedValueOnce('101')
+			mockBeadsManager.create.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
 
 			const result = await syncService.syncEpicToBeads('100')
 
@@ -205,8 +215,8 @@ describe('BeadsSyncService', () => {
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
 			mockBeadsManager.create
-				.mockResolvedValueOnce('101')
-				.mockResolvedValueOnce('102')
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
 
 			// First dependency fetch fails, second succeeds
 			mockIssueProvider.getDependencies
@@ -219,16 +229,164 @@ describe('BeadsSyncService', () => {
 			expect(result.created).toHaveLength(2)
 		})
 
-		it('should handle OPEN state for Linear issues', async () => {
+		it('should handle OPEN state for Linear issues (no prefix needed)', async () => {
 			const children: ChildIssueResult[] = [
 				{ id: 'ENG-101', title: 'Task A', url: 'url', state: 'OPEN' },
 			]
 			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			// Linear IDs already have prefix-hash format, so no repo prefix is added
 			mockBeadsManager.create.mockResolvedValueOnce('ENG-101')
 
 			const result = await syncService.syncEpicToBeads('ENG-100')
 
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task A', { id: 'ENG-101' })
 			expect(result.created).toHaveLength(1)
+		})
+
+		it('should use the prefix passed via constructor for all task IDs', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
+				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
+
+			await syncService.syncEpicToBeads('100')
+
+			// Both tasks should use the constructor-provided prefix
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task A', { id: `${TEST_PREFIX}-101` })
+			expect(mockBeadsManager.create).toHaveBeenCalledWith('Task B', { id: `${TEST_PREFIX}-102` })
+		})
+
+		it('should log user-visible output for child issue count', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
+				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
+				{ id: '103', title: 'Task C', url: 'url', state: 'closed' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
+
+			await syncService.syncEpicToBeads('100')
+
+			expect(logger.info).toHaveBeenCalledWith('   Found 2 open child issues')
+		})
+
+		it('should log user-visible output for each created task', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '54', title: 'Set up monorepo workspace structure', url: 'url', state: 'open' },
+				{ id: '55', title: 'Configure authentication', url: 'url', state: 'open' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-54`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-55`)
+
+			await syncService.syncEpicToBeads('50')
+
+			expect(logger.info).toHaveBeenCalledWith('   Creating task: #54 - Set up monorepo workspace structure')
+			expect(logger.info).toHaveBeenCalledWith('   Creating task: #55 - Configure authentication')
+		})
+
+		it('should log user-visible output for dependencies', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
+				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
+
+			mockIssueProvider.getDependencies
+				.mockResolvedValueOnce({ blocking: [], blockedBy: [] } as DependenciesResult)
+				.mockResolvedValueOnce({
+					blocking: [],
+					blockedBy: [{ id: '101', title: 'Task A', url: 'url', state: 'open' }],
+				} as DependenciesResult)
+
+			await syncService.syncEpicToBeads('100')
+
+			expect(logger.info).toHaveBeenCalledWith('   Linking dependency: #102 depends on #101')
+		})
+
+		it('should log DAG summary with correct counts', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
+				{ id: '102', title: 'Task B', url: 'url', state: 'open' },
+				{ id: '103', title: 'Task C', url: 'url', state: 'open' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create
+				.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-102`)
+				.mockResolvedValueOnce(`${TEST_PREFIX}-103`)
+
+			mockIssueProvider.getDependencies
+				.mockResolvedValueOnce({ blocking: [], blockedBy: [] } as DependenciesResult)
+				.mockResolvedValueOnce({
+					blocking: [],
+					blockedBy: [{ id: '101', title: 'Task A', url: 'url', state: 'open' }],
+				} as DependenciesResult)
+				.mockResolvedValueOnce({
+					blocking: [],
+					blockedBy: [{ id: '101', title: 'Task A', url: 'url', state: 'open' }],
+				} as DependenciesResult)
+
+			await syncService.syncEpicToBeads('100')
+
+			expect(logger.info).toHaveBeenCalledWith('   DAG ready: 3 tasks, 2 dependencies')
+		})
+
+		it('should use singular forms when counts are 1', async () => {
+			const children: ChildIssueResult[] = [
+				{ id: '101', title: 'Task A', url: 'url', state: 'open' },
+			]
+			mockIssueProvider.getChildIssues.mockResolvedValue(children)
+			mockBeadsManager.create.mockResolvedValueOnce(`${TEST_PREFIX}-101`)
+
+			mockIssueProvider.getDependencies
+				.mockResolvedValueOnce({ blocking: [], blockedBy: [] } as DependenciesResult)
+
+			await syncService.syncEpicToBeads('100')
+
+			expect(logger.info).toHaveBeenCalledWith('   Found 1 open child issue')
+			expect(logger.info).toHaveBeenCalledWith('   DAG ready: 1 task, 0 dependencies')
+		})
+	})
+
+	describe('toBeadsId', () => {
+		it('should prefix numeric GitHub issue IDs with the given prefix', () => {
+			expect(toBeadsId('101', TEST_PREFIX)).toBe(`${TEST_PREFIX}-101`)
+			expect(toBeadsId('42', TEST_PREFIX)).toBe(`${TEST_PREFIX}-42`)
+		})
+
+		it('should not prefix IDs that already start with the prefix', () => {
+			expect(toBeadsId(`${TEST_PREFIX}-42`, TEST_PREFIX)).toBe(`${TEST_PREFIX}-42`)
+		})
+
+		it('should not prefix IDs already in prefix-hash format (e.g., Linear)', () => {
+			expect(toBeadsId('ENG-101', TEST_PREFIX)).toBe('ENG-101')
+		})
+	})
+
+	describe('fromBeadsId', () => {
+		it('should strip the prefix from Beads IDs', () => {
+			expect(fromBeadsId(`${TEST_PREFIX}-101`, TEST_PREFIX)).toBe('101')
+			expect(fromBeadsId(`${TEST_PREFIX}-42`, TEST_PREFIX)).toBe('42')
+		})
+
+		it('should not strip non-matching prefixes', () => {
+			expect(fromBeadsId('ENG-101', TEST_PREFIX)).toBe('ENG-101')
+			expect(fromBeadsId('other-repo-101', TEST_PREFIX)).toBe('other-repo-101')
+		})
+
+		it('should return plain IDs unchanged', () => {
+			expect(fromBeadsId('101', TEST_PREFIX)).toBe('101')
 		})
 	})
 })

@@ -7,6 +7,7 @@ import { BeadsManager, BeadsError } from '../lib/BeadsManager.js'
 import { SwarmSupervisor } from '../lib/SwarmSupervisor.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { promptConfirmation } from '../utils/prompt.js'
+import { getRepoInfo } from '../utils/github.js'
 
 // Mock all external dependencies
 vi.mock('../lib/GitHubService.js')
@@ -58,7 +59,7 @@ vi.mock('../lib/BeadsManager.js', () => {
 			releaseClaim: vi.fn().mockResolvedValue(undefined),
 			addDependency: vi.fn().mockResolvedValue(undefined),
 			getBeadsDir: vi.fn().mockReturnValue('/test/beads'),
-		})),
+					})),
 		BeadsError,
 	}
 })
@@ -131,6 +132,10 @@ vi.mock('../utils/logger.js', () => ({
 		success: vi.fn(),
 	})),
 }))
+vi.mock('../utils/github.js', () => ({
+	getRepoInfo: vi.fn().mockResolvedValue({ owner: 'iloom-ai', name: 'iloom-test-project' }),
+	executeGhCommand: vi.fn(),
+}))
 vi.mock('../mcp/IssueManagementProviderFactory.js', () => ({
 	IssueManagementProviderFactory: {
 		create: vi.fn().mockReturnValue({
@@ -197,6 +202,7 @@ describe('StartCommand - Swarm Mode Integration', () => {
 
 		// Re-setup mocks that get cleared by mockReset
 		vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue('/test/main')
+		vi.mocked(getRepoInfo).mockResolvedValue({ owner: 'iloom-ai', name: 'iloom-test-project' })
 	})
 
 	describe('epic detection triggers swarm flow', () => {
@@ -250,6 +256,7 @@ describe('StartCommand - Swarm Mode Integration', () => {
 					epicBranch: 'epic/issue-100',
 					epicLoomPath: '/test/worktrees/issue-100',
 					projectPath: '/test/main',
+					beadsPrefix: 'iloom-test-project',
 				}),
 			)
 		})
@@ -465,7 +472,7 @@ describe('StartCommand - Swarm Mode Integration', () => {
 				releaseClaim: vi.fn(),
 				addDependency: vi.fn(),
 				getBeadsDir: vi.fn().mockReturnValue('/test/beads'),
-			}) as unknown as BeadsManager)
+							}) as unknown as BeadsManager)
 
 			const command = new StartCommand(
 				mockGitHubService,

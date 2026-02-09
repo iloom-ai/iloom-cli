@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
 import {
 	executeGhCommand,
+	executeGhCommandWithRetry,
 	checkGhAuth,
 	hasProjectScope,
 	fetchGhIssue,
@@ -869,6 +870,102 @@ with multiple lines.
 			})
 
 			await expect(updateIssueComment(99999, 'Test')).rejects.toThrow('Failed to update comment')
+		})
+	})
+
+	describe('executeGhCommandWithRetry', () => {
+		const noopSleep = async () => {}
+
+		it('should succeed on first attempt without retry', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify([{ number: 1 }]),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await executeGhCommandWithRetry<Array<{ number: number }>>(
+				['pr', 'list', '--json', 'number'],
+				{ sleepFn: noopSleep },
+			)
+
+			expect(result).toEqual([{ number: 1 }])
+			expect(execa).toHaveBeenCalledTimes(1)
+		})
+
+		it('should retry on rate limit error and succeed', async () => {
+			// First call: rate limit error
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('API rate limit exceeded'),
+			)
+			// Second call: success
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify([{ number: 42 }]),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await executeGhCommandWithRetry<Array<{ number: number }>>(
+				['pr', 'list', '--json', 'number'],
+				{ baseDelayMs: 1, sleepFn: noopSleep },
+			)
+
+			expect(result).toEqual([{ number: 42 }])
+			expect(execa).toHaveBeenCalledTimes(2)
+		})
+
+		it('should retry on 403 error', async () => {
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('HTTP 403: secondary rate limit'),
+			)
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: 'Merged PR #42',
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await executeGhCommandWithRetry<string>(
+				['pr', 'merge', '42', '--merge', '--delete-branch'],
+				{ baseDelayMs: 1, sleepFn: noopSleep },
+			)
+
+			// pr merge doesn't use --json, so result is raw stdout string
+			expect(result).toBe('Merged PR #42')
+			expect(execa).toHaveBeenCalledTimes(2)
+		})
+
+		it('should not retry on non-rate-limit errors', async () => {
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('Authentication failed'),
+			)
+
+			await expect(
+				executeGhCommandWithRetry(['pr', 'list', '--json', 'number'], { baseDelayMs: 1, sleepFn: noopSleep }),
+			).rejects.toThrow('Authentication failed')
+
+			expect(execa).toHaveBeenCalledTimes(1)
+		})
+
+		it('should give up after max retries', async () => {
+			// All attempts fail with rate limit - use mockRejectedValueOnce x3 for bounded behavior
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('API rate limit exceeded'),
+			)
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('API rate limit exceeded'),
+			)
+			vi.mocked(execa).mockRejectedValueOnce(
+				new Error('API rate limit exceeded'),
+			)
+
+			await expect(
+				executeGhCommandWithRetry(
+					['pr', 'list', '--json', 'number'],
+					{ maxRetries: 2, baseDelayMs: 1, sleepFn: noopSleep },
+				),
+			).rejects.toThrow('API rate limit exceeded')
+
+			// 1 initial + 2 retries = 3 calls
+			expect(execa).toHaveBeenCalledTimes(3)
 		})
 	})
 })

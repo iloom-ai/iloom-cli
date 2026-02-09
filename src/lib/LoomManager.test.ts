@@ -2320,6 +2320,146 @@ describe('LoomManager', () => {
       expect(result.path).toBe('/test/worktree-issue-39')
       expect(mockGitHub.moveIssueToInProgress).toHaveBeenCalledWith(39)
     })
+
+    it('should not launch any workspace components when reusing worktree in swarm mode', async () => {
+      const { LoomLauncher } = await import('./LoomLauncher.js')
+
+      const input: CreateLoomInput = {
+        type: 'issue',
+        identifier: 39,
+        originalInput: '39',
+        options: { swarmMode: true },
+      }
+
+      const existingWorktree = {
+        path: '/test/worktree-issue-39',
+        branch: 'issue-39-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 39,
+        title: 'Test Issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/39',
+      })
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {},
+      })
+
+      const result = await manager.createIloom(input)
+
+      expect(result.path).toBe('/test/worktree-issue-39')
+      expect(result.branch).toBe('issue-39-test')
+      // LoomLauncher should not have been instantiated in swarm mode
+      expect(LoomLauncher).not.toHaveBeenCalled()
+      // Should not move issue to In Progress in swarm mode
+      expect(mockGitHub.moveIssueToInProgress).not.toHaveBeenCalled()
+    })
+
+    it('should write metadata with swarmAgent flag when reusing worktree in swarm mode', async () => {
+      const input: CreateLoomInput = {
+        type: 'issue',
+        identifier: 39,
+        originalInput: '39',
+        parentLoom: {
+          type: 'issue',
+          identifier: 557,
+          branchName: 'feat/epic-branch',
+          worktreePath: '/test/epic-worktree',
+        },
+        options: { swarmMode: true },
+      }
+
+      const existingWorktree = {
+        path: '/test/worktree-issue-39',
+        branch: 'issue-39-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 39,
+        title: 'Swarm Child Issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/39',
+      })
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+
+      const result = await manager.createIloom(input)
+
+      expect(result.description).toBe('Swarm Child Issue')
+      expect(mockWriteMetadata).toHaveBeenCalledWith(
+        '/test/worktree-issue-39',
+        expect.objectContaining({
+          swarmAgent: true,
+          colorHex: '#888888',
+          parentLoom: {
+            type: 'issue',
+            identifier: 557,
+            branchName: 'feat/epic-branch',
+            worktreePath: '/test/epic-worktree',
+          },
+        })
+      )
+    })
+
+    it('should still copy environment files when reusing worktree in swarm mode', async () => {
+      const input: CreateLoomInput = {
+        type: 'issue',
+        identifier: 39,
+        originalInput: '39',
+        options: { swarmMode: true },
+      }
+
+      const existingWorktree = {
+        path: '/test/worktree-issue-39',
+        branch: 'issue-39-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 39,
+        title: 'Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/39',
+      })
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {},
+      })
+
+      await manager.createIloom(input)
+
+      // Metadata should be written (proves we got through env copy + port setup)
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      // Port should still be calculated for web projects
+      expect(mockEnvironment.calculatePort).toHaveBeenCalled()
+    })
   })
 
   describe('GitHub issue status updates', () => {

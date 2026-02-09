@@ -1,4 +1,5 @@
 import { execa } from 'execa'
+import { setTimeout as sleep } from 'timers/promises'
 import type {
 	GitHubIssue,
 	GitHubPullRequest,
@@ -29,6 +30,42 @@ export async function executeGhCommand<T = unknown>(
 	const data = isJson ? JSON.parse(result.stdout) : result.stdout
 
 	return data as T
+}
+
+/**
+ * Retry wrapper for executeGhCommand that handles GitHub rate limit errors
+ * with exponential backoff. Retries on 403, "rate limit", "secondary rate limit",
+ * or "API rate limit" errors.
+ */
+export async function executeGhCommandWithRetry<T = unknown>(
+	args: string[],
+	options?: { cwd?: string; timeout?: number; maxRetries?: number; baseDelayMs?: number; sleepFn?: (ms: number) => Promise<void> },
+): Promise<T> {
+	const maxRetries = options?.maxRetries ?? 3
+	const baseDelayMs = options?.baseDelayMs ?? 5000
+	const sleepFn = options?.sleepFn ?? sleep
+
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		try {
+			return await executeGhCommand<T>(args, options)
+		} catch (error) {
+			const isRateLimit =
+				error instanceof Error &&
+				(error.message.includes('rate limit') ||
+					error.message.includes('403') ||
+					error.message.includes('secondary rate limit') ||
+					error.message.includes('API rate limit'))
+
+			if (!isRateLimit || attempt >= maxRetries) throw error
+
+			const delay = baseDelayMs * Math.pow(2, attempt)
+			logger.warn(
+				`GitHub rate limit hit, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`,
+			)
+			await sleepFn(delay)
+		}
+	}
+	throw new Error('unreachable')
 }
 
 // Authentication checking

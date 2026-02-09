@@ -1,13 +1,14 @@
 import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
-import { setTimeout as sleep } from 'timers/promises'
+import { setTimeout as defaultSleep } from 'timers/promises'
 import { execa, type ExecaChildProcess } from 'execa'
 import type { BeadsManager, BeadsTask } from './BeadsManager.js'
+import { fromBeadsId } from './BeadsSyncService.js'
 import type { BeadsSyncService } from './BeadsSyncService.js'
 import type { LoomManager } from './LoomManager.js'
 import type { SwarmSettings } from './SettingsManager.js'
-import { executeGhCommand } from '../utils/github.js'
+import { executeGhCommand, executeGhCommandWithRetry } from '../utils/github.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -18,6 +19,8 @@ export interface EpicLoomContext {
 	epicBranch: string
 	epicLoomPath: string
 	projectPath: string
+	/** Prefix for Beads task IDs, derived from repository name (e.g., 'iloom-cli') */
+	beadsPrefix: string
 }
 
 /**
@@ -167,13 +170,27 @@ export class SwarmSupervisor {
 	private logDir: string = ''
 	/** Maps task IDs to their child worktree paths (retained after agent completes for merge queue use) */
 	private taskLoomPaths: Map<string, string> = new Map()
+	/** Maps task IDs to their branch names for precise PR matching via --head */
+	private taskBranchNames: Map<string, string> = new Map()
+	/** Cached Beads prefix for ID conversion */
+	private beadsPrefix: string = ''
+	/** Last printed progress line, used to suppress duplicate output */
+	private lastProgressLine: string = ''
+
+	/** Injectable sleep function for testability. Defaults to timers/promises setTimeout. */
+	private sleepFn: (ms: number) => Promise<void> = defaultSleep
 
 	constructor(
 		private readonly beadsManager: BeadsManager,
 		private readonly syncService: BeadsSyncService,
 		private readonly loomManager: LoomManager,
 		private readonly settings: SwarmSettings,
-	) {}
+		options?: { sleepFn?: (ms: number) => Promise<void> },
+	) {
+		if (options?.sleepFn) {
+			this.sleepFn = options.sleepFn
+		}
+	}
 
 	/**
 	 * Run the swarm supervisor loop.
@@ -198,13 +215,15 @@ export class SwarmSupervisor {
 		try {
 			// Step 1: Initialize Beads
 			logger.info('Initializing Beads DAG...')
-			await this.beadsManager.init()
+			await this.beadsManager.init(epicLoom.beadsPrefix)
+
+			// Use the deterministic prefix from the epic loom context
+			this.beadsPrefix = epicLoom.beadsPrefix
 
 			// Step 2: Sync epic children to Beads
 			logger.info('Syncing epic children to Beads...')
 			const syncResult = await this.syncService.syncEpicToBeads(epicLoom.epicIssueNumber)
 			result.totalTasks = syncResult.created.length + syncResult.skipped.length
-			logger.info(`Synced ${result.totalTasks} tasks (${syncResult.created.length} new, ${syncResult.skipped.length} existing)`)
 
 			// Store task titles for progress reporting
 			for (const mapping of syncResult.created) {
@@ -214,6 +233,23 @@ export class SwarmSupervisor {
 			// Step 3: Ensure agent-logs directory exists
 			this.logDir = path.join(epicLoom.epicLoomPath, 'agent-logs')
 			await fs.ensureDir(this.logDir)
+
+			// Step 3.5: Push epic branch to remote so child PRs can target it
+			logger.info(`Pushing epic branch '${epicLoom.epicBranch}' to remote...`)
+			try {
+				await execa('git', ['push', '-u', 'origin', epicLoom.epicBranch], {
+					cwd: epicLoom.epicLoomPath,
+				})
+				logger.info(`Epic branch '${epicLoom.epicBranch}' pushed to remote`)
+			} catch (pushError) {
+				// If the branch already exists on the remote, that's fine
+				const message = pushError instanceof Error ? pushError.message : 'Unknown error'
+				if (message.includes('everything up-to-date') || message.includes('Everything up-to-date')) {
+					logger.info(`Epic branch '${epicLoom.epicBranch}' already up-to-date on remote`)
+				} else {
+					throw new Error(`Failed to push epic branch '${epicLoom.epicBranch}' to remote: ${message}`)
+				}
+			}
 
 			// Step 4: Resume check - recover state from previous run
 			const resumeResult = await this.resumeFromExistingState(epicLoom, result)
@@ -264,15 +300,17 @@ export class SwarmSupervisor {
 				await this.writeProgress(epicLoom, result, 'running')
 
 				// 5g: Check if we're done
-				// Filter out permanently failed tasks - they will never be actioned and should
-				// not prevent the supervisor from exiting when all actionable work is complete.
+				// Only exit when ALL tasks are accounted for (completed + failed >= total).
+				// Without this check, the loop can exit prematurely when bd ready returns empty
+				// temporarily (e.g., a dependency just closed and dependents haven't been unblocked yet).
+				const allTasksAccountedFor = result.totalTasks === 0 || (result.completed + result.failed >= result.totalTasks)
 				const actionableReadyTasks = readyTasks.filter(t => !this.permanentlyFailed.has(t.id))
-				if (actionableReadyTasks.length === 0 && this.activeAgents.size === 0 && this.mergeQueue.length === 0 && this.pendingReleases === 0) {
+				if (allTasksAccountedFor && actionableReadyTasks.length === 0 && this.activeAgents.size === 0 && this.mergeQueue.length === 0 && this.pendingReleases === 0) {
 					break
 				}
 
 				// Poll interval - avoid tight loop
-				await sleep(2000)
+				await this.sleepFn(2000)
 			}
 
 			// If shutting down, wait for remaining agents
@@ -398,6 +436,8 @@ export class SwarmSupervisor {
 
 		// Store loom path for later use by conflict resolver (after agent is removed from activeAgents)
 		this.taskLoomPaths.set(task.id, loom.path)
+		// Store branch name for precise PR matching via --head
+		this.taskBranchNames.set(task.id, loom.branch)
 
 		// Set up log file
 		const logFile = path.join(logDir, `${task.id}.log`)
@@ -467,15 +507,8 @@ export class SwarmSupervisor {
 			if (agent.exitCode === 0) {
 				logger.info(`Agent for issue ${issueId} completed successfully`)
 
-				// Find the PR created by the agent
-				let prNumber: number | null = null
-				try {
-					prNumber = await this.findPRForBranch(issueId, epicLoom)
-				} catch (prSearchError) {
-					// findPRForBranch only throws on unexpected errors (network, auth, rate limit).
-					// Log the error and treat as "no PR found" to avoid losing the agent's work.
-					logger.error(`Failed to search for PR for issue ${issueId}: ${prSearchError instanceof Error ? prSearchError.message : 'Unknown error'}`)
-				}
+				// Find the PR created by the agent, with retry for GitHub API propagation delay
+				const prNumber = await this.findPRWithRetry(issueId, epicLoom)
 
 				if (prNumber) {
 					this.taskPRNumbers.set(issueId, prNumber)
@@ -489,7 +522,7 @@ export class SwarmSupervisor {
 				} else {
 					// Agent succeeded but no PR found - still mark as complete
 					logger.warn(`Agent for issue ${issueId} completed but no PR found, marking task as closed`)
-					await this.closeTask(agent.beadsTaskId, 'completed without PR')
+					await this.closeTask(agent.beadsTaskId, 'completed without PR', { swallow: true })
 					this.taskCompleteTimes.set(issueId, new Date().toISOString())
 					result.completed++
 				}
@@ -497,6 +530,41 @@ export class SwarmSupervisor {
 				await this.handleAgentFailure(agent, result, epicLoom)
 			}
 		}
+	}
+
+	/**
+	 * Find a PR for a completed agent, retrying a few times if not found immediately.
+	 *
+	 * GitHub's API may not surface a newly-created PR right away, so we poll
+	 * up to 3 times with 5-second delays before giving up.
+	 */
+	private async findPRWithRetry(
+		issueId: string,
+		epicLoom: EpicLoomContext,
+	): Promise<number | null> {
+		const maxAttempts = 3
+		const retryDelayMs = 5000
+
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			try {
+				const prNumber = await this.findPRForBranch(issueId, epicLoom)
+				if (prNumber) {
+					return prNumber
+				}
+			} catch (prSearchError) {
+				// findPRForBranch only throws on unexpected errors (network, auth, rate limit).
+				// Log the error and treat as "no PR found" to avoid losing the agent's work.
+				logger.error(`Failed to search for PR for issue ${issueId}: ${prSearchError instanceof Error ? prSearchError.message : 'Unknown error'}`)
+				return null
+			}
+
+			if (attempt < maxAttempts) {
+				logger.info(`PR not found for issue ${issueId} on attempt ${attempt}/${maxAttempts}, retrying in ${retryDelayMs / 1000}s...`)
+				await this.sleepFn(retryDelayMs)
+			}
+		}
+
+		return null
 	}
 
 	/**
@@ -537,8 +605,8 @@ export class SwarmSupervisor {
 			logger.error(`Task ${issueId} failed after ${attempts} attempt(s). Marking as permanently failed.`)
 			this.permanentlyFailed.add(issueId)
 
-			// Mark as failed in Beads
-			await this.closeTask(agent.beadsTaskId, `failed after ${attempts} attempts: ${failureReason}`)
+			// Mark as failed in Beads (non-critical: swallow errors to avoid masking the actual failure)
+			await this.closeTask(agent.beadsTaskId, `failed after ${attempts} attempts: ${failureReason}`, { swallow: true })
 
 			this.failures.push({
 				issue: issueId,
@@ -719,54 +787,100 @@ export class SwarmSupervisor {
 
 	/**
 	 * Merge a PR into the epic branch using gh CLI.
+	 * Uses retry wrapper for resilience against rate limits.
 	 */
 	private async mergePR(prNumber: number): Promise<void> {
-		await executeGhCommand(
+		await executeGhCommandWithRetry(
 			['pr', 'merge', String(prNumber), '--merge', '--delete-branch'],
 		)
 	}
 
 	/**
 	 * Close a GitHub issue via gh CLI.
+	 *
+	 * @param issueId - Beads task ID (e.g., 'myrepo-100'). Automatically strips
+	 *   the Beads prefix to get the raw GitHub issue number.
 	 */
 	private async closeIssue(issueId: string): Promise<void> {
+		const rawId = fromBeadsId(issueId, this.beadsPrefix)
 		try {
 			await executeGhCommand(
-				['issue', 'close', issueId],
+				['issue', 'close', rawId],
 			)
-			logger.info(`Closed issue ${issueId}`)
+			logger.info(`Closed issue ${rawId}`)
 		} catch (error) {
 			// Log but don't fail - issue closure is not critical
-			logger.warn(`Failed to close issue ${issueId}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			logger.warn(`Failed to close issue ${rawId}: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 	}
 
 	/**
 	 * Close a Beads task with an optional reason.
+	 *
+	 * By default, errors are propagated to the caller (critical path behavior).
+	 * Pass `{ swallow: true }` for non-critical paths where closeTask failure
+	 * should be logged but not prevent the workflow from continuing.
 	 */
-	private async closeTask(taskId: string, reason?: string): Promise<void> {
+	private async closeTask(taskId: string, reason?: string, options?: { swallow?: boolean }): Promise<void> {
 		try {
 			await this.beadsManager.close(taskId, reason)
 		} catch (error) {
-			logger.warn(`Failed to close Beads task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			const message = `Failed to close Beads task ${taskId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+			if (options?.swallow) {
+				logger.warn(message)
+				return
+			}
+			logger.error(message)
+			throw error
 		}
 	}
 
 	/**
 	 * Find a PR for a given issue branch.
-	 * Looks for open PRs created by the swarm agent.
+	 * Uses --head with the stored branch name for precise matching.
+	 * Falls back to title search if no branch name is stored.
+	 *
+	 * Uses executeGhCommandWithRetry for resilience against rate limits.
 	 */
 	private async findPRForBranch(issueId: string, _epicLoom: EpicLoomContext): Promise<number | null> {
+		const branchName = this.taskBranchNames.get(issueId)
+		if (!branchName) {
+			logger.warn(`No branch name stored for task ${issueId}, falling back to title search`)
+			return this.findPRForBranchByTitle(issueId)
+		}
+
 		try {
-			// Note: Searching by `issueId in:title` may match unrelated PRs if the issue ID
-			// appears in other PR titles. A more robust approach would filter by head branch
-			// pattern, but GitHub's search API doesn't support exact branch matching via `gh pr list --search`.
-			const prList = await executeGhCommand<Array<{ number: number; headRefName: string }>>(
-				['pr', 'list', '--state', 'open', '--json', 'number,headRefName', '--search', `is:pr is:open ${issueId} in:title`],
+			const prList = await executeGhCommandWithRetry<Array<{ number: number; headRefName: string }>>(
+				['pr', 'list', '--state', 'open', '--json', 'number,headRefName', '--head', branchName],
 			)
 
-			// Prefer PRs whose branch name contains the issue ID for more precise matching
-			const exactMatch = prList.find(pr => pr.headRefName.includes(issueId))
+			if (prList.length > 0 && prList[0]) {
+				return prList[0].number
+			}
+			return null
+		} catch (error: unknown) {
+			if (error instanceof Error) {
+				const msg = error.message.toLowerCase()
+				if (msg.includes('no pull requests match') || msg.includes('no open pull requests')) {
+					return null
+				}
+			}
+			throw error
+		}
+	}
+
+	/**
+	 * Fallback: find a PR by searching the title for the raw issue ID.
+	 * Used when no branch name is stored for the task.
+	 */
+	private async findPRForBranchByTitle(issueId: string): Promise<number | null> {
+		const rawId = fromBeadsId(issueId, this.beadsPrefix)
+		try {
+			const prList = await executeGhCommandWithRetry<Array<{ number: number; headRefName: string }>>(
+				['pr', 'list', '--state', 'open', '--json', 'number,headRefName', '--search', `is:pr is:open ${rawId} in:title`],
+			)
+
+			const exactMatch = prList.find(pr => pr.headRefName.includes(rawId))
 			if (exactMatch) {
 				return exactMatch.number
 			}
@@ -776,12 +890,7 @@ export class SwarmSupervisor {
 			}
 			return null
 		} catch (error: unknown) {
-			// Only return null for "no PR found" scenarios (empty result from gh pr list).
-			// gh pr list with --json returns exit code 0 with an empty array when no PRs match,
-			// so a caught error here indicates an unexpected failure (network, auth, rate limit, etc.).
-			// Propagate unexpected errors so callers can handle them appropriately.
 			if (error instanceof Error) {
-				// gh cli returns exit code 1 with no stderr for genuinely empty results in some edge cases
 				const msg = error.message.toLowerCase()
 				if (msg.includes('no pull requests match') || msg.includes('no open pull requests')) {
 					return null
@@ -824,7 +933,7 @@ export class SwarmSupervisor {
 					this.activeAgents.clear()
 					break
 				}
-				await sleep(2000)
+				await this.sleepFn(2000)
 			}
 		}
 	}
@@ -838,24 +947,38 @@ export class SwarmSupervisor {
 
 	/**
 	 * Parse an issue identifier from a Beads task ID.
-	 * Task IDs may be numeric (GitHub) or alphanumeric (Linear).
+	 *
+	 * Strips the Beads prefix added during sync and returns the raw issue
+	 * identifier. Numeric identifiers are returned as numbers (GitHub),
+	 * alphanumeric identifiers are returned as strings (Linear).
 	 */
 	private parseIssueIdentifier(taskId: string): string | number {
+		const rawId = fromBeadsId(taskId, this.beadsPrefix)
 		// Use strict regex to avoid parseInt truncating mixed-format IDs
 		// e.g., parseInt("100-fix-login", 10) returns 100, which is wrong
-		if (/^\d+$/.test(taskId)) {
-			return parseInt(taskId, 10)
+		if (/^\d+$/.test(rawId)) {
+			return parseInt(rawId, 10)
 		}
-		return taskId
+		return rawId
 	}
 
 	/**
 	 * Log a periodic progress summary to the terminal.
+	 * Only prints when the status line changes from the previous output.
 	 */
 	private logProgressSummary(result: SwarmResult): void {
-		logger.info(
-			`Active: ${this.activeAgents.size}/${this.settings.maxConcurrent} | Completed: ${result.completed}/${result.totalTasks} | Failed: ${result.failed} | Blocked: ${this.permanentlyFailed.size}`,
-		)
+		const line = `Active: ${this.activeAgents.size}/${this.settings.maxConcurrent} | Completed: ${result.completed}/${result.totalTasks} | Failed: ${result.failed} | Blocked: ${this.permanentlyFailed.size}`
+		if (line === this.lastProgressLine) {
+			// Print a dot to show activity without repeating the full line
+			process.stderr.write('.')
+			return
+		}
+		// If we were printing dots, start a new line before the status update
+		if (this.lastProgressLine) {
+			process.stderr.write('\n')
+		}
+		this.lastProgressLine = line
+		logger.info(line)
 	}
 
 	/**

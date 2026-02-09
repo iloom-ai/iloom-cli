@@ -183,11 +183,15 @@ describe('BeadsManager', () => {
 	})
 
 	describe('init', () => {
-		it('should call bd init with correct flags and environment', async () => {
+		it('should call bd init with correct flags and then configure beads.role', async () => {
+			// First call: bd init
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+			// Second call: bd config set beads.role maintainer
 			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
 
 			await beadsManager.init()
 
+			expect(execa).toHaveBeenCalledTimes(2)
 			expect(execa).toHaveBeenCalledWith(
 				'bd',
 				['init', '--quiet', '--skip-hooks', '--skip-merge-driver'],
@@ -199,9 +203,49 @@ describe('BeadsManager', () => {
 					}),
 				}),
 			)
+			expect(execa).toHaveBeenCalledWith(
+				'bd',
+				['config', 'set', 'beads.role', 'maintainer'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						BEADS_DIR: beadsManager.getBeadsDir(),
+						BEADS_NO_DAEMON: '1',
+					}),
+				}),
+			)
 		})
 
-		it('should throw BeadsError on failure', async () => {
+		it('should pass --prefix flag when prefix is provided', async () => {
+			// First call: bd init with --prefix
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+			// Second call: bd config set beads.role maintainer
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+
+			await beadsManager.init('iloom-test-project')
+
+			expect(execa).toHaveBeenCalledWith(
+				'bd',
+				['init', '--quiet', '--skip-hooks', '--skip-merge-driver', '--prefix', 'iloom-test-project'],
+				expect.objectContaining({
+					cwd: '/test/project',
+				}),
+			)
+		})
+
+		it('should not pass --prefix flag when prefix is not provided', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+
+			await beadsManager.init()
+
+			expect(execa).toHaveBeenCalledWith(
+				'bd',
+				['init', '--quiet', '--skip-hooks', '--skip-merge-driver'],
+				expect.anything(),
+			)
+		})
+
+		it('should throw BeadsError on init failure', async () => {
 			const error = new Error('init failed') as Error & { stderr: string; exitCode: number }
 			error.stderr = 'Permission denied'
 			error.exitCode = 1
@@ -256,6 +300,18 @@ describe('BeadsManager', () => {
 			vi.mocked(execa).mockRejectedValueOnce(error)
 
 			await expect(beadsManager.init()).resolves.toBeUndefined()
+		})
+
+		it('should throw BeadsError on config set failure', async () => {
+			// First call: bd init succeeds
+			vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+			// Second call: bd config set fails
+			const error = new Error('config failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'Config error'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
 		})
 	})
 
@@ -399,7 +455,7 @@ describe('BeadsManager', () => {
 
 			expect(execa).toHaveBeenCalledWith(
 				'bd',
-				['update', '--release', 'task-1'],
+				['update', '--status', 'open', '--assignee', '', 'task-1'],
 				expect.anything(),
 			)
 		})

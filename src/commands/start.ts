@@ -30,6 +30,7 @@ import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { EpicDetector } from '../lib/EpicDetector.js'
 import type { EpicDetectionResult } from '../lib/EpicDetector.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { getRepoInfo } from '../utils/github.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -791,10 +792,14 @@ export class StartCommand {
 		getLogger().info('Checking Beads CLI availability...')
 		await beadsManager.ensureInstalled(swarmSettings.autoInstallBeads)
 
+		// Derive repo-aware prefix for Beads task IDs (e.g., 'iloom-test-project-github')
+		const repoInfo = await getRepoInfo()
+		const beadsPrefix = repoInfo.name
+
 		// Create issue management provider for BeadsSyncService
 		const providerName = settings.issueManagement?.provider ?? 'github'
 		const issueProvider = IssueManagementProviderFactory.create(providerName)
-		const syncService = new BeadsSyncService(beadsManager, issueProvider)
+		const syncService = new BeadsSyncService(beadsManager, issueProvider, beadsPrefix)
 
 		// Create SwarmSupervisor
 		const supervisor = new SwarmSupervisor(
@@ -811,6 +816,7 @@ export class StartCommand {
 			epicBranch: loom.branch,
 			epicLoomPath: loom.path,
 			projectPath: mainWorktreePath,
+			beadsPrefix,
 		})
 	}
 
@@ -894,7 +900,7 @@ export class StartCommand {
 		const { promptConfirmation } = await import('../utils/prompt.js')
 		const confirmed = await promptConfirmation(
 			epicDetection.totalChildren > 0
-				? `Issue is an epic with ${epicDetection.totalChildren} child issue${epicDetection.totalChildren === 1 ? '' : 's'} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked).\nStart swarm mode? Max ${maxAgents} concurrent agents.`
+				? `Issue is an epic with ${epicDetection.totalChildren} child issue${epicDetection.totalChildren === 1 ? '' : 's'} (${epicDetection.readyChildren} ready, ${epicDetection.blockedChildren} blocked).\nStart swarm mode? Max ${maxAgents} concurrent agent${maxAgents === 1 ? '' : 's'}.`
 				: 'Issue is an epic. Start swarm mode?',
 			true
 		)

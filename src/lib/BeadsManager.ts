@@ -172,18 +172,19 @@ export class BeadsManager {
 	 * Idempotent - safe to re-run. If the database already exists,
 	 * the "already initialized" error is caught and treated as success.
 	 *
+	 * @param prefix - Optional prefix for task IDs (e.g., repo name). Should NOT have a trailing dash.
 	 * @throws BeadsError if init fails for reasons other than already being initialized
 	 */
-	async init(): Promise<void> {
-		logger.debug('Initializing Beads', { beadsDir: this.beadsDir, projectPath: this.projectPath })
+	async init(prefix?: string): Promise<void> {
+		logger.debug('Initializing Beads', { beadsDir: this.beadsDir, projectPath: this.projectPath, prefix })
+
+		const args = ['init', '--quiet', '--skip-hooks', '--skip-merge-driver']
+		if (prefix) {
+			args.push('--prefix', prefix)
+		}
 
 		try {
-			await this.execBd([
-				'init',
-				'--quiet',
-				'--skip-hooks',
-				'--skip-merge-driver',
-			], { cwd: this.projectPath })
+			await this.execBd(args, { cwd: this.projectPath })
 		} catch (error) {
 			if (error instanceof BeadsError && error.stderr.includes('already initialized')) {
 				logger.debug('Beads already initialized, skipping')
@@ -191,6 +192,8 @@ export class BeadsManager {
 			}
 			throw error
 		}
+
+		await this.execBd(['config', 'set', 'beads.role', 'maintainer'])
 
 		logger.debug('Beads initialized successfully')
 	}
@@ -285,7 +288,7 @@ export class BeadsManager {
 	 * @throws BeadsError if release fails
 	 */
 	async releaseClaim(taskId: string): Promise<void> {
-		await this.execBd(['update', '--release', taskId])
+		await this.execBd(['update', '--status', 'open', '--assignee', '', taskId])
 	}
 
 	/**
