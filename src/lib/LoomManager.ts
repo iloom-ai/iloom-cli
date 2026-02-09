@@ -285,11 +285,14 @@ export class LoomManager {
         }
 
         // Create draft PR
+        // For child looms, target the parent branch; otherwise use the configured main branch
+        const draftBaseBranch = input.parentLoom?.branchName ?? settingsData.mainBranch ?? 'main'
         getLogger().info('Creating draft PR...')
         const prResult = await prManager.createDraftPR(
           branchName,
           prTitle,
           prBody,
+          draftBaseBranch,
           worktreePath
         )
 

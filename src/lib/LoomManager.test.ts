@@ -536,6 +536,7 @@ describe('LoomManager', () => {
         expect.any(String), // branch name
         'Test Linear Issue', // PR title from issue
         expect.stringContaining('Fixes 123'), // PR body with Fixes keyword (no prefix for Linear)
+        'main', // base branch
         expectedPath // worktree path
       )
 
@@ -589,6 +590,7 @@ describe('LoomManager', () => {
         'my-feature', // branch name
         'Work on my-feature', // PR title from branch name (no issue data)
         expect.stringContaining('Branch: my-feature'), // PR body for branch mode
+        'main', // base branch
         expectedPath // worktree path
       )
 
@@ -600,6 +602,63 @@ describe('LoomManager', () => {
           pr_numbers: ['99'],
           prUrls: { '99': 'https://github.com/owner/repo/pull/99' },
         })
+      )
+    })
+
+    it('should create draft PR targeting parent branch for child looms', async () => {
+      mockCreateDraftPR.mockResolvedValue({ number: 101, url: 'https://github.com/owner/repo/pull/101' })
+      mockCheckForExistingPR.mockResolvedValue(null)
+
+      // Mock settings with github-draft-pr mode
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      // Mock issue fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 456,
+        title: 'Child Issue',
+        body: 'Child description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/456',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-456'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      // Child loom input with parent loom
+      const childInput: CreateLoomInput = {
+        type: 'issue',
+        identifier: 456,
+        originalInput: '456',
+        parentLoom: {
+          type: 'issue',
+          identifier: 123,
+          branchName: 'feature/parent-branch',
+          worktreePath: '/test/worktree-issue-123',
+        },
+      }
+
+      const result = await manager.createIloom(childInput)
+
+      expect(result.path).toBe(expectedPath)
+
+      // Verify draft PR targets the parent branch, NOT main
+      expect(mockCreateDraftPR).toHaveBeenCalledWith(
+        expect.any(String), // branch name
+        'Child Issue', // PR title
+        expect.stringContaining('Fixes #456'), // PR body with Fixes keyword
+        'feature/parent-branch', // base branch should be parent's branch
+        expectedPath // worktree path
       )
     })
 
