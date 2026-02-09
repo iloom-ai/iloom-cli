@@ -751,3 +751,51 @@ export async function removeIssueDependency(
 		apiPath,
 	])
 }
+
+// Issue List Operations (for il issues command)
+
+export interface GitHubIssueListItem {
+	id: string
+	title: string
+	updatedAt: string
+	url: string
+	state: string
+}
+
+/**
+ * Fetch a list of open GitHub issues sorted by recently updated
+ * @param options - Fetch options
+ * @param options.limit - Maximum number of issues to return (default: 100)
+ * @param options.cwd - Working directory for gh CLI (default: process.cwd())
+ * @returns Array of issues
+ */
+export async function fetchGitHubIssueList(
+	options?: { limit?: number; cwd?: string }
+): Promise<GitHubIssueListItem[]> {
+	const limit = options?.limit ?? 100
+
+	logger.debug('Fetching GitHub issue list', { limit, cwd: options?.cwd })
+
+	const result = await executeGhCommand<Array<{
+		number: number
+		title: string
+		updatedAt: string
+		url: string
+		state: string
+	}>>([
+		'issue',
+		'list',
+		'--state', 'open',
+		'--json', 'number,title,updatedAt,url,state',
+		'--limit', String(limit),
+		'--search', 'sort:updated-desc',
+	], options?.cwd ? { cwd: options.cwd } : undefined)
+
+	return (result ?? []).map(item => ({
+		id: String(item.number),
+		title: item.title,
+		updatedAt: item.updatedAt,
+		url: item.url,
+		state: item.state.toLowerCase(),
+	}))
+}

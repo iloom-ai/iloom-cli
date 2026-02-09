@@ -129,7 +129,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   }
 
   // Tier 2: Commands that warn on settings errors but continue
-  const warnOnlyCommands = ['list', 'projects']
+  const warnOnlyCommands = ['list', 'projects', 'issues']
 
   // Tier 3: All other commands require FULL validation (settings + multi-remote)
   // Commands: start, add-issue, enhance, finish, cleanup, open, run, etc.
@@ -173,7 +173,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
   const conditionallyRequireGh = ['start', 'finish', 'enhance', 'add-issue', 'ignite', 'spin']
 
   // Commands that only warn if gh CLI is missing (secondary/utility commands)
-  const warnOnly = ['init', 'list', 'rebase', 'cleanup', 'run', 'update', 'open']
+  const warnOnly = ['init', 'list', 'rebase', 'cleanup', 'run', 'update', 'open', 'issues']
 
   // Test commands and help bypass this check entirely
   if (commandName.startsWith('test-') || commandName === 'help') {
@@ -1322,6 +1322,29 @@ program
       console.log(JSON.stringify(result, null, 2))
     } catch (error) {
       logger.error(`Failed to list projects: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('issues')
+  .description('List project issues from configured issue tracker')
+  .argument('[project-path]', 'Path to project root (auto-detected if omitted)')
+  .option('--json', 'Output as JSON (default behavior)')
+  .option('--limit <n>', 'Max issues to return', '100')
+  .action(async (projectPath?: string, options?: { json?: boolean; limit?: string }) => {
+    try {
+      const { IssuesCommand } = await import('./commands/issues.js')
+      const command = new IssuesCommand()
+      const parsedLimit = parseInt(options?.limit ?? '100', 10)
+      const limit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 100 : parsedLimit
+      const result = await command.execute({
+        ...(projectPath ? { projectPath } : {}),
+        limit,
+      })
+      console.log(JSON.stringify(result, null, 2))
+    } catch (error) {
+      logger.error(`Failed to list issues: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
     }
   })

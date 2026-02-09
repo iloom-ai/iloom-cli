@@ -694,6 +694,81 @@ export async function deleteLinearIssueRelation(relationId: string): Promise<voi
   }
 }
 
+// Issue List Operations (for il issues command)
+
+export interface LinearIssueListItem {
+  id: string
+  title: string
+  updatedAt: string
+  url: string
+  state: string
+}
+
+/**
+ * Fetch a list of active Linear issues for a team, sorted by recently updated
+ * @param teamKey - Team key (e.g., "ENG", "PLAT")
+ * @param options - Fetch options
+ * @param options.limit - Maximum number of issues to return (default: 100)
+ * @returns Array of issues
+ * @throws LinearServiceError on fetch failure
+ */
+export async function fetchLinearIssueList(
+  teamKey: string,
+  options?: { limit?: number },
+): Promise<LinearIssueListItem[]> {
+  try {
+    const limit = options?.limit ?? 100
+
+    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit })
+    const client = createLinearClient()
+
+    // Get team by key
+    const teams = await client.teams()
+    const team = teams.nodes.find((t) => t.key === teamKey)
+
+    if (!team) {
+      throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
+    }
+
+    // Fetch issues: filter out completed and canceled states, order by updatedAt
+    const issues = await team.issues({
+      first: limit,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PaginationOrderBy is a const enum incompatible with isolatedModules
+      orderBy: 'updatedAt' as any,
+      filter: {
+        state: {
+          type: {
+            nin: ['completed', 'canceled'],
+          },
+        },
+      },
+    })
+
+    // Build results, resolving state names in parallel
+    const results = await Promise.all(
+      issues.nodes.map(async (issue) => {
+        const stateObj = await issue.state
+        const state = stateObj?.name ?? 'unknown'
+
+        return {
+          id: issue.identifier,
+          title: issue.title,
+          updatedAt: issue.updatedAt.toISOString(),
+          url: issue.url,
+          state,
+        }
+      }),
+    )
+
+    return results
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'fetchLinearIssueList')
+  }
+}
+
 /**
  * Find the relation ID between two issues for removal
  * @param blockingIdentifier - Identifier of the blocking issue

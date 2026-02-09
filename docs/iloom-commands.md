@@ -25,6 +25,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 - [Planning Commands](#planning-commands)
   - [il plan](#il-plan)
 - [Issue Management Commands](#issue-management-commands)
+  - [il issues](#il-issues)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
 - [Configuration & Maintenance](#configuration--maintenance)
@@ -1222,6 +1223,70 @@ il plan --print --output-format=json 42
 ---
 
 ## Issue Management Commands
+
+### il issues
+
+List open issues from the configured issue tracker (GitHub or Linear) as JSON.
+
+**Usage:**
+```bash
+il issues [options] [project-path]
+```
+
+**Arguments:**
+- `[project-path]` - Path to project root. Auto-detected from current directory or worktree if omitted.
+
+**Options:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--json` | Output as JSON (default behavior) | `true` |
+| `--limit <n>` | Maximum number of issues to return | `100` |
+
+**Output Format:**
+```json
+[
+  {
+    "id": "123",
+    "title": "Issue title",
+    "updatedAt": "2026-02-08T00:00:00Z",
+    "url": "https://github.com/org/repo/issues/123",
+    "state": "open"
+  }
+]
+```
+
+**Behavior:**
+- Returns only open/active issues
+- Sorted by most recently updated
+- Results are cached on disk with a 2-minute TTL for fast repeated calls
+- Cache is stored in `~/.config/iloom-ai/cache/` and keyed per project + provider
+- Works from worktrees (resolves settings from the correct project root)
+- For GitHub: uses `gh issue list` with `--search sort:updated-desc`
+- For Linear: uses `@linear/sdk` with team key filter from settings
+
+**Examples:**
+
+```bash
+# List issues from current project
+il issues
+
+# List issues with a limit
+il issues --limit 50
+
+# List issues from a specific project path
+il issues /path/to/project
+
+# Pipe to jq for filtering
+il issues | jq '.[] | select(.title | test("bug"; "i"))'
+```
+
+**Notes:**
+- Designed for programmatic use by the VS Code extension
+- Uses the CLI's existing settings merging logic (env vars, settings.json, settings.local.json)
+- Follows the same pattern as `il list --json` and `il projects --json`
+
+---
 
 ### il add-issue
 
