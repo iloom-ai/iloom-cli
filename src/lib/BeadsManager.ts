@@ -4,7 +4,15 @@ import os from 'os'
 import { execa, type ExecaError } from 'execa'
 import { logger } from '../utils/logger.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
-import type { SwarmSettings } from './SettingsManager.js'
+
+/**
+ * Subset of SwarmSettings used by BeadsManager.
+ * Defined locally to avoid coupling to the full SwarmSettings schema
+ * which lives in SettingsManager and may not be present on all branches.
+ */
+interface BeadsManagerSettings {
+	beadsDir?: string
+}
 
 /**
  * Error class for Beads CLI failures
@@ -57,7 +65,7 @@ export class BeadsManager {
 
 	constructor(
 		private readonly projectPath: string,
-		swarmSettings?: Partial<SwarmSettings>,
+		swarmSettings?: Partial<BeadsManagerSettings>,
 	) {
 		const baseDir = swarmSettings?.beadsDir ?? '~/.config/iloom-ai/beads'
 		const resolvedBaseDir = baseDir.startsWith('~')
@@ -161,19 +169,28 @@ export class BeadsManager {
 
 	/**
 	 * Initialize Beads for this project.
-	 * Idempotent - safe to re-run.
+	 * Idempotent - safe to re-run. If the database already exists,
+	 * the "already initialized" error is caught and treated as success.
 	 *
-	 * @throws BeadsError if init fails
+	 * @throws BeadsError if init fails for reasons other than already being initialized
 	 */
 	async init(): Promise<void> {
 		logger.debug('Initializing Beads', { beadsDir: this.beadsDir, projectPath: this.projectPath })
 
-		await this.execBd([
-			'init',
-			'--quiet',
-			'--skip-hooks',
-			'--skip-merge-driver',
-		], { cwd: this.projectPath })
+		try {
+			await this.execBd([
+				'init',
+				'--quiet',
+				'--skip-hooks',
+				'--skip-merge-driver',
+			], { cwd: this.projectPath })
+		} catch (error) {
+			if (error instanceof BeadsError && error.stderr.includes('already initialized')) {
+				logger.debug('Beads already initialized, skipping')
+				return
+			}
+			throw error
+		}
 
 		logger.debug('Beads initialized successfully')
 	}
@@ -329,13 +346,16 @@ export class BeadsManager {
 			})
 			return { stdout: result.stdout, stderr: result.stderr }
 		} catch (error) {
-			const execaError = error as ExecaError
-			const stderr = execaError.stderr ?? execaError.message ?? 'Unknown Beads error'
-			throw new BeadsError(
-				`Beads command failed: bd ${args.join(' ')}: ${stderr}`,
-				execaError.exitCode,
-				stderr,
-			)
+			if (error instanceof Error && 'exitCode' in error) {
+				const execaError = error as ExecaError
+				const stderr = execaError.stderr ?? execaError.message ?? 'Unknown Beads error'
+				throw new BeadsError(
+					`Beads command failed: bd ${args.join(' ')}: ${stderr}`,
+					execaError.exitCode,
+					stderr,
+				)
+			}
+			throw error
 		}
 	}
 

@@ -24,6 +24,7 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
+import { logger } from '../utils/logger.js'
 
 describe('BeadsManager', () => {
 	let beadsManager: BeadsManager
@@ -208,6 +209,54 @@ describe('BeadsManager', () => {
 
 			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
 		})
+
+		it('should succeed silently when beads is already initialized', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'This workspace is already initialized.'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).resolves.toBeUndefined()
+			expect(logger.debug).toHaveBeenCalledWith('Beads already initialized, skipping')
+		})
+
+		it('should re-throw non-"already initialized" BeadsErrors', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'Permission denied: /some/path'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).rejects.toThrow(BeadsError)
+			await expect(
+				// Need to re-mock since the previous call consumed it
+				(async () => {
+					const err = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+					err.stderr = 'Permission denied: /some/path'
+					err.exitCode = 1
+					vi.mocked(execa).mockRejectedValueOnce(err)
+					return beadsManager.init()
+				})()
+			).rejects.toThrow('Permission denied')
+		})
+
+		it('should re-throw errors that are not BeadsError instances', async () => {
+			// Simulate an unexpected error type (not an ExecaError with exitCode)
+			vi.mocked(execa).mockRejectedValueOnce(new TypeError('unexpected type error'))
+
+			// Non-execa errors are re-thrown without wrapping in BeadsError
+			await expect(beadsManager.init()).rejects.toThrow(TypeError)
+			vi.mocked(execa).mockRejectedValueOnce(new TypeError('unexpected type error'))
+			await expect(beadsManager.init()).rejects.toThrow('unexpected type error')
+		})
+
+		it('should handle stderr containing "already initialized" anywhere in the message', async () => {
+			const error = new Error('bd init failed') as Error & { stderr: string; exitCode: number }
+			error.stderr = 'Found existing database: /path/to/beads.db\n\nThis workspace is already initialized.\n\nTo use the existing database...'
+			error.exitCode = 1
+			vi.mocked(execa).mockRejectedValueOnce(error)
+
+			await expect(beadsManager.init()).resolves.toBeUndefined()
+		})
 	})
 
 	describe('create', () => {
@@ -288,7 +337,11 @@ describe('BeadsManager', () => {
 		})
 
 		it('should throw BeadsError when output is not valid JSON', async () => {
-			vi.mocked(execa).mockResolvedValue({
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: 'not json',
+				stderr: '',
+			} as never)
+			vi.mocked(execa).mockResolvedValueOnce({
 				stdout: 'not json',
 				stderr: '',
 			} as never)
@@ -358,7 +411,7 @@ describe('BeadsManager', () => {
 
 			await beadsManager.ready()
 
-			const callArgs = vi.mocked(execa).mock.calls[0]
+			const callArgs = vi.mocked(execa).mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
 			expect(callArgs[2]).toEqual(
 				expect.objectContaining({
 					env: expect.objectContaining({
@@ -371,15 +424,15 @@ describe('BeadsManager', () => {
 
 		it('should only pass allowed environment variables to bd subprocess', async () => {
 			// Set a secret env var that should NOT be passed through
-			process.env.SECRET_API_KEY = 'super-secret'
-			process.env.BD_CUSTOM = 'bd-value'
+			vi.stubEnv('SECRET_API_KEY', 'super-secret')
+			vi.stubEnv('BD_CUSTOM', 'bd-value')
 
 			vi.mocked(execa).mockResolvedValueOnce({ stdout: '[]', stderr: '' } as never)
 
 			await beadsManager.ready()
 
-			const callArgs = vi.mocked(execa).mock.calls[0]
-			const env = (callArgs[2] as { env: Record<string, string> }).env
+			const callArgs = vi.mocked(execa).mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }]
+			const env = callArgs[2].env
 
 			// Should NOT include arbitrary env vars
 			expect(env).not.toHaveProperty('SECRET_API_KEY')
@@ -388,10 +441,6 @@ describe('BeadsManager', () => {
 			// Should include required vars
 			expect(env.BEADS_DIR).toBe(beadsManager.getBeadsDir())
 			expect(env.BEADS_NO_DAEMON).toBe('1')
-
-			// Clean up
-			delete process.env.SECRET_API_KEY
-			delete process.env.BD_CUSTOM
 		})
 	})
 
@@ -417,7 +466,11 @@ describe('BeadsManager', () => {
 		})
 
 		it('should throw BeadsError when output is not valid JSON', async () => {
-			vi.mocked(execa).mockResolvedValue({
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: 'not json',
+				stderr: '',
+			} as never)
+			vi.mocked(execa).mockResolvedValueOnce({
 				stdout: 'not json',
 				stderr: '',
 			} as never)
