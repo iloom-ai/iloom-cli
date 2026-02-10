@@ -74,10 +74,12 @@ function getLinearApiToken(): string {
 
 /**
  * Create a Linear SDK client instance
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Configured LinearClient
  */
-function createLinearClient(): LinearClient {
-  return new LinearClient({ apiKey: getLinearApiToken() })
+function createLinearClient(apiToken?: string): LinearClient {
+  const token = apiToken ?? getLinearApiToken()
+  return new LinearClient({ apiKey: token })
 }
 
 /**
@@ -709,18 +711,19 @@ export interface LinearIssueListItem {
  * @param teamKey - Team key (e.g., "ENG", "PLAT")
  * @param options - Fetch options
  * @param options.limit - Maximum number of issues to return (default: 100)
+ * @param options.apiToken - Optional API token (takes precedence over env var)
  * @returns Array of issues
  * @throws LinearServiceError on fetch failure
  */
 export async function fetchLinearIssueList(
   teamKey: string,
-  options?: { limit?: number },
+  options?: { limit?: number; apiToken?: string },
 ): Promise<LinearIssueListItem[]> {
   try {
     const limit = options?.limit ?? 100
 
     logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit })
-    const client = createLinearClient()
+    const client = createLinearClient(options?.apiToken)
 
     // Get team by key
     const teams = await client.teams()

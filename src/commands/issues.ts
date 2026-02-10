@@ -146,7 +146,11 @@ export class IssuesCommand {
           'Linear team ID not configured. Set issueManagement.linear.teamId in your settings.json.',
         )
       }
-      results = await fetchLinearIssueList(teamId, { limit })
+      const apiToken = settings.issueManagement?.linear?.apiToken ?? process.env.LINEAR_API_TOKEN
+      results = await fetchLinearIssueList(teamId, {
+        limit,
+        ...(apiToken ? { apiToken } : {}),
+      })
     } else {
       throw new Error(`Unsupported issue tracker provider: ${provider}`)
     }

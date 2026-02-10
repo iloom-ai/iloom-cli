@@ -173,6 +173,47 @@ describe('IssuesCommand', () => {
       expect(fetchLinearIssueList).toHaveBeenCalledWith('ENG', { limit: 100 })
     })
 
+    it('passes apiToken from settings to fetchLinearIssueList', async () => {
+      vi.mocked(fetchLinearIssueList).mockResolvedValue(mockLinearIssues)
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({
+          issueManagement: { provider: 'linear', linear: { teamId: 'ENG', apiToken: 'lin_api_from_settings' } },
+        }),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project' })
+
+      expect(fetchLinearIssueList).toHaveBeenCalledWith('ENG', { limit: 100, apiToken: 'lin_api_from_settings' })
+    })
+
+    it('falls back to LINEAR_API_TOKEN env var when apiToken not in settings', async () => {
+      const originalEnv = process.env.LINEAR_API_TOKEN
+      process.env.LINEAR_API_TOKEN = 'lin_api_from_env'
+
+      try {
+        vi.mocked(fetchLinearIssueList).mockResolvedValue(mockLinearIssues)
+
+        const mockSettingsManager = {
+          loadSettings: vi.fn().mockResolvedValue({
+            issueManagement: { provider: 'linear', linear: { teamId: 'ENG' } },
+          }),
+        }
+
+        const command = new IssuesCommand(mockSettingsManager as never)
+        await command.execute({ projectPath: '/my/project' })
+
+        expect(fetchLinearIssueList).toHaveBeenCalledWith('ENG', { limit: 100, apiToken: 'lin_api_from_env' })
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.LINEAR_API_TOKEN
+        } else {
+          process.env.LINEAR_API_TOKEN = originalEnv
+        }
+      }
+    })
+
     it('passes limit and teamId to fetchLinearIssueList', async () => {
       vi.mocked(fetchLinearIssueList).mockResolvedValue([])
 
