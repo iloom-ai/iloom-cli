@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
-import { fetchGitHubIssueList } from '../utils/github.js'
+import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
 import { getLogger } from '../utils/logger-context.js'
 
@@ -18,6 +18,7 @@ export interface IssueListItem {
   updatedAt: string
   url: string
   state: string
+  type?: 'issue' | 'pr'
 }
 
 /**
@@ -128,7 +129,8 @@ export class IssuesCommand {
     const cached = await readCacheFile(cacheFilePath)
     if (cached !== null) {
       logger.debug(`Returning cached issues (${cached.length} items)`)
-      return cached
+      // Backfill type field for cache entries from before PR support was added
+      return cached.map(item => ({ type: 'issue' as const, ...item }))
     }
 
     // 5. Fetch issues based on provider
@@ -155,7 +157,42 @@ export class IssuesCommand {
       throw new Error(`Unsupported issue tracker provider: ${provider}`)
     }
 
-    // 6. Write results to cache file
+    // Tag issues with type
+    results.forEach(item => { item.type = 'issue' })
+
+    // 6. Fetch PRs from GitHub (PRs are a GitHub concept regardless of issue tracker)
+    try {
+      const prs = await fetchGitHubPRList({
+        limit,
+        cwd: resolvedProjectPath,
+      })
+      const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
+      results = [...results, ...prItems]
+    } catch (error) {
+      // Only catch expected, non-fatal errors from gh CLI
+      // Per CLAUDE.md: "DO NOT SWALLOW ERRORS" -- must check specifically
+      const stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
+      const isExpectedError = error instanceof Error && (
+        error.message.includes('not logged in') ||
+        error.message.includes('auth login') ||
+        error.message.includes('rate limit') ||
+        error.message.includes('ETIMEDOUT') ||
+        error.message.includes('ECONNREFUSED') ||
+        stderr.includes('not logged in') ||
+        stderr.includes('rate limit')
+      )
+      if (isExpectedError) {
+        logger.warn(`PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
+      } else {
+        throw error // Re-throw unexpected errors -- do not swallow
+      }
+    }
+
+    // 7. Sort by updatedAt descending and apply limit
+    results.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    results = results.slice(0, limit)
+
+    // 8. Write results to cache file
     await writeCacheFile(cacheFilePath, results, resolvedProjectPath, provider)
 
     return results

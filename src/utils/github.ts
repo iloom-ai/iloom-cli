@@ -799,3 +799,46 @@ export async function fetchGitHubIssueList(
 		state: item.state.toLowerCase(),
 	}))
 }
+
+/**
+ * Fetch a list of open, non-draft GitHub PRs sorted by recently updated
+ * @param options - Fetch options
+ * @param options.limit - Maximum number of PRs to return (default: 100)
+ * @param options.cwd - Working directory for gh CLI (default: process.cwd())
+ * @returns Array of PRs mapped to GitHubIssueListItem (with [PR] title prefix)
+ */
+export async function fetchGitHubPRList(
+	options?: { limit?: number; cwd?: string }
+): Promise<GitHubIssueListItem[]> {
+	const limit = options?.limit ?? 100
+	// Over-fetch to account for draft PRs that will be filtered out client-side
+	// gh pr list has no --draft=false flag
+	const fetchLimit = Math.max(limit * 2, 50)
+
+	logger.debug('Fetching GitHub PR list', { limit, fetchLimit, cwd: options?.cwd })
+
+	const result = await executeGhCommand<Array<{
+		number: number
+		title: string
+		updatedAt: string
+		url: string
+		state: string
+		isDraft: boolean
+	}>>([
+		'pr', 'list',
+		'--state', 'open',
+		'--json', 'number,title,updatedAt,url,state,isDraft',
+		'--limit', String(fetchLimit),
+	], options?.cwd ? { cwd: options.cwd } : undefined)
+
+	return (result ?? [])
+		.filter(item => !item.isDraft)
+		.slice(0, limit)
+		.map(item => ({
+			id: String(item.number),
+			title: `[PR] ${item.title}`,
+			updatedAt: item.updatedAt,
+			url: item.url,
+			state: item.state.toLowerCase(),
+		}))
+}

@@ -1226,7 +1226,7 @@ il plan --print --output-format=json 42
 
 ### il issues
 
-List open issues from the configured issue tracker (GitHub or Linear) as JSON.
+List open issues and open (non-draft) pull requests from the configured issue tracker as JSON. PRs are always fetched from GitHub regardless of the configured issue tracker.
 
 **Usage:**
 ```bash
@@ -1241,7 +1241,7 @@ il issues [options] [project-path]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--json` | Output as JSON (default behavior) | `true` |
-| `--limit <n>` | Maximum number of issues to return | `100` |
+| `--limit <n>` | Maximum number of items to return (combined issues + PRs) | `100` |
 
 **Output Format:**
 ```json
@@ -1251,34 +1251,53 @@ il issues [options] [project-path]
     "title": "Issue title",
     "updatedAt": "2026-02-08T00:00:00Z",
     "url": "https://github.com/org/repo/issues/123",
-    "state": "open"
+    "state": "open",
+    "type": "issue"
+  },
+  {
+    "id": "456",
+    "title": "[PR] PR title",
+    "updatedAt": "2026-02-09T00:00:00Z",
+    "url": "https://github.com/org/repo/pull/456",
+    "state": "open",
+    "type": "pr"
   }
 ]
 ```
 
+**Fields:**
+- `type` - Either `"issue"` or `"pr"`. PRs also have a `[PR]` prefix in their title for human-readable output.
+
 **Behavior:**
-- Returns only open/active issues
-- Sorted by most recently updated
+- Returns open/active issues and open, non-draft pull requests
+- Issues and PRs are merged, sorted by most recently updated, and truncated to the `--limit`
+- Draft PRs are excluded (filtered client-side after over-fetching from GitHub)
+- PRs are always fetched from GitHub, even when the issue tracker is Linear
+- If PR fetching fails due to expected errors (auth, rate limit, network), issues are returned without PRs
 - Results are cached on disk with a 2-minute TTL for fast repeated calls
 - Cache is stored in `~/.config/iloom-ai/cache/` and keyed per project + provider
 - Works from worktrees (resolves settings from the correct project root)
-- For GitHub: uses `gh issue list` with `--search sort:updated-desc`
-- For Linear: uses `@linear/sdk` with team key filter from settings
+- For issues on GitHub: uses `gh issue list` with `--search sort:updated-desc`
+- For issues on Linear: uses `@linear/sdk` with team key filter from settings
+- For PRs: uses `gh pr list --state open` with draft filtering
 
 **Examples:**
 
 ```bash
-# List issues from current project
+# List issues and PRs from current project
 il issues
 
-# List issues with a limit
+# List issues and PRs with a limit
 il issues --limit 50
 
-# List issues from a specific project path
+# List issues and PRs from a specific project path
 il issues /path/to/project
 
-# Pipe to jq for filtering
-il issues | jq '.[] | select(.title | test("bug"; "i"))'
+# Filter to only PRs using jq
+il issues | jq '.[] | select(.type == "pr")'
+
+# Filter to only issues using jq
+il issues | jq '.[] | select(.type == "issue")'
 ```
 
 **Notes:**
