@@ -172,7 +172,7 @@ describe('list-children', () => {
       } as Partial<IloomSettings>)
       const result = await fetchChildIssues('ENG-100', settings)
 
-      expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100')
+      expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100', undefined)
       expect(result).toEqual(mockChildIssues)
     })
 

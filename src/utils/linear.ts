@@ -493,15 +493,18 @@ export async function fetchLinearIssueComments(identifier: string): Promise<Line
 /**
  * Get child issues of a parent Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param options - Optional settings
+ * @param options.apiToken - Optional API token (takes precedence over env var)
  * @returns Array of child issues
  * @throws LinearServiceError on fetch failure
  */
 export async function getLinearChildIssues(
   identifier: string,
+  options?: { apiToken?: string },
 ): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
   try {
     logger.debug(`Fetching child issues for Linear issue: ${identifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(options?.apiToken)
 
     // Get issue by identifier
     const issue = await client.issue(identifier)
