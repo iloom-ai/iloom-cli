@@ -610,6 +610,7 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
+  .option('--skip-to-pr', 'Skip rebase/validation/commit, go directly to PR creation (debug)')
   .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
@@ -2219,6 +2220,93 @@ program
 
     process.exit(0)
   })
+
+// Debug commands - only registered when debug mode is enabled
+if (process.env.ILOOM_DEBUG === 'true') {
+  const debugCommand = program
+    .command('debug')
+    .description('Debug tools (only available in debug mode)')
+
+  const bitbucketDebugCommand = debugCommand
+    .command('bitbucket')
+    .description('BitBucket debug tools')
+
+  bitbucketDebugCommand
+    .command('resolve-reviewer-ids')
+    .description('Resolve configured reviewer usernames to BitBucket account IDs')
+    .action(async () => {
+      try {
+        const settingsManager = new SettingsManager()
+        const settings = await settingsManager.loadSettings()
+
+        const bitbucketConfig = settings.versionControl?.bitbucket
+        if (!bitbucketConfig) {
+          logger.error('BitBucket configuration not found in settings')
+          logger.info('Configure versionControl.bitbucket in .iloom/settings.json')
+          process.exit(1)
+        }
+
+        if (!bitbucketConfig.username) {
+          logger.error('BitBucket username not configured')
+          logger.info('Configure versionControl.bitbucket.username in .iloom/settings.json')
+          process.exit(1)
+        }
+
+        if (!bitbucketConfig.apiToken) {
+          logger.error('BitBucket API token not configured')
+          logger.info('Configure versionControl.bitbucket.apiToken in .iloom/settings.local.json')
+          process.exit(1)
+        }
+
+        const reviewers = bitbucketConfig.reviewers ?? []
+        if (reviewers.length === 0) {
+          logger.warn('No reviewers configured in settings')
+          logger.info('Configure versionControl.bitbucket.reviewers in .iloom/settings.json')
+          console.log(JSON.stringify({}, null, 2))
+          process.exit(0)
+        }
+
+        // Get workspace from config or auto-detect from git remote
+        let workspace = bitbucketConfig.workspace
+        if (!workspace) {
+          const { parseGitRemotes } = await import('./utils/remote.js')
+          const remotes = await parseGitRemotes()
+          const bitbucketRemote = remotes.find(r => r.url.includes('bitbucket.org'))
+          if (!bitbucketRemote) {
+            logger.error('Could not auto-detect BitBucket workspace from git remote')
+            logger.info('Configure versionControl.bitbucket.workspace in .iloom/settings.json')
+            process.exit(1)
+          }
+          workspace = bitbucketRemote.owner
+        }
+
+        // At this point workspace is guaranteed to be a string (either from config or auto-detected)
+        const resolvedWorkspace = workspace
+
+        // Create BitBucket API client and resolve reviewer IDs
+        const { BitBucketApiClient } = await import('./lib/providers/bitbucket/BitBucketApiClient.js')
+        const apiClient = new BitBucketApiClient({
+          username: bitbucketConfig.username,
+          apiToken: bitbucketConfig.apiToken,
+          workspace: resolvedWorkspace,
+        })
+
+        const resolvedMap = await apiClient.findUsersByUsername(resolvedWorkspace, reviewers)
+
+        // Convert Map to plain object for JSON output
+        const result: Record<string, string> = {}
+        for (const [username, accountId] of resolvedMap) {
+          result[username] = accountId
+        }
+
+        console.log(JSON.stringify(result, null, 2))
+        process.exit(0)
+      } catch (error) {
+        logger.error(`Failed to resolve reviewer IDs: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        process.exit(1)
+      }
+    })
+}
 
 // Parse CLI arguments (only when run directly, not when imported for testing)
 // Resolve symlinks to handle npm link and global installs

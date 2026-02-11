@@ -365,7 +365,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--debug'],
 					expect.objectContaining({
 						input: prompt,
 						timeout: 0,

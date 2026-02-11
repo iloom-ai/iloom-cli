@@ -247,21 +247,18 @@ describe('SessionSummaryService', () => {
 		})
 
 		it('should use correct issue management provider based on settings', async () => {
-			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+			const mockSettingsValue: IloomSettings = {
 				...defaultSettings,
 				issueManagement: {
 					provider: 'linear',
 				},
-			})
+			};
+
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue(mockSettingsValue)
 
 			await service.generateAndPostSummary(defaultInput)
 
-			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('linear', {
-				...defaultSettings,
-				issueManagement: {
-					provider: 'linear',
-				},
-			})
+			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('linear', mockSettingsValue)
 		})
 
 		it('should skip when Claude returns empty result', async () => {

@@ -210,6 +210,11 @@ export async function launchClaude(
 	if (sessionId) {
 		args.push('--session-id', sessionId)
 	}
+	const isDebugMode = logger.isDebugEnabled()
+
+	if (isDebugMode) {
+		args.push('--debug') // Enable debug mode for more detailed logs
+	}
 
 	// Add --no-session-persistence flag if requested (for utility operations that don't need session persistence)
 	// Note: --no-session-persistence can only be used with --print mode (-p), which is only added in headless mode
@@ -223,7 +228,6 @@ export async function launchClaude(
 	try {
 		if (headless) {
 			// Headless mode: capture and return output
-			const isDebugMode = logger.isDebugEnabled()
 
 			// Set up execa options based on debug mode
 			const execaOptions = {

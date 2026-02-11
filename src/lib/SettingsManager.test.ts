@@ -2816,6 +2816,85 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('bitbucket reviewers configuration', () => {
+		it('should accept valid usernames in reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: ['alice', 'bob_smith'],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual(['alice', 'bob_smith'])
+		})
+
+		it('should allow empty reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: [],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual([])
+		})
+
+		it('should allow missing reviewers field', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toBeUndefined()
+		})
+	})
+
 	describe('getSpinModel', () => {
 		it('should return opus by default when spin not configured', () => {
 			const settings = { sourceEnvOnStart: false }
