@@ -85,29 +85,29 @@ describe('ClaudeContextManager', () => {
 			)
 		})
 
-		it('should throw error when issue identifier is not a number', async () => {
+		it('should throw error when issue identifier is undefined', async () => {
 			const context = {
 				type: 'issue',
-				identifier: 'not-a-number',
+				identifier: undefined,
 				workspacePath: '/workspace',
 				port: 3000,
 			} as unknown as ClaudeContext
 
 			await expect(manager.prepareContext(context)).rejects.toThrow(
-				'Issue identifier must be a number'
+				'Issue identifier is required'
 			)
 		})
 
-		it('should throw error when PR identifier is not a number', async () => {
+		it('should throw error when PR identifier is undefined', async () => {
 			const context = {
 				type: 'pr',
-				identifier: 'not-a-number',
+				identifier: undefined,
 				workspacePath: '/workspace',
 				port: 3000,
 			} as unknown as ClaudeContext
 
 			await expect(manager.prepareContext(context)).rejects.toThrow(
-				'PR identifier must be a number'
+				'PR identifier is required'
 			)
 		})
 

@@ -134,7 +134,7 @@ export class CommitCommand {
 		// Step 6: Load settings to get issue prefix
 		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const providerType = settings.issueManagement?.provider ?? 'github'
-		const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+		const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
 
 		// Determine whether to skip pre-commit hooks:
 		// - With --wip-commit: always skip hooks (quick WIP commit)
@@ -262,10 +262,10 @@ export class CommitCommand {
 		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 
-			// Try to get issue number from metadata for more accuracy
+			// Try to get issue key from metadata for more accuracy (canonical case)
 			const metadata = await this.metadataManager.readMetadata(worktreePath)
 			return {
-				issueNumber: metadata?.issue_numbers?.[0] ?? issueNumber,
+				issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? issueNumber,
 				loomType: metadata?.issueType ?? 'issue',
 			}
 		}
@@ -281,7 +281,7 @@ export class CommitCommand {
 
 				const metadata = await this.metadataManager.readMetadata(worktreePath)
 				return {
-					issueNumber: metadata?.issue_numbers?.[0] ?? branchIssueNumber,
+					issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? branchIssueNumber,
 					loomType: metadata?.issueType ?? 'issue',
 				}
 			}
@@ -295,8 +295,8 @@ export class CommitCommand {
 		let resolvedIssueNumber: string | number | undefined
 		const loomType = metadata?.issueType ?? 'branch'
 
-		if (loomType === 'issue' && metadata?.issue_numbers?.[0]) {
-			resolvedIssueNumber = metadata.issue_numbers[0]
+		if (loomType === 'issue' && (metadata?.issueKey || metadata?.issue_numbers?.[0])) {
+			resolvedIssueNumber = metadata?.issueKey ?? metadata?.issue_numbers?.[0]
 		} else if (loomType === 'pr' && metadata?.pr_numbers?.[0]) {
 			resolvedIssueNumber = metadata.pr_numbers[0]
 		}

@@ -1,3 +1,10 @@
+#!/bin/sh
+# Set up PATH for pnpm if not already in PATH
+if ! command -v pnpm >/dev/null 2>&1; then
+  export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+  export PATH="$PNPM_HOME:$PATH"
+fi
+
 # Run linting
 pnpm run lint
 

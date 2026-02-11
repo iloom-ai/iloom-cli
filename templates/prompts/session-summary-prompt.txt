@@ -89,6 +89,20 @@ The reader doesn't care about your internal process. They care about:
 - Any explanation of what you're doing
 - Any text after the closing `</details>` tag
 
+**CRITICAL FORMAT REQUIREMENT:**
+All comment content MUST use **GitHub-Flavored Markdown** syntax.
+NEVER use Jira Wiki format - it will corrupt the output when converted.
+
+| Do NOT use (Jira Wiki) | Use instead (Markdown) |
+|------------------------|------------------------|
+| `{code}...{code}` | ` ``` ` code blocks |
+| `h1. Title` | `# Title` |
+| `*bold*` | `**bold**` |
+| `_italic_` | `*italic*` |
+| `{quote}...{quote}` | `> ` blockquotes |
+| `[link text\|url]` | `[link text](url)` |
+| `-` or `*` at line start | `- ` (with space) for lists |
+
 **Output ONLY the markdown content below, starting with `## iloom Session Summary` and ending with `</details>`.**
 
 Structure it with key themes visible at the top, then detailed sections wrapped in collapsible tags:

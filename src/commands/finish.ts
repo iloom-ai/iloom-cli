@@ -219,6 +219,7 @@ export class FinishCommand {
 		// We need repo info if:
 		// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
 		// 2. Provider is GitHub (for GitHub issue operations)
+		// Note: bitbucket-pr mode handles repo detection internally via BitBucketVCSProvider
 		const needsRepo =
 			settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr' || this.issueTracker.providerName === 'github'
 		if (needsRepo && (await hasMultipleRemotes())) {
@@ -248,7 +249,6 @@ export class FinishCommand {
 		if (!worktree) {
 			throw new Error('No worktree found')
 		}
-
 		// Step 4: Branch based on input type
 		if (parsed.type === 'pr') {
 			// Fetch PR to get current state
@@ -345,6 +345,20 @@ export class FinishCommand {
 			result.branchName = parsed.branchName
 		}
 
+		// For issue types, get original issue key from metadata (preserves case for Jira/Linear IDs)
+		if (result.type === 'issue' && result.number !== undefined) {
+			const worktree = await this.gitWorktreeManager.findWorktreeForIssue(result.number)
+			if (worktree) {
+				const { MetadataManager } = await import('../lib/MetadataManager.js')
+				const metadataManager = new MetadataManager()
+				const metadata = await metadataManager.readMetadata(worktree.path)
+				const canonicalKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0]
+				if (canonicalKey) {
+					result.number = canonicalKey
+				}
+			}
+		}
+
 		return result
 	}
 
@@ -371,16 +385,24 @@ export class FinishCommand {
 			}
 		}
 
+		// Read metadata to get original issue key (preserves case for Jira/Linear IDs)
+		// process.cwd() is the worktree path when auto-detecting
+		const { MetadataManager } = await import('../lib/MetadataManager.js')
+		const metadataManager = new MetadataManager()
+		const metadata = await metadataManager.readMetadata(process.cwd())
+
 		// Check for issue pattern in directory or branch name
 		const issueNumber = extractIssueNumber(currentDir)
 
 		if (issueNumber !== null) {
+			// Use issueKey from metadata (canonical case), then issue_numbers, then extracted (lowercase)
+			const originalIssueKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? issueNumber
 			getLogger().debug(
-				`Auto-detected issue #${issueNumber} from directory: ${currentDir}`
+				`Auto-detected issue #${originalIssueKey} from directory: ${currentDir}`
 			)
 			return {
 				type: 'issue',
-				number: issueNumber,
+				number: originalIssueKey,
 				originalInput: currentDir,
 				autoDetected: true,
 			}
@@ -400,12 +422,14 @@ export class FinishCommand {
 		// Try to extract issue from branch name
 		const branchIssueNumber = extractIssueNumber(currentBranch)
 		if (branchIssueNumber !== null) {
+			// Use issueKey from metadata (canonical case), then issue_numbers, then extracted (lowercase)
+			const originalIssueKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? branchIssueNumber
 			getLogger().debug(
-				`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`
+				`Auto-detected issue #${originalIssueKey} from branch: ${currentBranch}`
 			)
 			return {
 				type: 'issue',
-				number: branchIssueNumber,
+				number: originalIssueKey,
 				originalInput: currentBranch,
 				autoDetected: true,
 			}
@@ -599,102 +623,109 @@ export class FinishCommand {
 		worktree: GitWorktree,
 		result: FinishResult
 	): Promise<void> {
-		// Step 1: Rebase branch on main FIRST (Issue #344)
-		// This ensures validation runs against the rebased code (with latest main changes)
-		getLogger().info('Rebasing branch on main...')
-
+		// Define merge options early so they're available for all code paths
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 		}
 
-		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
-		getLogger().success('Branch rebased successfully')
-		result.operations.push({
-			type: 'rebase',
-			message: 'Branch rebased on main',
-			success: true,
-		})
-
-		// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
-		// Validates code with latest main changes integrated
-		if (!options.dryRun) {
-			getLogger().info('Running pre-merge validations...')
-
-			await this.validationRunner.runValidations(worktree.path, {
-				dryRun: options.dryRun ?? false,
-			})
-			getLogger().success('All validations passed')
-			result.operations.push({
-				type: 'validation',
-				message: 'Pre-merge validations passed',
-				success: true,
-			})
+		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)
+		if (options.skipToPr) {
+			getLogger().info('Skipping rebase/validation/commit (--skip-to-pr flag)')
 		} else {
-			getLogger().info('[DRY RUN] Would run pre-merge validations')
+			// Step 1: Rebase branch on main FIRST (Issue #344)
+			// This ensures validation runs against the rebased code (with latest main changes)
+			getLogger().info('Rebasing branch on main...')
+
+			await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
+			getLogger().success('Branch rebased successfully')
 			result.operations.push({
-				type: 'validation',
-				message: 'Would run pre-merge validations (dry-run)',
+				type: 'rebase',
+				message: 'Branch rebased on main',
 				success: true,
 			})
-		}
 
-		// Step 3: Detect uncommitted changes AFTER validation passes
-		const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
+			// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
+			// Validates code with latest main changes integrated
+			if (!options.dryRun) {
+				getLogger().info('Running pre-merge validations...')
 
-		// Step 4: Commit changes only if validation passed AND changes exist
-		if (gitStatus.hasUncommittedChanges) {
-			if (options.dryRun) {
-				getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
+				await this.validationRunner.runValidations(worktree.path, {
+					dryRun: options.dryRun ?? false,
+				})
+				getLogger().success('All validations passed')
 				result.operations.push({
-					type: 'commit',
-					message: 'Would auto-commit uncommitted changes (dry-run)',
+					type: 'validation',
+					message: 'Pre-merge validations passed',
 					success: true,
 				})
 			} else {
-				getLogger().info('Validation passed, auto-committing uncommitted changes...')
+				getLogger().info('[DRY RUN] Would run pre-merge validations')
+				result.operations.push({
+					type: 'validation',
+					message: 'Would run pre-merge validations (dry-run)',
+					success: true,
+				})
+			}
 
-				// Load settings to get skipVerify configuration and issuePrefix
-				const settings = await this.settingsManager.loadSettings(worktree.path)
-				const skipVerify = settings.workflows?.issue?.noVerify ?? false
-				const providerType = settings.issueManagement?.provider ?? 'github'
-				const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+			// Step 3: Detect uncommitted changes AFTER validation passes
+			const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
 
-				const commitOptions: CommitOptions = {
-					dryRun: options.dryRun ?? false,
-					skipVerify,
-					issuePrefix,
-					timeout: settings.git?.commitTimeout,
-				}
-
-				// Only add issueNumber if it's an issue
-				if (parsed.type === 'issue' && parsed.number) {
-					commitOptions.issueNumber = parsed.number
-				}
-
-				try {
-					await this.commitManager.commitChanges(worktree.path, commitOptions)
-					getLogger().success('Changes committed successfully')
+			// Step 4: Commit changes only if validation passed AND changes exist
+			if (gitStatus.hasUncommittedChanges) {
+				if (options.dryRun) {
+					getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
 					result.operations.push({
 						type: 'commit',
-						message: 'Changes committed successfully',
+						message: 'Would auto-commit uncommitted changes (dry-run)',
 						success: true,
 					})
-				} catch (error) {
-					if (error instanceof UserAbortedCommitError) {
-						getLogger().info('Commit aborted by user')
+				} else {
+					getLogger().info('Validation passed, auto-committing uncommitted changes...')
+
+					// Load settings to get skipVerify configuration and issuePrefix
+					const settings = await this.settingsManager.loadSettings(worktree.path)
+					const skipVerify = settings.workflows?.issue?.noVerify ?? false
+					const providerType = settings.issueManagement?.provider ?? 'github'
+					const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
+
+					const commitOptions: CommitOptions = {
+						dryRun: options.dryRun ?? false,
+						skipVerify,
+						issuePrefix,
+						timeout: settings.git?.commitTimeout,
+					}
+
+					// Only add issueNumber if it's an issue
+					// Note: parsed.number already has correct case from parseInput() metadata lookup
+					if (parsed.type === 'issue' && parsed.number) {
+						commitOptions.issueNumber = parsed.number
+					}
+
+					try {
+						await this.commitManager.commitChanges(worktree.path, commitOptions)
+						getLogger().success('Changes committed successfully')
 						result.operations.push({
 							type: 'commit',
-							message: 'Commit aborted by user',
-							success: false,
+							message: 'Changes committed successfully',
+							success: true,
 						})
-						throw error  // Propagate to CLI for non-zero exit
+					} catch (error) {
+						if (error instanceof UserAbortedCommitError) {
+							getLogger().info('Commit aborted by user')
+							result.operations.push({
+								type: 'commit',
+								message: 'Commit aborted by user',
+								success: false,
+							})
+							throw error  // Propagate to CLI for non-zero exit
+						}
+						throw error  // Re-throw other errors
 					}
-					throw error  // Re-throw other errors
 				}
+			} else {
+				getLogger().debug('No uncommitted changes found')
 			}
-		} else {
-			getLogger().debug('No uncommitted changes found')
 		}
 
 		// Step 5: Check merge mode from settings and branch workflow
@@ -932,7 +963,7 @@ export class FinishCommand {
 					const settings = await this.settingsManager.loadSettings(worktree.path)
 					const skipVerify = settings.workflows?.pr?.noVerify ?? false
 					const providerType = settings.issueManagement?.provider ?? 'github'
-					const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+					const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
 
 					try {
 						await this.commitManager.commitChanges(worktree.path, {
@@ -1060,6 +1091,21 @@ export class FinishCommand {
 					message: `Pull request created`,
 					success: true,
 				})
+
+				// Move issue to Ready for Review state
+				if (parsed.type === 'issue' && parsed.number) {
+					try {
+						if (this.issueTracker.moveIssueToReadyForReview) {
+							await this.issueTracker.moveIssueToReadyForReview(parsed.number)
+							getLogger().info('Issue moved to Ready for Review')
+						}
+					} catch (error) {
+						getLogger().warn(
+							`Failed to move issue to Ready for Review: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							error
+						)
+					}
+				}
 			}
 
 			// Set PR URL in result

@@ -248,10 +248,66 @@ export class GitHubService implements IssueTracker {
 		}
 	}
 
+	// GitHub Projects integration - move to Ready for Review
+	public async moveIssueToReadyForReview(issueNumber: number): Promise<void> {
+		getLogger().info('Moving issue to Ready for Review in GitHub Projects', {
+			issueNumber,
+		})
+
+		// Check for project scope
+		if (!(await hasProjectScope())) {
+			getLogger().warn('Missing project scope in GitHub CLI auth')
+			throw new GitHubError(
+				GitHubErrorCode.MISSING_SCOPE,
+				'GitHub CLI lacks project scope. Run: gh auth refresh -s project'
+			)
+		}
+
+		// Get repository info
+		let owner: string
+		try {
+			const repoInfo = await executeGhCommand<{
+				owner: { login: string }
+				name: string
+			}>(['repo', 'view', '--json', 'owner,name'])
+			owner = repoInfo.owner.login
+		} catch (error) {
+			getLogger().warn('Could not determine repository info', { error })
+			return
+		}
+
+		// List all projects
+		let projects: GitHubProject[]
+		try {
+			projects = await fetchProjectList(owner)
+		} catch (error) {
+			getLogger().warn('Could not fetch projects', { owner, error })
+			return
+		}
+
+		if (!projects.length) {
+			getLogger().warn('No projects found', { owner })
+			return
+		}
+
+		// Process each project
+		for (const project of projects) {
+			await this.updateIssueStatusInProject(
+				project,
+				issueNumber,
+				owner,
+				['Ready for Review', 'In Review', 'Review'],
+				'Ready for Review'
+			)
+		}
+	}
+
 	private async updateIssueStatusInProject(
 		project: GitHubProject,
 		issueNumber: number,
-		owner: string
+		owner: string,
+		statusNames: string[] = ['In Progress', 'In progress'],
+		logLabel: string = 'In Progress'
 	): Promise<void> {
 		// Check if issue is in project
 		let items: ProjectItem[]
@@ -285,19 +341,21 @@ export class GitHubService implements IssueTracker {
 			return
 		}
 
-		// Find Status field and In Progress option
+		// Find Status field and target option
 		const statusField = fieldsData.fields.find((f) => f.name === 'Status')
 		if (!statusField) {
 			getLogger().debug('No Status field found in project', { projectNumber: project.number })
 			return
 		}
 
-		const inProgressOption = statusField.options?.find(
-			(o: { id: string; name: string }) => o.name === 'In Progress' || o.name === 'In progress'
+		const targetOption = statusField.options?.find(
+			(o: { id: string; name: string }) => statusNames.some(name =>
+				o.name.toLowerCase() === name.toLowerCase()
+			)
 		)
 
-		if (!inProgressOption) {
-			getLogger().debug('No In Progress option found in Status field', { projectNumber: project.number })
+		if (!targetOption) {
+			getLogger().debug(`No ${logLabel} option found in Status field`, { projectNumber: project.number })
 			return
 		}
 
@@ -307,16 +365,22 @@ export class GitHubService implements IssueTracker {
 				item.id,
 				project.id,
 				statusField.id,
-				inProgressOption.id
+				targetOption.id
 			)
 
 			getLogger().info('Updated issue status in project', {
 				issueNumber,
 				projectNumber: project.number,
+				status: logLabel,
 			})
 		} catch (error) {
 			getLogger().debug('Could not update project item', { item: item.id, error })
 		}
+	}
+
+	// Identifier normalization - GitHub identifiers are numeric, just stringify
+	public normalizeIdentifier(identifier: string | number): string {
+		return String(identifier)
 	}
 
 	// Utility methods

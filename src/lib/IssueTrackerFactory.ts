@@ -4,10 +4,11 @@
 import type { IssueTracker } from './IssueTracker.js'
 import { GitHubService } from './GitHubService.js'
 import { LinearService, type LinearServiceConfig } from './LinearService.js'
+import { JiraIssueTracker, type JiraTrackerConfig } from './providers/jira/index.js'
 import type { IloomSettings } from './SettingsManager.js'
 import { getLogger } from '../utils/logger-context.js'
 
-export type IssueTrackerProviderType = 'github' | 'linear'
+export type IssueTrackerProviderType = 'github' | 'linear' | 'jira'
 
 /**
  * Factory for creating IssueTracker instances based on settings
@@ -52,6 +53,36 @@ export class IssueTrackerFactory {
 
 				getLogger().debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
 				return new LinearService(linearConfig)
+			}
+			case 'jira': {
+				const jiraSettings = settings.issueManagement?.jira
+				
+				if (!jiraSettings?.host) {
+					throw new Error('Jira host is required. Configure issueManagement.jira.host in .iloom/settings.json')
+				}
+				if (!jiraSettings?.username) {
+					throw new Error('Jira username is required. Configure issueManagement.jira.username in .iloom/settings.json')
+				}
+				if (!jiraSettings?.apiToken) {
+					throw new Error('Jira API token is required. Configure issueManagement.jira.apiToken in .iloom/settings.local.json')
+				}
+				if (!jiraSettings?.projectKey) {
+					throw new Error('Jira project key is required. Configure issueManagement.jira.projectKey in .iloom/settings.json')
+				}
+
+				const jiraConfig: JiraTrackerConfig = {
+					host: jiraSettings.host,
+					username: jiraSettings.username,
+					apiToken: jiraSettings.apiToken,
+					projectKey: jiraSettings.projectKey,
+				}
+
+				if (jiraSettings.transitionMappings) {
+					jiraConfig.transitionMappings = jiraSettings.transitionMappings
+				}
+
+				getLogger().debug(`IssueTrackerFactory: Creating JiraIssueTracker for host: ${jiraSettings.host}`)
+				return new JiraIssueTracker(jiraConfig)
 			}
 			default:
 				throw new Error(`Unsupported issue tracker provider: ${provider}`)

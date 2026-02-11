@@ -94,20 +94,22 @@ export class IssueEnhancementService {
 			// Call Claude in headless mode with issue enhancer agent
 			const prompt = `@agent-iloom-issue-enhancer
 
-TASK: Enhance the following issue description for GitHub.
+TASK: Enhance the following issue description for the issue tracker.
 
 INPUT:
 ${description}
 
 OUTPUT REQUIREMENTS:
 - Return ONLY the enhanced description markdown text
+- Use GitHub-Flavored Markdown syntax ONLY
+- NEVER use Jira Wiki format (e.g., {code}, h1., *bold*, {quote}, [link|url])
 - NO meta-commentary (no "Here is...", "The enhanced...", "I have...", etc)
 - NO code block markers (\`\`\`)
 - NO conversational framing or acknowledgments
 - NO explanations of your work
 - Start your response immediately with the enhanced content
 
-Your response should be the raw markdown that will become the GitHub issue body.`
+Your response should be the raw markdown that will become the issue body.`
 
 			const enhanced = await launchClaude(prompt, {
 				headless: true,

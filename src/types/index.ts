@@ -182,6 +182,7 @@ export interface FinishOptions {
   noBrowser?: boolean // --no-browser - Skip opening PR in browser (github-pr mode only)
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
+  skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
 }
 
 /**

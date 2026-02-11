@@ -352,7 +352,7 @@ export const IloomSettingsSchema = z.object({
 	issueManagement: z
 		.object({
 			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
-			provider: z.enum(['github', 'linear']).optional().default('github').describe('Issue tracker provider (github, linear)'),
+			provider: z.enum(['github', 'linear', 'jira']).optional().default('github').describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
@@ -375,6 +375,34 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.optional()
 						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
+				})
+				.optional(),
+			jira: z
+				.object({
+					host: z
+						.string()
+						.min(1, 'Jira host cannot be empty')
+						.describe('Jira instance URL (e.g., "https://yourcompany.atlassian.net")'),
+					username: z
+						.string()
+						.min(1, 'Jira username/email cannot be empty')
+						.describe('Jira username or email address'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Jira API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://id.atlassian.com/manage-profile/security/api-tokens'),
+					projectKey: z
+						.string()
+						.min(1, 'Project key cannot be empty')
+						.describe('Jira project key (e.g., "PROJ", "ENG")'),
+					boardId: z
+						.string()
+						.optional()
+						.describe('Jira board ID for sprint/workflow operations (optional)'),
+					transitionMappings: z
+						.record(z.string(), z.string())
+						.optional()
+						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
 				})
 				.optional(),
 		})
@@ -555,7 +583,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
-			provider: z.enum(['github', 'linear']).optional().describe('Issue tracker provider (github, linear)'),
+			provider: z.enum(['github', 'linear', 'jira']).optional().describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
@@ -578,6 +606,34 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.optional()
 						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
+				})
+				.optional(),
+			jira: z
+				.object({
+					host: z
+						.string()
+						.min(1, 'Jira host cannot be empty')
+						.describe('Jira instance URL (e.g., "https://yourcompany.atlassian.net")'),
+					username: z
+						.string()
+						.min(1, 'Jira username/email cannot be empty')
+						.describe('Jira username or email address'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Jira API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://id.atlassian.com/manage-profile/security/api-tokens'),
+					projectKey: z
+						.string()
+						.min(1, 'Project key cannot be empty')
+						.describe('Jira project key (e.g., "PROJ", "ENG")'),
+					boardId: z
+						.string()
+						.optional()
+						.describe('Jira board ID for sprint/workflow operations (optional)'),
+					transitionMappings: z
+						.record(z.string(), z.string())
+						.optional()
+						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
 				})
 				.optional(),
 		})

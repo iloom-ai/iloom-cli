@@ -207,6 +207,20 @@ Estimate the following metrics:
 <comment_tool_info>
 IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
 
+**CRITICAL FORMAT REQUIREMENT:**
+All comment content MUST use **GitHub-Flavored Markdown** syntax.
+NEVER use Jira Wiki format - it will corrupt the output when converted.
+
+| Do NOT use (Jira Wiki) | Use instead (Markdown) |
+|------------------------|------------------------|
+| `{code}...{code}` | ` ``` ` code blocks |
+| `h1. Title` | `# Title` |
+| `*bold*` | `**bold**` |
+| `_italic_` | `*italic*` |
+| `{quote}...{quote}` | `> ` blockquotes |
+| `[link text\|url]` | `[link text](url)` |
+| `-` or `*` at line start | `- ` (with space) for lists |
+
 Available Tools:
 - mcp__issue_management__get_issue: Fetch issue details
   Parameters: { number: string, includeComments?: boolean }

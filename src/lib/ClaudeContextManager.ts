@@ -33,12 +33,12 @@ export class ClaudeContextManager {
 			throw new Error('Workspace path is required')
 		}
 
-		if (context.type === 'issue' && typeof context.identifier !== 'number') {
-			throw new Error('Issue identifier must be a number')
+		if (context.type === 'issue' && context.identifier === undefined) {
+			throw new Error('Issue identifier is required')
 		}
 
-		if (context.type === 'pr' && typeof context.identifier !== 'number') {
-			throw new Error('PR identifier must be a number')
+		if (context.type === 'pr' && context.identifier === undefined) {
+			throw new Error('PR identifier is required')
 		}
 
 		logger.debug('Context prepared', { context })

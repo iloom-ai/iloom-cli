@@ -433,6 +433,7 @@ export class LoomManager {
       branchName,
       worktreePath,
       issueType: input.type,
+      ...(input.type === 'issue' && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
       issue_numbers,
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
@@ -1160,8 +1161,9 @@ export class LoomManager {
         type = loomMetadata.issueType
 
         // Extract identifier from metadata based on type
-        if (type === 'issue' && loomMetadata.issue_numbers?.[0]) {
-          const issueId = loomMetadata.issue_numbers[0]
+        // Prefer issueKey (canonical case) over issue_numbers (may be lowercase from branch extraction)
+        if (type === 'issue' && (loomMetadata.issueKey || loomMetadata.issue_numbers?.[0])) {
+          const issueId = loomMetadata.issueKey ?? loomMetadata.issue_numbers[0] ?? ''
           // Try to parse as number, otherwise keep as string (for alphanumeric IDs)
           const numericId = parseInt(issueId, 10)
           identifier = isNaN(numericId) ? issueId : numericId
@@ -1400,6 +1402,7 @@ export class LoomManager {
         branchName,
         worktreePath,
         issueType: input.type,
+        ...(input.type === 'issue' && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
         issue_numbers,
         pr_numbers,
         issueTracker: this.issueTracker.providerName,

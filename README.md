@@ -439,12 +439,59 @@ Integrations
 
 ### Issue Trackers
 
-iloom supports the tools you already use. Unless you use JIRA.
+iloom supports multiple issue tracking providers to fit your team's workflow.
 
 | **Provider** | **Setup** | **Notes** |
 |--------------|-----------|-----------|
 | **GitHub**   | `gh auth login` | Default. Supports Issues and Pull Requests automatically. |
 | **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
+| **Jira**     | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [Jira Setup](#jira-setup) below. |
+
+### Jira Setup
+
+To use Jira as your issue tracker, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ",
+      "boardId": "123",
+      "transitionMappings": {
+        "In Review": "Start Review"
+      }
+    }
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token-here"
+    }
+  }
+}
+```
+
+**Generate a Jira API Token:**
+1. Visit https://id.atlassian.com/manage-profile/security/api-tokens
+2. Click "Create API token"
+3. Copy the token to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `host`: Your Jira Cloud instance URL
+- `username`: Your Jira email address
+- `apiToken`: API token (store in settings.local.json only!)
+- `projectKey`: Jira project key (e.g., "PROJ", "ENG")
+- `boardId`: (Optional) Board ID for sprint/workflow operations
+- `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
 
 
 ### IDE Support
