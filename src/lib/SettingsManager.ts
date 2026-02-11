@@ -437,10 +437,40 @@ export const IloomSettingsSchema = z.object({
 		})
 		.optional()
 		.describe('Issue management configuration'),
+	versionControl: z
+		.object({
+			provider: z.enum(['github', 'bitbucket']).optional().default('github').describe('Version control provider (github, bitbucket)'),
+			bitbucket: z
+				.object({
+					username: z
+						.string()
+						.min(1, 'BitBucket username cannot be empty')
+						.describe('BitBucket username'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('BitBucket API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/ (Note: App passwords deprecated Sep 2025, use API tokens)'),
+					workspace: z
+						.string()
+						.optional()
+						.describe('BitBucket workspace (optional, auto-detected from git remote if not provided)'),
+					repoSlug: z
+						.string()
+						.optional()
+						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				reviewers: z
+					.array(z.string().describe('Reviewer username'))
+					.optional()
+					.describe('List of usernames to add as PR reviewers. Usernames are resolved to Bitbucket account IDs at PR creation time.'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Version control provider configuration'),
 	mergeBehavior: z
 		.object({
 			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).default('local'),
 			remote: z.string().optional(),
 			autoCommitPush: z
 				.boolean()
@@ -454,9 +484,10 @@ export const IloomSettingsSchema = z.object({
 				.describe(
 					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
+			prTitlePrefix: z.boolean().default(true).optional().describe('Prefix PR titles with the issue number (e.g., "QLH-123: Title"). Default: true'),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
 	ide: z
 		.object({
 			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
@@ -691,9 +722,39 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Issue management configuration'),
+	versionControl: z
+		.object({
+			provider: z.enum(['github', 'bitbucket']).optional().describe('Version control provider (github, bitbucket)'),
+			bitbucket: z
+				.object({
+					username: z
+						.string()
+						.min(1, 'BitBucket username cannot be empty')
+						.describe('BitBucket username'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('BitBucket API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/ (Note: App passwords deprecated Sep 2025, use API tokens)'),
+					workspace: z
+						.string()
+						.optional()
+						.describe('BitBucket workspace (optional, auto-detected from git remote if not provided)'),
+					repoSlug: z
+						.string()
+						.optional()
+						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				reviewers: z
+					.array(z.string().describe('Reviewer username'))
+					.optional()
+					.describe('List of usernames to add as PR reviewers. Usernames are resolved to Bitbucket account IDs at PR creation time.'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Version control provider configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).optional(),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).optional(),
 			remote: z.string().optional(),
 			autoCommitPush: z
 				.boolean()
@@ -707,9 +768,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				.describe(
 					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
+			prTitlePrefix: z.boolean().optional(),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
 	ide: z
 		.object({
 			type: z

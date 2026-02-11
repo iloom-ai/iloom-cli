@@ -54,23 +54,35 @@ export async function parseGitRemotes(cwd?: string): Promise<GitRemote[]> {
 }
 
 /**
- * Extract owner and repo from GitHub URL
- * Supports both HTTPS and SSH formats
+ * Extract owner and repo from Git remote URL
+ * Supports both HTTPS and SSH formats for GitHub and BitBucket
  */
 function extractOwnerRepoFromUrl(url: string): { owner: string; repo: string } | null {
 	// Remove .git suffix if present
 	const cleanUrl = url.replace(/\.git$/, '')
 
-	// HTTPS format: https://github.com/owner/repo
-	const httpsMatch = cleanUrl.match(/https?:\/\/github\.com\/([^/]+)\/([^/]+)/)
-	if (httpsMatch?.[1] && httpsMatch?.[2]) {
-		return { owner: httpsMatch[1], repo: httpsMatch[2] }
+	// GitHub HTTPS format: https://github.com/owner/repo
+	const githubHttpsMatch = cleanUrl.match(/https?:\/\/github\.com\/([^/]+)\/([^/]+)/)
+	if (githubHttpsMatch?.[1] && githubHttpsMatch?.[2]) {
+		return { owner: githubHttpsMatch[1], repo: githubHttpsMatch[2] }
 	}
 
-	// SSH format: git@github.com:owner/repo
-	const sshMatch = cleanUrl.match(/git@github\.com:([^/]+)\/(.+)/)
-	if (sshMatch?.[1] && sshMatch?.[2]) {
-		return { owner: sshMatch[1], repo: sshMatch[2] }
+	// GitHub SSH format: git@github.com:owner/repo
+	const githubSshMatch = cleanUrl.match(/git@github\.com:([^/]+)\/(.+)/)
+	if (githubSshMatch?.[1] && githubSshMatch?.[2]) {
+		return { owner: githubSshMatch[1], repo: githubSshMatch[2] }
+	}
+
+	// BitBucket HTTPS format: https://bitbucket.org/workspace/repo
+	const bitbucketHttpsMatch = cleanUrl.match(/https?:\/\/bitbucket\.org\/([^/]+)\/([^/]+)/)
+	if (bitbucketHttpsMatch?.[1] && bitbucketHttpsMatch?.[2]) {
+		return { owner: bitbucketHttpsMatch[1], repo: bitbucketHttpsMatch[2] }
+	}
+
+	// BitBucket SSH format: git@bitbucket.org:workspace/repo
+	const bitbucketSshMatch = cleanUrl.match(/git@bitbucket\.org:([^/]+)\/(.+)/)
+	if (bitbucketSshMatch?.[1] && bitbucketSshMatch?.[2]) {
+		return { owner: bitbucketSshMatch[1], repo: bitbucketSshMatch[2] }
 	}
 
 	return null

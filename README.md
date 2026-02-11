@@ -459,6 +459,15 @@ iloom supports multiple issue tracking providers to fit your team's workflow.
 | **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
 | **Jira**     | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [Jira Setup](#jira-setup) below. |
 
+### Version Control Providers
+
+Choose which platform hosts your pull requests and code reviews.
+
+| **Provider** | **Setup** | **Notes** |
+|--------------|-----------|-----------|
+| **GitHub**   | `gh auth login` | Default. Integrated with GitHub Issues. |
+| **BitBucket** | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [BitBucket Setup](#bitbucket-setup) below. |
+
 ### Jira Setup
 
 To use Jira as your issue tracker, add this configuration:
@@ -507,13 +516,121 @@ To use Jira as your issue tracker, add this configuration:
 - `doneStatuses`: (Optional) Status names to exclude from `il issues` lists (default: `["Done"]`). Set to match your Jira workflow, e.g., `["Done", "Closed", "Verified"]`
 - `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
 
+### BitBucket Setup
+
+To use BitBucket for pull requests, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "workspace": "your-workspace",
+      "repoSlug": "your-repo"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "versionControl": {
+    "bitbucket": {
+      "apiToken": "your-bitbucket-api-token"
+    }
+  }
+}
+```
+
+**Generate a BitBucket API Token:**
+1. Visit https://bitbucket.org/account/settings/app-passwords/
+2. Click "Create API token" (Note: App passwords were deprecated September 2025)
+3. Grant permissions: `repository:read`, `repository:write`, `pullrequest:read`, `pullrequest:write`
+4. Copy the token to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `username`: Your BitBucket username
+- `apiToken`: API token (store in settings.local.json only!)
+- `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
+- `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
+- `reviewers`: (Optional) Array of BitBucket usernames to automatically add as PR reviewers. Usernames are resolved to BitBucket account IDs at PR creation time. Unresolved usernames are logged as warnings but don't block PR creation.
+
+**Example with Reviewers:**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "reviewers": [
+        "alice.jones",
+        "bob.smith"
+      ]
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+### Jira + BitBucket Together
+
+Use Jira for issues and BitBucket for pull requests:
+
+**.iloom/settings.json**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ"
+    }
+  },
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token"
+    }
+  },
+  "versionControl": {
+    "bitbucket": {
+      "apiToken": "your-bitbucket-api-token"
+    }
+  }
+}
+```
+
 
 ### IDE Support
 iloom creates isolated workspace settings for your editor. Color synchronization (visual context) only works best VS Code-based editors.
 
 *   **Supported:** VS Code, Cursor, Windsurf, Antigravity, WebStorm, IntelliJ, Sublime Text.
-    
+
 *   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
+
 
 ### Git Operation Settings
 
@@ -533,7 +650,6 @@ Configure git operation timeouts for projects with long-running pre-commit hooks
 | `git.commitTimeout` | 60000 (60s) | 1000-600000 | Timeout in milliseconds for git commit operations. Increase if pre-commit hooks (linting, tests, type checking) exceed the default timeout. |
 
 **When to increase:** If you see timeout errors during `il commit` or `il finish`, your pre-commit hooks are taking longer than the default 60 seconds. Set a higher value based on your typical hook duration.
-
 
 Advanced Features
 -----------------
