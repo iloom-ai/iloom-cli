@@ -283,6 +283,13 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	}
 
 	/**
+	 * Get the underlying API client (for direct API access by MCP provider)
+	 */
+	getApiClient(): JiraApiClient {
+		return this.client
+	}
+
+	/**
 	 * Get configuration (for MCP provider)
 	 */
 	getConfig(): JiraTrackerConfig {

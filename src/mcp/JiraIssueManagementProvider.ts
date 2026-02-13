@@ -7,10 +7,19 @@
 import type {
 	IssueManagementProvider,
 	GetIssueInput,
+	GetPRInput,
+	PRResult,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
 	CreateIssueInput,
+	CreateChildIssueInput,
+	CreateDependencyInput,
+	GetDependenciesInput,
+	DependenciesResult,
+	RemoveDependencyInput,
+	GetChildIssuesInput,
+	ChildIssueResult,
 	CreateIssueResult,
 	IssueResult,
 	CommentDetailResult,
@@ -88,11 +97,13 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 	readonly providerName = 'jira'
 	readonly issuePrefix = ''
 	private tracker: JiraIssueTracker
+	private projectKey: string
 
 	constructor(settings: IloomSettings) {
 		const config = getJiraTrackerConfig(settings);
 
 		this.tracker = new JiraIssueTracker(config)
+		this.projectKey = config.projectKey
 	}
 
 	/**
@@ -253,5 +264,141 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		return result
+	}
+
+	/**
+	 * Fetch pull request details
+	 * Jira does not have pull requests - throw like Linear does
+	 */
+	async getPR(_input: GetPRInput): Promise<PRResult> {
+		throw new Error(
+			'Jira does not support pull requests. PRs exist only on GitHub. Use the GitHub provider for PR operations.'
+		)
+	}
+
+	/**
+	 * Create a child issue linked to a parent issue
+	 * Uses Jira's parent field to create a subtask
+	 */
+	async createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult> {
+		const { parentId, title, body } = input
+		const parentKey = this.tracker.normalizeIdentifier(parentId)
+
+		const jiraIssue = await this.tracker.getApiClient().createIssueWithParent(
+			this.projectKey,
+			title,
+			body,
+			parentKey
+		)
+
+		return {
+			id: jiraIssue.key,
+			url: `${this.tracker.getConfig().host}/browse/${jiraIssue.key}`,
+		}
+	}
+
+	/**
+	 * Create a blocking dependency between two issues
+	 * Uses Jira issue links with "Blocks" link type
+	 */
+	async createDependency(input: CreateDependencyInput): Promise<void> {
+		const blockingKey = this.tracker.normalizeIdentifier(input.blockingIssue)
+		const blockedKey = this.tracker.normalizeIdentifier(input.blockedIssue)
+
+		// In Jira "Blocks" link type: outward = "blocks", inward = "is blocked by"
+		// outwardIssue blocks inwardIssue
+		await this.tracker.getApiClient().createIssueLink(blockedKey, blockingKey, 'Blocks')
+	}
+
+	/**
+	 * Get dependencies for an issue
+	 * Parses issue links of type "Blocks"
+	 */
+	async getDependencies(input: GetDependenciesInput): Promise<DependenciesResult> {
+		const issueKey = this.tracker.normalizeIdentifier(input.number)
+		const host = this.tracker.getConfig().host
+
+		const issue = await this.tracker.getApiClient().getIssue(issueKey)
+		const links = issue.fields.issuelinks ?? []
+
+		const blocking: DependenciesResult['blocking'] = []
+		const blockedBy: DependenciesResult['blockedBy'] = []
+
+		for (const link of links) {
+			if (link.type.name !== 'Blocks') continue
+
+			// inwardIssue present = the other issue is the inward ("is blocked by") side
+			// → this issue blocks that issue → blocking
+			if (link.inwardIssue) {
+				blocking.push({
+					id: link.inwardIssue.key,
+					title: link.inwardIssue.fields.summary,
+					url: `${host}/browse/${link.inwardIssue.key}`,
+					state: link.inwardIssue.fields.status.name.toLowerCase(),
+				})
+			}
+
+			// outwardIssue present = the other issue is the outward ("blocks") side
+			// → that issue blocks this issue → blockedBy
+			if (link.outwardIssue) {
+				blockedBy.push({
+					id: link.outwardIssue.key,
+					title: link.outwardIssue.fields.summary,
+					url: `${host}/browse/${link.outwardIssue.key}`,
+					state: link.outwardIssue.fields.status.name.toLowerCase(),
+				})
+			}
+		}
+
+		if (input.direction === 'blocking') {
+			return { blocking, blockedBy: [] }
+		}
+		if (input.direction === 'blocked_by') {
+			return { blocking: [], blockedBy }
+		}
+		return { blocking, blockedBy }
+	}
+
+	/**
+	 * Remove a blocking dependency between two issues
+	 * Finds the matching "Blocks" link and deletes it
+	 */
+	async removeDependency(input: RemoveDependencyInput): Promise<void> {
+		const blockingKey = this.tracker.normalizeIdentifier(input.blockingIssue)
+		const blockedKey = this.tracker.normalizeIdentifier(input.blockedIssue)
+
+		// Fetch the blocked issue to find the link
+		const issue = await this.tracker.getApiClient().getIssue(blockedKey)
+		const links = issue.fields.issuelinks ?? []
+
+		const matchingLink = links.find(link =>
+			link.type.name === 'Blocks' && link.outwardIssue?.key === blockingKey
+		)
+
+		if (!matchingLink) {
+			throw new Error(
+				`No "Blocks" dependency found from ${blockingKey} to ${blockedKey}`
+			)
+		}
+
+		await this.tracker.getApiClient().deleteIssueLink(matchingLink.id)
+	}
+
+	/**
+	 * Get child issues of a parent issue
+	 * Uses JQL search: parent = KEY
+	 */
+	async getChildIssues(input: GetChildIssuesInput): Promise<ChildIssueResult[]> {
+		const parentKey = this.tracker.normalizeIdentifier(input.number)
+		const host = this.tracker.getConfig().host
+
+		const issues = await this.tracker.getApiClient().searchIssues(`parent = ${parentKey}`)
+
+		return issues.map(issue => ({
+			id: issue.key,
+			title: issue.fields.summary,
+			url: `${host}/browse/${issue.key}`,
+			state: issue.fields.status.name.toLowerCase(),
+		}))
 	}
 }

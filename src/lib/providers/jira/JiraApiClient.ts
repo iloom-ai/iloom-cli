@@ -17,6 +17,35 @@ export interface JiraConfig {
 /**
  * Jira issue response from API
  */
+/**
+ * Jira issue link (relationship between issues)
+ */
+export interface JiraIssueLink {
+	id: string
+	type: {
+		id: string
+		name: string
+		inward: string
+		outward: string
+	}
+	inwardIssue?: {
+		id: string
+		key: string
+		fields: {
+			summary: string
+			status: { name: string }
+		}
+	}
+	outwardIssue?: {
+		id: string
+		key: string
+		fields: {
+			summary: string
+			status: { name: string }
+		}
+	}
+}
+
 export interface JiraIssue {
 	id: string
 	key: string
@@ -46,6 +75,15 @@ export interface JiraIssue {
 		labels: string[]
 		created: string
 		updated: string
+		issuelinks?: JiraIssueLink[]
+		parent?: {
+			id: string
+			key: string
+			fields: {
+				summary: string
+				status: { name: string }
+			}
+		}
 		[key: string]: unknown // Allow additional fields
 	}
 	[key: string]: unknown // Allow additional top-level fields
@@ -101,7 +139,7 @@ export class JiraApiClient {
 	 * Make an HTTP request to Jira API
 	 */
 	private async request<T>(
-		method: 'GET' | 'POST' | 'PUT',
+		method: 'GET' | 'POST' | 'PUT' | 'DELETE',
 		endpoint: string,
 		body?: unknown
 	): Promise<T> {
@@ -182,6 +220,13 @@ export class JiraApiClient {
 	}
 
 	/**
+	 * Make a DELETE request to Jira API
+	 */
+	async delete(endpoint: string): Promise<void> {
+		await this.request('DELETE', endpoint)
+	}
+
+	/**
 	 * Fetch an issue by key (e.g., "PROJ-123")
 	 */
 	async getIssue(issueKey: string): Promise<JiraIssue> {
@@ -254,6 +299,72 @@ export class JiraApiClient {
 				},
 			},
 		})
+	}
+
+	/**
+	 * Create an issue with a parent (subtask or child issue)
+	 * Accepts Markdown description which is converted to ADF for Jira
+	 */
+	async createIssueWithParent(
+		projectKey: string,
+		summary: string,
+		description: string,
+		parentKey: string,
+		issueType = 'Sub-task'
+	): Promise<JiraIssue> {
+		return this.post<JiraIssue>('/issue', {
+			fields: {
+				project: {
+					key: projectKey,
+				},
+				summary,
+				description: markdownToAdf(description),
+				issuetype: {
+					name: issueType,
+				},
+				parent: {
+					key: parentKey,
+				},
+			},
+		})
+	}
+
+	/**
+	 * Create an issue link (dependency/relationship between issues)
+	 * @param inwardKey - The issue key for the inward side (e.g., the blocked issue)
+	 * @param outwardKey - The issue key for the outward side (e.g., the blocking issue)
+	 * @param linkType - The link type name (e.g., "Blocks")
+	 */
+	async createIssueLink(inwardKey: string, outwardKey: string, linkType: string): Promise<void> {
+		await this.post('/issueLink', {
+			type: {
+				name: linkType,
+			},
+			inwardIssue: {
+				key: inwardKey,
+			},
+			outwardIssue: {
+				key: outwardKey,
+			},
+		})
+	}
+
+	/**
+	 * Delete an issue link by ID
+	 */
+	async deleteIssueLink(linkId: string): Promise<void> {
+		await this.delete(`/issueLink/${linkId}`)
+	}
+
+	/**
+	 * Search issues using JQL
+	 */
+	async searchIssues(jql: string): Promise<JiraIssue[]> {
+		const response = await this.post<{ issues: JiraIssue[] }>(
+			'/search/jql',
+			{ jql, fields: ['*all'] }
+		)
+		return response.issues
 	}
 
 	/**

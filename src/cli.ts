@@ -1892,6 +1892,83 @@ program
     }
   })
 
+// Test command for Jira integration
+const testJiraCommand = program
+  .command('test-jira')
+  .description('Test Jira integration methods against a real Jira instance')
+
+testJiraCommand
+  .command('child-issue')
+  .description('Create a test child issue under a parent')
+  .argument('<parentKey>', 'Parent issue key (e.g., PROJ-123)')
+  .action(async (parentKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().createChildIssue(parentKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('create-dep')
+  .description('Create a "Blocks" dependency between two issues')
+  .argument('<blockingKey>', 'Issue key that blocks (e.g., PROJ-100)')
+  .argument('<blockedKey>', 'Issue key being blocked (e.g., PROJ-200)')
+  .action(async (blockingKey: string, blockedKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().createDependency(blockingKey, blockedKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('get-deps')
+  .description('Fetch and print dependencies for an issue')
+  .argument('<issueKey>', 'Issue key (e.g., PROJ-123)')
+  .action(async (issueKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().getDependencies(issueKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('remove-dep')
+  .description('Remove a "Blocks" dependency between two issues')
+  .argument('<blockingKey>', 'Issue key that blocks (e.g., PROJ-100)')
+  .argument('<blockedKey>', 'Issue key being blocked (e.g., PROJ-200)')
+  .action(async (blockingKey: string, blockedKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().removeDependency(blockingKey, blockedKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('get-children')
+  .description('List child issues of a parent')
+  .argument('<issueKey>', 'Parent issue key (e.g., PROJ-123)')
+  .action(async (issueKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().getChildIssues(issueKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
 // Test command for Neon integration
 program
   .command('test-neon')
