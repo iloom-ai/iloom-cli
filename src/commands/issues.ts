@@ -7,6 +7,8 @@ import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
+import { fetchJiraIssueList } from '../utils/jira.js'
+import { JiraApiClient } from '../lib/providers/jira/index.js'
 import { getLogger } from '../utils/logger-context.js'
 
 /**
@@ -27,7 +29,7 @@ export interface IssueListItem {
 interface IssuesCacheFile {
   timestamp: number    // Date.now() when cached
   projectPath: string  // for verification
-  provider: string     // 'github' | 'linear'
+  provider: string     // 'github' | 'linear' | 'jira'
   data: IssueListItem[]
 }
 
@@ -38,8 +40,8 @@ const CACHE_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'cache')
 /**
  * Generate a deterministic cache file path from project path + provider
  */
-function getCacheFilePath(projectPath: string, provider: string, limit: number): string {
-  const hash = crypto.createHash('md5').update(`${projectPath}:${provider}:${limit}`).digest('hex').slice(0, 12)
+function getCacheFilePath(projectPath: string, provider: string, limit: number, sprint?: string, mine?: boolean): string {
+  const hash = crypto.createHash('md5').update(`${projectPath}:${provider}:${limit}:${sprint ?? ''}:${mine ? 'mine' : ''}`).digest('hex').slice(0, 12)
   return path.join(CACHE_DIR, `issues-${hash}.json`)
 }
 
@@ -81,6 +83,8 @@ async function writeCacheFile(
 export interface IssuesCommandOptions {
   projectPath?: string | undefined
   limit?: number | undefined
+  sprint?: string | undefined
+  mine?: boolean | undefined
 }
 
 /**
@@ -104,6 +108,8 @@ export class IssuesCommand {
   async execute(options?: IssuesCommandOptions): Promise<IssueListItem[]> {
     const logger = getLogger()
     const limit = options?.limit ?? 100
+    const sprint = options?.sprint
+    const mine = options?.mine
 
     // 1. Resolve project root
     let resolvedProjectPath: string
@@ -124,8 +130,13 @@ export class IssuesCommand {
     // 3. Determine provider
     const provider = IssueTrackerFactory.getProviderName(settings)
 
+    // Warn if Jira-only flags used with non-Jira provider
+    if (provider !== 'jira' && (sprint || mine)) {
+      logger.warn('--sprint and --mine flags are only supported with the Jira issue tracker. Ignoring.')
+    }
+
     // 4. Check file-based cache
-    const cacheFilePath = getCacheFilePath(resolvedProjectPath, provider, limit)
+    const cacheFilePath = getCacheFilePath(resolvedProjectPath, provider, limit, sprint, mine)
     const cached = await readCacheFile(cacheFilePath)
     if (cached !== null) {
       logger.debug(`Returning cached issues (${cached.length} items)`)
@@ -153,6 +164,35 @@ export class IssuesCommand {
         limit,
         ...(apiToken ? { apiToken } : {}),
       })
+    } else if (provider === 'jira') {
+      const jiraSettings = settings.issueManagement?.jira
+      const host = jiraSettings?.host
+      if (!host) {
+        throw new Error(
+          'Jira host not configured. Set issueManagement.jira.host in your settings.json.',
+        )
+      }
+      const username = jiraSettings?.username
+      if (!username) {
+        throw new Error(
+          'Jira username not configured. Set issueManagement.jira.username in your settings.json.',
+        )
+      }
+      const apiToken = jiraSettings?.apiToken
+      if (!apiToken) {
+        throw new Error(
+          'Jira API token not configured. Set issueManagement.jira.apiToken in your settings.json or settings.local.json.',
+        )
+      }
+      const projectKey = jiraSettings?.projectKey
+      if (!projectKey) {
+        throw new Error(
+          'Jira project key not configured. Set issueManagement.jira.projectKey in your settings.json.',
+        )
+      }
+      const doneStatuses = jiraSettings?.doneStatuses
+      const client = new JiraApiClient({ host, username, apiToken })
+      results = await fetchJiraIssueList(client, { host, projectKey, doneStatuses, limit, sprint, mine })
     } else {
       throw new Error(`Unsupported issue tracker provider: ${provider}`)
     }
@@ -161,6 +201,7 @@ export class IssuesCommand {
     results.forEach(item => { item.type = 'issue' })
 
     // 6. Fetch PRs from GitHub (PRs are a GitHub concept regardless of issue tracker)
+    // TODO(bitbucket): detect bitbucket configuration and fetch PRs from Bitbucket instead of GitHub when relevant
     try {
       const prs = await fetchGitHubPRList({
         limit,

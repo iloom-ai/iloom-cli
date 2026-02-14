@@ -1242,6 +1242,8 @@ il issues [options] [project-path]
 |------|-------------|---------|
 | `--json` | Output as JSON (default behavior) | `true` |
 | `--limit <n>` | Maximum number of items to return (combined issues + PRs) | `100` |
+| `--sprint <name>` | **Jira only:** filter by sprint name (e.g., `"Sprint 17"`) or `"current"` for the active sprint | - |
+| `--mine` | **Jira only:** show only issues assigned to the authenticated user | `false` |
 
 **Output Format:**
 ```json
@@ -1279,6 +1281,11 @@ il issues [options] [project-path]
 - Works from worktrees (resolves settings from the correct project root)
 - For issues on GitHub: uses `gh issue list` with `--search sort:updated-desc`
 - For issues on Linear: uses `@linear/sdk` with team key filter from settings
+- For issues on Jira: uses Jira REST API with JQL, excluding statuses listed in `doneStatuses` (default: `["Done"]`)
+- `--sprint` and `--mine` flags are Jira-only. When used with other providers, a warning is logged and the flags are ignored.
+- `--sprint current` uses Jira's `openSprints()` JQL function to match the active sprint
+- `--sprint "Sprint 17"` filters to a specific named sprint
+- `--mine` uses Jira's `currentUser()` JQL function to filter by the authenticated user
 - For PRs: uses `gh pr list --state open` with draft filtering
 
 **Examples:**
@@ -1298,6 +1305,18 @@ il issues | jq '.[] | select(.type == "pr")'
 
 # Filter to only issues using jq
 il issues | jq '.[] | select(.type == "issue")'
+
+# Jira: show issues in the current sprint
+il issues --sprint current
+
+# Jira: show issues in a specific sprint
+il issues --sprint "Sprint 17"
+
+# Jira: show only my issues
+il issues --mine
+
+# Jira: my issues in the current sprint
+il issues --sprint current --mine
 ```
 
 **Notes:**

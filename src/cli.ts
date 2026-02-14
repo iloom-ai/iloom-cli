@@ -1332,7 +1332,9 @@ program
   .argument('[project-path]', 'Path to project root (auto-detected if omitted)')
   .option('--json', 'Output as JSON (default behavior)')
   .option('--limit <n>', 'Max issues to return', '100')
-  .action(async (projectPath?: string, options?: { json?: boolean; limit?: string }) => {
+  .option('--sprint <name>', 'Jira only: filter by sprint name (e.g., "Sprint 17") or "current" for active sprint')
+  .option('--mine', 'Jira only: show only issues assigned to me')
+  .action(async (projectPath?: string, options?: { json?: boolean; limit?: string; sprint?: string; mine?: boolean }) => {
     try {
       const { IssuesCommand } = await import('./commands/issues.js')
       const command = new IssuesCommand()
@@ -1341,6 +1343,8 @@ program
       const result = await command.execute({
         ...(projectPath ? { projectPath } : {}),
         limit,
+        sprint: options?.sprint,
+        mine: options?.mine,
       })
       console.log(JSON.stringify(result, null, 2))
     } catch (error) {

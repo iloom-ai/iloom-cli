@@ -403,6 +403,11 @@ export const IloomSettingsSchema = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					doneStatuses: z
+						.array(z.string())
+						.optional()
+						.default(['Done'])
+						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
 				})
 				.optional(),
 		})
@@ -634,6 +639,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					doneStatuses: z
+						.array(z.string())
+						.optional()
+						.default(['Done'])
+						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
 				})
 				.optional(),
 		})

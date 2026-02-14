@@ -461,6 +461,7 @@ To use Jira as your issue tracker, add this configuration:
       "username": "your.email@company.com",
       "projectKey": "PROJ",
       "boardId": "123",
+      "doneStatuses": ["Done", "Closed"],
       "transitionMappings": {
         "In Review": "Start Review"
       }
@@ -491,6 +492,7 @@ To use Jira as your issue tracker, add this configuration:
 - `apiToken`: API token (store in settings.local.json only!)
 - `projectKey`: Jira project key (e.g., "PROJ", "ENG")
 - `boardId`: (Optional) Board ID for sprint/workflow operations
+- `doneStatuses`: (Optional) Status names to exclude from `il issues` lists (default: `["Done"]`). Set to match your Jira workflow, e.g., `["Done", "Closed", "Verified"]`
 - `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
 
 
