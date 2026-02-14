@@ -14,7 +14,14 @@ vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/SettingsManager.js')
 vi.mock('../lib/MetadataManager.js')
 vi.mock('../lib/ValidationRunner.js')
-vi.mock('../mcp/IssueManagementProviderFactory.js')
+vi.mock('../lib/IssueTrackerFactory.js', () => ({
+	IssueTrackerFactory: {
+		formatIssueId: vi.fn((provider: string, id: string | number) => {
+			if (provider === 'github') return `#${id}`
+			return String(id).toUpperCase()
+		}),
+	},
+}))
 vi.mock('../utils/git.js', () => ({
 	isValidGitRepo: vi.fn(),
 	getWorktreeRoot: vi.fn(),
@@ -23,7 +30,6 @@ vi.mock('../utils/git.js', () => ({
 
 // Import mocked functions
 import { isValidGitRepo, getWorktreeRoot, extractIssueNumber } from '../utils/git.js'
-import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 
 describe('CommitCommand', () => {
 	let command: CommitCommand
@@ -63,8 +69,7 @@ describe('CommitCommand', () => {
 		originalIloomEnv = process.env.ILOOM
 		delete process.env.ILOOM
 
-		// Mock IssueManagementProviderFactory
-		vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({ issuePrefix: '#' } as ReturnType<typeof IssueManagementProviderFactory.create>)
+		// IssueTrackerFactory.formatIssueId is already mocked via vi.mock above
 
 		// Create mock CommitManager
 		mockCommitManager = {

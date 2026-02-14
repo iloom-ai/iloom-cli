@@ -4,7 +4,7 @@ import { CommitManager } from '../lib/CommitManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
-import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { IssueTrackerFactory, type IssueTrackerProviderType } from '../lib/IssueTrackerFactory.js'
 import { getLogger } from '../utils/logger-context.js'
 import { extractIssueNumber, isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 import type { CommitOptions } from '../types/index.js'
@@ -131,10 +131,9 @@ export class CommitCommand {
 			validationPassed = true
 		}
 
-		// Step 6: Load settings to get issue prefix
+		// Step 6: Load settings to get provider type for issue formatting
 		const settings = await this.settingsManager.loadSettings(worktreePath)
-		const providerType = settings.issueManagement?.provider ?? 'github'
-		const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueTrackerProviderType
 
 		// Determine whether to skip pre-commit hooks:
 		// - With --wip-commit: always skip hooks (quick WIP commit)
@@ -146,7 +145,7 @@ export class CommitCommand {
 		let commitMessage: string | undefined = input.message
 		if (input.wipCommit && !input.message) {
 			if (detected.issueNumber !== undefined) {
-				commitMessage = `WIP commit for Issue ${issuePrefix}${detected.issueNumber}`
+				commitMessage = `WIP commit for Issue ${IssueTrackerFactory.formatIssueId(providerType, detected.issueNumber)}`
 			} else {
 				commitMessage = 'WIP commit'
 			}
@@ -154,6 +153,9 @@ export class CommitCommand {
 		}
 
 		// Step 8: Build commit options
+		// Derive issuePrefix for CommitManager's downstream contract
+		// formatIssueId with empty string yields just the prefix (e.g., '#' for GitHub, '' for Linear)
+		const issuePrefix = IssueTrackerFactory.formatIssueId(providerType, '')
 		const commitOptions: CommitOptions = {
 			issuePrefix,
 			skipVerify: shouldSkipVerify,

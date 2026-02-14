@@ -5,7 +5,7 @@ import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
-import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { IssueTrackerFactory, type IssueTrackerProviderType } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
@@ -22,23 +22,23 @@ type ReviewerProvider = (typeof REVIEWER_PROVIDERS)[number]
 /**
  * Format child issues as a markdown list for inclusion in the prompt
  */
-function formatChildIssues(children: ChildIssueResult[], issuePrefix: string): string {
+function formatChildIssues(children: ChildIssueResult[], providerType: IssueTrackerProviderType): string {
 	if (children.length === 0) return 'None'
 	return children
-		.map(child => `- ${issuePrefix}${child.id}: ${child.title} (${child.state})`)
+		.map(child => `- ${IssueTrackerFactory.formatIssueId(providerType, child.id)}: ${child.title} (${child.state})`)
 		.join('\n')
 }
 
 /**
  * Format dependencies as a markdown list for inclusion in the prompt
  */
-function formatDependencies(dependencies: DependenciesResult, issuePrefix: string): string {
+function formatDependencies(dependencies: DependenciesResult, providerType: IssueTrackerProviderType): string {
 	const lines: string[] = []
 
 	if (dependencies.blockedBy.length > 0) {
 		lines.push('**Blocked by:**')
 		for (const dep of dependencies.blockedBy) {
-			lines.push(`- ${issuePrefix}${dep.id}: ${dep.title} (${dep.state})`)
+			lines.push(`- ${IssueTrackerFactory.formatIssueId(providerType, dep.id)}: ${dep.title} (${dep.state})`)
 		}
 	}
 
@@ -46,7 +46,7 @@ function formatDependencies(dependencies: DependenciesResult, issuePrefix: strin
 		if (lines.length > 0) lines.push('')
 		lines.push('**Blocking:**')
 		for (const dep of dependencies.blocking) {
-			lines.push(`- ${issuePrefix}${dep.id}: ${dep.title} (${dep.state})`)
+			lines.push(`- ${IssueTrackerFactory.formatIssueId(providerType, dep.id)}: ${dep.title} (${dep.state})`)
 		}
 	}
 
@@ -187,7 +187,6 @@ export class PlanCommand {
 		} | null = null
 
 		const provider = settings ? IssueTrackerFactory.getProviderName(settings) : 'github'
-		const issuePrefix = provider === 'github' ? '#' : ''
 
 		if (prompt && looksLikeIssueIdentifier) {
 			// Validate and fetch issue using issueTracker.detectInputType() pattern from StartCommand
@@ -380,10 +379,10 @@ export class PlanCommand {
 			PARENT_ISSUE_TITLE: decompositionContext?.title,
 			PARENT_ISSUE_BODY: decompositionContext?.body,
 			PARENT_ISSUE_CHILDREN: decompositionContext?.children
-				? formatChildIssues(decompositionContext.children, issuePrefix)
+				? formatChildIssues(decompositionContext.children, provider)
 				: undefined,
 			PARENT_ISSUE_DEPENDENCIES: decompositionContext?.dependencies
-				? formatDependencies(decompositionContext.dependencies, issuePrefix)
+				? formatDependencies(decompositionContext.dependencies, provider)
 				: undefined,
 			PLANNER: effectivePlanner,
 			REVIEWER: effectiveReviewer,

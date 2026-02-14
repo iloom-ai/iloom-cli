@@ -24,6 +24,20 @@ vi.mock('./ProjectCapabilityDetector.js')
 vi.mock('./CLIIsolationManager.js')
 vi.mock('./SettingsManager.js')
 
+// Mock IssueTrackerFactory for formatIssueId
+vi.mock('./IssueTrackerFactory.js', () => ({
+  IssueTrackerFactory: {
+    formatIssueId: vi.fn((provider: string, id: string | number) => {
+      if (provider === 'github') return `#${id}`
+      return String(id).toUpperCase()
+    }),
+    getProviderName: vi.fn((settings: Record<string, unknown>) => {
+      const issueManagement = settings.issueManagement as Record<string, unknown> | undefined
+      return (issueManagement?.provider as string) ?? 'github'
+    }),
+  },
+}))
+
 // Mock fs-extra
 vi.mock('fs-extra', () => ({
   default: {
@@ -118,7 +132,6 @@ vi.mock('./LoomLauncher.js', () => ({
 // Shared mock functions for verification in tests
 const mockCreateDraftPR = vi.fn()
 const mockCheckForExistingPR = vi.fn()
-let mockIssuePrefix = '#'
 vi.mock('./PRManager.js', () => {
   // Use a class-like factory that creates fresh instances
   // This avoids issues with mockReset clearing the constructor implementation
@@ -126,7 +139,6 @@ vi.mock('./PRManager.js', () => {
     PRManager: class MockPRManager {
       createDraftPR = mockCreateDraftPR
       checkForExistingPR = mockCheckForExistingPR
-      get issuePrefix() { return mockIssuePrefix }
     },
   }
 })
@@ -148,7 +160,6 @@ describe('LoomManager', () => {
   let mockSettings: vi.Mocked<SettingsManager>
 
   beforeEach(() => {
-    mockIssuePrefix = '#' // Reset to GitHub default
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     mockGitHub = new GitHubService() as vi.Mocked<GitHubService>
     mockBranchNaming = new DefaultBranchNamingService() as vi.Mocked<DefaultBranchNamingService>
@@ -495,15 +506,17 @@ describe('LoomManager', () => {
       // Configure Linear provider (doesn't support PRs natively)
       mockGitHub.supportsPullRequests = false
       mockGitHub.providerName = 'linear'
-      mockIssuePrefix = '' // Linear issues use empty prefix (identifier already includes team key)
 
-      // Mock settings with github-draft-pr mode
+      // Mock settings with github-draft-pr mode and Linear provider
       // (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
           mode: 'github-draft-pr',
+        },
+        issueManagement: {
+          provider: 'linear',
         },
       })
 

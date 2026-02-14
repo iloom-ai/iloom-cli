@@ -20,6 +20,10 @@ vi.mock('../lib/SettingsManager.js', () => ({
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	IssueTrackerFactory: {
 		getProviderName: vi.fn().mockReturnValue('github'),
+		formatIssueId: vi.fn((provider: string, id: string | number) => {
+			if (provider === 'github') return `#${id}`
+			return String(id).toUpperCase()
+		}),
 	},
 }))
 vi.mock('../utils/logger.js', () => ({
