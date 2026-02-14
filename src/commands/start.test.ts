@@ -105,6 +105,8 @@ describe('StartCommand', () => {
 		// Set IssueTracker interface properties
 		mockGitHubService.supportsPullRequests = true
 		mockGitHubService.providerName = 'github'
+		// Mock formatIssueId to return GitHub-style formatting
+		vi.mocked(mockGitHubService.formatIssueId).mockImplementation((id) => `#${id}`)
 		command = new StartCommand(mockGitHubService)
 	})
 
@@ -1563,6 +1565,7 @@ describe('StartCommand', () => {
 			detectInputType: ReturnType<typeof vi.fn>
 			fetchIssue: ReturnType<typeof vi.fn>
 			validateIssueState: ReturnType<typeof vi.fn>
+			formatIssueId: ReturnType<typeof vi.fn>
 			fetchPR?: ReturnType<typeof vi.fn>
 			validatePRState?: ReturnType<typeof vi.fn>
 		}
@@ -1576,6 +1579,7 @@ describe('StartCommand', () => {
 				detectInputType: vi.fn(),
 				fetchIssue: vi.fn(),
 				validateIssueState: vi.fn(),
+				formatIssueId: vi.fn((id: string | number) => String(id).toUpperCase()),
 				// Linear does NOT have fetchPR or validatePRState
 			}
 			linearCommand = new StartCommand(mockLinearService as unknown as GitHubService)

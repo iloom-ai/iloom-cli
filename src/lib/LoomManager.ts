@@ -381,6 +381,7 @@ export class LoomManager {
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
         colorHex: colorData.hex,
+        issueTrackerProvider: this.issueTracker.providerName as import('./IssueTrackerFactory.js').IssueTrackerProviderType,
       })
     }
 
@@ -1320,6 +1321,7 @@ export class LoomManager {
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
         colorHex,
+        issueTrackerProvider: this.issueTracker.providerName as import('./IssueTrackerFactory.js').IssueTrackerProviderType,
       })
     }
 

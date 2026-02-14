@@ -160,7 +160,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 
 		if (isNonInteractive) {
 			// In non-interactive environment: Skip all interactive operations
-			getLogger().info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
+			getLogger().info(`Running in non-interactive environment - skipping interactive prompts for issue ${this.issueTrackerService.formatIssueId(issueNumber)}`)
 			return
 		}
 
@@ -168,7 +168,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 		const issueUrl = await this.issueTrackerService.getIssueUrl(issueNumber, repository)
 
 		// Display message and wait for first keypress
-		const message = `Created issue #${issueNumber}.
+		const message = `Created issue ${this.issueTrackerService.formatIssueId(issueNumber)}.
 Review and edit the issue in your browser if needed.
 Press any key to open issue for editing...`
 		await waitForKeypress(message)

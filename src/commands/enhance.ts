@@ -75,7 +75,7 @@ export class EnhanceCommand {
 
 		// Step 2: Fetch issue to verify it exists
 		if (!isJsonMode) {
-			getLogger().info(`Fetching issue #${issueNumber}...`)
+			getLogger().info(`Fetching issue ${this.issueTracker.formatIssueId(issueNumber)}...`)
 		}
 		const issue = await this.issueTracker.fetchIssue(issueNumber, repo)
 		getLogger().debug('Issue fetched successfully', { number: issue.number, title: issue.title })
@@ -109,7 +109,7 @@ export class EnhanceCommand {
 			return
 		}
 
-		getLogger().success(`Issue #${issueNumber} enhanced successfully!`)
+		getLogger().success(`Issue ${this.issueTracker.formatIssueId(issueNumber)} enhanced successfully!`)
 		getLogger().info(`Enhanced specification available at: ${result.url}`)
 
 		// Prompt to open browser (unless --no-browser flag is set)

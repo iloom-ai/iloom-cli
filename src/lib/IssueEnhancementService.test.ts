@@ -51,6 +51,9 @@ describe('IssueEnhancementService', () => {
 		mockAgentManager = new AgentManager()
 		mockSettingsManager = new SettingsManager()
 
+		// Mock formatIssueId to return GitHub-style formatting
+		vi.mocked(mockGitHubService.formatIssueId).mockImplementation((id) => `#${id}`)
+
 		service = new IssueEnhancementService(
 			mockGitHubService,
 			mockAgentManager,
