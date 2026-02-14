@@ -6,6 +6,7 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
@@ -47,6 +48,7 @@ export class CleanupCommand {
   private readonly gitWorktreeManager: GitWorktreeManager
   private resourceCleanup?: ResourceCleanup
   private loomManager?: import('../lib/LoomManager.js').LoomManager
+  private settings?: import('../lib/SettingsManager.js').IloomSettings
   private readonly identifierParser: IdentifierParser
 
   constructor(
@@ -84,6 +86,7 @@ export class CleanupCommand {
 
     const settingsManager = new SettingsManager()
     const settings = await settingsManager.loadSettings()
+    this.settings = settings
     const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
     const environmentManager = new EnvironmentManager()
@@ -462,7 +465,12 @@ export class CleanupCommand {
 
     const { force, dryRun } = parsed.options
 
-    getLogger().info(`Finding worktrees related to GitHub issue/PR #${issueNumber}...`)
+    // Use settings from ensureResourceCleanup (called via checkForChildLooms in execute())
+    // to get issue tracker provider type for formatting
+    const providerType = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
+    const formattedId = IssueTrackerFactory.formatIssueId(providerType, issueNumber)
+
+    getLogger().info(`Finding worktrees related to issue/PR ${formattedId}...`)
 
     // Step 1: Get all worktrees and filter by path pattern
     const worktrees = await this.gitWorktreeManager.listWorktrees()
@@ -479,7 +487,7 @@ export class CleanupCommand {
     })
 
     if (matchingWorktrees.length === 0) {
-      getLogger().warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
+      getLogger().warn(`No worktrees found for issue/PR ${formattedId}`)
       getLogger().info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
       return {
         identifier: String(issueNumber),
@@ -500,7 +508,7 @@ export class CleanupCommand {
       }))
 
     // Step 3: Display preview
-    getLogger().info(`Found ${targets.length} worktree(s) related to issue/PR #${issueNumber}:`)
+    getLogger().info(`Found ${targets.length} worktree(s) related to issue/PR ${formattedId}:`)
     for (const target of targets) {
       getLogger().info(`  Branch: ${target.branchName} (${target.worktreePath})`)
     }
@@ -592,7 +600,7 @@ export class CleanupCommand {
     }
 
     // Step 7: Report statistics
-    getLogger().success(`Completed cleanup for issue/PR #${issueNumber}:`)
+    getLogger().success(`Completed cleanup for issue/PR ${formattedId}:`)
     getLogger().info(`   Worktrees removed: ${worktreesRemoved}`)
     getLogger().info(`   Branches deleted: ${branchesDeleted}`)
     if (databaseBranchesDeletedList.length > 0) {
