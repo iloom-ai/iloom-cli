@@ -86,6 +86,7 @@ describe('ClaudeService', () => {
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('issue', {
 					ISSUE_NUMBER: 123,
+					ISSUE_PREFIX: '#',
 					ISSUE_TITLE: 'Add authentication',
 					WORKSPACE_PATH: '/workspace/issue-123',
 					PORT: 3123,
@@ -117,6 +118,7 @@ describe('ClaudeService', () => {
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('issue', {
 					ISSUE_NUMBER: 123,
+					ISSUE_PREFIX: '#',
 					WORKSPACE_PATH: '/workspace',
 					PORT: 3123,
 				})
@@ -137,6 +139,7 @@ describe('ClaudeService', () => {
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('issue', {
 					ISSUE_NUMBER: 123,
+					ISSUE_PREFIX: '#',
 					WORKSPACE_PATH: '/workspace',
 				})
 			})
@@ -160,6 +163,7 @@ describe('ClaudeService', () => {
 				await service.launchForWorkflow(options)
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('pr', {
+					ISSUE_PREFIX: '#',
 					PR_NUMBER: 456,
 					PR_TITLE: 'Fix bug',
 					WORKSPACE_PATH: '/workspace/pr-456',
@@ -193,6 +197,7 @@ describe('ClaudeService', () => {
 				await service.launchForWorkflow(options)
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('regular', {
+					ISSUE_PREFIX: '#',
 					WORKSPACE_PATH: '/workspace/feature',
 				})
 

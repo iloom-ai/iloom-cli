@@ -88,4 +88,23 @@ export class IssueTrackerFactory {
 	static getProviderName(settings: IloomSettings): IssueTrackerProviderType {
 		return (settings.issueManagement?.provider ?? 'github') as IssueTrackerProviderType
 	}
+
+	/**
+	 * Get the issue ID prefix for a given provider type.
+	 * GitHub uses '#' (e.g., #123), Linear and Jira use '' (identifiers are self-contained).
+	 *
+	 * @param providerType - The issue tracker provider type
+	 * @returns Prefix string to prepend before issue identifiers in display text
+	 */
+	static getIssuePrefix(providerType: IssueTrackerProviderType): string {
+		switch (providerType) {
+			case 'github':
+				return '#'
+			case 'linear':
+			case 'jira':
+				return ''
+			default:
+				return '#'
+		}
+	}
 }

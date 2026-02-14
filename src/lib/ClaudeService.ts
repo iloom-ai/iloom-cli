@@ -1,6 +1,7 @@
 import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
 import { SettingsManager, IloomSettings } from './SettingsManager.js'
+import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 import { logger } from '../utils/logger.js'
 
 export interface ClaudeWorkflowOptions {
@@ -70,8 +71,10 @@ export class ClaudeService {
 			this.settings ??= await this.settingsManager.loadSettings()
 
 			// Build template variables
+			const providerType = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
 			const variables: TemplateVariables = {
 				WORKSPACE_PATH: workspacePath,
+				ISSUE_PREFIX: IssueTrackerFactory.getIssuePrefix(providerType),
 			}
 
 			if (issueNumber !== undefined) {

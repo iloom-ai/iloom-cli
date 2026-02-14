@@ -59,7 +59,7 @@ Use these Recap MCP tools:
 
 **IMPORTANT: This loom is using draft PR mode.**
 
-- **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Read issue details** from Issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
 - **Read draft PR details** from PR #{{DRAFT_PR_NUMBER}} using `mcp__issue_management__get_pr`
 - **Write ALL workflow comments** to PR #{{DRAFT_PR_NUMBER}} using `type: "pr"`
 
@@ -91,7 +91,7 @@ Call `mcp__recap__add_artifact` to register the draft PR:
 {
   type: "pr",
   primaryUrl: "{{DRAFT_PR_URL}}",
-  description: "Draft PR for issue #{{ISSUE_NUMBER}}"
+  description: "Draft PR for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}"
 }
 ```
 
@@ -100,8 +100,8 @@ This ensures the draft PR appears in the recap panel for easy access throughout 
 {{#if STANDARD_ISSUE_MODE}}
 ## Comment Routing: Standard Issue Mode
 
-- **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
-- **Write ALL workflow comments** to Issue #{{ISSUE_NUMBER}} using `type: "issue"`
+- **Read issue details** from Issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to Issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}} using `type: "issue"`
 
 When calling `mcp__issue_management__create_comment`:
 ```
@@ -350,7 +350,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Enhancement):
    - The enhancer output should be reviewed before posting
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -426,7 +426,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Complexity Evaluation):
    - The complexity evaluator output should be reviewed before posting
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -520,7 +520,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Analysis):
    - The analyzer output should be reviewed before posting
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -625,7 +625,7 @@ Execute combined analyze-and-plan agent:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 3.6. Artifact Review (Analysis and Plan):
    - The analyze-and-plan output should be reviewed before posting
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -692,7 +692,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Plan):
    - The planner output should be reviewed before posting
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -817,7 +817,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 5.5. Artifact Review (Implementation):
    - The implementer output should be reviewed for plan alignment before code review
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
@@ -926,7 +926,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
    c. **Create the real implementation commit:**
       - Generate a commit message summarizing the implementation work
-      - Include reference to Issue #{{ISSUE_NUMBER}}
+      - Include reference to Issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}
       - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
       ```bash
       git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
@@ -947,7 +947,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
    b. **Create commit with descriptive message:**
       - Generate a commit message summarizing the implementation work
-      - Include reference to Issue #{{ISSUE_NUMBER}}
+      - Include reference to Issue {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}
       - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
       ```bash
       git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
