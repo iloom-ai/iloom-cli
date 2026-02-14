@@ -7,7 +7,7 @@ import { LinearService, type LinearServiceConfig } from './LinearService.js'
 import type { IloomSettings } from './SettingsManager.js'
 import { getLogger } from '../utils/logger-context.js'
 
-export type IssueTrackerProviderType = 'github' | 'linear'
+export type IssueTrackerProviderType = 'github' | 'linear' | 'jira'
 
 /**
  * Factory for creating IssueTracker instances based on settings
@@ -55,6 +55,26 @@ export class IssueTrackerFactory {
 			}
 			default:
 				throw new Error(`Unsupported issue tracker provider: ${provider}`)
+		}
+	}
+
+	/**
+	 * Format an issue identifier for display without needing a provider instance.
+	 * GitHub issues get a "#" prefix, Linear/Jira identifiers are uppercased.
+	 *
+	 * @param providerType - The issue tracker provider type
+	 * @param identifier - The issue identifier (number or string)
+	 * @returns Formatted issue ID string
+	 */
+	static formatIssueId(providerType: IssueTrackerProviderType, identifier: string | number): string {
+		switch (providerType) {
+			case 'github':
+				return `#${identifier}`
+			case 'linear':
+			case 'jira':
+				return String(identifier).toUpperCase()
+			default:
+				return `#${identifier}`
 		}
 	}
 

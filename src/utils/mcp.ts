@@ -4,6 +4,7 @@ import { getRepoInfo } from './github.js'
 import { logger } from './logger.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+import type { IssueTrackerProviderType } from '../lib/IssueTrackerFactory.js'
 
 /**
  * Generate MCP configuration for issue management
@@ -18,7 +19,7 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
 	repo?: string,
-	provider: 'github' | 'linear' = 'github',
+	provider: IssueTrackerProviderType = 'github',
 	settings?: IloomSettings,
 	draftPrNumber?: number
 ): Promise<Record<string, unknown>[]> {
