@@ -6,6 +6,7 @@ import { openIdeWindow } from '../utils/ide.js'
 import { generateColorFromBranchName, hexToRgb } from '../utils/color.js'
 import { getLogger } from '../utils/logger-context.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
+import { IssueTrackerFactory, type IssueTrackerProviderType } from './IssueTrackerFactory.js'
 import type { SettingsManager } from './SettingsManager.js'
 import type { Capability } from '../types/loom.js'
 import { getDotenvFlowFiles } from '../utils/env.js'
@@ -29,6 +30,7 @@ export interface LaunchLoomOptions {
 	sourceEnvOnStart?: boolean // defaults to false if undefined
 	colorTerminal?: boolean // defaults to true if undefined
 	colorHex?: string // Pre-calculated hex color from metadata, avoids recalculation
+	issueTrackerProvider?: IssueTrackerProviderType // Provider type for formatting issue IDs
 }
 
 /**
@@ -208,7 +210,7 @@ export class LoomLauncher {
 		options: LaunchLoomOptions
 	): Promise<TerminalWindowOptions> {
 		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
-		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
+		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier, options.issueTrackerProvider)}`
 
 		const executable = options.executablePath ?? 'iloom'
 		let claudeCommand = `${executable} spin`
@@ -250,7 +252,7 @@ export class LoomLauncher {
 		const devServerIdentifier = String(options.identifier)
 		const devServerCommand = `${executable} dev-server ${devServerIdentifier}`
 
-		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier)}`
+		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier, options.issueTrackerProvider)}`
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
@@ -278,7 +280,7 @@ export class LoomLauncher {
 	private buildStandaloneTerminalOptions(
 		options: LaunchLoomOptions
 	): TerminalWindowOptions {
-		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier)}`
+		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier, options.issueTrackerProvider)}`
 
 		// Build shell command with identifier
 		// Use the same executable path pattern as buildClaudeTerminalOptions
@@ -332,9 +334,10 @@ export class LoomLauncher {
 	/**
 	 * Format identifier for terminal tab titles
 	 */
-	private formatIdentifier(workflowType: 'issue' | 'pr' | 'regular', identifier: string | number): string {
+	private formatIdentifier(workflowType: 'issue' | 'pr' | 'regular', identifier: string | number, issueTrackerProvider?: IssueTrackerProviderType): string {
 		if (workflowType === 'issue') {
-			return `Issue #${identifier}`
+			const formattedId = IssueTrackerFactory.formatIssueId(issueTrackerProvider ?? 'github', identifier)
+			return `Issue ${formattedId}`
 		} else if (workflowType === 'pr') {
 			return `PR #${identifier}`
 		} else {
