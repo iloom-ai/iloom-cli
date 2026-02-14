@@ -476,8 +476,10 @@ export class IgniteCommand {
 		draftPrNumber?: number,
 		draftPrUrl?: string
 	): TemplateVariables {
+		const providerType = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
+			ISSUE_PREFIX: IssueTrackerFactory.getIssuePrefix(providerType),
 		}
 
 		if (context.issueNumber !== undefined) {

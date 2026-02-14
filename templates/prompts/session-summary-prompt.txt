@@ -1,7 +1,7 @@
 You are generating a summary of THIS conversation - the development session you just completed.
 
 ## Context
-- Issue/PR: #{{ISSUE_NUMBER}}
+- Issue/PR: {{ISSUE_PREFIX}}{{ISSUE_NUMBER}}
 - Branch: {{BRANCH_NAME}}
 - Loom Type: {{LOOM_TYPE}}
 
