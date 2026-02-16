@@ -69,8 +69,11 @@ export class AddIssueCommand {
 			throw new Error('Description is required and must be more than 30 characters with at least 3 words')
 		}
 
-		// Step 2: Skip enhancement if body provided, otherwise enhance description
-		const issueBody = body ?? await this.enhancementService.enhanceDescription(description)
+		// Step 2: Enhance the content - pass title + body together for full context,
+		// or just the description if no body provided.
+		// The enhancer agent will skip enhancement if the content is already well-structured.
+		const enhancementInput = body ? `${description}\n\n${body}` : description
+		const issueBody = await this.enhancementService.enhanceDescription(enhancementInput)
 
 		// Step 3: Create GitHub issue with original as title, body as body
 		const result = await this.enhancementService.createEnhancedIssue(
