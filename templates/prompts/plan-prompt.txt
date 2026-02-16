@@ -118,6 +118,15 @@ After the subagent completes, include its context summary when sending the plan 
 
 ---
 
+## Formatting Rules
+
+**Always write in standard GitHub-flavored Markdown.** The MCP issue management tools handle any necessary format conversion automatically (e.g., Markdown to ADF for Jira). This means:
+- Use standard Markdown: `##` headings, `**bold**`, `| tables |`, `` ``` `` code blocks, `- bullet lists`
+- Use `<details><summary>` tags for collapsed/expandable sections — the converter handles these
+- Do NOT use platform-specific markup (e.g., Jira wiki syntax like `h2.`, `||header||`, `{code}`)
+
+---
+
 ## Core Principles
 
 **1 Child Issue = 1 Loom = 1 PR**
@@ -328,9 +337,9 @@ Use clear, action-oriented titles:
 **Summary Comment with Dependency Diagram:**
 After creating all child issues and dependencies, post a summary comment on the parent epic that includes:
 1. A list of the child issues created with their numbers and titles
-2. A Mermaid diagram visualizing the dependency DAG
+2. A dependency diagram visualizing the DAG
 
-The Mermaid diagram should:
+**For GitHub and Linear**, use a Mermaid diagram. The Mermaid diagram should:
 - Use `graph TD` (top-down) format
 - Include each child issue as a node with format: `ISSUE_ID[Short Title]`
 - Use the appropriate issue ID format for the tracker:
@@ -384,6 +393,27 @@ graph TD
     ENG-101[Bootstrap plan command] --> ENG-103[Implement creation flow]
     ENG-102[Add dependency management] --> ENG-103
 ```
+```
+
+**For Jira**, use ASCII art diagrams instead of Mermaid:
+- Jira does not render Mermaid diagrams — they appear as raw text. Use simple ASCII box-and-arrow diagrams instead.
+- **Write in standard Markdown, NOT Jira wiki markup.** The MCP tools automatically convert Markdown to Atlassian Document Format (ADF) before sending to Jira. If you write Jira wiki markup (e.g., `h2.`, `||header||`, `{code}`), it will be treated as literal text and displayed raw. Use standard Markdown headings (`##`), tables (`| col |`), code blocks (`` ``` ``), etc.
+
+Example summary comment format (Jira):
+```
+## Child Issues Created
+
+| Issue | Title | Dependencies |
+|-------|-------|--------------|
+| PROJ-101 | Bootstrap plan command | None |
+| PROJ-102 | Add dependency management | None |
+| PROJ-103 | Implement creation flow | PROJ-101, PROJ-102 |
+
+## Dependency Graph
+
+PROJ-101 [Bootstrap plan command] ──┐
+                                    ├──> PROJ-103 [Implement creation flow]
+PROJ-102 [Add dependency management] ──┘
 ```
 
 Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.
