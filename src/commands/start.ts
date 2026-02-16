@@ -207,9 +207,9 @@ export class StartCommand {
 			}
 			// Note: --no-child-loom when no parent is a no-op (already independent)
 
-			// Step 2.5: Handle description input - create GitHub issue
+			// Step 2.5: Handle description input - create issue
 			if (parsed.type === 'description') {
-				getLogger().info('Creating GitHub issue from description...')
+				getLogger().info('Creating issue from description...')
 				// Apply first-letter capitalization to title and body
 				const title = capitalizeFirstLetter(parsed.originalInput)
 				const body = input.options.body ? capitalizeFirstLetter(input.options.body) : ""

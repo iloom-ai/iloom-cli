@@ -145,6 +145,9 @@ export class JiraApiClient {
 	): Promise<T> {
 		const url = new URL(`${this.baseUrl}${endpoint}`)
 		getLogger().debug(`Jira API ${method} request`, { url: url.toString() })
+		if (body) {
+			getLogger().debug('Jira API request body', JSON.stringify(body, null, 2))
+		}
 
 		return new Promise((resolve, reject) => {
 			const options: https.RequestOptions = {
@@ -170,7 +173,23 @@ export class JiraApiClient {
 					const data = Buffer.concat(chunks).toString('utf8')
 
 					if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-						reject(new Error(`Jira API error (${res.statusCode}): ${data}`))
+						let errorDetail = data
+						try {
+							const parsed = JSON.parse(data)
+							const parts: string[] = []
+							if (parsed.errorMessages?.length) {
+								parts.push(`messages: ${parsed.errorMessages.join(', ')}`)
+							}
+							if (parsed.errors && Object.keys(parsed.errors).length) {
+								parts.push(`field errors: ${JSON.stringify(parsed.errors)}`)
+							}
+							if (parts.length) {
+								errorDetail = parts.join('; ')
+							}
+						} catch {
+							// Use raw data if not JSON
+						}
+						reject(new Error(`Jira API error (${res.statusCode}): ${errorDetail}`))
 						return
 					}
 
