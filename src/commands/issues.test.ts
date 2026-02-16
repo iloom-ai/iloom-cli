@@ -4,14 +4,15 @@ import os from 'os'
 // Mock fs-extra
 vi.mock('fs-extra')
 
-// Mock logger-context
+// Mock logger-context - use a stable singleton so tests can assert on logger calls
+const mockLogger = {
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}
 vi.mock('../utils/logger-context.js', () => ({
-  getLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  getLogger: () => mockLogger,
 }))
 
 // Mock github.ts
@@ -543,6 +544,153 @@ describe('IssuesCommand', () => {
       // Both should be in the cache directory
       expect(pathA).toContain('cache/issues-')
       expect(pathB).toContain('cache/issues-')
+    })
+  })
+
+  describe('execute - --mine flag', () => {
+    it('passes mine option to fetchGitHubIssueList when provider is github', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(fetchGitHubIssueList).mockResolvedValue(mockGitHubIssues)
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(fetchGitHubIssueList).toHaveBeenCalledWith({
+        limit: 100,
+        cwd: '/my/project',
+        mine: true,
+      })
+    })
+
+    it('passes mine option to fetchGitHubPRList when --mine is active', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(fetchGitHubIssueList).mockResolvedValue([])
+      vi.mocked(fetchGitHubPRList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(fetchGitHubPRList).toHaveBeenCalledWith({
+        limit: 100,
+        cwd: '/my/project',
+        mine: true,
+      })
+    })
+
+    it('passes mine option to fetchLinearIssueList when provider is linear', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+      vi.mocked(fetchLinearIssueList).mockResolvedValue(mockLinearIssues)
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({
+          issueManagement: { provider: 'linear', linear: { teamId: 'ENG' } },
+        }),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(fetchLinearIssueList).toHaveBeenCalledWith('ENG', { limit: 100, mine: true })
+    })
+
+    it('passes mine option to fetchGitHubPRList when provider is linear and --mine is active', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+      vi.mocked(fetchLinearIssueList).mockResolvedValue([])
+      vi.mocked(fetchGitHubPRList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({
+          issueManagement: { provider: 'linear', linear: { teamId: 'ENG' } },
+        }),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(fetchGitHubPRList).toHaveBeenCalledWith({
+        limit: 100,
+        cwd: '/my/project',
+        mine: true,
+      })
+    })
+
+    it('does not warn when --mine used with github provider', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(fetchGitHubIssueList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(mockLogger.warn).not.toHaveBeenCalled()
+    })
+
+    it('does not warn when --mine used with linear provider', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+      vi.mocked(fetchLinearIssueList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({
+          issueManagement: { provider: 'linear', linear: { teamId: 'ENG' } },
+        }),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', mine: true })
+
+      expect(mockLogger.warn).not.toHaveBeenCalled()
+    })
+
+    it('warns only for --sprint with non-jira provider, not --mine', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(fetchGitHubIssueList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project', sprint: 'current', mine: true })
+
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1)
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('--sprint'),
+      )
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('--mine'),
+      )
+    })
+
+    it('does not pass mine to fetch functions when mine is falsy', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(fetchGitHubIssueList).mockResolvedValue([])
+
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const command = new IssuesCommand(mockSettingsManager as never)
+      await command.execute({ projectPath: '/my/project' })
+
+      expect(fetchGitHubIssueList).toHaveBeenCalledWith({
+        limit: 100,
+        cwd: '/my/project',
+      })
+      expect(fetchGitHubPRList).toHaveBeenCalledWith({
+        limit: 100,
+        cwd: '/my/project',
+      })
     })
   })
 
