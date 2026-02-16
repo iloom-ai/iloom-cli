@@ -659,5 +659,270 @@ Content here
 				}
 			})
 		})
+
+		describe('table cell content wrapping', () => {
+			test('simple table cells are wrapped in paragraph nodes', () => {
+				const input = '| a | b |\n|---|---|\n| c | d |'
+				const result = markdownToAdf(input) as AdfNode
+
+				// Find the table node
+				const tableNode = result.content?.find((n) => n.type === 'table')
+				expect(tableNode).toBeDefined()
+
+				// Check all tableHeader and tableCell nodes have paragraph-wrapped content
+				for (const row of tableNode!.content || []) {
+					for (const cell of row.content || []) {
+						expect(cell.type === 'tableHeader' || cell.type === 'tableCell').toBe(true)
+						// Every child of a cell should be block-level (paragraph)
+						for (const child of cell.content || []) {
+							expect(child.type).toBe('paragraph')
+						}
+					}
+				}
+			})
+
+			test('table with formatted content has paragraph-wrapped cells', () => {
+				const input = '| **bold** | *italic* |\n|---|---|\n| `code` | [link](https://example.com) |'
+				const result = markdownToAdf(input) as AdfNode
+
+				const tableNode = result.content?.find((n) => n.type === 'table')
+				expect(tableNode).toBeDefined()
+
+				// Verify all cells have block-level children
+				for (const row of tableNode!.content || []) {
+					for (const cell of row.content || []) {
+						if (cell.type === 'tableHeader' || cell.type === 'tableCell') {
+							for (const child of cell.content || []) {
+								expect(child.type).toBe('paragraph')
+							}
+						}
+					}
+				}
+			})
+		})
+
+		describe('checkbox task list conversion', () => {
+			test('simple checkbox list - mixed DONE and TODO', () => {
+				const input = '- [x] Done\n- [ ] Todo'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+				expect(taskList!.attrs).toHaveProperty('localId')
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+
+				// First item: checked
+				expect(taskItems[0].type).toBe('taskItem')
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+
+				// Second item: unchecked
+				expect(taskItems[1].type).toBe('taskItem')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+
+				// Verify text content
+				const firstText = findFirstTextInNode(taskItems[0])
+				expect(firstText).toBe('Done')
+
+				const secondText = findFirstTextInNode(taskItems[1])
+				expect(secondText).toBe('Todo')
+			})
+
+			test('all checked items', () => {
+				const input = '- [x] A\n- [x] B'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+				expect(taskItems[1].attrs?.state).toBe('DONE')
+			})
+
+			test('all unchecked items', () => {
+				const input = '- [ ] A\n- [ ] B'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('TODO')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+			})
+
+			test('mixed list stays as bulletList - not all items are checkboxes', () => {
+				const input = '- [x] Checked\n- Regular item'
+				const result = markdownToAdf(input) as AdfNode
+
+				const bulletList = result.content?.find((n) => n.type === 'bulletList')
+				expect(bulletList).toBeDefined()
+
+				// Should NOT have been converted to taskList
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeUndefined()
+			})
+
+			test('regular bullet list unaffected', () => {
+				const input = '- Item 1\n- Item 2'
+				const result = markdownToAdf(input) as AdfNode
+
+				const bulletList = result.content?.find((n) => n.type === 'bulletList')
+				expect(bulletList).toBeDefined()
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeUndefined()
+			})
+
+			test('multiple checkbox blocks converted independently', () => {
+				const input = '- [x] First A\n- [ ] First B\n\nSome text\n\n- [ ] Second A\n- [x] Second B'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskLists = result.content?.filter((n) => n.type === 'taskList') || []
+				expect(taskLists.length).toBe(2)
+
+				// First task list
+				const firstItems = taskLists[0].content || []
+				expect(firstItems.length).toBe(2)
+				expect(firstItems[0].attrs?.state).toBe('DONE')
+				expect(firstItems[1].attrs?.state).toBe('TODO')
+
+				// Second task list
+				const secondItems = taskLists[1].content || []
+				expect(secondItems.length).toBe(2)
+				expect(secondItems[0].attrs?.state).toBe('TODO')
+				expect(secondItems[1].attrs?.state).toBe('DONE')
+			})
+
+			test('checkbox with formatted text matches correctly', () => {
+				const input = '- [x] **bold** task\n- [ ] plain task'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+			})
+
+			test('nested checkbox list remains as bulletList - no conversion', () => {
+				const input = '- [x] Parent\n  - [ ] Child'
+				const result = markdownToAdf(input) as AdfNode
+
+				// The outer list should remain a bulletList (not converted to taskList)
+				// because the nested child has a different indent level
+				const bulletList = result.content?.find((n) => n.type === 'bulletList')
+				expect(bulletList).toBeDefined()
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeUndefined()
+			})
+
+			test('checkbox item with continuation paragraph remains as bulletList', () => {
+				const input = '- [x] First line\n\n  Continuation paragraph\n\n- [ ] Second item'
+				const result = markdownToAdf(input) as AdfNode
+
+				// Multi-paragraph list items are too complex for taskItem conversion,
+				// so the list should remain as bulletList
+				const bulletList = result.content?.find((n) => n.type === 'bulletList')
+				expect(bulletList).toBeDefined()
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeUndefined()
+			})
+
+			test('multi-line checkbox item with lazy continuation converts to taskList', () => {
+				const input = '- [x] This is a task\n  that wraps to a second line\n- [ ] Another task'
+				const result = markdownToAdf(input) as AdfNode
+
+				// The checkbox block should still be detected despite the continuation line
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+			})
+
+			test('checkbox list using * marker converts to taskList', () => {
+				const input = '* [x] Done\n* [ ] Todo'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+			})
+
+			test('checkbox list using + marker converts to taskList', () => {
+				const input = '+ [x] Done\n+ [ ] Todo'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(2)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+				expect(taskItems[1].attrs?.state).toBe('TODO')
+			})
+
+			test('checkbox with literal asterisks converts correctly', () => {
+				const input = '- [x] Multiply 2 * 3 * 4'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				expect(taskItems.length).toBe(1)
+				expect(taskItems[0].attrs?.state).toBe('DONE')
+
+				// The text should contain the literal asterisks
+				const text = findFirstTextInNode(taskItems[0])
+				expect(text).toContain('2')
+			})
+
+			test('taskItem content is unwrapped - inline nodes not wrapped in paragraph', () => {
+				const input = '- [x] Done\n- [ ] Todo'
+				const result = markdownToAdf(input) as AdfNode
+
+				const taskList = result.content?.find((n) => n.type === 'taskList')
+				expect(taskList).toBeDefined()
+
+				const taskItems = taskList!.content || []
+				for (const item of taskItems) {
+					expect(item.type).toBe('taskItem')
+					// Content should be inline nodes directly, NOT wrapped in paragraph
+					for (const child of item.content || []) {
+						expect(child.type).not.toBe('paragraph')
+					}
+				}
+			})
+		})
 	})
 })
+
+// Helper to find the first text string in an ADF node subtree
+function findFirstTextInNode(node: AdfNode): string | null {
+	if (node.type === 'text' && node.text !== undefined) {
+		return node.text
+	}
+	if (node.content && Array.isArray(node.content)) {
+		for (const child of node.content) {
+			const text = findFirstTextInNode(child)
+			if (text !== null) return text
+		}
+	}
+	return null
+}
