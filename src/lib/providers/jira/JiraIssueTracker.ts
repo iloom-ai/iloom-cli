@@ -14,6 +14,8 @@ import { adfToMarkdown } from './AdfMarkdownConverter.js'
 export interface JiraTrackerConfig extends JiraConfig {
 	projectKey: string
 	transitionMappings?: Record<string, string> // Map iloom states to Jira transition names
+	defaultIssueType?: string // Default issue type for creating issues (e.g., "Task", "Story")
+	defaultSubtaskType?: string // Default issue type for creating subtasks (e.g., "Subtask", "Sub-task")
 }
 
 /**
@@ -141,7 +143,8 @@ export class JiraIssueTracker implements IssueTracker {
 		const jiraIssue = await this.client.createIssue(
 			this.config.projectKey,
 			title,
-			body
+			body,
+			this.config.defaultIssueType
 		)
 
 		return {

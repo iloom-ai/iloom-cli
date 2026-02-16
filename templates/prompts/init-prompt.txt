@@ -499,7 +499,7 @@ This repository has multiple git remotes detected. iloom needs to know which rem
    - Store answer as: `issueManagement.jira.boardId`
    - Context: The board ID can be found in the URL when viewing a Jira board (e.g., `/board/42`). This is optional and used for sprint-based filtering with `il issues --sprint`.
 
-   **Note:** Advanced Jira settings like `transitionMappings` and `doneStatuses` can be configured later by editing the settings files directly. Mention this to the user.
+   **Note:** Advanced Jira settings like `transitionMappings`, `doneStatuses`, `defaultIssueType`, and `defaultSubtaskType` can be configured later by editing the settings files directly. Mention this to the user.
 
 **Step 3: IDE Selection**
 
