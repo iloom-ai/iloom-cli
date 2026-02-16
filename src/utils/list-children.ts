@@ -14,6 +14,8 @@ import type { IloomSettings } from '../lib/SettingsManager.js'
 import { getSubIssues } from './github.js'
 import { getLinearChildIssues } from './linear.js'
 import { logger } from './logger.js'
+import { JiraApiClient } from '../lib/providers/jira/index.js'
+import { escapeJql } from './jira.js'
 
 // ============================================================================
 // Type Definitions
@@ -109,6 +111,25 @@ export async function fetchChildIssues(
         // Pass API token from settings since LinearService may not have been instantiated
         const apiToken = settings.issueManagement?.linear?.apiToken
         return getLinearChildIssues(parentIssueNumber, apiToken ? { apiToken } : undefined)
+      } else if (providerName === 'jira') {
+        // Jira uses issue keys like "PROJ-123"
+        const jiraSettings = settings.issueManagement?.jira
+        if (!jiraSettings?.host || !jiraSettings?.username || !jiraSettings?.apiToken) {
+          logger.warn('Missing Jira settings (host, username, apiToken) for child issue fetch')
+          return []
+        }
+        const client = new JiraApiClient({
+          host: jiraSettings.host,
+          username: jiraSettings.username,
+          apiToken: jiraSettings.apiToken,
+        })
+        const issues = await client.searchIssues(`parent = "${escapeJql(parentIssueNumber)}"`)
+        return issues.map(issue => ({
+          id: issue.key,
+          title: issue.fields.summary,
+          url: `${jiraSettings.host.replace(/\/$/, '')}/browse/${issue.key}`,
+          state: issue.fields.status.name.toLowerCase(),
+        }))
       } else {
         logger.warn(`Unsupported issue tracker provider: ${providerName}`)
         return []

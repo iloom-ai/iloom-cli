@@ -26,6 +26,7 @@ import type {
 	CommentResult,
 	FlexibleAuthor,
 } from './types.js'
+import { escapeJql } from '../utils/jira.js'
 import { JiraIssueTracker } from '../lib/providers/jira/JiraIssueTracker.js'
 import type { JiraTrackerConfig } from '../lib/providers/jira/JiraIssueTracker.js'
 import type { Issue } from '../types/index.js'
@@ -371,6 +372,9 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const issue = await this.tracker.getApiClient().getIssue(blockedKey)
 		const links = issue.fields.issuelinks ?? []
 
+		// When fetching the blocked issue (B), the blocking issue (A) appears as
+		// outwardIssue because A is on the "outward/blocks" side of the relationship.
+		// See: https://developer.atlassian.com/cloud/jira/platform/issue-linking-model/
 		const matchingLink = links.find(link =>
 			link.type.name === 'Blocks' && link.outwardIssue?.key === blockingKey
 		)
@@ -392,7 +396,7 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const parentKey = this.tracker.normalizeIdentifier(input.number)
 		const host = this.tracker.getConfig().host
 
-		const issues = await this.tracker.getApiClient().searchIssues(`parent = ${parentKey}`)
+		const issues = await this.tracker.getApiClient().searchIssues(`parent = "${escapeJql(parentKey)}"`)
 
 		return issues.map(issue => ({
 			id: issue.key,

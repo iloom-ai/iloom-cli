@@ -452,39 +452,39 @@ describe('matchIssueIdentifier', () => {
 		})
 	})
 
-	describe('Linear patterns', () => {
-		it('should match standard Linear identifier', () => {
+	describe('project key patterns', () => {
+		it('should match standard project key identifier', () => {
 			const result = matchIssueIdentifier('ENG-123')
 			expect(result).toEqual({
 				isIssueIdentifier: true,
-				type: 'linear',
+				type: 'project-key',
 				identifier: 'ENG-123',
 			})
 		})
 
-		it('should match lowercase Linear identifier and uppercase it', () => {
+		it('should match lowercase project key identifier and uppercase it', () => {
 			const result = matchIssueIdentifier('plat-456')
 			expect(result).toEqual({
 				isIssueIdentifier: true,
-				type: 'linear',
+				type: 'project-key',
 				identifier: 'PLAT-456',
 			})
 		})
 
-		it('should match mixed case Linear identifier and uppercase it', () => {
+		it('should match mixed case project key identifier and uppercase it', () => {
 			const result = matchIssueIdentifier('Proj-789')
 			expect(result).toEqual({
 				isIssueIdentifier: true,
-				type: 'linear',
+				type: 'project-key',
 				identifier: 'PROJ-789',
 			})
 		})
 
-		it('should match Linear identifier with longer team prefix', () => {
+		it('should match project key identifier with longer team prefix', () => {
 			const result = matchIssueIdentifier('PLATFORM-1')
 			expect(result).toEqual({
 				isIssueIdentifier: true,
-				type: 'linear',
+				type: 'project-key',
 				identifier: 'PLATFORM-1',
 			})
 		})
@@ -499,7 +499,7 @@ describe('matchIssueIdentifier', () => {
 			const result = matchIssueIdentifier('PR-123')
 			// PR-123 does match our Linear pattern (2+ letters before dash)
 			expect(result.isIssueIdentifier).toBe(true)
-			expect(result.type).toBe('linear')
+			expect(result.type).toBe('project-key')
 		})
 
 		it('should not match single letter prefix', () => {
