@@ -52,6 +52,8 @@ export interface TemplateVariables {
 	AUTO_COMMIT_PUSH?: boolean  // True when auto-commit/push is enabled for draft PR mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
 	STANDARD_BRANCH_MODE?: boolean // True when using standard branch mode (not draft PR)
+	// Direct prompt mode - agent enhances raw text without issue context or MCP tools
+	DIRECT_PROMPT_MODE?: boolean
 	// VS Code environment detection
 	IS_VSCODE_MODE?: boolean  // True when ILOOM_VSCODE=1 environment variable is set
 	// Multi-language support variables - mutually exclusive
