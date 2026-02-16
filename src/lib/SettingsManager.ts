@@ -403,6 +403,18 @@ export const IloomSettingsSchema = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					defaultIssueType: z
+						.string()
+						.min(1)
+						.optional()
+						.default('Task')
+						.describe('Default Jira issue type name for creating issues (e.g., "Task", "Story", "Bug")'),
+					defaultSubtaskType: z
+						.string()
+						.min(1)
+						.optional()
+						.default('Subtask')
+						.describe('Default Jira issue type name for creating subtasks/child issues (e.g., "Subtask", "Sub-task")'),
 					doneStatuses: z
 						.array(z.string())
 						.optional()
@@ -639,6 +651,16 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					defaultIssueType: z
+						.string()
+						.min(1)
+						.optional()
+						.describe('Default Jira issue type name for creating issues (e.g., "Task", "Story", "Bug")'),
+					defaultSubtaskType: z
+						.string()
+						.min(1)
+						.optional()
+						.describe('Default Jira issue type name for creating subtasks/child issues (e.g., "Subtask", "Sub-task")'),
 					doneStatuses: z
 						.array(z.string())
 						.optional()

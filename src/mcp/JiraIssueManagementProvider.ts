@@ -63,6 +63,12 @@ const getJiraTrackerConfig = (settings: IloomSettings): JiraTrackerConfig => {
 		if (jiraSettings.transitionMappings) {
 			config.transitionMappings = jiraSettings.transitionMappings
 		}
+		if (jiraSettings.defaultIssueType) {
+			config.defaultIssueType = jiraSettings.defaultIssueType
+		}
+		if (jiraSettings.defaultSubtaskType) {
+			config.defaultSubtaskType = jiraSettings.defaultSubtaskType
+		}
 
 		return config;
 	}
@@ -81,6 +87,12 @@ const getJiraTrackerConfig = (settings: IloomSettings): JiraTrackerConfig => {
 			} catch {
 				throw new Error('Invalid JSON in JIRA_TRANSITION_MAPPINGS environment variable')
 			}
+		}
+		if (process.env.JIRA_DEFAULT_ISSUE_TYPE) {
+			config.defaultIssueType = process.env.JIRA_DEFAULT_ISSUE_TYPE
+		}
+		if (process.env.JIRA_DEFAULT_SUBTASK_TYPE) {
+			config.defaultSubtaskType = process.env.JIRA_DEFAULT_SUBTASK_TYPE
 		}
 
 		return config
@@ -289,7 +301,8 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 			this.projectKey,
 			title,
 			body,
-			parentKey
+			parentKey,
+			this.tracker.getConfig().defaultSubtaskType
 		)
 
 		return {
@@ -306,9 +319,8 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const blockingKey = this.tracker.normalizeIdentifier(input.blockingIssue)
 		const blockedKey = this.tracker.normalizeIdentifier(input.blockedIssue)
 
-		// In Jira "Blocks" link type: outward = "blocks", inward = "is blocked by"
-		// outwardIssue blocks inwardIssue
-		await this.tracker.getApiClient().createIssueLink(blockedKey, blockingKey, 'Blocks')
+		// In Jira "Blocks" link type: inwardIssue = blocker, outwardIssue = blocked
+		await this.tracker.getApiClient().createIssueLink(blockingKey, blockedKey, 'Blocks')
 	}
 
 	/**
@@ -328,10 +340,10 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		for (const link of links) {
 			if (link.type.name !== 'Blocks') continue
 
-			// inwardIssue present = the other issue is the inward ("is blocked by") side
-			// → this issue blocks that issue → blocking
+			// inwardIssue present = the other issue is the blocker
+			// → that issue blocks this issue → blockedBy
 			if (link.inwardIssue) {
-				blocking.push({
+				blockedBy.push({
 					id: link.inwardIssue.key,
 					title: link.inwardIssue.fields.summary,
 					url: `${host}/browse/${link.inwardIssue.key}`,
@@ -339,10 +351,10 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 				})
 			}
 
-			// outwardIssue present = the other issue is the outward ("blocks") side
-			// → that issue blocks this issue → blockedBy
+			// outwardIssue present = the other issue is blocked by this issue
+			// → this issue blocks that issue → blocking
 			if (link.outwardIssue) {
-				blockedBy.push({
+				blocking.push({
 					id: link.outwardIssue.key,
 					title: link.outwardIssue.fields.summary,
 					url: `${host}/browse/${link.outwardIssue.key}`,
@@ -373,10 +385,9 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const links = issue.fields.issuelinks ?? []
 
 		// When fetching the blocked issue (B), the blocking issue (A) appears as
-		// outwardIssue because A is on the "outward/blocks" side of the relationship.
-		// See: https://developer.atlassian.com/cloud/jira/platform/issue-linking-model/
+		// inwardIssue in the link data
 		const matchingLink = links.find(link =>
-			link.type.name === 'Blocks' && link.outwardIssue?.key === blockingKey
+			link.type.name === 'Blocks' && link.inwardIssue?.key === blockingKey
 		)
 
 		if (!matchingLink) {

@@ -1473,7 +1473,7 @@ il init "configure neon database with project ID abc-123"
 ```
 
 **Configuration Areas:**
-- Issue tracker (GitHub/Linear)
+- Issue tracker (GitHub/Linear/Jira)
 - Database provider (Neon)
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local vs github-pr)
@@ -1481,6 +1481,24 @@ il init "configure neon database with project ID abc-123"
 - Project type (web app, CLI tool, etc.)
 - Base port for development servers
 - Environment variable names
+
+**Jira Advanced Settings:**
+
+The following Jira settings can be configured in `.iloom/settings.json` under `issueManagement.jira`:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `host` | string | (required) | Jira instance URL (e.g., `"https://yourcompany.atlassian.net"`) |
+| `username` | string | (required) | Jira username or email address |
+| `apiToken` | string | (required) | Jira API token (store in `settings.local.json`) |
+| `projectKey` | string | (required) | Jira project key (e.g., `"PROJ"`, `"ENG"`) |
+| `boardId` | string | - | Jira board ID for sprint filtering |
+| `transitionMappings` | object | - | Map iloom states to Jira transition names (e.g., `{"In Review": "Start Review"}`) |
+| `defaultIssueType` | string | `"Task"` | Issue type name for creating issues (e.g., `"Task"`, `"Story"`, `"Bug"`) |
+| `defaultSubtaskType` | string | `"Subtask"` | Issue type name for creating child issues (e.g., `"Subtask"`, `"Sub-task"`) |
+| `doneStatuses` | string[] | `["Done"]` | Status names to exclude from `il issues` output |
+
+**Note:** Different Jira instances may use different issue type names. If issue creation fails with a 400 error, check your Jira project's available issue types and configure `defaultIssueType` and `defaultSubtaskType` accordingly.
 
 ---
 
@@ -1642,6 +1660,12 @@ iloom respects these environment variables:
 | `ILOOM_DEBUG` | Enable debug logging | `false` |
 | `ILOOM_DEV_SERVER_TIMEOUT` | Dev server startup timeout in milliseconds | `180000` (180 seconds) |
 | `CLAUDE_API_KEY` | Claude API key (if not using Claude CLI) | - |
+| `JIRA_HOST` | Jira instance URL (MCP server) | - |
+| `JIRA_USERNAME` | Jira username/email (MCP server) | - |
+| `JIRA_API_TOKEN` | Jira API token (MCP server) | - |
+| `JIRA_PROJECT_KEY` | Jira project key (MCP server) | - |
+| `JIRA_DEFAULT_ISSUE_TYPE` | Default issue type for Jira issue creation (MCP server) | `"Task"` |
+| `JIRA_DEFAULT_SUBTASK_TYPE` | Default subtask type for Jira child issue creation (MCP server) | `"Subtask"` |
 
 ---
 

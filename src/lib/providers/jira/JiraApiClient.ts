@@ -320,7 +320,7 @@ export class JiraApiClient {
 		summary: string,
 		description: string,
 		parentKey: string,
-		issueType = 'Sub-task'
+		issueType = 'Subtask'
 	): Promise<JiraIssue> {
 		return this.post<JiraIssue>('/issue', {
 			fields: {
