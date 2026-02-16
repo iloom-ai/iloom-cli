@@ -170,7 +170,7 @@ describe('SessionSummaryService', () => {
 			})
 
 			// Verify provider was created and comment was posted
-			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('github')
+			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('github', defaultSettings)
 			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
 				number: '123',
 				body: '## iloom Session Summary\n\n**Key Themes:**\n- Theme one about testing\n- Theme two about implementation\n\n### Key Insights\n- Test insight one\n- Test insight two',
@@ -256,7 +256,12 @@ describe('SessionSummaryService', () => {
 
 			await service.generateAndPostSummary(defaultInput)
 
-			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('linear')
+			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('linear', {
+				...defaultSettings,
+				issueManagement: {
+					provider: 'linear',
+				},
+			})
 		})
 
 		it('should skip when Claude returns empty result', async () => {

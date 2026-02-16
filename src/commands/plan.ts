@@ -175,7 +175,7 @@ export class PlanCommand {
 		// Detect if prompt is an issue number for decomposition mode
 		// Uses shared matchIssueIdentifier() utility to identify issue identifiers:
 		// - Numeric pattern: #123 or 123 (GitHub format)
-		// - Linear pattern: ENG-123 (requires at least 2 letters before dash)
+		// - Project key pattern: ENG-123, PROJ-456 (requires at least 2 letters before dash)
 		const identifierMatch = prompt ? matchIssueIdentifier(prompt) : { isIssueIdentifier: false }
 		const looksLikeIssueIdentifier = identifierMatch.isIssueIdentifier
 		let decompositionContext: {
@@ -211,7 +211,7 @@ export class PlanCommand {
 				// Fetch existing children and dependencies using MCP provider
 				// This allows users to resume planning where they left off
 				try {
-					const mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider)
+					const mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
 
 					// Fetch child issues
 					logger.debug('Fetching child issues for decomposition context', { identifier: decompositionContext.identifier })

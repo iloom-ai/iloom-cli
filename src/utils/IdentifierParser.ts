@@ -8,8 +8,8 @@ import { extractIssueNumber, extractPRNumber } from './git.js'
 export interface IssueIdentifierMatch {
   /** Whether the input matches an issue identifier pattern */
   isIssueIdentifier: boolean
-  /** The type of identifier: 'numeric' (GitHub) or 'linear' (Linear format) */
-  type?: 'numeric' | 'linear'
+  /** The type of identifier: 'numeric' (GitHub) or 'project-key' (project key format, e.g., Linear, Jira) */
+  type?: 'numeric' | 'project-key'
   /** The extracted identifier (without # prefix for numeric) */
   identifier?: string
 }
@@ -19,7 +19,7 @@ export interface IssueIdentifierMatch {
  *
  * Matches:
  * - Numeric patterns: "123", "#123" (GitHub format)
- * - Linear patterns: "ENG-123", "PLAT-456" (requires at least 2 letters before dash)
+ * - Project key patterns: "ENG-123", "PLAT-456" (requires at least 2 letters before dash)
  *
  * This is a pure pattern match - it does NOT validate that the issue exists.
  * Use IssueTracker.detectInputType() to validate existence.
@@ -30,15 +30,15 @@ export interface IssueIdentifierMatch {
 export function matchIssueIdentifier(input: string): IssueIdentifierMatch {
   const trimmed = input.trim()
 
-  // Check for Linear identifier format (TEAM-NUMBER, e.g., ENG-123, PLAT-456)
+  // Check for project key identifier format (TEAM-NUMBER, e.g., ENG-123, PLAT-456, PROJ-789)
   // Requires at least 2 letters before dash to avoid conflict with PR-123 format
-  const linearPattern = /^([A-Z]{2,}-\d+)$/i
-  const linearMatch = trimmed.match(linearPattern)
-  if (linearMatch?.[1]) {
+  const projectKeyPattern = /^([A-Z]{2,}-\d+)$/i
+  const projectKeyMatch = trimmed.match(projectKeyPattern)
+  if (projectKeyMatch?.[1]) {
     return {
       isIssueIdentifier: true,
-      type: 'linear',
-      identifier: linearMatch[1].toUpperCase(),
+      type: 'project-key',
+      identifier: projectKeyMatch[1].toUpperCase(),
     }
   }
 

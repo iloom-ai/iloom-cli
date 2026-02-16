@@ -359,11 +359,11 @@ export class StartCommand {
 		}
 
 		// Check for issue identifier patterns using shared utility
-		// - Linear pattern: ENG-123 (requires at least 2 letters before dash)
+		// - Project key pattern: ENG-123 (requires at least 2 letters before dash)
 		// - Numeric pattern: #123 or 123 (GitHub format)
 		const identifierMatch = matchIssueIdentifier(trimmedIdentifier)
 
-		if (identifierMatch.type === 'linear' && identifierMatch.identifier) {
+		if (identifierMatch.type === 'project-key' && identifierMatch.identifier) {
 			// Use IssueTracker to validate it exists
 			const detection = await this.issueTracker.detectInputType(
 				trimmedIdentifier,
@@ -373,14 +373,14 @@ export class StartCommand {
 			if (detection.type === 'issue' && detection.identifier) {
 				return {
 					type: 'issue',
-					number: detection.identifier, // Keep as string for Linear
+					number: detection.identifier, // Keep as string for project key identifiers
 					originalInput: trimmedIdentifier,
 				}
 			}
 
-			// Linear identifier format matched but not found
+			// Project key identifier format matched but not found
 			throw new Error(
-				`Could not find Linear issue ${identifierMatch.identifier}`
+				`Could not find issue matching identifier ${identifierMatch.identifier}`
 			)
 		}
 
@@ -411,7 +411,7 @@ export class StartCommand {
 					throw new Error(`Could not find issue or PR #${number}`)
 				}
 			} else {
-				// Issue tracker doesn't support PRs (e.g., Linear)
+				// Issue tracker doesn't support PRs (e.g., Linear, Jira)
 				// Check GitHub first for PR, then fall back to issue tracker for issues
 				const githubService = this.getGitHubService()
 				const detection = await githubService.detectInputType(trimmedIdentifier, repo)

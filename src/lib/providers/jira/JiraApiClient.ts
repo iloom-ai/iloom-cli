@@ -159,14 +159,16 @@ export class JiraApiClient {
 				},
 			}
 
-			const req = https.request(options, (res) => {
-				let data = ''
+			const req = https.request({ ...options, timeout: 30000 }, (res) => {
+				const chunks: Buffer[] = []
 
-				res.on('data', (chunk) => {
-					data += chunk
+				res.on('data', (chunk: Buffer) => {
+					chunks.push(chunk)
 				})
 
 				res.on('end', () => {
+					const data = Buffer.concat(chunks).toString('utf8')
+
 					if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
 						reject(new Error(`Jira API error (${res.statusCode}): ${data}`))
 						return
@@ -184,6 +186,11 @@ export class JiraApiClient {
 						reject(new Error(`Failed to parse Jira API response: ${error}`))
 					}
 				})
+			})
+
+			req.on('timeout', () => {
+				req.destroy()
+				reject(new Error('Jira API request timed out after 30 seconds'))
 			})
 
 			req.on('error', (error) => {
@@ -222,7 +229,7 @@ export class JiraApiClient {
 	/**
 	 * Make a DELETE request to Jira API
 	 */
-	async delete(endpoint: string): Promise<void> {
+	private async delete(endpoint: string): Promise<void> {
 		await this.request('DELETE', endpoint)
 	}
 
@@ -239,7 +246,7 @@ export class JiraApiClient {
 	 */
 	async addComment(issueKey: string, body: string): Promise<JiraComment> {
 		const adfBody = markdownToAdf(body);
-		getLogger().debug('Adding comment to Jira issue', { issueKey, body, adfBody })
+		getLogger().debug('Adding comment to Jira issue', { issueKey, bodyLength: body.length })
 		return this.post<JiraComment>(`/issue/${issueKey}/comment`, {
 			body: adfBody
 		})
@@ -249,7 +256,10 @@ export class JiraApiClient {
 	 * Get all comments for an issue
 	 */
 	async getComments(issueKey: string): Promise<JiraComment[]> {
-		const response = await this.get<{ comments: JiraComment[] }>(`/issue/${issueKey}/comment`)
+		const response = await this.get<{ comments: JiraComment[]; total: number; maxResults: number }>(`/issue/${issueKey}/comment?maxResults=5000`)
+		if (response.total > response.comments.length) {
+			getLogger().warn(`Comments truncated for issue ${issueKey}: returned ${response.comments.length} of ${response.total} total comments`)
+		}
 		return response.comments
 	}
 
@@ -358,13 +368,33 @@ export class JiraApiClient {
 
 	/**
 	 * Search issues using JQL
+	 * Automatically paginates through all results up to MAX_SEARCH_RESULTS.
 	 */
 	async searchIssues(jql: string): Promise<JiraIssue[]> {
-		const response = await this.post<{ issues: JiraIssue[] }>(
-			'/search/jql',
-			{ jql, fields: ['*all'] }
-		)
-		return response.issues
+		const MAX_SEARCH_RESULTS = 5000
+		const allIssues: JiraIssue[] = []
+		let startAt = 0
+		const maxResults = 100
+
+		while (allIssues.length < MAX_SEARCH_RESULTS) {
+			const response = await this.post<{ issues: JiraIssue[]; startAt: number; total: number }>(
+				'/search/jql',
+				{ jql, fields: ['*all'], maxResults, startAt }
+			)
+			allIssues.push(...response.issues)
+
+			if (allIssues.length >= response.total || response.issues.length === 0) {
+				break
+			}
+
+			startAt += response.issues.length
+		}
+
+		if (allIssues.length >= MAX_SEARCH_RESULTS) {
+			getLogger().warn(`Search results truncated at ${MAX_SEARCH_RESULTS} issues. The query matched more results than the safety cap allows.`, { jql, returnedCount: allIssues.length })
+		}
+
+		return allIssues
 	}
 
 	/**
@@ -375,8 +405,12 @@ export class JiraApiClient {
 			await this.get('/myself')
 			return true
 		} catch (error) {
-			getLogger().error('Jira connection test failed', { error })
-			return false
+			const message = error instanceof Error ? error.message : String(error)
+			if (message.includes('Jira API error (401)') || message.includes('Jira API error (403)')) {
+				getLogger().error('Jira connection test failed: authentication error', { error })
+				return false
+			}
+			throw error
 		}
 	}
 }
