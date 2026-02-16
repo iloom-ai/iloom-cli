@@ -224,11 +224,11 @@ export class StartCommand {
 			}
 
 			// Step 2.7: Confirm bypassPermissions mode if applicable
-			if (input.options.oneShot === 'bypassPermissions') {
-				// JSON mode cannot use bypassPermissions confirmation prompt
-				if (isJsonMode) {
-					throw new Error('JSON mode does not support bypassPermissions confirmation prompt')
-				}
+			// Only prompt in interactive mode when Claude is enabled.
+			// Skip when: --no-claude (Claude won't launch now), JSON mode (non-interactive).
+			// The explicit --one-shot=bypassPermissions flag is sufficient intent.
+			// The warning is shown again when Claude launches via 'il spin'.
+			if (input.options.oneShot === 'bypassPermissions' && input.options.claude !== false && !isJsonMode) {
 				const { promptConfirmation } = await import('../utils/prompt.js')
 				const confirmed = await promptConfirmation(
 					'WARNING: bypassPermissions mode will allow Claude to execute all tool calls without confirmation. ' +
