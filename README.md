@@ -666,6 +666,11 @@ This command:
 
 The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
 
+Acknowledgments
+----------------
+
+- [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
+
 License & Name
 --------------
 
