@@ -1896,7 +1896,7 @@ program
     }
   })
 
-// Test command for Jira integration
+// Test command for Jira integration (hidden from help output)
 const testJiraCommand = program
   .command('test-jira')
   .description('Test Jira integration methods against a real Jira instance')

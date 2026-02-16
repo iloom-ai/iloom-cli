@@ -27,7 +27,7 @@ export class PRManager {
 	 */
 	public get issuePrefix(): string {
 		const providerType = this.settings.issueManagement?.provider ?? 'github'
-		const provider = IssueManagementProviderFactory.create(providerType)
+		const provider = IssueManagementProviderFactory.create(providerType, this.settings)
 		return provider.issuePrefix
 	}
 

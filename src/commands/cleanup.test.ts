@@ -129,7 +129,7 @@ describe('CleanupCommand', () => {
       })
 
       expect(logger.info).toHaveBeenCalledWith('Cleanup mode: issue')
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #42...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #42...')
     })
 
     it('should handle issue mode with number 1', async () => {
@@ -137,7 +137,7 @@ describe('CleanupCommand', () => {
         options: { issue: 1 }
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #1...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #1...')
     })
 
     it('should handle issue mode with large number', async () => {
@@ -145,7 +145,7 @@ describe('CleanupCommand', () => {
         options: { issue: 999 }
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #999...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #999...')
     })
   })
 
@@ -157,7 +157,7 @@ describe('CleanupCommand', () => {
       })
 
       expect(logger.info).toHaveBeenCalledWith('Cleanup mode: issue')
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #42...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #42...')
     })
 
     it('should detect "123" as issue number', async () => {
@@ -166,7 +166,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #123...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #123...')
     })
 
     it('should detect "1" as issue number', async () => {
@@ -175,7 +175,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #1...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #1...')
     })
 
     it('should detect "0" as issue number (edge case)', async () => {
@@ -184,7 +184,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #0...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #0...')
     })
 
     it('should parse numeric string to integer correctly', async () => {
@@ -194,7 +194,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should parse as integer 7, not string "007"
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #7...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #7...')
     })
   })
 
@@ -223,7 +223,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should use explicit issue flag (99), not auto-detected (42)
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #99...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #99...')
     })
   })
 
@@ -420,7 +420,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should parse to integer 7
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #7...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #7...')
     })
 
 
@@ -1029,7 +1029,7 @@ describe('CleanupCommand', () => {
           options: { issue: 25 }
         })
 
-        expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #25...')
+        expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #25...')
         expect(logger.info).toHaveBeenCalledWith('Found 2 worktree(s) related to issue/PR #25:')
       })
 
@@ -1057,7 +1057,7 @@ describe('CleanupCommand', () => {
           options: { issue: 25 }
         })
 
-        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for GitHub issue/PR #25')
+        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for issue/PR #25')
       })
 
       it('should handle no matching worktrees found', async () => {
@@ -1068,7 +1068,7 @@ describe('CleanupCommand', () => {
           options: { issue: 99999 }
         })
 
-        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for GitHub issue/PR #99999')
+        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for issue/PR #99999')
         expect(logger.info).toHaveBeenCalledWith('Searched for worktree paths containing: 99999, _pr_99999, issue-99999, etc.')
       })
 

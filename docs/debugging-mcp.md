@@ -103,20 +103,19 @@ iloom generates MCP configuration that Claude Code uses. You can inspect it:
 il start --help  # This won't actually start, but shows the config
 
 # Or manually test config generation:
-node -e "
-const { generateIssueManagementMcpConfig } = require('./dist/utils/mcp.js');
-const { loadSettings } = require('./dist/lib/SettingsManager.js');
+node --input-type=module -e "
+import { generateIssueManagementMcpConfig } from './dist/utils/mcp.js';
+import { SettingsManager } from './dist/lib/SettingsManager.js';
 
-(async () => {
-  const settings = await loadSettings();
-  const config = await generateIssueManagementMcpConfig(
-    'issue',
-    null,
-    'jira',
-    settings
-  );
-  console.log(JSON.stringify(config, null, 2));
-})();
+const settingsManager = new SettingsManager();
+const settings = await settingsManager.loadSettings();
+const config = await generateIssueManagementMcpConfig(
+  'issue',
+  null,
+  'jira',
+  settings
+);
+console.log(JSON.stringify(config, null, 2));
 "
 ```
 

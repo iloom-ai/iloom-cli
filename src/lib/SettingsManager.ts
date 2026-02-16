@@ -778,6 +778,25 @@ export type IloomSettings = z.infer<typeof IloomSettingsSchema>
  */
 export type IloomSettingsInput = z.input<typeof IloomSettingsSchema>
 
+function redactSensitiveFields(obj: unknown): unknown {
+	if (obj === null || obj === undefined) return obj
+	if (typeof obj !== 'object') return obj
+	if (Array.isArray(obj)) return obj.map(redactSensitiveFields)
+	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password']
+	const result: Record<string, unknown> = {}
+	for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+		const lowerKey = key.toLowerCase()
+		if (sensitiveKeys.some(s => lowerKey.includes(s)) && typeof value === 'string') {
+			result[key] = '[REDACTED]'
+		} else if (typeof value === 'object' && value !== null) {
+			result[key] = redactSensitiveFields(value)
+		} else {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 /**
  * Manages project-level settings from .iloom/settings.json
  */
@@ -800,26 +819,26 @@ export class SettingsManager {
 		// Load global settings (lowest priority)
 		const globalSettings = await this.loadGlobalSettingsFile()
 		const globalSettingsPath = this.getGlobalSettingsPath()
-		logger.debug(`🌍 Global settings from ${globalSettingsPath}:`, JSON.stringify(globalSettings, null, 2))
+		logger.debug(`🌍 Global settings from ${globalSettingsPath}:`, JSON.stringify(redactSensitiveFields(globalSettings), null, 2))
 
 		// Load base settings from settings.json
 		const baseSettings = await this.loadSettingsFile(root, 'settings.json')
 		const baseSettingsPath = path.join(root, '.iloom', 'settings.json')
-		logger.debug(`📄 Base settings from ${baseSettingsPath}:`, JSON.stringify(baseSettings, null, 2))
+		logger.debug(`📄 Base settings from ${baseSettingsPath}:`, JSON.stringify(redactSensitiveFields(baseSettings), null, 2))
 
 		// Load local overrides from settings.local.json
 		const localSettings = await this.loadSettingsFile(root, 'settings.local.json')
 		const localSettingsPath = path.join(root, '.iloom', 'settings.local.json')
-		logger.debug(`📄 Local settings from ${localSettingsPath}:`, JSON.stringify(localSettings, null, 2))
+		logger.debug(`📄 Local settings from ${localSettingsPath}:`, JSON.stringify(redactSensitiveFields(localSettings), null, 2))
 
 		// Deep merge with priority: cliOverrides > localSettings > baseSettings > globalSettings
 		let merged = this.mergeSettings(this.mergeSettings(globalSettings, baseSettings), localSettings)
-		logger.debug('🔄 After merging global + base + local settings:', JSON.stringify(merged, null, 2))
+		logger.debug('🔄 After merging global + base + local settings:', JSON.stringify(redactSensitiveFields(merged), null, 2))
 
 		if (cliOverrides && Object.keys(cliOverrides).length > 0) {
-			logger.debug('⚙️ CLI overrides to apply:', JSON.stringify(cliOverrides, null, 2))
+			logger.debug('⚙️ CLI overrides to apply:', JSON.stringify(redactSensitiveFields(cliOverrides), null, 2))
 			merged = this.mergeSettings(merged, cliOverrides)
-			logger.debug('🔄 After applying CLI overrides:', JSON.stringify(merged, null, 2))
+			logger.debug('🔄 After applying CLI overrides:', JSON.stringify(redactSensitiveFields(merged), null, 2))
 		}
 
 		// Validate merged result
@@ -848,7 +867,7 @@ export class SettingsManager {
 	 * Log the final merged configuration for debugging
 	 */
 	private logFinalConfiguration(settings: IloomSettings): void {
-		logger.debug('📋 Final merged configuration:', JSON.stringify(settings, null, 2))
+		logger.debug('📋 Final merged configuration:', JSON.stringify(redactSensitiveFields(settings), null, 2))
 	}
 
 	/**

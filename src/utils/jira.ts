@@ -5,6 +5,14 @@
 
 import type { JiraApiClient, JiraIssue } from '../lib/providers/jira/index.js'
 
+/**
+ * Escape a string value for safe interpolation into JQL queries.
+ * Prevents JQL injection by escaping backslashes and double quotes.
+ */
+export function escapeJql(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 export interface JiraIssueListItem {
   id: string        // issue key e.g. "PROJ-123"
   title: string     // fields.summary
@@ -33,14 +41,14 @@ export async function fetchJiraIssueList(
   const { host, projectKey, doneStatuses = ['Done'], limit = 100, sprint, mine } = options
 
   // Build JQL with status exclusion
-  const statusExclusions = doneStatuses.map((s) => `"${s}"`).join(', ')
-  let jql = `project = "${projectKey}" AND status NOT IN (${statusExclusions})`
+  const statusExclusions = doneStatuses.map((s) => `"${escapeJql(s)}"`).join(', ')
+  let jql = `project = "${escapeJql(projectKey)}" AND status NOT IN (${statusExclusions})`
 
   // Add sprint filter
   if (sprint === 'current') {
     jql += ' AND sprint in openSprints()'
   } else if (sprint) {
-    jql += ` AND sprint = "${sprint}"`
+    jql += ` AND sprint = "${escapeJql(sprint)}"`
   }
 
   // Add assignee filter
