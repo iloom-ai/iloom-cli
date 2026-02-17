@@ -7,6 +7,7 @@
  * Environment variables:
  * - RECAP_FILE_PATH: Complete path to the recap.json file (read/write)
  * - LOOM_METADATA_JSON: Stringified JSON of the loom metadata (parsed using LoomMetadata type)
+ * - METADATA_FILE_PATH: Complete path to the loom metadata JSON file (for state transition tools)
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -15,16 +16,18 @@ import path from 'path'
 import fs from 'fs-extra'
 import { randomUUID } from 'crypto'
 import type { RecapFile, RecapEntry, RecapOutput, RecapArtifact } from './recap-types.js'
-import type { LoomMetadata } from '../lib/MetadataManager.js'
+import type { LoomMetadata, MetadataFile, SwarmState } from '../lib/MetadataManager.js'
 
 interface EnvConfig {
 	recapFilePath: string
 	loomMetadata: LoomMetadata
+	metadataFilePath: string | null
 }
 
 // Store validated config for use in tool handlers
 let validatedRecapFilePath: string | null = null
 let validatedLoomMetadata: LoomMetadata | null = null
+let validatedMetadataFilePath: string | null = null
 
 /**
  * Validate required environment variables
@@ -51,11 +54,15 @@ function validateEnvironment(): EnvConfig {
 		process.exit(1)
 	}
 
+	// METADATA_FILE_PATH is optional (only needed for state transition tools)
+	const metadataFilePath = process.env.METADATA_FILE_PATH ?? null
+
 	// Store for tool handlers
 	validatedRecapFilePath = recapFilePath
 	validatedLoomMetadata = loomMetadata
+	validatedMetadataFilePath = metadataFilePath
 
-	return { recapFilePath, loomMetadata }
+	return { recapFilePath, loomMetadata, metadataFilePath }
 }
 
 /**
@@ -78,6 +85,17 @@ export function getLoomMetadata(): LoomMetadata {
 		throw new Error('LOOM_METADATA_JSON not validated - validateEnvironment() must be called first')
 	}
 	return validatedLoomMetadata
+}
+
+/**
+ * Get the validated metadata file path
+ * Throws if METADATA_FILE_PATH was not provided
+ */
+function getMetadataFilePath(): string {
+	if (!validatedMetadataFilePath) {
+		throw new Error('METADATA_FILE_PATH not configured - state transition tools require this environment variable')
+	}
+	return validatedMetadataFilePath
 }
 
 /**
@@ -325,6 +343,80 @@ server.registerTool(
 		return {
 			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
 			structuredContent: result as unknown as Record<string, unknown>,
+		}
+	}
+)
+
+// Zod schema for swarm state values
+const swarmStateSchema = z.enum(['pending', 'in_progress', 'code_review', 'done', 'failed'])
+
+// Register set_loom_state tool
+server.registerTool(
+	'set_loom_state',
+	{
+		title: 'Set Loom State',
+		description: 'Set the swarm lifecycle state of the current loom',
+		inputSchema: {
+			state: swarmStateSchema.describe('The new state for the loom'),
+		},
+		outputSchema: {
+			success: z.literal(true),
+			state: swarmStateSchema,
+		},
+	},
+	async ({ state }) => {
+		const metadataFilePath = getMetadataFilePath()
+
+		// Read existing metadata
+		let metadata: MetadataFile
+		try {
+			const content = await fs.readFile(metadataFilePath, 'utf8')
+			metadata = JSON.parse(content) as MetadataFile
+		} catch (error) {
+			throw new Error(`Failed to read metadata file at ${metadataFilePath}: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
+		// Update state
+		metadata.state = state as SwarmState
+
+		// Write back
+		await fs.writeFile(metadataFilePath, JSON.stringify(metadata, null, 2), { mode: 0o644 })
+
+		const result = { success: true as const, state: state as SwarmState }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
+		}
+	}
+)
+
+// Register get_loom_state tool
+server.registerTool(
+	'get_loom_state',
+	{
+		title: 'Get Loom State',
+		description: 'Get the current swarm lifecycle state of the loom',
+		inputSchema: {},
+		outputSchema: {
+			state: swarmStateSchema.nullable(),
+		},
+	},
+	async () => {
+		const metadataFilePath = getMetadataFilePath()
+
+		// Read metadata
+		let metadata: MetadataFile
+		try {
+			const content = await fs.readFile(metadataFilePath, 'utf8')
+			metadata = JSON.parse(content) as MetadataFile
+		} catch (error) {
+			throw new Error(`Failed to read metadata file at ${metadataFilePath}: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
+		const result = { state: metadata.state ?? null }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
 		}
 	}
 )

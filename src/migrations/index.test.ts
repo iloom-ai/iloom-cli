@@ -144,4 +144,66 @@ describe('migrations', () => {
       expect(fs.writeFile).not.toHaveBeenCalled()
     })
   })
+
+  describe('v0.9.3 global gitignore migration for swarm mode', () => {
+    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
+    const agentPattern = '**/.claude/agents/iloom-*'
+    const skillPattern = '**/.claude/skills/iloom-swarm-*'
+    const migration = migrations.find(m => m.version === '0.9.3')
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toContain('swarm')
+    })
+
+    it('should create ~/.config/git/ignore if not exists', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toContain(agentPattern)
+      expect(writtenContent).toContain(skillPattern)
+      expect(writtenContent).toContain('# Added by iloom CLI (swarm mode)')
+    })
+
+    it('should append both patterns when not already present', async () => {
+      const existingContent = '# Existing ignores\n*.log\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toContain(agentPattern)
+      expect(writtenContent).toContain(skillPattern)
+      expect(writtenContent.startsWith(existingContent)).toBe(true)
+    })
+
+    it('should not duplicate if agent pattern already exists', async () => {
+      const existingContent = '# Added by iloom CLI (swarm mode)\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-swarm-*\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('should handle file without trailing newline', async () => {
+      const existingContent = '*.log'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toMatch(/^\*\.log\n/)
+    })
+  })
 })
