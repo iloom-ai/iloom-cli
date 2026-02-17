@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { VCSProviderFactory } from './VCSProviderFactory.js'
-import { BitBucketVCSProvider } from './providers/bitbucket/index.js'
 import type { IloomSettings } from './SettingsManager.js'
 
 // Mock the BitBucketVCSProvider
+const { mockBBInstance, mockFromSettings } = vi.hoisted(() => {
+	const mockBBInstance = { providerName: 'bitbucket' }
+	const mockFromSettings = vi.fn().mockReturnValue(mockBBInstance)
+	return { mockBBInstance, mockFromSettings }
+})
 vi.mock('./providers/bitbucket/index.js', () => ({
-	BitBucketVCSProvider: vi.fn().mockImplementation((config) => ({
-		providerName: 'bitbucket',
-		config,
-	})),
+	BitBucketVCSProvider: {
+		fromSettings: mockFromSettings,
+	},
 }))
 
 // Mock the logger
@@ -23,7 +26,7 @@ vi.mock('../utils/logger-context.js', () => ({
 
 describe('VCSProviderFactory', () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
+		mockFromSettings.mockReturnValue(mockBBInstance)
 	})
 
 	describe('create', () => {
@@ -50,7 +53,7 @@ describe('VCSProviderFactory', () => {
 			expect(result).toBeNull()
 		})
 
-		it('should create BitBucketVCSProvider with basic config', () => {
+		it('should delegate to BitBucketVCSProvider.fromSettings for bitbucket provider', () => {
 			const settings: IloomSettings = {
 				sourceEnvOnStart: false,
 				attribution: 'upstreamOnly',
@@ -63,122 +66,10 @@ describe('VCSProviderFactory', () => {
 				},
 			}
 
-			VCSProviderFactory.create(settings)
+			const result = VCSProviderFactory.create(settings)
 
-			expect(BitBucketVCSProvider).toHaveBeenCalledWith({
-				username: 'testuser',
-				apiToken: 'test-token',
-			})
-		})
-
-		it('should pass workspace and repoSlug when configured', () => {
-			const settings: IloomSettings = {
-				sourceEnvOnStart: false,
-				attribution: 'upstreamOnly',
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: 'testuser',
-						apiToken: 'test-token',
-						workspace: 'my-workspace',
-						repoSlug: 'my-repo',
-					},
-				},
-			}
-
-			VCSProviderFactory.create(settings)
-
-			expect(BitBucketVCSProvider).toHaveBeenCalledWith({
-				username: 'testuser',
-				apiToken: 'test-token',
-				workspace: 'my-workspace',
-				repoSlug: 'my-repo',
-			})
-		})
-
-		it('should pass reviewers when configured', () => {
-			const settings: IloomSettings = {
-				sourceEnvOnStart: false,
-				attribution: 'upstreamOnly',
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: 'testuser',
-						apiToken: 'test-token',
-						reviewers: ['alice@example.com', 'bob@example.com'],
-					},
-				},
-			}
-
-			VCSProviderFactory.create(settings)
-
-			expect(BitBucketVCSProvider).toHaveBeenCalledWith({
-				username: 'testuser',
-				apiToken: 'test-token',
-				reviewers: ['alice@example.com', 'bob@example.com'],
-			})
-		})
-
-		it('should pass all config options together', () => {
-			const settings: IloomSettings = {
-				sourceEnvOnStart: false,
-				attribution: 'upstreamOnly',
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: 'testuser',
-						apiToken: 'test-token',
-						workspace: 'my-workspace',
-						repoSlug: 'my-repo',
-						reviewers: ['alice@example.com'],
-					},
-				},
-			}
-
-			VCSProviderFactory.create(settings)
-
-			expect(BitBucketVCSProvider).toHaveBeenCalledWith({
-				username: 'testuser',
-				apiToken: 'test-token',
-				workspace: 'my-workspace',
-				repoSlug: 'my-repo',
-				reviewers: ['alice@example.com'],
-			})
-		})
-
-		it('should throw when bitbucket username is missing', () => {
-			const settings: IloomSettings = {
-				sourceEnvOnStart: false,
-				attribution: 'upstreamOnly',
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: '',
-						apiToken: 'test-token',
-					},
-				},
-			}
-
-			expect(() => VCSProviderFactory.create(settings)).toThrow(
-				'BitBucket username is required'
-			)
-		})
-
-		it('should throw when bitbucket apiToken is missing', () => {
-			const settings: IloomSettings = {
-				sourceEnvOnStart: false,
-				attribution: 'upstreamOnly',
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: 'testuser',
-					},
-				},
-			}
-
-			expect(() => VCSProviderFactory.create(settings)).toThrow(
-				'BitBucket API token is required'
-			)
+			expect(mockFromSettings).toHaveBeenCalledWith(settings)
+			expect(result).toEqual({ providerName: 'bitbucket' })
 		})
 	})
 

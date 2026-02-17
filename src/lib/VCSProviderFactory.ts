@@ -2,7 +2,7 @@
 // Follows pattern from IssueTrackerFactory
 
 import type { VersionControlProvider } from './VersionControlProvider.js'
-import { BitBucketVCSProvider, type BitBucketVCSConfig } from './providers/bitbucket/index.js'
+import { BitBucketVCSProvider } from './providers/bitbucket/index.js'
 import type { IloomSettings } from './SettingsManager.js'
 import { getLogger } from '../utils/logger-context.js'
 
@@ -40,32 +40,8 @@ export class VCSProviderFactory {
 				return null
 				
 			case 'bitbucket': {
-				const bbSettings = settings.versionControl?.bitbucket
-				
-				if (!bbSettings?.username) {
-					throw new Error('BitBucket username is required. Configure versionControl.bitbucket.username in .iloom/settings.json')
-				}
-				if (!bbSettings?.apiToken) {
-					throw new Error('BitBucket API token is required. Configure versionControl.bitbucket.apiToken in .iloom/settings.local.json')
-				}
-
-				const bbConfig: BitBucketVCSConfig = {
-					username: bbSettings.username,
-					apiToken: bbSettings.apiToken,
-				}
-
-				if (bbSettings.workspace) {
-					bbConfig.workspace = bbSettings.workspace
-				}
-				if (bbSettings.repoSlug) {
-					bbConfig.repoSlug = bbSettings.repoSlug
-				}
-				if (bbSettings.reviewers) {
-					bbConfig.reviewers = bbSettings.reviewers
-				}
-
-				getLogger().debug(`VCSProviderFactory: Creating BitBucketVCSProvider for user: ${bbSettings.username}`)
-				return new BitBucketVCSProvider(bbConfig)
+				getLogger().debug(`VCSProviderFactory: Creating BitBucketVCSProvider from settings`)
+				return BitBucketVCSProvider.fromSettings(settings)
 			}
 			
 			default:
