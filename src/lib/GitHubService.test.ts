@@ -719,6 +719,16 @@ describe('GitHubService', () => {
 		})
 	})
 
+	describe('formatIssueId', () => {
+		it('should prefix number with #', () => {
+			expect(service.formatIssueId(123)).toBe('#123')
+		})
+
+		it('should prefix string with #', () => {
+			expect(service.formatIssueId('456')).toBe('#456')
+		})
+	})
+
 	describe('extractContext', () => {
 		it('should extract context from issue', () => {
 			const issue = {

@@ -461,7 +461,7 @@ export class FinishCommand {
 				// Validate issue state (warn if closed unless --force)
 				if (issue.state === 'closed' && !options.force) {
 					throw new Error(
-						`Issue #${parsed.number} is closed. Use --force to finish anyway.`
+						`Issue ${this.issueTracker.formatIssueId(parsed.number ?? 0)} is closed. Use --force to finish anyway.`
 					)
 				}
 
@@ -581,7 +581,7 @@ export class FinishCommand {
 			case 'pr':
 				return `PR #${parsed.number}${autoLabel}`
 			case 'issue':
-				return `Issue #${parsed.number}${autoLabel}`
+				return `Issue ${this.issueTracker.formatIssueId(parsed.number ?? 0)}${autoLabel}`
 			case 'branch':
 				return `Branch '${parsed.branchName}'${autoLabel}`
 			default:

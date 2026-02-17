@@ -24,6 +24,7 @@ import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
 import { PRManager } from './PRManager.js'
+import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -279,7 +280,7 @@ export class LoomManager {
         let prBody: string
         if (input.type === 'issue') {
           const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
-          prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
+          prBody = `Fixes ${IssueTrackerFactory.formatIssueId(IssueTrackerFactory.getProviderName(settingsData), input.identifier)}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
         } else {
           prBody = `Branch: ${branchName}\n\n---\n*This PR was created automatically by iloom.*`
         }
@@ -381,6 +382,7 @@ export class LoomManager {
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
         colorHex: colorData.hex,
+        issueTrackerProvider: this.issueTracker.providerName as import('./IssueTrackerFactory.js').IssueTrackerProviderType,
       })
     }
 
@@ -1357,6 +1359,7 @@ export class LoomManager {
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
         colorHex,
+        issueTrackerProvider: this.issueTracker.providerName as import('./IssueTrackerFactory.js').IssueTrackerProviderType,
       })
     }
 

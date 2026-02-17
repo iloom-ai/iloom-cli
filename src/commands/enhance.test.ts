@@ -50,6 +50,7 @@ describe('EnhanceCommand', () => {
 			fetchIssue: vi.fn(),
 			getIssueUrl: vi.fn(),
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		// Create mock IssueEnhancementService

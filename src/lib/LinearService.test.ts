@@ -9,6 +9,28 @@ vi.mock('../utils/linear.js', () => ({
 }))
 
 describe('LinearService', () => {
+	describe('formatIssueId', () => {
+		it('should uppercase a lowercase identifier', () => {
+			const service = new LinearService()
+			expect(service.formatIssueId('eng-123')).toBe('ENG-123')
+		})
+
+		it('should keep already-uppercase identifiers unchanged', () => {
+			const service = new LinearService()
+			expect(service.formatIssueId('ENG-456')).toBe('ENG-456')
+		})
+
+		it('should handle mixed case', () => {
+			const service = new LinearService()
+			expect(service.formatIssueId('Eng-789')).toBe('ENG-789')
+		})
+
+		it('should convert numeric identifier to uppercase string', () => {
+			const service = new LinearService()
+			expect(service.formatIssueId(123)).toBe('123')
+		})
+	})
+
 	describe('constructor', () => {
 		let originalToken: string | undefined
 

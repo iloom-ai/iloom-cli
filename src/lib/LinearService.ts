@@ -193,6 +193,14 @@ export class LinearService implements IssueTracker {
   }
 
   /**
+   * Format a Linear issue identifier for display
+   * Uppercases to match Linear convention (e.g., "eng-123" -> "ENG-123")
+   */
+  public formatIssueId(identifier: string | number): string {
+    return String(identifier).toUpperCase()
+  }
+
+  /**
    * Extract issue context for AI prompts
    * @param entity - Issue (Linear doesn't have PRs)
    * @returns Formatted context string

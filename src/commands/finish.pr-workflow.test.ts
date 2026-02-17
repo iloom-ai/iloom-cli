@@ -68,6 +68,7 @@ describe('FinishCommand - PR State Detection', () => {
 			fetchIssue: vi.fn(),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -247,6 +248,7 @@ describe('FinishCommand - Open PR Workflow', () => {
 			fetchIssue: vi.fn(),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -455,6 +457,7 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 			fetchIssue: vi.fn().mockResolvedValue(mockIssue),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -586,6 +589,7 @@ describe('FinishCommand - Closed PR Workflow', () => {
 			fetchIssue: vi.fn(),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -789,6 +793,7 @@ describe('FinishCommand - Merged PR Workflow', () => {
 			fetchIssue: vi.fn(),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -883,6 +888,7 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 			fetchIssue: vi.fn(),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {
@@ -1037,6 +1043,7 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 			fetchIssue: vi.fn().mockResolvedValue(mockIssue),
 			supportsPullRequests: true,
 			providerName: 'github',
+			formatIssueId: vi.fn((id: string | number) => `#${id}`),
 		} as unknown as GitHubService
 
 		mockGitWorktreeManager = {

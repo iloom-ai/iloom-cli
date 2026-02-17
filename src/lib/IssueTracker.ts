@@ -41,6 +41,9 @@ export interface IssueTracker {
 	// Status management - optional, check provider capabilities before calling
 	moveIssueToInProgress?(identifier: string | number): Promise<void>
 
+	// Formatting - provider-aware issue ID display
+	formatIssueId(identifier: string | number): string
+
 	// Context extraction - formats issue/PR for AI prompts
 	extractContext(entity: Issue | PullRequest): string
 }

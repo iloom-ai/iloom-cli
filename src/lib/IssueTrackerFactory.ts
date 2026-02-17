@@ -7,7 +7,7 @@ import { LinearService, type LinearServiceConfig } from './LinearService.js'
 import type { IloomSettings } from './SettingsManager.js'
 import { getLogger } from '../utils/logger-context.js'
 
-export type IssueTrackerProviderType = 'github' | 'linear'
+export type IssueTrackerProviderType = 'github' | 'linear' | 'jira'
 
 /**
  * Factory for creating IssueTracker instances based on settings
@@ -59,6 +59,26 @@ export class IssueTrackerFactory {
 	}
 
 	/**
+	 * Format an issue identifier for display without needing a provider instance.
+	 * GitHub issues get a "#" prefix, Linear/Jira identifiers are uppercased.
+	 *
+	 * @param providerType - The issue tracker provider type
+	 * @param identifier - The issue identifier (number or string)
+	 * @returns Formatted issue ID string
+	 */
+	static formatIssueId(providerType: IssueTrackerProviderType, identifier: string | number): string {
+		switch (providerType) {
+			case 'github':
+				return `#${identifier}`
+			case 'linear':
+			case 'jira':
+				return String(identifier).toUpperCase()
+			default:
+				return `#${identifier}`
+		}
+	}
+
+	/**
 	 * Get the configured provider name from settings
 	 * Defaults to 'github' if not configured
 	 *
@@ -67,5 +87,24 @@ export class IssueTrackerFactory {
 	 */
 	static getProviderName(settings: IloomSettings): IssueTrackerProviderType {
 		return (settings.issueManagement?.provider ?? 'github') as IssueTrackerProviderType
+	}
+
+	/**
+	 * Get the issue ID prefix for a given provider type.
+	 * GitHub uses '#' (e.g., #123), Linear and Jira use '' (identifiers are self-contained).
+	 *
+	 * @param providerType - The issue tracker provider type
+	 * @returns Prefix string to prepend before issue identifiers in display text
+	 */
+	static getIssuePrefix(providerType: IssueTrackerProviderType): string {
+		switch (providerType) {
+			case 'github':
+				return '#'
+			case 'linear':
+			case 'jira':
+				return ''
+			default:
+				return '#'
+		}
 	}
 }

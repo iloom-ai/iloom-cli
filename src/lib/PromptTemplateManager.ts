@@ -15,6 +15,7 @@ Handlebars.registerHelper('raw', function (this: unknown, options: Handlebars.He
 
 export interface TemplateVariables {
 	ISSUE_NUMBER?: string | number
+	ISSUE_PREFIX?: string
 	PR_NUMBER?: number
 	ISSUE_TITLE?: string
 	PR_TITLE?: string

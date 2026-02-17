@@ -319,6 +319,11 @@ export class GitHubService implements IssueTracker {
 		}
 	}
 
+	// Formatting - provider-aware issue ID display
+	public formatIssueId(identifier: string | number): string {
+		return `#${identifier}`
+	}
+
 	// Utility methods
 	public extractContext(entity: Issue | PullRequest): string {
 		if ('branch' in entity) {

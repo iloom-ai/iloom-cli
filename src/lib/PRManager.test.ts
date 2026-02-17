@@ -10,6 +10,18 @@ vi.mock('../utils/github.js')
 vi.mock('../utils/claude.js')
 vi.mock('../utils/remote.js')
 vi.mock('../utils/browser.js')
+vi.mock('./IssueTrackerFactory.js', () => ({
+	IssueTrackerFactory: {
+		formatIssueId: vi.fn((provider: string, id: string | number) => {
+			if (provider === 'github') return `#${id}`
+			return String(id).toUpperCase()
+		}),
+		getProviderName: vi.fn((settings: Record<string, unknown>) => {
+			const issueManagement = settings.issueManagement as Record<string, unknown> | undefined
+			return (issueManagement?.provider as string) ?? 'github'
+		}),
+	},
+}))
 
 describe('PRManager', () => {
 	let prManager: PRManager

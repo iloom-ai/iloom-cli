@@ -166,7 +166,7 @@ export class StartCommand {
 
 				// Format display message based on parent type
 				const parentDisplay = parentLoom.type === 'issue'
-					? `issue #${parentLoom.identifier}`
+					? `issue ${this.issueTracker.formatIssueId(parentLoom.identifier)}`
 					: parentLoom.type === 'pr'
 					? `PR #${parentLoom.identifier}`
 					: `branch ${parentLoom.identifier}`
@@ -217,7 +217,7 @@ export class StartCommand {
 					title,  // Use capitalized description as title
 					body    // Use capitalized body or empty
 				)
-				getLogger().success(`Created issue #${result.number}: ${result.url}`)
+				getLogger().success(`Created issue ${this.issueTracker.formatIssueId(result.number)}: ${result.url}`)
 				// Update parsed to be an issue type with the new number
 				parsed.type = 'issue'
 				parsed.number = result.number
@@ -408,7 +408,7 @@ export class StartCommand {
 						originalInput: trimmedIdentifier,
 					}
 				} else {
-					throw new Error(`Could not find issue or PR #${number}`)
+					throw new Error(`Could not find issue or PR ${this.issueTracker.formatIssueId(number)}`)
 				}
 			} else {
 				// Issue tracker doesn't support PRs (e.g., Linear)
@@ -523,7 +523,7 @@ export class StartCommand {
 			case 'pr':
 				return `PR #${parsed.number}`
 			case 'issue':
-				return `Issue #${parsed.number}`
+				return `Issue ${this.issueTracker.formatIssueId(parsed.number ?? 0)}`
 			case 'branch':
 				return `Branch '${parsed.branchName}'`
 			case 'description':

@@ -612,4 +612,64 @@ describe('LoomLauncher', () => {
 			})
 		})
 	})
+
+	describe('provider-aware issue formatting', () => {
+		it('should format Linear issue identifiers without # prefix in terminal titles', async () => {
+			await launcher.launchLoom({
+				...baseOptions,
+				enableClaude: true,
+				enableCode: false,
+				enableDevServer: false,
+				enableTerminal: false,
+				identifier: 'ENG-123',
+				issueTrackerProvider: 'linear',
+			})
+
+			// Claude terminal should use Linear formatting (no # prefix)
+			expect(mockClaudeContext.launchWithContext).toHaveBeenCalledWith(
+				expect.objectContaining({
+					identifier: 'ENG-123',
+				})
+			)
+		})
+
+		it('should format GitHub issue identifiers with # prefix in multi-terminal titles', async () => {
+			await launcher.launchLoom({
+				...baseOptions,
+				enableClaude: false,
+				enableCode: false,
+				enableDevServer: true,
+				enableTerminal: true,
+				issueTrackerProvider: 'github',
+			})
+
+			// Multi-terminal mode should use tab titles with GitHub formatting
+			expect(terminal.openMultipleTerminalWindows).toHaveBeenCalledWith(
+				expect.arrayContaining([
+					expect.objectContaining({ title: 'Dev Server - Issue #42' }),
+					expect.objectContaining({ title: 'Terminal - Issue #42' }),
+				])
+			)
+		})
+
+		it('should format Linear identifiers in multi-terminal titles', async () => {
+			await launcher.launchLoom({
+				...baseOptions,
+				enableClaude: false,
+				enableCode: false,
+				enableDevServer: true,
+				enableTerminal: true,
+				identifier: 'ENG-123',
+				issueTrackerProvider: 'linear',
+			})
+
+			// Multi-terminal mode should use Linear formatting (no # prefix)
+			expect(terminal.openMultipleTerminalWindows).toHaveBeenCalledWith(
+				expect.arrayContaining([
+					expect.objectContaining({ title: 'Dev Server - Issue ENG-123' }),
+					expect.objectContaining({ title: 'Terminal - Issue ENG-123' }),
+				])
+			)
+		})
+	})
 })

@@ -112,6 +112,8 @@ describe('FinishCommand', () => {
 		// Set IssueTracker interface properties
 		mockGitHubService.supportsPullRequests = true
 		mockGitHubService.providerName = 'github'
+		// Mock formatIssueId to return GitHub-style formatting
+		vi.mocked(mockGitHubService.formatIssueId).mockImplementation((id) => `#${id}`)
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockValidationRunner = new ValidationRunner()
 		mockCommitManager = new CommitManager()
