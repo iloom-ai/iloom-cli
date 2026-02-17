@@ -23,6 +23,7 @@ import { realpathSync } from 'fs'
 import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
 import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
+import chalk from 'chalk'
 import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 
@@ -929,6 +930,20 @@ program
     }
   })
 
+/**
+ * Apply color coding to a swarm state value for terminal display
+ */
+function colorizeState(state: string): string {
+  switch (state) {
+    case 'pending': return chalk.gray(state)
+    case 'in_progress': return chalk.yellow(state)
+    case 'code_review': return chalk.blue(state)
+    case 'done': return chalk.green(state)
+    case 'failed': return chalk.red(state)
+    default: return chalk.gray(state)
+  }
+}
+
 program
   .command('list')
   .description('Show active workspaces')
@@ -1074,6 +1089,7 @@ program
               prUrls: loom.prUrls ?? {},
               status: 'active' as const,
               finishedAt: null,
+              state: loom.state ?? null,
               isChildLoom: loom.parentLoom != null,
               parentLoom: loom.parentLoom ?? null,
             }))
@@ -1205,6 +1221,9 @@ program
             if (loom.description) {
               logger.info(`    Description: ${loom.description}`)
             }
+            if (loom.state) {
+              logger.info(`    State: ${colorizeState(loom.state)}`)
+            }
             if (loom.worktreePath) {
               logger.info(`    Path: ${loom.worktreePath}`)
             }
@@ -1238,6 +1257,9 @@ program
             }
             if (loomMetadata?.description) {
               logger.info(`    Description: ${loomMetadata.description}`)
+            }
+            if (loomMetadata?.state) {
+              logger.info(`    State: ${colorizeState(loomMetadata.state)}`)
             }
             logger.info(`    Path: ${formatted.path}`)
             logger.info(`    Commit: ${formatted.commit}`)
@@ -1273,6 +1295,9 @@ program
           }
           if (loom.description) {
             logger.info(`    Description: ${loom.description}`)
+          }
+          if (loom.state) {
+            logger.info(`    State: ${colorizeState(loom.state)}`)
           }
           if (loom.finishedAt) {
             logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
