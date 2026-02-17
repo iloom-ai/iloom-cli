@@ -4,6 +4,7 @@
 import type { VersionControlProvider, ExistingPR } from '../../VersionControlProvider.js'
 import type { PullRequest } from '../../../types/index.js'
 import { BitBucketApiClient, type BitBucketConfig, type BitBucketPullRequest } from './BitBucketApiClient.js'
+import type { IloomSettings } from '../../SettingsManager.js'
 import { getLogger } from '../../../utils/logger-context.js'
 import { parseGitRemotes } from '../../../utils/remote.js'
 
@@ -30,6 +31,38 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 
 	private readonly client: BitBucketApiClient
 	private readonly reviewerUsernames?: string[]
+
+	/**
+	 * Create a BitBucketVCSProvider from IloomSettings
+	 * Extracts and validates BitBucket config from settings
+	 */
+	static fromSettings(settings: IloomSettings): BitBucketVCSProvider {
+		const bbSettings = settings.versionControl?.bitbucket
+
+		if (!bbSettings?.username) {
+			throw new Error('BitBucket username is required. Configure versionControl.bitbucket.username in .iloom/settings.json')
+		}
+		if (!bbSettings?.apiToken) {
+			throw new Error('BitBucket API token is required. Configure versionControl.bitbucket.apiToken in .iloom/settings.local.json')
+		}
+
+		const config: BitBucketVCSConfig = {
+			username: bbSettings.username,
+			apiToken: bbSettings.apiToken,
+		}
+
+		if (bbSettings.workspace) {
+			config.workspace = bbSettings.workspace
+		}
+		if (bbSettings.repoSlug) {
+			config.repoSlug = bbSettings.repoSlug
+		}
+		if (bbSettings.reviewers) {
+			config.reviewers = bbSettings.reviewers
+		}
+
+		return new BitBucketVCSProvider(config)
+	}
 
 	constructor(config: BitBucketVCSConfig) {
 		this.client = new BitBucketApiClient(config)
@@ -150,6 +183,15 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		getLogger().debug('Creating BitBucket PR comment', { workspace, repoSlug, prNumber })
 
 		await this.client.addPRComment(workspace, repoSlug, prNumber, body)
+	}
+
+	/**
+	 * List open pull requests for the repository
+	 * Uses getWorkspaceAndRepo for auto-detection from git remotes
+	 */
+	async listPullRequests(cwd?: string): Promise<BitBucketPullRequest[]> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+		return this.client.listPullRequests(workspace, repoSlug)
 	}
 
 	/**

@@ -6,11 +6,10 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
-import { BitBucketApiClient } from '../lib/providers/bitbucket/BitBucketApiClient.js'
-import { parseGitRemotes } from '../utils/remote.js'
+import { BitBucketVCSProvider } from '../lib/providers/bitbucket/BitBucketVCSProvider.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
 import { fetchJiraIssueList } from '../utils/jira.js'
-import { JiraApiClient } from '../lib/providers/jira/index.js'
+import { JiraIssueTracker } from '../lib/providers/jira/JiraIssueTracker.js'
 import { getLogger } from '../utils/logger-context.js'
 
 /**
@@ -169,34 +168,17 @@ export class IssuesCommand {
         ...(mine ? { mine } : {}),
       })
     } else if (provider === 'jira') {
-      const jiraSettings = settings.issueManagement?.jira
-      const host = jiraSettings?.host
-      if (!host) {
-        throw new Error(
-          'Jira host not configured. Set issueManagement.jira.host in your settings.json.',
-        )
-      }
-      const username = jiraSettings?.username
-      if (!username) {
-        throw new Error(
-          'Jira username not configured. Set issueManagement.jira.username in your settings.json.',
-        )
-      }
-      const apiToken = jiraSettings?.apiToken
-      if (!apiToken) {
-        throw new Error(
-          'Jira API token not configured. Set issueManagement.jira.apiToken in your settings.json or settings.local.json.',
-        )
-      }
-      const projectKey = jiraSettings?.projectKey
-      if (!projectKey) {
-        throw new Error(
-          'Jira project key not configured. Set issueManagement.jira.projectKey in your settings.json.',
-        )
-      }
-      const doneStatuses = jiraSettings?.doneStatuses
-      const client = new JiraApiClient({ host, username, apiToken })
-      results = await fetchJiraIssueList(client, { host, projectKey, doneStatuses, limit, sprint, mine })
+      const tracker = JiraIssueTracker.fromSettings(settings)
+      const trackerConfig = tracker.getConfig()
+      const doneStatuses = settings.issueManagement?.jira?.doneStatuses
+      results = await fetchJiraIssueList(tracker.getApiClient(), {
+        host: trackerConfig.host,
+        projectKey: trackerConfig.projectKey,
+        ...(doneStatuses ? { doneStatuses } : {}),
+        limit,
+        sprint,
+        mine,
+      })
     } else {
       throw new Error(`Unsupported issue tracker provider: ${provider}`)
     }
@@ -210,42 +192,20 @@ export class IssuesCommand {
     if (vcsProvider === 'bitbucket') {
       try {
         const bbSettings = settings.versionControl?.bitbucket
-        const bbUsername = bbSettings?.username
-        const bbApiToken = bbSettings?.apiToken
-        if (!bbUsername || !bbApiToken) {
+        if (!bbSettings?.username || !bbSettings?.apiToken) {
           logger.warn('BitBucket username or API token not configured. Skipping PR fetch.')
         } else {
-          const client = new BitBucketApiClient({
-            username: bbUsername,
-            apiToken: bbApiToken,
-            ...(bbSettings?.workspace ? { workspace: bbSettings.workspace } : {}),
-            ...(bbSettings?.repoSlug ? { repoSlug: bbSettings.repoSlug } : {}),
-          })
-
-          // Detect workspace/repoSlug from git remote if not configured
-          let workspace = bbSettings?.workspace
-          let repoSlug = bbSettings?.repoSlug
-          if (!workspace || !repoSlug) {
-            const remotes = await parseGitRemotes(resolvedProjectPath)
-            const bbRemote = remotes.find(r => r.url.includes('bitbucket.org'))
-            workspace = workspace ?? bbRemote?.owner
-            repoSlug = repoSlug ?? bbRemote?.repo
-          }
-
-          if (!workspace || !repoSlug) {
-            logger.warn('Could not determine BitBucket workspace/repository. Skipping PR fetch.')
-          } else {
-            const bbPRs = await client.listPullRequests(workspace, repoSlug)
-            const prItems: IssueListItem[] = bbPRs.map(pr => ({
-              id: String(pr.id),
-              title: `[PR] ${pr.title}`,
-              updatedAt: pr.updated_on,
-              url: pr.links.html.href,
-              state: pr.state.toLowerCase(),
-              type: 'pr' as const,
-            }))
-            results = [...results, ...prItems]
-          }
+          const bbProvider = BitBucketVCSProvider.fromSettings(settings)
+          const bbPRs = await bbProvider.listPullRequests(resolvedProjectPath)
+          const prItems: IssueListItem[] = bbPRs.map(pr => ({
+            id: String(pr.id),
+            title: `[PR] ${pr.title}`,
+            updatedAt: pr.updated_on,
+            url: pr.links.html.href,
+            state: pr.state.toLowerCase(),
+            type: 'pr' as const,
+          }))
+          results = [...results, ...prItems]
         }
       } catch (error) {
         // Only catch expected, non-fatal BitBucket errors
@@ -253,6 +213,7 @@ export class IssuesCommand {
           error.message.includes('BitBucket API error (401)') ||
           error.message.includes('BitBucket API error (403)') ||
           error.message.includes('BitBucket API request failed') ||
+          error.message.includes('Could not determine BitBucket workspace/repository') ||
           error.message.includes('ETIMEDOUT') ||
           error.message.includes('ECONNREFUSED')
         )

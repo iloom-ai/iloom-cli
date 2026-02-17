@@ -4,6 +4,7 @@
 import type { IssueTracker } from '../../IssueTracker.js'
 import type { Issue, IssueTrackerInputDetection } from '../../../types/index.js'
 import { JiraApiClient, type JiraConfig, type JiraIssue, type JiraTransition } from './JiraApiClient.js'
+import type { IloomSettings } from '../../SettingsManager.js'
 import { getLogger } from '../../../utils/logger-context.js'
 import { promptConfirmation } from '../../../utils/prompt.js'
 import { adfToMarkdown } from './AdfMarkdownConverter.js'
@@ -34,6 +35,40 @@ export class JiraIssueTracker implements IssueTracker {
 	private readonly client: JiraApiClient
 	private readonly config: JiraTrackerConfig
 	private prompter: (message: string) => Promise<boolean>
+
+	/**
+	 * Create a JiraIssueTracker from IloomSettings
+	 * Extracts and validates Jira config from settings
+	 */
+	static fromSettings(settings: IloomSettings): JiraIssueTracker {
+		const jiraSettings = settings.issueManagement?.jira
+
+		if (!jiraSettings?.host) {
+			throw new Error('Jira host is required. Configure issueManagement.jira.host in .iloom/settings.json')
+		}
+		if (!jiraSettings?.username) {
+			throw new Error('Jira username is required. Configure issueManagement.jira.username in .iloom/settings.json')
+		}
+		if (!jiraSettings?.apiToken) {
+			throw new Error('Jira API token is required. Configure issueManagement.jira.apiToken in .iloom/settings.local.json')
+		}
+		if (!jiraSettings?.projectKey) {
+			throw new Error('Jira project key is required. Configure issueManagement.jira.projectKey in .iloom/settings.json')
+		}
+
+		const config: JiraTrackerConfig = {
+			host: jiraSettings.host,
+			username: jiraSettings.username,
+			apiToken: jiraSettings.apiToken,
+			projectKey: jiraSettings.projectKey,
+		}
+
+		if (jiraSettings.transitionMappings) {
+			config.transitionMappings = jiraSettings.transitionMappings
+		}
+
+		return new JiraIssueTracker(config)
+	}
 
 	constructor(config: JiraTrackerConfig, options?: {
 		prompter?: (message: string) => Promise<boolean>
