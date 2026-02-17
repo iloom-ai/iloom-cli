@@ -1229,9 +1229,8 @@ export class FinishCommand {
 			try {
 				const issue = await this.issueTracker.fetchIssue(parsed.number)
 
-				// Apply ticket prefix if enabled (default: true)
-				const usePrefix = settings.mergeBehavior?.prTitlePrefix;
-				if (usePrefix) {
+				// Apply ticket prefix if enabled (default: false)
+				if (settings.mergeBehavior?.prTitlePrefix) {
 					prTitle = `${parsed.number}: ${issue.title}`
 				} else {
 					prTitle = issue.title

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager } from './SettingsManager.js'
+import { SettingsManager, redactSensitiveFields } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -3483,6 +3483,89 @@ const error: { code?: string; message: string } = {
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-implementer']?.model).toBe('haiku')
 			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-planner']?.model).toBe('opus')
+		})
+	})
+
+	describe('redactSensitiveFields', () => {
+		it('should pass through null and undefined', () => {
+			expect(redactSensitiveFields(null)).toBeNull()
+			expect(redactSensitiveFields(undefined)).toBeUndefined()
+		})
+
+		it('should return primitives unchanged', () => {
+			expect(redactSensitiveFields('hello')).toBe('hello')
+			expect(redactSensitiveFields(42)).toBe(42)
+			expect(redactSensitiveFields(true)).toBe(true)
+		})
+
+		it('should redact sensitive keys', () => {
+			const input = {
+				apiToken: 'secret-token-123',
+				accessToken: 'access-abc',
+				clientSecret: 'my-secret',
+				password: 'hunter2',
+				credential: 'cred-xyz',
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.apiToken).toBe('[REDACTED]')
+			expect(result.accessToken).toBe('[REDACTED]')
+			expect(result.clientSecret).toBe('[REDACTED]')
+			expect(result.password).toBe('[REDACTED]')
+			expect(result.credential).toBe('[REDACTED]')
+		})
+
+		it('should not redact non-sensitive keys', () => {
+			const input = {
+				username: 'alice',
+				host: 'example.com',
+				port: 8080,
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.username).toBe('alice')
+			expect(result.host).toBe('example.com')
+			expect(result.port).toBe(8080)
+		})
+
+		it('should recursively handle nested objects', () => {
+			const input = {
+				versionControl: {
+					bitbucket: {
+						username: 'alice',
+						apiToken: 'bb-token-123',
+					},
+				},
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+			const bb = (result.versionControl as Record<string, unknown>).bitbucket as Record<string, unknown>
+
+			expect(bb.username).toBe('alice')
+			expect(bb.apiToken).toBe('[REDACTED]')
+		})
+
+		it('should handle arrays', () => {
+			const input = [
+				{ apiToken: 'token-1', name: 'first' },
+				{ apiToken: 'token-2', name: 'second' },
+			]
+			const result = redactSensitiveFields(input) as Record<string, unknown>[]
+
+			expect(result[0].apiToken).toBe('[REDACTED]')
+			expect(result[0].name).toBe('first')
+			expect(result[1].apiToken).toBe('[REDACTED]')
+			expect(result[1].name).toBe('second')
+		})
+
+		it('should not redact non-string sensitive values', () => {
+			const input = {
+				token: 123,
+				password: true,
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.token).toBe(123)
+			expect(result.password).toBe(true)
 		})
 	})
 })

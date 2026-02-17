@@ -115,6 +115,74 @@ describe('remote utils', () => {
 			expect(remotes[0].repo).toBe('repo')
 		})
 
+		it('should parse BitBucket HTTPS remote with .git', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'origin\thttps://bitbucket.org/workspace/repo.git (fetch)\norigin\thttps://bitbucket.org/workspace/repo.git (push)',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const remotes = await parseGitRemotes()
+
+			expect(remotes).toEqual([
+				{
+					name: 'origin',
+					url: 'https://bitbucket.org/workspace/repo.git',
+					owner: 'workspace',
+					repo: 'repo',
+				},
+			])
+		})
+
+		it('should parse BitBucket HTTPS remote without .git', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'origin\thttps://bitbucket.org/workspace/repo (fetch)\norigin\thttps://bitbucket.org/workspace/repo (push)',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const remotes = await parseGitRemotes()
+
+			expect(remotes).toEqual([
+				{
+					name: 'origin',
+					url: 'https://bitbucket.org/workspace/repo',
+					owner: 'workspace',
+					repo: 'repo',
+				},
+			])
+		})
+
+		it('should parse BitBucket SSH remote with .git', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'origin\tgit@bitbucket.org:workspace/repo.git (fetch)\norigin\tgit@bitbucket.org:workspace/repo.git (push)',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const remotes = await parseGitRemotes()
+
+			expect(remotes).toEqual([
+				{
+					name: 'origin',
+					url: 'git@bitbucket.org:workspace/repo.git',
+					owner: 'workspace',
+					repo: 'repo',
+				},
+			])
+		})
+
+		it('should parse BitBucket SSH remote without .git', async () => {
+			vi.mocked(execa).mockResolvedValue({
+				stdout: 'origin\tgit@bitbucket.org:workspace/repo (fetch)\norigin\tgit@bitbucket.org:workspace/repo (push)',
+			} as Partial<ExecaReturnValue> as ExecaReturnValue)
+
+			const remotes = await parseGitRemotes()
+
+			expect(remotes).toEqual([
+				{
+					name: 'origin',
+					url: 'git@bitbucket.org:workspace/repo',
+					owner: 'workspace',
+					repo: 'repo',
+				},
+			])
+		})
+
 		it('should deduplicate fetch/push entries', async () => {
 			vi.mocked(execa).mockResolvedValue({
 				stdout: 'origin\tgit@github.com:user/repo.git (fetch)\norigin\tgit@github.com:user/repo.git (push)',
