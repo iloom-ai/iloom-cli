@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { RecapFile, RecapEntry } from './recap-types.js'
+import type { MetadataFile, SwarmState } from '../lib/MetadataManager.js'
 
 /**
  * Since the recap-server.ts registers MCP tools directly on module load,
@@ -263,6 +264,139 @@ describe('recap-server add_entry deduplication', () => {
 
 			expect(result.skipped).toBe(false)
 			expect(mockRecapFile.entries).toHaveLength(1)
+		})
+	})
+})
+
+/**
+ * Simulates the set_loom_state logic from recap-server.ts
+ * Reads metadata file, updates state, writes back
+ */
+async function setLoomState(
+	readMetadata: () => Promise<MetadataFile>,
+	writeMetadata: (metadata: MetadataFile) => Promise<void>,
+	state: SwarmState
+): Promise<{ success: true; state: SwarmState }> {
+	const metadata = await readMetadata()
+	metadata.state = state
+	await writeMetadata(metadata)
+	return { success: true, state }
+}
+
+/**
+ * Simulates the get_loom_state logic from recap-server.ts
+ * Reads metadata file, returns current state
+ */
+async function getLoomState(
+	readMetadata: () => Promise<MetadataFile>
+): Promise<{ state: SwarmState | null }> {
+	const metadata = await readMetadata()
+	return { state: metadata.state ?? null }
+}
+
+describe('recap-server state transition tools', () => {
+	let mockMetadataFile: MetadataFile
+	let readMetadataMock: () => Promise<MetadataFile>
+	let writeMetadataMock: (metadata: MetadataFile) => Promise<void>
+
+	beforeEach(() => {
+		mockMetadataFile = {
+			description: 'Test loom',
+			version: 1,
+			branchName: 'issue-42__test',
+			worktreePath: '/Users/test/dev/repo',
+		}
+
+		readMetadataMock = vi.fn().mockImplementation(async () => ({ ...mockMetadataFile }))
+		writeMetadataMock = vi.fn().mockImplementation(async (metadata: MetadataFile) => {
+			mockMetadataFile = { ...metadata }
+		})
+	})
+
+	describe('set_loom_state', () => {
+		it('should set state to in_progress', async () => {
+			const result = await setLoomState(readMetadataMock, writeMetadataMock, 'in_progress')
+
+			expect(result.success).toBe(true)
+			expect(result.state).toBe('in_progress')
+			expect(mockMetadataFile.state).toBe('in_progress')
+		})
+
+		it('should set state to code_review', async () => {
+			const result = await setLoomState(readMetadataMock, writeMetadataMock, 'code_review')
+
+			expect(result.state).toBe('code_review')
+			expect(mockMetadataFile.state).toBe('code_review')
+		})
+
+		it('should set state to done', async () => {
+			const result = await setLoomState(readMetadataMock, writeMetadataMock, 'done')
+
+			expect(result.state).toBe('done')
+			expect(mockMetadataFile.state).toBe('done')
+		})
+
+		it('should set state to failed', async () => {
+			const result = await setLoomState(readMetadataMock, writeMetadataMock, 'failed')
+
+			expect(result.state).toBe('failed')
+			expect(mockMetadataFile.state).toBe('failed')
+		})
+
+		it('should overwrite existing state', async () => {
+			mockMetadataFile.state = 'pending'
+
+			const result = await setLoomState(readMetadataMock, writeMetadataMock, 'in_progress')
+
+			expect(result.state).toBe('in_progress')
+			expect(mockMetadataFile.state).toBe('in_progress')
+		})
+
+		it('should preserve other metadata fields when setting state', async () => {
+			mockMetadataFile.description = 'Important loom'
+			mockMetadataFile.branchName = 'issue-99__feature'
+
+			await setLoomState(readMetadataMock, writeMetadataMock, 'done')
+
+			expect(mockMetadataFile.description).toBe('Important loom')
+			expect(mockMetadataFile.branchName).toBe('issue-99__feature')
+			expect(mockMetadataFile.state).toBe('done')
+		})
+
+		it('should call writeMetadata with updated metadata', async () => {
+			await setLoomState(readMetadataMock, writeMetadataMock, 'pending')
+
+			expect(writeMetadataMock).toHaveBeenCalledWith(
+				expect.objectContaining({ state: 'pending' })
+			)
+		})
+	})
+
+	describe('get_loom_state', () => {
+		it('should return current state when set', async () => {
+			mockMetadataFile.state = 'in_progress'
+
+			const result = await getLoomState(readMetadataMock)
+
+			expect(result.state).toBe('in_progress')
+		})
+
+		it('should return null when state is not set', async () => {
+			// mockMetadataFile has no state field by default
+
+			const result = await getLoomState(readMetadataMock)
+
+			expect(result.state).toBeNull()
+		})
+
+		it('should return each valid state value', async () => {
+			const states: SwarmState[] = ['pending', 'in_progress', 'code_review', 'done', 'failed']
+
+			for (const state of states) {
+				mockMetadataFile.state = state
+				const result = await getLoomState(readMetadataMock)
+				expect(result.state).toBe(state)
+			}
 		})
 	})
 })

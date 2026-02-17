@@ -5,6 +5,8 @@ import { getLogger } from '../utils/logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
 import type { OneShotMode } from '../types/index.js'
 
+export type SwarmState = 'pending' | 'in_progress' | 'code_review' | 'done' | 'failed'
+
 /**
  * Schema for metadata JSON file
  * Stored in ~/.config/iloom-ai/looms/
@@ -29,6 +31,7 @@ export interface MetadataFile {
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
+  state?: SwarmState // Swarm mode lifecycle state
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -60,6 +63,7 @@ export interface WriteMetadataInput {
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
   oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
+  state?: SwarmState // Swarm mode lifecycle state
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -92,6 +96,7 @@ export interface LoomMetadata {
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
+  state: SwarmState | null // Swarm mode lifecycle state (null for non-swarm looms)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -143,6 +148,7 @@ export class MetadataManager {
       draftPrNumber: data.draftPrNumber ?? null,
       oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
+      state: data.state ?? null,
       parentLoom: data.parentLoom ?? null,
     }
   }
@@ -222,6 +228,7 @@ export class MetadataManager {
         capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
+        ...(input.state && { state: input.state }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 

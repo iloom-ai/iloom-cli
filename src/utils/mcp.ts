@@ -177,12 +177,18 @@ export function generateRecapMcpConfig(
 	const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
 	const recapFilePath = path.join(recapsDir, slugifyPath(loomPath))
 
-	// Pass both env vars:
+	// Compute metadata file path (same directory/naming as MetadataManager)
+	const loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
+	const metadataFilePath = path.join(loomsDir, slugifyPath(loomPath))
+
+	// Pass env vars:
 	// - RECAP_FILE_PATH: where to read/write recap data
 	// - LOOM_METADATA_JSON: stringified loom metadata (parsed by MCP using LoomMetadata type)
+	// - METADATA_FILE_PATH: path to loom metadata file (for state transition tools)
 	const envVars = {
 		RECAP_FILE_PATH: recapFilePath,
 		LOOM_METADATA_JSON: JSON.stringify(loomMetadata),
+		METADATA_FILE_PATH: metadataFilePath,
 	}
 
 	logger.debug('Generated MCP config for recap server', {
