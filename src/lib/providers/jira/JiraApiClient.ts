@@ -392,21 +392,33 @@ export class JiraApiClient {
 	async searchIssues(jql: string): Promise<JiraIssue[]> {
 		const MAX_SEARCH_RESULTS = 5000
 		const allIssues: JiraIssue[] = []
-		let startAt = 0
+		let nextPageToken: string | undefined
 		const maxResults = 100
 
 		while (allIssues.length < MAX_SEARCH_RESULTS) {
-			const response = await this.post<{ issues: JiraIssue[]; startAt: number; total: number }>(
+			const body: Record<string, unknown> = {
+				jql,
+				maxResults,
+				fields: [
+					'summary', 'description', 'status', 'issuetype', 'project',
+					'assignee', 'reporter', 'labels', 'created', 'updated',
+					'issuelinks', 'parent',
+				],
+			}
+			if (nextPageToken) {
+				body.nextPageToken = nextPageToken
+			}
+			const response = await this.post<{ issues: JiraIssue[]; nextPageToken?: string }>(
 				'/search/jql',
-				{ jql, fields: ['*all'], maxResults, startAt }
+				body
 			)
 			allIssues.push(...response.issues)
 
-			if (allIssues.length >= response.total || response.issues.length === 0) {
+			if (!response.nextPageToken || response.issues.length === 0) {
 				break
 			}
 
-			startAt += response.issues.length
+			nextPageToken = response.nextPageToken
 		}
 
 		if (allIssues.length >= MAX_SEARCH_RESULTS) {
