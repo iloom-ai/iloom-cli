@@ -6,6 +6,8 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
+import { BitBucketApiClient } from '../lib/providers/bitbucket/BitBucketApiClient.js'
+import { parseGitRemotes } from '../utils/remote.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
 import { fetchJiraIssueList } from '../utils/jira.js'
 import { JiraApiClient } from '../lib/providers/jira/index.js'
@@ -202,34 +204,92 @@ export class IssuesCommand {
     // Tag issues with type
     results.forEach(item => { item.type = 'issue' })
 
-    // 6. Fetch PRs from GitHub (PRs are a GitHub concept regardless of issue tracker)
-    // TODO(bitbucket): detect bitbucket configuration and fetch PRs from Bitbucket instead of GitHub when relevant
-    try {
-      const prs = await fetchGitHubPRList({
-        limit,
-        cwd: resolvedProjectPath,
-        ...(mine ? { mine } : {}),
-      })
-      const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
-      results = [...results, ...prItems]
-    } catch (error) {
-      // Only catch expected, non-fatal errors from gh CLI
-      // Per CLAUDE.md: "DO NOT SWALLOW ERRORS" -- must check specifically
-      const stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
-      const isExpectedError = error instanceof Error && (
-        error.message.includes('not logged in') ||
-        error.message.includes('auth login') ||
-        error.message.includes('rate limit') ||
-        error.message.includes('ETIMEDOUT') ||
-        error.message.includes('ECONNREFUSED') ||
-        error.message.includes('no git remotes found') ||
-        stderr.includes('not logged in') ||
-        stderr.includes('rate limit')
-      )
-      if (isExpectedError) {
-        logger.warn(`PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
-      } else {
-        throw error // Re-throw unexpected errors -- do not swallow
+    // 6. Fetch PRs from VCS provider (GitHub or BitBucket)
+    const vcsProvider = settings.versionControl?.provider ?? 'github'
+
+    if (vcsProvider === 'bitbucket') {
+      try {
+        const bbSettings = settings.versionControl?.bitbucket
+        const bbUsername = bbSettings?.username
+        const bbApiToken = bbSettings?.apiToken
+        if (!bbUsername || !bbApiToken) {
+          logger.warn('BitBucket username or API token not configured. Skipping PR fetch.')
+        } else {
+          const client = new BitBucketApiClient({
+            username: bbUsername,
+            apiToken: bbApiToken,
+            ...(bbSettings?.workspace ? { workspace: bbSettings.workspace } : {}),
+            ...(bbSettings?.repoSlug ? { repoSlug: bbSettings.repoSlug } : {}),
+          })
+
+          // Detect workspace/repoSlug from git remote if not configured
+          let workspace = bbSettings?.workspace
+          let repoSlug = bbSettings?.repoSlug
+          if (!workspace || !repoSlug) {
+            const remotes = await parseGitRemotes(resolvedProjectPath)
+            const bbRemote = remotes.find(r => r.url.includes('bitbucket.org'))
+            workspace = workspace ?? bbRemote?.owner
+            repoSlug = repoSlug ?? bbRemote?.repo
+          }
+
+          if (!workspace || !repoSlug) {
+            logger.warn('Could not determine BitBucket workspace/repository. Skipping PR fetch.')
+          } else {
+            const bbPRs = await client.listPullRequests(workspace, repoSlug)
+            const prItems: IssueListItem[] = bbPRs.map(pr => ({
+              id: String(pr.id),
+              title: `[PR] ${pr.title}`,
+              updatedAt: pr.updated_on,
+              url: pr.links.html.href,
+              state: pr.state.toLowerCase(),
+              type: 'pr' as const,
+            }))
+            results = [...results, ...prItems]
+          }
+        }
+      } catch (error) {
+        // Only catch expected, non-fatal BitBucket errors
+        const isExpectedError = error instanceof Error && (
+          error.message.includes('BitBucket API error (401)') ||
+          error.message.includes('BitBucket API error (403)') ||
+          error.message.includes('BitBucket API request failed') ||
+          error.message.includes('ETIMEDOUT') ||
+          error.message.includes('ECONNREFUSED')
+        )
+        if (isExpectedError) {
+          logger.warn(`BitBucket PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
+        } else {
+          throw error
+        }
+      }
+    } else {
+      try {
+        const prs = await fetchGitHubPRList({
+          limit,
+          cwd: resolvedProjectPath,
+          ...(mine ? { mine } : {}),
+        })
+        const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
+        results = [...results, ...prItems]
+      } catch (error) {
+        // Only catch expected, non-fatal errors from gh CLI
+        // Per CLAUDE.md: "DO NOT SWALLOW ERRORS" -- must check specifically
+        const stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
+        const isExpectedError = error instanceof Error && (
+          error.message.includes('not logged in') ||
+          error.message.includes('auth login') ||
+          error.message.includes('rate limit') ||
+          error.message.includes('ETIMEDOUT') ||
+          error.message.includes('ECONNREFUSED') ||
+          error.message.includes('no git remotes found') ||
+          stderr.includes('not logged in') ||
+          stderr.includes('rate limit')
+        )
+        if (isExpectedError) {
+          logger.warn(`PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
+        } else {
+          throw error // Re-throw unexpected errors -- do not swallow
+        }
       }
     }
 
