@@ -908,6 +908,30 @@ function redactSensitiveFields(obj: unknown): unknown {
 }
 
 /**
+ * Recursively redact sensitive fields (tokens, secrets, passwords) from an object.
+ * Returns a deep copy with sensitive string values replaced by '[REDACTED]'.
+ */
+export function redactSensitiveFields(obj: unknown): unknown {
+	if (obj === null || obj === undefined) return obj
+	if (typeof obj !== 'object') return obj
+	if (Array.isArray(obj)) return obj.map(redactSensitiveFields)
+
+	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password']
+	const result: Record<string, unknown> = {}
+	for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+		const lowerKey = key.toLowerCase()
+		if (sensitiveKeys.some(s => lowerKey.includes(s)) && typeof value === 'string') {
+			result[key] = '[REDACTED]'
+		} else if (typeof value === 'object' && value !== null) {
+			result[key] = redactSensitiveFields(value)
+		} else {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+/**
  * Manages project-level settings from .iloom/settings.json
  */
 export class SettingsManager {

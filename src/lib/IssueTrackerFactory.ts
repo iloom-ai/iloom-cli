@@ -5,7 +5,7 @@ import type { IssueTracker } from './IssueTracker.js'
 import { GitHubService } from './GitHubService.js'
 import { LinearService, type LinearServiceConfig } from './LinearService.js'
 import { JiraIssueTracker } from './providers/jira/index.js'
-import type { IloomSettings } from './SettingsManager.js'
+import { type IloomSettings, redactSensitiveFields } from './SettingsManager.js'
 import { getLogger } from '../utils/logger-context.js'
 
 export type IssueTrackerProviderType = 'github' | 'linear' | 'jira'
@@ -31,7 +31,7 @@ export class IssueTrackerFactory {
 		const provider = settings.issueManagement?.provider ?? 'github'
 
 		getLogger().debug(`IssueTrackerFactory: Creating tracker for provider "${provider}"`)
-		getLogger().debug(`IssueTrackerFactory: issueManagement settings:`, JSON.stringify(settings.issueManagement, null, 2))
+		getLogger().debug(`IssueTrackerFactory: issueManagement settings:`, JSON.stringify(redactSensitiveFields(settings.issueManagement), null, 2))
 
 		switch (provider) {
 			case 'github':
@@ -51,7 +51,7 @@ export class IssueTrackerFactory {
 					linearConfig.apiToken = linearSettings.apiToken
 				}
 
-				getLogger().debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
+				getLogger().debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(redactSensitiveFields(linearConfig), null, 2))
 				return new LinearService(linearConfig)
 			}
 			case 'jira': {
