@@ -484,7 +484,7 @@ export const IloomSettingsSchema = z.object({
 				.describe(
 					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
-			prTitlePrefix: z.boolean().default(true).optional().describe('Prefix PR titles with the issue number (e.g., "QLH-123: Title"). Default: true'),
+			prTitlePrefix: z.boolean().default(false).optional().describe('Prefix PR titles with the issue number (e.g., "QLH-123: Title"). Default: false'),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
@@ -888,25 +888,6 @@ export type IloomSettings = z.infer<typeof IloomSettingsSchema>
  */
 export type IloomSettingsInput = z.input<typeof IloomSettingsSchema>
 
-function redactSensitiveFields(obj: unknown): unknown {
-	if (obj === null || obj === undefined) return obj
-	if (typeof obj !== 'object') return obj
-	if (Array.isArray(obj)) return obj.map(redactSensitiveFields)
-	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password']
-	const result: Record<string, unknown> = {}
-	for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-		const lowerKey = key.toLowerCase()
-		if (sensitiveKeys.some(s => lowerKey.includes(s)) && typeof value === 'string') {
-			result[key] = '[REDACTED]'
-		} else if (typeof value === 'object' && value !== null) {
-			result[key] = redactSensitiveFields(value)
-		} else {
-			result[key] = value
-		}
-	}
-	return result
-}
-
 /**
  * Recursively redact sensitive fields (tokens, secrets, passwords) from an object.
  * Returns a deep copy with sensitive string values replaced by '[REDACTED]'.
@@ -916,7 +897,7 @@ export function redactSensitiveFields(obj: unknown): unknown {
 	if (typeof obj !== 'object') return obj
 	if (Array.isArray(obj)) return obj.map(redactSensitiveFields)
 
-	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password']
+	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password', 'credential']
 	const result: Record<string, unknown> = {}
 	for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
 		const lowerKey = key.toLowerCase()

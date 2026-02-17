@@ -230,7 +230,8 @@ export class BitBucketApiClient {
 		if (sourceBranch) {
 			// Use BBQL query syntax for filtering by source branch AND state
 			// Include state="OPEN" in the query to exclude DECLINED/MERGED/SUPERSEDED PRs
-			const query = `state="OPEN" AND source.branch.name="${sourceBranch}"`
+			const safeBranch = sourceBranch.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+			const query = `state="OPEN" AND source.branch.name="${safeBranch}"`
 			endpoint += `?q=${encodeURIComponent(query)}`
 		} else {
 			// No branch filter, just filter by state
@@ -312,7 +313,7 @@ export class BitBucketApiClient {
 		// Fetch all workspace members with pagination
 		const allMembers = await this.getAllWorkspaceMembers(workspace)
 
-		getLogger().debug(`Resolving ${usernames.length} usernames against ${allMembers.length} workspace members`, { allMembers})
+		getLogger().debug(`Resolving ${usernames.length} usernames against ${allMembers.length} workspace members`)
 
 		// Match usernames against fetched members
 		for (const username of usernames) {

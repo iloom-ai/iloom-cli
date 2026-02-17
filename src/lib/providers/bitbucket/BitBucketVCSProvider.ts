@@ -91,6 +91,15 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 
 			return null
 		} catch (error) {
+			if (error instanceof Error) {
+				const statusMatch = error.message.match(/BitBucket API error \((\d+)\)/)
+				if (statusMatch?.[1]) {
+					const statusCode = parseInt(statusMatch[1], 10)
+					if (statusCode === 401 || statusCode === 403) {
+						throw error
+					}
+				}
+			}
 			getLogger().debug('Error checking for existing PR', { error })
 			return null
 		}

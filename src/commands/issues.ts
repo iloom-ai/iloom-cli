@@ -6,7 +6,6 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
-import { BitBucketVCSProvider } from '../lib/providers/bitbucket/BitBucketVCSProvider.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
 import { fetchJiraIssueList } from '../utils/jira.js'
 import { JiraIssueTracker } from '../lib/providers/jira/JiraIssueTracker.js'
@@ -195,6 +194,7 @@ export class IssuesCommand {
         if (!bbSettings?.username || !bbSettings?.apiToken) {
           logger.warn('BitBucket username or API token not configured. Skipping PR fetch.')
         } else {
+          const { BitBucketVCSProvider } = await import('../lib/providers/bitbucket/BitBucketVCSProvider.js')
           const bbProvider = BitBucketVCSProvider.fromSettings(settings)
           const bbPRs = await bbProvider.listPullRequests(resolvedProjectPath)
           const prItems: IssueListItem[] = bbPRs.map(pr => ({

@@ -45,7 +45,6 @@ describe('BitBucketVCSProvider', () => {
 	}
 
 	beforeEach(() => {
-		vi.clearAllMocks()
 		// Get the mock client instance
 		mockClient = {
 			getWorkspace: vi.fn().mockReturnValue('test-workspace'),
@@ -347,6 +346,106 @@ describe('BitBucketVCSProvider', () => {
 				'main',
 				[]
 			)
+		})
+	})
+
+	describe('checkForExistingPR', () => {
+		it('should return existing PR when found', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockResolvedValue([
+				{
+					id: 42,
+					links: { html: { href: 'https://bitbucket.org/test/repo/pull-requests/42' } },
+				},
+			])
+
+			const result = await provider.checkForExistingPR('feature-branch')
+
+			expect(result).toEqual({
+				number: 42,
+				url: 'https://bitbucket.org/test/repo/pull-requests/42',
+			})
+		})
+
+		it('should return null when no PR exists', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockResolvedValue([])
+
+			const result = await provider.checkForExistingPR('feature-branch')
+
+			expect(result).toBeNull()
+		})
+
+		it('should propagate 401 authentication errors', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockRejectedValue(
+				new Error('BitBucket API error (401): Unauthorized')
+			)
+
+			await expect(provider.checkForExistingPR('feature-branch')).rejects.toThrow(
+				'BitBucket API error (401)'
+			)
+		})
+
+		it('should propagate 403 forbidden errors', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockRejectedValue(
+				new Error('BitBucket API error (403): Forbidden')
+			)
+
+			await expect(provider.checkForExistingPR('feature-branch')).rejects.toThrow(
+				'BitBucket API error (403)'
+			)
+		})
+
+		it('should return null for network/other errors', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockRejectedValue(
+				new Error('BitBucket API request failed: ECONNREFUSED')
+			)
+
+			const result = await provider.checkForExistingPR('feature-branch')
+
+			expect(result).toBeNull()
+		})
+
+		it('should return null for non-Error thrown values', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockRejectedValue('string error')
+
+			const result = await provider.checkForExistingPR('feature-branch')
+
+			expect(result).toBeNull()
 		})
 	})
 
