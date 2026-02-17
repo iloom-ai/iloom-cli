@@ -279,6 +279,27 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.oneShot).toBeUndefined()
     })
+
+    it('should write state to metadata when provided', async () => {
+      const inputWithState = {
+        ...metadataInput,
+        state: 'in_progress' as const,
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithState)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.state).toBe('in_progress')
+    })
+
+    it('should not include state field when not provided', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.state).toBeUndefined()
+    })
   })
 
   describe('readMetadata', () => {
@@ -325,6 +346,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['web'],
+        state: null,
         parentLoom: null,
       })
     })
@@ -421,6 +443,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: [],
+        state: null,
         parentLoom: null,
       })
     })
@@ -653,6 +676,49 @@ describe('MetadataManager', () => {
 
       expect(result?.oneShot).toBeNull()
     })
+
+    it('should return state when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with swarm state',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        state: 'code_review',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.state).toBe('code_review')
+    })
+
+    it('should return null state for looms without state field', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom without state',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.state).toBeNull()
+    })
   })
 
   describe('listAllMetadata', () => {
@@ -742,6 +808,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['cli'],
+        state: null,
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -762,6 +829,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: ['web'],
+        state: null,
         parentLoom: null,
       })
     })
@@ -866,6 +934,7 @@ describe('MetadataManager', () => {
         draftPrNumber: null,
         oneShot: null,
         capabilities: [],
+        state: null,
         parentLoom: null,
       })
     })
