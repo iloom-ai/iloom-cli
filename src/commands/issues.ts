@@ -222,6 +222,7 @@ export class IssuesCommand {
         error.message.includes('rate limit') ||
         error.message.includes('ETIMEDOUT') ||
         error.message.includes('ECONNREFUSED') ||
+        error.message.includes('no git remotes found') ||
         stderr.includes('not logged in') ||
         stderr.includes('rate limit')
       )
