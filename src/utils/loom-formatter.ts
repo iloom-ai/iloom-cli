@@ -1,6 +1,6 @@
 import { extractIssueNumber } from './git.js'
 import type { GitWorktree } from '../types/worktree.js'
-import type { LoomMetadata } from '../lib/MetadataManager.js'
+import type { LoomMetadata, SwarmState } from '../lib/MetadataManager.js'
 import type { ProjectCapability } from '../types/loom.js'
 
 /**
@@ -76,6 +76,8 @@ export interface LoomJsonOutput {
   capabilities?: ProjectCapability[]
   status?: 'active' | 'finished'
   finishedAt?: string | null
+  /** Swarm mode lifecycle state (null for non-swarm looms) */
+  state?: SwarmState | null
   /** Whether this loom is a child of another loom (has a parentLoom) */
   isChildLoom: boolean
   /** Reference to the parent loom if this is a child loom */
@@ -197,6 +199,7 @@ export function formatLoomForJson(
     issueUrls: metadata?.issueUrls ?? {},
     prUrls: metadata?.prUrls ?? {},
     capabilities: metadata?.capabilities ?? [],
+    state: metadata?.state ?? null,
     isChildLoom: metadata?.parentLoom != null,
     parentLoom: metadata?.parentLoom ?? null,
   }
@@ -246,6 +249,7 @@ export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutpu
     capabilities: metadata.capabilities ?? [],
     status: metadata.status ?? 'finished',
     finishedAt: metadata.finishedAt ?? null,
+    state: metadata.state ?? null,
     isChildLoom: metadata.parentLoom != null,
     parentLoom: metadata.parentLoom ?? null,
   }
