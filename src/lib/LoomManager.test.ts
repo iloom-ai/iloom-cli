@@ -107,6 +107,37 @@ vi.mock('../utils/package-manager.js', () => ({
   installDependencies: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock terminal utilities (prevents real execa calls to 'defaults' for dark mode detection)
+// Using plain functions to survive vitest mockReset between tests
+vi.mock('../utils/terminal.js', () => ({
+  detectDarkMode: () => Promise.resolve('light' as const),
+  detectPlatform: () => 'darwin',
+  detectITerm2: () => Promise.resolve(false),
+  openTerminalWindow: () => Promise.resolve(undefined),
+  openMultipleTerminalWindows: () => Promise.resolve(undefined),
+  openDualTerminalWindow: () => Promise.resolve(undefined),
+}))
+
+// Mock env utilities (prevents real dotenv-flow file reads)
+// Using plain functions to survive vitest mockReset between tests
+vi.mock('../utils/env.js', () => ({
+  loadEnvIntoProcess: () => ({ parsed: {}, error: undefined }),
+  isNoEnvFilesFoundError: () => false,
+  findEnvFileForDatabaseUrl: () => Promise.resolve('.env.local'),
+  parseEnvFile: () => ({}),
+  formatEnvLine: () => '',
+  validateEnvVariable: () => true,
+  normalizeLineEndings: (s: string) => s,
+  extractPort: () => null,
+  isValidEnvKey: () => true,
+  loadWorkspaceEnv: () => ({ parsed: {} }),
+  getDotenvFlowFiles: () => [],
+  getLocalEquivalent: (f: string) => f,
+  buildEnvSourceCommands: () => '',
+  findEnvFileContainingVariable: () => Promise.resolve(null),
+  hasVariableInAnyEnvFile: () => Promise.resolve(false),
+}))
+
 // Mock LoomLauncher (dynamically imported)
 vi.mock('./LoomLauncher.js', () => ({
   LoomLauncher: vi.fn(() => ({
