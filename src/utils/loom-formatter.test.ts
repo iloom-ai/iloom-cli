@@ -683,6 +683,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -704,6 +705,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -725,6 +727,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -746,6 +749,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -881,6 +885,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1143,6 +1148,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: null,
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1236,6 +1242,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: ['cli'],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1458,5 +1465,109 @@ describe('formatFinishedLoomForJson - child loom fields', () => {
       branchName: 'issue-100__parent-feature',
       worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
     })
+  })
+})
+
+describe('formatLoomForJson - swarm state field', () => {
+  const createWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
+    path: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    branch: 'issue-101__sub-task',
+    commit: 'abc123def456789012345678901234567890abcd',
+    bare: false,
+    detached: false,
+    locked: false,
+    ...overrides,
+  })
+
+  const createMetadataWithState = (state: LoomMetadata['state']): LoomMetadata => ({
+    description: 'Swarm task',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    parentLoom: null,
+  })
+
+  it('should return state: null when no metadata is provided', () => {
+    const worktree = createWorktree()
+    const result = formatLoomForJson(worktree)
+    expect(result.state).toBeNull()
+  })
+
+  it('should return state: null when metadata has no state', () => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithState(null)
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.state).toBeNull()
+  })
+
+  it.each([
+    'pending' as const,
+    'in_progress' as const,
+    'code_review' as const,
+    'done' as const,
+    'failed' as const,
+  ])('should include state "%s" in output when set', (state) => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithState(state)
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.state).toBe(state)
+  })
+})
+
+describe('formatFinishedLoomForJson - swarm state field', () => {
+  const createFinishedMetadataWithState = (state: LoomMetadata['state']): LoomMetadata => ({
+    description: 'Finished swarm task',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    parentLoom: null,
+    status: 'finished',
+    finishedAt: '2024-01-20T15:45:00.000Z',
+  })
+
+  it('should return state: null when metadata has no state', () => {
+    const metadata = createFinishedMetadataWithState(null)
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.state).toBeNull()
+  })
+
+  it.each([
+    'pending' as const,
+    'in_progress' as const,
+    'code_review' as const,
+    'done' as const,
+    'failed' as const,
+  ])('should include state "%s" in output when set', (state) => {
+    const metadata = createFinishedMetadataWithState(state)
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.state).toBe(state)
   })
 })
