@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import path from 'path'
+import os from 'os'
 import type { RecapFile, RecapEntry } from './recap-types.js'
 import type { MetadataFile, SwarmState } from '../lib/MetadataManager.js'
 
@@ -397,6 +399,151 @@ describe('recap-server state transition tools', () => {
 				const result = await getLoomState(readMetadataMock)
 				expect(result.state).toBe(state)
 			}
+		})
+	})
+})
+
+/**
+ * Replicates the slugifyPath logic from recap-server.ts for testing
+ * Same algorithm as MetadataManager.slugifyPath() and src/utils/mcp.ts slugifyPath()
+ */
+function slugifyPath(worktreePath: string): string {
+	let slug = worktreePath.replace(/[/\\]+$/, '')
+	slug = slug.replace(/[/\\]/g, '___')
+	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
+	return `${slug}.json`
+}
+
+/**
+ * Replicates the resolveRecapFilePath logic from recap-server.ts
+ * When worktreePath is provided, derives the path dynamically.
+ * Otherwise falls back to the env var default.
+ */
+function resolveRecapFilePath(worktreePath: string | undefined, envDefault: string): string {
+	if (worktreePath) {
+		const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+		return path.join(recapsDir, slugifyPath(worktreePath))
+	}
+	return envDefault
+}
+
+/**
+ * Replicates the resolveMetadataFilePath logic from recap-server.ts
+ * When worktreePath is provided, derives the path dynamically.
+ * Otherwise falls back to the env var default.
+ */
+function resolveMetadataFilePath(worktreePath: string | undefined, envDefault: string): string {
+	if (worktreePath) {
+		const loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
+		return path.join(loomsDir, slugifyPath(worktreePath))
+	}
+	return envDefault
+}
+
+describe('recap-server worktreePath resolution', () => {
+	const envRecapPath = '/home/user/.config/iloom-ai/recaps/existing.json'
+	const envMetadataPath = '/home/user/.config/iloom-ai/looms/existing.json'
+
+	describe('slugifyPath', () => {
+		it('should convert a Unix worktree path to a slug', () => {
+			const result = slugifyPath('/Users/jane/dev/repo')
+			expect(result).toBe('___Users___jane___dev___repo.json')
+		})
+
+		it('should trim trailing slashes', () => {
+			const result = slugifyPath('/Users/jane/dev/repo/')
+			expect(result).toBe('___Users___jane___dev___repo.json')
+		})
+
+		it('should handle paths with special characters', () => {
+			const result = slugifyPath('/Users/jane/my project/repo')
+			expect(result).toBe('___Users___jane___my-project___repo.json')
+		})
+
+		it('should handle paths with dots', () => {
+			const result = slugifyPath('/Users/jane/.config/repo')
+			expect(result).toBe('___Users___jane___-config___repo.json')
+		})
+
+		it('should preserve hyphens and underscores', () => {
+			const result = slugifyPath('/Users/jane/my-repo_v2')
+			expect(result).toBe('___Users___jane___my-repo_v2.json')
+		})
+	})
+
+	describe('resolveRecapFilePath', () => {
+		it('should return env default when worktreePath is undefined', () => {
+			const result = resolveRecapFilePath(undefined, envRecapPath)
+			expect(result).toBe(envRecapPath)
+		})
+
+		it('should derive path from worktreePath when provided', () => {
+			const worktreePath = '/Users/jane/dev/repo'
+			const result = resolveRecapFilePath(worktreePath, envRecapPath)
+
+			const expected = path.join(
+				os.homedir(),
+				'.config',
+				'iloom-ai',
+				'recaps',
+				'___Users___jane___dev___repo.json'
+			)
+			expect(result).toBe(expected)
+		})
+
+		it('should not use env default when worktreePath is provided', () => {
+			const result = resolveRecapFilePath('/some/path', envRecapPath)
+			expect(result).not.toBe(envRecapPath)
+		})
+
+		it('should produce different paths for different worktrees', () => {
+			const result1 = resolveRecapFilePath('/Users/jane/project-a', envRecapPath)
+			const result2 = resolveRecapFilePath('/Users/jane/project-b', envRecapPath)
+			expect(result1).not.toBe(result2)
+		})
+	})
+
+	describe('resolveMetadataFilePath', () => {
+		it('should return env default when worktreePath is undefined', () => {
+			const result = resolveMetadataFilePath(undefined, envMetadataPath)
+			expect(result).toBe(envMetadataPath)
+		})
+
+		it('should derive path from worktreePath when provided', () => {
+			const worktreePath = '/Users/jane/dev/repo'
+			const result = resolveMetadataFilePath(worktreePath, envMetadataPath)
+
+			const expected = path.join(
+				os.homedir(),
+				'.config',
+				'iloom-ai',
+				'looms',
+				'___Users___jane___dev___repo.json'
+			)
+			expect(result).toBe(expected)
+		})
+
+		it('should use looms directory not recaps directory', () => {
+			const result = resolveMetadataFilePath('/Users/jane/dev/repo', envMetadataPath)
+			expect(result).toContain('/looms/')
+			expect(result).not.toContain('/recaps/')
+		})
+
+		it('should not use env default when worktreePath is provided', () => {
+			const result = resolveMetadataFilePath('/some/path', envMetadataPath)
+			expect(result).not.toBe(envMetadataPath)
+		})
+	})
+
+	describe('recap and metadata paths use same slug for same worktree', () => {
+		it('should produce the same filename for both recap and metadata paths', () => {
+			const worktreePath = '/Users/jane/dev/feature-branch'
+			const recapPath = resolveRecapFilePath(worktreePath, envRecapPath)
+			const metadataPath = resolveMetadataFilePath(worktreePath, envMetadataPath)
+
+			// Same filename, different directory
+			expect(path.basename(recapPath)).toBe(path.basename(metadataPath))
+			expect(path.dirname(recapPath)).not.toBe(path.dirname(metadataPath))
 		})
 	})
 })
