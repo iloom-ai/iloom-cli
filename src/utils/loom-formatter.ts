@@ -56,6 +56,18 @@ export interface ChildrenJson {
 }
 
 /**
+ * Swarm issue data for epic loom JSON output
+ * Each child issue enriched with state and worktreePath from its loom metadata
+ */
+export interface SwarmIssue {
+  number: string          // With prefix: "#123" (GitHub), "ENG-123" (Linear)
+  title: string
+  url: string
+  state: SwarmState | null
+  worktreePath: string | null
+}
+
+/**
  * JSON output schema for il list --json
  */
 export interface LoomJsonOutput {
@@ -84,6 +96,10 @@ export interface LoomJsonOutput {
   parentLoom: ParentLoomRef | null
   /** Children data (only populated when --children flag is used) */
   children?: ChildrenJson | null
+  /** Swarm issues for epic looms (only present when type === 'epic') */
+  swarmIssues?: SwarmIssue[] | null
+  /** Dependency map for epic looms (only present when type === 'epic') */
+  dependencyMap?: Record<string, string[]> | null
 }
 
 /**
@@ -145,6 +161,44 @@ function extractIssueNumbers(branch: string): string[] {
 }
 
 /**
+ * Enrich child issues from epic metadata with state and worktreePath
+ * by looking up each child's loom metadata from the provided metadata collection.
+ *
+ * @param childIssues - Child issues from epic metadata
+ * @param allMetadata - All active loom metadata to search for child looms
+ * @returns Array of SwarmIssue with enriched state and worktreePath
+ */
+export function enrichSwarmIssues(
+  childIssues: LoomMetadata['childIssues'],
+  allMetadata: LoomMetadata[],
+): SwarmIssue[] {
+  // Build a map of issue number -> metadata for fast lookup
+  const issueNumberToMetadata = new Map<string, LoomMetadata>()
+  for (const meta of allMetadata) {
+    for (const issueNum of meta.issue_numbers) {
+      issueNumberToMetadata.set(issueNum, meta)
+    }
+  }
+
+  return childIssues.map((child) => {
+    // Strip the '#' prefix from GitHub issue numbers for lookup
+    // e.g., "#123" -> "123", "ENG-123" stays as-is
+    const lookupNumber = child.number.startsWith('#')
+      ? child.number.slice(1)
+      : child.number
+    const childMeta = issueNumberToMetadata.get(lookupNumber)
+
+    return {
+      number: child.number,
+      title: child.title,
+      url: child.url,
+      state: childMeta?.state ?? null,
+      worktreePath: childMeta?.worktreePath ?? null,
+    }
+  })
+}
+
+/**
  * Format single worktree to JSON schema
  * - When metadata is available, use metadata values for type, issue_numbers, pr_numbers
  * - When metadata is not available, derive values from worktree path/branch
@@ -152,11 +206,13 @@ function extractIssueNumbers(branch: string): string[] {
  * @param worktree - The worktree to format
  * @param mainWorktreePath - Optional path to the main worktree for isMainWorktree detection
  * @param metadata - Optional metadata from MetadataManager (preferred source when available)
+ * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  */
 export function formatLoomForJson(
   worktree: GitWorktree,
   mainWorktreePath?: string,
-  metadata?: LoomMetadata | null
+  metadata?: LoomMetadata | null,
+  allMetadata?: LoomMetadata[],
 ): LoomJsonOutput {
   // Use metadata values when available, otherwise derive from worktree
   const loomType = metadata?.issueType ?? determineLoomType(worktree)
@@ -183,6 +239,17 @@ export function formatLoomForJson(
   // Determine if this is the main worktree by comparing paths
   const isMainWorktree = mainWorktreePath ? worktree.path === mainWorktreePath : false
 
+  // Build swarmIssues and dependencyMap for epic looms
+  const isEpic = loomType === 'epic'
+  const swarmIssues = isEpic && metadata?.childIssues && metadata.childIssues.length > 0
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [])
+    : isEpic ? [] : undefined
+  const dependencyMap = isEpic
+    ? (metadata?.dependencyMap && Object.keys(metadata.dependencyMap).length > 0
+        ? metadata.dependencyMap
+        : {})
+    : undefined
+
   return {
     name: worktree.branch || worktree.path,
     worktreePath: worktree.bare ? null : worktree.path,
@@ -202,6 +269,8 @@ export function formatLoomForJson(
     state: metadata?.state ?? null,
     isChildLoom: metadata?.parentLoom != null,
     parentLoom: metadata?.parentLoom ?? null,
+    ...(swarmIssues !== undefined && { swarmIssues }),
+    ...(dependencyMap !== undefined && { dependencyMap }),
   }
 }
 
@@ -211,13 +280,19 @@ export function formatLoomForJson(
  * @param worktrees - Array of worktrees to format
  * @param mainWorktreePath - Optional path to the main worktree for isMainWorktree detection
  * @param metadata - Optional map of worktree paths to metadata
+ * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  */
 export function formatLoomsForJson(
   worktrees: GitWorktree[],
   mainWorktreePath?: string,
-  metadata?: Map<string, LoomMetadata | null>
+  metadata?: Map<string, LoomMetadata | null>,
+  allMetadata?: LoomMetadata[],
 ): LoomJsonOutput[] {
-  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path)))
+  // If allMetadata not provided, derive from metadata map values
+  const resolvedAllMetadata = allMetadata ?? (metadata
+    ? Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+    : [])
+  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path), resolvedAllMetadata))
 }
 
 /**
@@ -226,10 +301,22 @@ export function formatLoomsForJson(
  * Finished looms don't have an associated worktree, so we derive values from metadata.
  *
  * @param metadata - The finished loom metadata
+ * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  */
-export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutput {
+export function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: LoomMetadata[]): LoomJsonOutput {
   // Use metadata values for type, default to 'branch' if not set
   const loomType = metadata.issueType ?? 'branch'
+
+  // Build swarmIssues and dependencyMap for epic looms
+  const isEpic = loomType === 'epic'
+  const swarmIssues = isEpic && metadata.childIssues && metadata.childIssues.length > 0
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [])
+    : isEpic ? [] : undefined
+  const dependencyMap = isEpic
+    ? (metadata.dependencyMap && Object.keys(metadata.dependencyMap).length > 0
+        ? metadata.dependencyMap
+        : {})
+    : undefined
 
   return {
     name: metadata.branchName ?? metadata.worktreePath ?? 'unknown',
@@ -252,5 +339,7 @@ export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutpu
     state: metadata.state ?? null,
     isChildLoom: metadata.parentLoom != null,
     parentLoom: metadata.parentLoom ?? null,
+    ...(swarmIssues !== undefined && { swarmIssues }),
+    ...(dependencyMap !== undefined && { dependencyMap }),
   }
 }

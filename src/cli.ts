@@ -20,7 +20,7 @@ import { hasMultipleRemotes } from './utils/remote.js'
 import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
-import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
+import { formatLoomsForJson, formatFinishedLoomForJson, enrichSwarmIssues } from './utils/loom-formatter.js'
 import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
 import chalk from 'chalk'
@@ -1074,27 +1074,40 @@ program
         if (showActive) {
           if (options.global) {
             // Format global active looms from metadata (similar to finished looms format)
-            activeJson = globalActiveLooms.map(loom => ({
-              name: loom.branchName ?? loom.worktreePath ?? 'unknown',
-              worktreePath: loom.worktreePath,
-              branch: loom.branchName,
-              type: loom.issueType ?? 'branch',
-              issue_numbers: loom.issue_numbers,
-              pr_numbers: loom.pr_numbers,
-              isMainWorktree: false, // Global looms from other projects are never the main worktree
-              description: loom.description ?? null,
-              created_at: loom.created_at ?? null,
-              issueTracker: loom.issueTracker ?? null,
-              colorHex: loom.colorHex ?? null,
-              projectPath: loom.projectPath ?? null,
-              issueUrls: loom.issueUrls ?? {},
-              prUrls: loom.prUrls ?? {},
-              status: 'active' as const,
-              finishedAt: null,
-              state: loom.state ?? null,
-              isChildLoom: loom.parentLoom != null,
-              parentLoom: loom.parentLoom ?? null,
-            }))
+            activeJson = globalActiveLooms.map(loom => {
+              const isEpic = (loom.issueType ?? 'branch') === 'epic'
+              const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms)
+                : isEpic ? [] : undefined
+              const depMap = isEpic
+                ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
+                    ? loom.dependencyMap
+                    : {})
+                : undefined
+              return {
+                name: loom.branchName ?? loom.worktreePath ?? 'unknown',
+                worktreePath: loom.worktreePath,
+                branch: loom.branchName,
+                type: loom.issueType ?? 'branch',
+                issue_numbers: loom.issue_numbers,
+                pr_numbers: loom.pr_numbers,
+                isMainWorktree: false, // Global looms from other projects are never the main worktree
+                description: loom.description ?? null,
+                created_at: loom.created_at ?? null,
+                issueTracker: loom.issueTracker ?? null,
+                colorHex: loom.colorHex ?? null,
+                projectPath: loom.projectPath ?? null,
+                issueUrls: loom.issueUrls ?? {},
+                prUrls: loom.prUrls ?? {},
+                status: 'active' as const,
+                finishedAt: null,
+                state: loom.state ?? null,
+                isChildLoom: loom.parentLoom != null,
+                parentLoom: loom.parentLoom ?? null,
+                ...(swarmIssues !== undefined && { swarmIssues }),
+                ...(depMap !== undefined && { dependencyMap: depMap }),
+              }
+            })
           } else {
             // Format worktrees from current repo
             activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
@@ -1113,8 +1126,13 @@ program
           )
         }
 
+        // Collect all active metadata for enriching epic swarm issues
+        const allActiveMetadata = options.global
+          ? globalActiveLooms
+          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+
         // Format finished looms
-        let finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+        let finishedJson = finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata))
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
         if (currentProjectPath) {
