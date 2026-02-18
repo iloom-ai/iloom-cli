@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import fs from 'fs-extra'
 import { SwarmSetupService, type SwarmChildIssue } from './SwarmSetupService.js'
 import type { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { MetadataManager } from './MetadataManager.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
+import type { PromptTemplateManager } from './PromptTemplateManager.js'
 
 // Mock dependencies
 vi.mock('../utils/package-manager.js', () => ({
@@ -24,8 +26,6 @@ vi.mock('fs-extra', () => ({
 	default: {
 		ensureDir: vi.fn().mockResolvedValue(undefined),
 		writeFile: vi.fn().mockResolvedValue(undefined),
-		readFile: vi.fn().mockResolvedValue('# Skill content'),
-		accessSync: vi.fn(),
 	},
 }))
 
@@ -35,6 +35,7 @@ describe('SwarmSetupService', () => {
 	let mockMetadataManager: MetadataManager
 	let mockAgentManager: AgentManager
 	let mockSettingsManager: SettingsManager
+	let mockTemplateManager: PromptTemplateManager
 
 	const childIssues: SwarmChildIssue[] = [
 		{ number: '#101', title: 'Child issue 1', body: 'Body 1', url: 'https://github.com/org/repo/issues/101' },
@@ -67,11 +68,16 @@ describe('SwarmSetupService', () => {
 			loadSettings: vi.fn().mockResolvedValue({}),
 		} as unknown as SettingsManager
 
+		mockTemplateManager = {
+			getPrompt: vi.fn().mockResolvedValue('# Rendered swarm skill content'),
+		} as unknown as PromptTemplateManager
+
 		service = new SwarmSetupService(
 			mockGitWorktree,
 			mockMetadataManager,
 			mockAgentManager,
 			mockSettingsManager,
+			mockTemplateManager,
 		)
 	})
 
@@ -191,6 +197,69 @@ describe('SwarmSetupService', () => {
 				expect.anything(),
 				expect.objectContaining({ SWARM_MODE: true }),
 			)
+		})
+	})
+
+	describe('renderSwarmSkill', () => {
+		it('calls PromptTemplateManager.getPrompt with SWARM_MODE=true and ONE_SHOT_MODE=true', async () => {
+			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					SWARM_MODE: true,
+					ONE_SHOT_MODE: true,
+				}),
+			)
+		})
+
+		it('writes rendered content to .claude/skills/iloom-swarm-workflow/SKILL.md', async () => {
+			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills/iloom-swarm-workflow/SKILL.md',
+				'# Rendered swarm skill content',
+				'utf-8',
+			)
+		})
+
+		it('includes review configuration variables from settings', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-code-reviewer': {
+						enabled: true,
+						providers: { claude: 'opus' },
+					},
+				},
+			})
+
+			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					SWARM_MODE: true,
+					ONE_SHOT_MODE: true,
+					REVIEW_ENABLED: true,
+					REVIEW_CLAUDE_MODEL: 'opus',
+				}),
+			)
+		})
+
+		it('returns true on success', async () => {
+			const result = await service.renderSwarmSkill('/Users/dev/project-epic-610')
+
+			expect(result).toBe(true)
+		})
+
+		it('returns false and logs warning when getPrompt fails', async () => {
+			vi.mocked(mockTemplateManager.getPrompt).mockRejectedValueOnce(
+				new Error('Template not found'),
+			)
+
+			const result = await service.renderSwarmSkill('/Users/dev/project-epic-610')
+
+			expect(result).toBe(false)
 		})
 	})
 
