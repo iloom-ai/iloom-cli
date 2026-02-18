@@ -5,7 +5,9 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
-import { fetchChildIssues } from '../utils/list-children.js'
+import { fetchChildIssues, fetchChildIssueDetails } from '../utils/list-children.js'
+import { buildDependencyMap } from '../utils/dependency-map.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 
 // Mock the GitHubService
 vi.mock('../lib/GitHubService.js')
@@ -83,6 +85,31 @@ vi.mock('../utils/first-run-setup.js', () => ({
 // Mock list-children utilities for epic detection
 vi.mock('../utils/list-children.js', () => ({
 	fetchChildIssues: vi.fn().mockResolvedValue([]),
+	fetchChildIssueDetails: vi.fn().mockResolvedValue([]),
+}))
+
+// Mock dependency-map utilities
+vi.mock('../utils/dependency-map.js', () => ({
+	buildDependencyMap: vi.fn().mockResolvedValue({}),
+}))
+
+// Mock IssueTrackerFactory for epic child data fetching
+vi.mock('../lib/IssueTrackerFactory.js', () => ({
+	IssueTrackerFactory: {
+		create: vi.fn().mockReturnValue({
+			fetchIssue: vi.fn().mockResolvedValue({
+				number: 0,
+				title: '',
+				body: '',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: '',
+			}),
+			providerName: 'github',
+		}),
+		getProviderName: vi.fn().mockReturnValue('github'),
+	},
 }))
 
 // Mock the logger to prevent console output during tests
@@ -1868,6 +1895,17 @@ describe('StartCommand', () => {
 				url: 'https://github.com/test/repo/issues/100',
 			})
 			vi.mocked(epicMockGitHubService.validateIssueState).mockResolvedValue()
+
+			// Default: no child issues (epic detection returns empty)
+			vi.mocked(fetchChildIssues).mockResolvedValue([])
+			// Default: empty child issue details and dependency map
+			vi.mocked(fetchChildIssueDetails).mockResolvedValue([])
+			vi.mocked(buildDependencyMap).mockResolvedValue({})
+			// Re-setup IssueTrackerFactory.create (reset by vitest mockReset)
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				fetchIssue: vi.fn().mockResolvedValue({ number: 0, title: '', body: '', state: 'open', labels: [], assignees: [], url: '' }),
+				providerName: 'github',
+			} as unknown as ReturnType<typeof IssueTrackerFactory.create>)
 		})
 
 		it('should prompt user when issue has children and no --epic flag', async () => {
@@ -1995,6 +2033,93 @@ describe('StartCommand', () => {
 				type: 'epic',
 				childIssueNumbers: ['201', '202'],
 			}))
+		})
+
+		it('should fetch and pass childIssues and dependencyMap when creating epic loom', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+				{ id: '102', title: 'Child 2', url: 'https://github.com/test/repo/issues/102', state: 'open' },
+			])
+
+			vi.mocked(fetchChildIssueDetails).mockResolvedValue([
+				{ number: '#101', title: 'Child 1', body: 'Body 1', url: 'https://github.com/test/repo/issues/101' },
+				{ number: '#102', title: 'Child 2', body: 'Body 2', url: 'https://github.com/test/repo/issues/102' },
+			])
+
+			vi.mocked(buildDependencyMap).mockResolvedValue({
+				'101': [],
+				'102': ['101'],
+			})
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: { epic: true },
+			})
+
+			expect(fetchChildIssueDetails).toHaveBeenCalledWith('100', expect.anything(), expect.anything(), undefined)
+			expect(buildDependencyMap).toHaveBeenCalledWith(['101', '102'], expect.anything(), undefined)
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'epic',
+					options: expect.objectContaining({
+						childIssueNumbers: ['101', '102'],
+						childIssues: [
+							{ number: '#101', title: 'Child 1', body: 'Body 1', url: 'https://github.com/test/repo/issues/101' },
+							{ number: '#102', title: 'Child 2', body: 'Body 2', url: 'https://github.com/test/repo/issues/102' },
+						],
+						dependencyMap: {
+							'101': [],
+							'102': ['101'],
+						},
+					}),
+				})
+			)
+		})
+
+		it('should continue epic creation when fetchChildIssueDetails fails', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+			])
+
+			vi.mocked(fetchChildIssueDetails).mockRejectedValue(new Error('API error'))
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: { epic: true },
+			})
+
+			// Should still create epic, just without rich child data
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'epic',
+					options: expect.objectContaining({
+						childIssueNumbers: ['101'],
+					}),
+				})
+			)
+		})
+
+		it('should not fetch childIssueDetails when user declines epic mode', async () => {
+			const { promptConfirmation, isInteractiveEnvironment } = await import('../utils/prompt.js')
+			vi.mocked(isInteractiveEnvironment).mockReturnValue(true)
+			vi.mocked(promptConfirmation).mockResolvedValue(false)
+
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+			])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: {},
+			})
+
+			expect(fetchChildIssueDetails).not.toHaveBeenCalled()
+			expect(buildDependencyMap).not.toHaveBeenCalled()
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'issue',
+				})
+			)
 		})
 
 		it('should not fetch children for non-issue types (branch)', async () => {

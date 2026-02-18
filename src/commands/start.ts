@@ -20,9 +20,10 @@ import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions, StartResult } from '../types/index.js'
-import { fetchChildIssues } from '../utils/list-children.js'
-import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
+import { fetchChildIssues, fetchChildIssueDetails } from '../utils/list-children.js'
+import { buildDependencyMap } from '../utils/dependency-map.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -226,6 +227,8 @@ export class StartCommand {
 
 			// Step 2.6: Detect epic (issue with child issues) and handle --epic/--no-epic flags
 			let childIssueNumbers: string[] = []
+			let childIssues: Array<{ number: string; title: string; body: string; url: string }> = []
+			let dependencyMap: Record<string, string[]> = {}
 
 			if (parsed.type === 'issue' && parsed.number) {
 				const settings = await this.settingsManager.loadSettings()
@@ -269,6 +272,22 @@ export class StartCommand {
 
 					if (createAsEpic) {
 						parsed.type = 'epic'
+
+						// Fetch rich child issue details and dependency map for epic metadata
+						try {
+							const issueTracker = IssueTrackerFactory.create(settings)
+							const [details, depMap] = await Promise.all([
+								fetchChildIssueDetails(String(parsed.number), issueTracker, settings, repo),
+								buildDependencyMap(childIssueNumbers, settings, repo),
+							])
+							childIssues = details ?? []
+							dependencyMap = depMap ?? {}
+							getLogger().info(`Fetched ${childIssues.length} child issue details and dependency map`)
+						} catch (error) {
+							// Non-fatal: epic can still be created without rich child data
+							// il spin will re-fetch this data when it runs
+							getLogger().warn(`Failed to fetch epic child data: ${error instanceof Error ? error.message : String(error)}`)
+						}
 					} else {
 						// Not creating as epic, clear child issue numbers
 						childIssueNumbers = []
@@ -343,6 +362,8 @@ export class StartCommand {
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
 					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
+					...(childIssues.length > 0 && { childIssues }),
+					...(Object.keys(dependencyMap).length > 0 && { dependencyMap }),
 				},
 			})
 
