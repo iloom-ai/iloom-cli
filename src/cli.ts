@@ -1143,9 +1143,10 @@ program
 
         // Fetch children data if --children flag is set
         if (options.children) {
-          // Load settings for determining issue tracker provider
+          // Load settings and create issue tracker for fetching children
           const settingsManager = new SettingsManager()
           const settings = await settingsManager.loadSettings()
+          const issueTracker = IssueTrackerFactory.create(settings)
 
           // Fetch children for all active looms in parallel using Promise.allSettled
           const activeChildrenResults = await Promise.allSettled(
@@ -1158,7 +1159,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1181,7 +1182,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1219,11 +1220,12 @@ program
         return
       }
 
-      // Load settings for children fetching if --children flag is set
-      let textSettings: import('./lib/SettingsManager.js').IloomSettings | null = null
+      // Load settings and create issue tracker for children fetching if --children flag is set
+      let textIssueTracker: import('./lib/IssueTracker.js').IssueTracker | null = null
       if (options.children) {
         const settingsManager = new SettingsManager()
-        textSettings = await settingsManager.loadSettings()
+        const textSettings = await settingsManager.loadSettings()
+        textIssueTracker = IssueTrackerFactory.create(textSettings)
       }
 
       // Show active workspaces
@@ -1251,8 +1253,8 @@ program
               logger.info(`    Project: ${loom.projectPath}`)
             }
             // Show children summary if --children flag is set
-            if (options.children && textSettings) {
-              const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+            if (options.children && textIssueTracker) {
+              const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1284,8 +1286,8 @@ program
             logger.info(`    Path: ${formatted.path}`)
             logger.info(`    Commit: ${formatted.commit}`)
             // Show children summary if --children flag is set
-            if (options.children && textSettings && loomMetadata) {
-              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textSettings)
+            if (options.children && textIssueTracker && loomMetadata) {
+              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1323,8 +1325,8 @@ program
             logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
           }
           // Show children summary if --children flag is set
-          if (options.children && textSettings) {
-            const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+          if (options.children && textIssueTracker) {
+            const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
             if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
               logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
               // Show child issues without looms

@@ -244,6 +244,28 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	}
 
 	/**
+	 * Fetch child issues of a Jira parent issue using JQL
+	 * @param parentIdentifier - Jira issue key (e.g., "PROJ-123")
+	 * @param _repo - Repository (unused for Jira)
+	 * @returns Array of child issues
+	 */
+	async getChildIssues(parentIdentifier: string, _repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+		const parentKey = this.normalizeIdentifier(parentIdentifier)
+		const jiraKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/
+		if (!jiraKeyPattern.test(parentKey)) {
+			getLogger().warn(`Invalid Jira issue key format: ${parentKey}`)
+			return []
+		}
+		const issues = await this.client.searchIssues(`parent = ${parentKey}`)
+		return issues.map(issue => ({
+			id: issue.key,
+			title: issue.fields.summary,
+			url: `${this.config.host}/browse/${issue.key}`,
+			state: issue.fields.status.name.toLowerCase(),
+		}))
+	}
+
+	/**
 	 * Get issue details (alias for fetchIssue for MCP compatibility)
 	 */
 	async getIssue(identifier: string | number): Promise<Issue> {

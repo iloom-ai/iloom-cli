@@ -231,9 +231,10 @@ export class StartCommand {
 
 			if (parsed.type === 'issue' && parsed.number) {
 				const settings = await this.settingsManager.loadSettings()
+				const epicIssueTracker = IssueTrackerFactory.create(settings)
 				let children: Awaited<ReturnType<typeof fetchChildIssues>> = []
 				try {
-					children = await fetchChildIssues(String(parsed.number), settings, repo)
+					children = await fetchChildIssues(String(parsed.number), epicIssueTracker, repo)
 				} catch (error) {
 					getLogger().warn(`Failed to check for child issues: ${error instanceof Error ? error.message : 'Unknown error'}. Proceeding as normal loom.`)
 				}
@@ -271,9 +272,8 @@ export class StartCommand {
 
 						// Fetch rich child issue details and dependency map for epic metadata
 						try {
-							const issueTracker = IssueTrackerFactory.create(settings)
 							const [details, depMap] = await Promise.all([
-								fetchChildIssueDetails(String(parsed.number), issueTracker, settings, repo),
+								fetchChildIssueDetails(String(parsed.number), epicIssueTracker, repo),
 								buildDependencyMap(childIssueNumbers, settings, repo),
 							])
 							childIssues = details ?? []

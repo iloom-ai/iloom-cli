@@ -19,6 +19,7 @@ vi.mock('../utils/github.js', async () => {
 		fetchProjectFields: vi.fn(),
 		updateProjectItemField: vi.fn(),
 		createIssue: vi.fn(),
+		getSubIssues: vi.fn(),
 	}
 })
 
@@ -716,6 +717,35 @@ describe('GitHubService', () => {
 			await service.moveIssueToInProgress(123)
 
 			expect(githubUtils.updateProjectItemField).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('getChildIssues', () => {
+		it('should call getSubIssues with parsed integer and repo', async () => {
+			const mockChildren = [
+				{ id: '101', title: 'Sub-task 1', url: 'https://github.com/owner/repo/issues/101', state: 'open' },
+			]
+			vi.mocked(githubUtils.getSubIssues).mockResolvedValueOnce(mockChildren)
+
+			const result = await service.getChildIssues('100', 'owner/repo')
+
+			expect(githubUtils.getSubIssues).toHaveBeenCalledWith(100, 'owner/repo')
+			expect(result).toEqual(mockChildren)
+		})
+
+		it('should return empty array for non-numeric identifier', async () => {
+			const result = await service.getChildIssues('not-a-number')
+
+			expect(githubUtils.getSubIssues).not.toHaveBeenCalled()
+			expect(result).toEqual([])
+		})
+
+		it('should call getSubIssues without repo when not provided', async () => {
+			vi.mocked(githubUtils.getSubIssues).mockResolvedValueOnce([])
+
+			await service.getChildIssues('42')
+
+			expect(githubUtils.getSubIssues).toHaveBeenCalledWith(42, undefined)
 		})
 	})
 

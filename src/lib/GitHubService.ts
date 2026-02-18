@@ -18,6 +18,7 @@ import {
 	fetchProjectFields,
 	updateProjectItemField,
 	createIssue,
+	getSubIssues,
 } from '../utils/github.js'
 import { getLogger } from '../utils/logger-context.js'
 import { promptConfirmation } from '../utils/prompt.js'
@@ -197,6 +198,15 @@ export class GitHubService implements IssueTracker {
 		getLogger().debug('Fetching issue URL', { issueNumber, repo })
 		const issue = await fetchGhIssue(issueNumber, repo)
 		return issue.url
+	}
+
+	public async getChildIssues(parentIdentifier: string, repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+		const issueNum = parseInt(parentIdentifier, 10)
+		if (isNaN(issueNum)) {
+			getLogger().warn(`Invalid GitHub issue number: ${parentIdentifier}`)
+			return []
+		}
+		return getSubIssues(issueNum, repo)
 	}
 
 	// GitHub Projects integration

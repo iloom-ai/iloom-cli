@@ -10,6 +10,7 @@ import {
   fetchLinearIssue,
   createLinearIssue,
   updateLinearIssueState,
+  getLinearChildIssues,
 } from '../utils/linear.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import type { IssueTracker } from './IssueTracker.js'
@@ -180,6 +181,16 @@ export class LinearService implements IssueTracker {
   public async getIssueUrl(identifier: string | number, _repo?: string): Promise<string> {
     const issue = await this.fetchIssue(identifier)
     return issue.url
+  }
+
+  /**
+   * Fetch child issues of a Linear parent issue
+   * @param parentIdentifier - Linear issue identifier (e.g., "ENG-123")
+   * @param _repo - Repository (unused for Linear)
+   * @returns Array of child issues
+   */
+  public async getChildIssues(parentIdentifier: string, _repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+    return getLinearChildIssues(parentIdentifier, this.config.apiToken ? { apiToken: this.config.apiToken } : undefined)
   }
 
   /**
