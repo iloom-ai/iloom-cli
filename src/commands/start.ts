@@ -24,6 +24,7 @@ import { fetchChildIssues, fetchChildIssueDetails } from '../utils/list-children
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
+import { isInteractiveEnvironment, promptConfirmation } from '../utils/prompt.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -164,7 +165,6 @@ export class StartCommand {
 
 			// Step 2.4: Handle child loom decision
 			if (parentLoom) {
-				const { isInteractiveEnvironment, promptConfirmation } = await import('../utils/prompt.js')
 
 				// Format display message based on parent type
 				const parentDisplay = parentLoom.type === 'issue'
@@ -194,8 +194,7 @@ export class StartCommand {
 							true // Default yes
 						)
 					} else {
-						getLogger().error(`Non-interactive environment detected, use either --child-loom or --no-child-loom to specify behavior`)
-						process.exit(1)
+						throw new Error('Non-interactive environment detected, use either --child-loom or --no-child-loom to specify behavior')
 					}
 
 					if (!createAsChild) {
@@ -257,16 +256,13 @@ export class StartCommand {
 							throw new Error('JSON mode requires explicit --epic or --no-epic flag when issue has child issues')
 						}
 
-						const { isInteractiveEnvironment, promptConfirmation } = await import('../utils/prompt.js')
-
 						if (isInteractiveEnvironment()) {
 							createAsEpic = await promptConfirmation(
 								`This issue has ${children.length} child issue(s). Create as epic loom?`,
 								true // Default yes
 							)
 						} else {
-							getLogger().error('Non-interactive environment detected, use either --epic or --no-epic to specify behavior')
-							process.exit(1)
+							throw new Error('Non-interactive environment detected, use either --epic or --no-epic to specify behavior')
 						}
 					}
 
@@ -284,9 +280,11 @@ export class StartCommand {
 							dependencyMap = depMap ?? {}
 							getLogger().info(`Fetched ${childIssues.length} child issue details and dependency map`)
 						} catch (error) {
-							// Non-fatal: epic can still be created without rich child data
-							// il spin will re-fetch this data when it runs
-							getLogger().warn(`Failed to fetch epic child data: ${error instanceof Error ? error.message : String(error)}`)
+							// Revert to issue type since child data fetch failed
+							// il spin needs child data to enter swarm mode, so an epic without it would be broken
+							parsed.type = 'issue'
+							childIssueNumbers = []
+							getLogger().warn(`Failed to fetch epic child data, reverting to normal loom: ${error instanceof Error ? error.message : String(error)}`)
 						}
 					} else {
 						// Not creating as epic, clear child issue numbers
@@ -304,7 +302,6 @@ export class StartCommand {
 			// The explicit --one-shot=bypassPermissions flag is sufficient intent.
 			// The warning is shown again when Claude launches via 'il spin'.
 			if (input.options.oneShot === 'bypassPermissions' && input.options.claude !== false && !isJsonMode) {
-				const { promptConfirmation } = await import('../utils/prompt.js')
 				const confirmed = await promptConfirmation(
 					'WARNING: bypassPermissions mode will allow Claude to execute all tool calls without confirmation. ' +
 					'This can be dangerous. Do you want to proceed?'

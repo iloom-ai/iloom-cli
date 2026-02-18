@@ -2076,7 +2076,7 @@ describe('StartCommand', () => {
 			)
 		})
 
-		it('should continue epic creation when fetchChildIssueDetails fails', async () => {
+		it('should revert to normal loom when fetchChildIssueDetails fails', async () => {
 			vi.mocked(fetchChildIssues).mockResolvedValue([
 				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
 			])
@@ -2088,15 +2088,15 @@ describe('StartCommand', () => {
 				options: { epic: true },
 			})
 
-			// Should still create epic, just without rich child data
+			// Should revert to issue type since child data fetch failed
 			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
 				expect.objectContaining({
-					type: 'epic',
-					options: expect.objectContaining({
-						childIssueNumbers: ['101'],
-					}),
+					type: 'issue',
 				})
 			)
+			// Should not include childIssueNumbers since epic was reverted
+			const createCall = epicMockLoomManager.createIloom.mock.calls[0][0]
+			expect(createCall.options.childIssueNumbers).toBeUndefined()
 		})
 
 		it('should not fetch childIssueDetails when user declines epic mode', async () => {
