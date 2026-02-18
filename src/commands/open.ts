@@ -19,7 +19,7 @@ export interface OpenCommandInput {
 }
 
 interface ParsedOpenInput {
-	type: 'issue' | 'pr' | 'branch'
+	type: 'issue' | 'pr' | 'branch' | 'epic'
 	number?: string | number // For issues and PRs
 	branchName?: string // For branches
 	originalInput: string

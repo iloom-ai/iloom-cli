@@ -373,6 +373,8 @@ program
   .option('--no-terminal', 'Disable terminal')
   .option('--child-loom', 'Force create as child loom (skip prompt)')
   .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
+  .option('--epic', 'Create as epic loom with child issues (skip prompt)')
+  .option('--no-epic', 'Skip epic loom creation even if issue has children')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
   .option('--json', 'Output result as JSON')
   .addOption(

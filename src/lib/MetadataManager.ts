@@ -18,7 +18,7 @@ export interface MetadataFile {
   // Additional metadata fields (v2)
   branchName?: string
   worktreePath?: string
-  issueType?: 'branch' | 'issue' | 'pr'
+  issueType?: 'branch' | 'issue' | 'pr' | 'epic'
   issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers?: string[]
   pr_numbers?: string[]
@@ -32,8 +32,9 @@ export interface MetadataFile {
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
   state?: SwarmState // Swarm mode lifecycle state
+  childIssueNumbers?: string[] // Child issue numbers for epic looms
   parentLoom?: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
@@ -50,7 +51,7 @@ export interface WriteMetadataInput {
   description: string
   branchName: string
   worktreePath: string
-  issueType: 'branch' | 'issue' | 'pr'
+  issueType: 'branch' | 'issue' | 'pr' | 'epic'
   issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
@@ -64,8 +65,9 @@ export interface WriteMetadataInput {
   oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   state?: SwarmState // Swarm mode lifecycle state
+  childIssueNumbers?: string[] // Child issue numbers for epic looms
   parentLoom?: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
@@ -83,7 +85,7 @@ export interface LoomMetadata {
   created_at: string | null
   branchName: string | null
   worktreePath: string | null
-  issueType: 'branch' | 'issue' | 'pr' | null
+  issueType: 'branch' | 'issue' | 'pr' | 'epic' | null
   issueKey: string | null // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
@@ -97,8 +99,9 @@ export interface LoomMetadata {
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   state: SwarmState | null // Swarm mode lifecycle state (null for non-swarm looms)
+  childIssueNumbers: string[] // Child issue numbers for epic looms (empty for non-epic looms)
   parentLoom: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
@@ -149,6 +152,7 @@ export class MetadataManager {
       oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
       state: data.state ?? null,
+      childIssueNumbers: data.childIssueNumbers ?? [],
       parentLoom: data.parentLoom ?? null,
     }
   }
@@ -229,6 +233,7 @@ export class MetadataManager {
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
         ...(input.state && { state: input.state }),
+        ...(input.childIssueNumbers && input.childIssueNumbers.length > 0 && { childIssueNumbers: input.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 

@@ -25,7 +25,7 @@ export interface DevServerResult {
 }
 
 interface ParsedDevServerInput {
-	type: 'issue' | 'pr' | 'branch'
+	type: 'issue' | 'pr' | 'branch' | 'epic'
 	number?: string | number
 	branchName?: string
 	originalInput: string

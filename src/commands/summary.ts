@@ -30,7 +30,7 @@ export interface SummaryCommandInput {
  */
 interface ParsedSummaryInput {
 	worktree: GitWorktree
-	loomType: 'issue' | 'pr' | 'branch'
+	loomType: 'issue' | 'pr' | 'branch' | 'epic'
 	issueNumber?: string | number | undefined
 }
 

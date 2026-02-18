@@ -149,6 +149,8 @@ export interface StartOptions {
   terminal?: boolean
   // Child loom control flag
   childLoom?: boolean
+  // Epic loom control flag (for issues with child issues)
+  epic?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
   // Optional body text for issue creation
@@ -231,15 +233,16 @@ export interface StartResult {
   path: string
   branch: string
   port?: number
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   title?: string
   capabilities?: string[]
+  childIssueNumbers?: string[]
 }
 
 export interface FinishResult {
   success: boolean
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   /** Whether this was a dry-run operation */
   dryRun?: boolean
@@ -258,7 +261,7 @@ export interface SummaryResult {
   sessionId: string
   issueNumber?: string | number
   branchName: string
-  loomType: 'issue' | 'pr' | 'branch'
+  loomType: 'issue' | 'pr' | 'branch' | 'epic'
 }
 
 // Deprecated: Result types - use exception-based error handling instead

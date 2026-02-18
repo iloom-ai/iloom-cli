@@ -90,7 +90,7 @@ export class LoomManager {
     const issueData = await this.fetchIssueData(input)
 
     // NEW: Check for existing worktree BEFORE generating branch name (for efficiency)
-    if (input.type === 'issue' || input.type === 'pr' || input.type === 'branch') {
+    if (input.type === 'issue' || input.type === 'epic' || input.type === 'pr' || input.type === 'branch') {
       getLogger().info('Checking for existing worktree...')
       const existing = await this.findExistingIloom(input, issueData)
       if (existing) {
@@ -208,7 +208,7 @@ export class LoomManager {
 
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
 
-    if (mergeBehavior.mode === 'github-draft-pr' && (input.type === 'issue' || input.type === 'branch')) {
+    if (mergeBehavior.mode === 'github-draft-pr' && (input.type === 'issue' || input.type === 'epic' || input.type === 'branch')) {
       const prManager = new PRManager(settingsData)
 
       // Fetch from origin to get latest remote branch state
@@ -277,7 +277,7 @@ export class LoomManager {
         // For branch mode: use branch name and generic description
         const prTitle = issueData?.title ?? `Work on ${branchName}`
         let prBody: string
-        if (input.type === 'issue') {
+        if (input.type === 'issue' || input.type === 'epic') {
           const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
           prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
         } else {
@@ -329,7 +329,7 @@ export class LoomManager {
     }
 
     // NEW: Move issue to In Progress (for new worktrees)
-    if (input.type === 'issue') {
+    if (input.type === 'issue' || input.type === 'epic') {
       try {
         getLogger().info('Moving issue to In Progress...')
         // Check if provider supports this optional method
@@ -372,7 +372,7 @@ export class LoomManager {
         branchName,
         port,
         capabilities,
-        workflowType: input.type === 'branch' ? 'regular' : input.type,
+        workflowType: input.type === 'branch' ? 'regular' : input.type === 'epic' ? 'issue' : input.type,
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
@@ -392,7 +392,7 @@ export class LoomManager {
     // For PR workflows, extract issue number from branch name if present
     let issue_numbers: string[] = []
     let extractedIssueNum: string | null = null
-    if (input.type === 'issue') {
+    if (input.type === 'issue' || input.type === 'epic') {
       issue_numbers = [String(input.identifier)]
     } else if (input.type === 'pr') {
       extractedIssueNum = extractIssueNumber(branchName)
@@ -415,7 +415,7 @@ export class LoomManager {
     // Build issueUrls/prUrls based on workflow type
     // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
     let issueUrls: Record<string, string> = {}
-    if (input.type === 'issue' && issueData?.url) {
+    if ((input.type === 'issue' || input.type === 'epic') && issueData?.url) {
       issueUrls = { [String(input.identifier)]: issueData.url }
     } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
       const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
@@ -433,7 +433,7 @@ export class LoomManager {
       branchName,
       worktreePath,
       issueType: input.type,
-      ...(input.type === 'issue' && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
+      ...((input.type === 'issue' || input.type === 'epic') && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
       issue_numbers,
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
@@ -445,6 +445,7 @@ export class LoomManager {
       capabilities,
       ...(draftPrNumber && { draftPrNumber }),
       ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
+      ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
@@ -597,7 +598,7 @@ export class LoomManager {
   private async fetchIssueData(
     input: CreateLoomInput
   ): Promise<Issue | PullRequest | null> {
-    if (input.type === 'issue') {
+    if (input.type === 'issue' || input.type === 'epic') {
       return await this.issueTracker.fetchIssue(input.identifier as number)
     } else if (input.type === 'pr') {
       // Use issue tracker if it supports PRs
@@ -630,7 +631,7 @@ export class LoomManager {
       return issueData.branch
     }
 
-    if (input.type === 'issue' && issueData) {
+    if ((input.type === 'issue' || input.type === 'epic') && issueData) {
       // Use BranchNamingService for AI-powered branch name generation
       const branchName = await this.branchNaming.generateBranchName({
         issueNumber: input.identifier as number,
@@ -1027,7 +1028,7 @@ export class LoomManager {
     // Calculate port based on input type
     const options: { basePort: number; issueNumber?: number; prNumber?: number; branchName?: string } = { basePort }
 
-    if (input.type === 'issue') {
+    if (input.type === 'issue' || input.type === 'epic') {
       options.issueNumber = input.identifier as number
     } else if (input.type === 'pr') {
       options.prNumber = input.identifier as number
@@ -1080,7 +1081,7 @@ export class LoomManager {
     const settingsData = await this.settings.loadSettings()
     const basePort = settingsData.capabilities?.web?.basePort ?? 3000
 
-    if (input.type === 'issue') {
+    if (input.type === 'issue' || input.type === 'epic') {
       if (typeof input.identifier === 'number') {
         return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
       } else if (typeof input.identifier === 'string') {
@@ -1154,7 +1155,7 @@ export class LoomManager {
       const loomMetadata = await this.metadataManager.readMetadata(wt.path)
 
       // Priority 1: Use metadata as source of truth if available
-      let type: 'issue' | 'pr' | 'branch' = 'branch'
+      let type: 'issue' | 'pr' | 'branch' | 'epic' = 'branch'
       let identifier: string | number = wt.branch
 
       if (loomMetadata?.issueType) {
@@ -1350,7 +1351,7 @@ export class LoomManager {
         branchName,
         port,
         capabilities,
-        workflowType: input.type === 'branch' ? 'regular' : input.type,
+        workflowType: input.type === 'branch' ? 'regular' : input.type === 'epic' ? 'issue' : input.type,
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
@@ -1413,6 +1414,7 @@ export class LoomManager {
         prUrls,
         capabilities,
         ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
+        ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
