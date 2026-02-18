@@ -17,6 +17,8 @@ import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
 import type { OneShotMode } from '../types/index.js'
+import { fetchChildIssueDetails } from '../utils/list-children.js'
+import { buildDependencyMap } from '../utils/dependency-map.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -220,7 +222,16 @@ export class IgniteCommand {
 				logger.info(`🌐 Development server port: ${context.port}`)
 			}
 
-			// Step 2.1: Get prompt template with variable substitution
+			// Step 2.1: Fetch and persist epic child data if this is an epic loom
+			// Detection: check for childIssues already stored (re-spin of an epic)
+			// or check for 'epic' issueType once issue #624 adds it
+			const isEpicLoom = metadata && metadata.issue_numbers.length > 0 && !metadata.parentLoom
+				&& ((metadata.childIssues?.length ?? 0) > 0 || (metadata.issueType as string) === 'epic')
+			if (isEpicLoom && this.settings) {
+				await this.fetchAndStoreEpicChildData(metadataManager, metadata, context.workspacePath, this.settings)
+			}
+
+			// Step 2.2: Get prompt template with variable substitution
 			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
 
 			// Step 2.5: Add first-time user context if needed
@@ -715,6 +726,55 @@ export class IgniteCommand {
 		return context
 	}
 
+
+	/**
+	 * Fetch and store epic child issue data and dependency map in metadata
+	 *
+	 * Called during spin setup for epic looms. Fetches child issue details
+	 * and dependency relationships from the issue tracker, then persists
+	 * them in the loom metadata for use by the orchestrator.
+	 */
+	private async fetchAndStoreEpicChildData(
+		metadataManager: MetadataManager,
+		metadata: import('../lib/MetadataManager.js').LoomMetadata,
+		worktreePath: string,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+	): Promise<void> {
+		const parentIssueNumber = metadata.issue_numbers[0]
+		if (!parentIssueNumber) return
+
+		logger.info('Fetching child issue data for epic...')
+
+		try {
+			const issueTracker = IssueTrackerFactory.create(settings)
+
+			// Fetch child issue details and build dependency map in parallel
+			const childIssueDetails = await fetchChildIssueDetails(
+				parentIssueNumber, issueTracker, settings
+			)
+
+			if (childIssueDetails.length === 0) {
+				logger.debug('No child issues found for epic')
+				return
+			}
+
+			// Extract raw IDs for dependency map building (strip prefixes)
+			const childIds = childIssueDetails.map((child) => child.number.replace(/^#/, ''))
+
+			const dependencyMap = await buildDependencyMap(childIds, settings)
+
+			// Persist to metadata
+			await metadataManager.updateMetadata(worktreePath, {
+				childIssues: childIssueDetails,
+				dependencyMap,
+			})
+
+			logger.info(`Stored ${childIssueDetails.length} child issues and dependency map in metadata`)
+		} catch (error) {
+			// Non-fatal: epic can still spin without child data
+			logger.warn(`Failed to fetch epic child data: ${error instanceof Error ? error.message : String(error)}`)
+		}
+	}
 
 	/**
 	 * Build user prompt based on one-shot mode

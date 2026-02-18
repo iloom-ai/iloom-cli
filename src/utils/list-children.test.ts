@@ -4,7 +4,9 @@ import {
   findChildLooms,
   matchChildrenData,
   assembleChildrenData,
+  fetchChildIssueDetails,
 } from './list-children.js'
+import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { LoomMetadata, MetadataManager } from '../lib/MetadataManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 
@@ -610,6 +612,107 @@ describe('list-children', () => {
       // Both starts should happen before any end (they run in parallel)
       expect(subIssuesStartIndex).toBeLessThan(Math.max(subIssuesEndIndex, metadataEndIndex))
       expect(metadataStartIndex).toBeLessThan(Math.max(subIssuesEndIndex, metadataEndIndex))
+    })
+  })
+
+  describe('fetchChildIssueDetails', () => {
+    function createMockIssueTracker(overrides: Partial<IssueTracker> = {}): IssueTracker {
+      return {
+        providerName: 'github',
+        supportsPullRequests: true,
+        detectInputType: vi.fn(),
+        fetchIssue: vi.fn(),
+        isValidIssue: vi.fn(),
+        validateIssueState: vi.fn(),
+        createIssue: vi.fn(),
+        getIssueUrl: vi.fn(),
+        normalizeIdentifier: vi.fn((id) => String(id)),
+        extractContext: vi.fn(),
+        ...overrides,
+      }
+    }
+
+    it('should fetch child issues with details and proper GitHub prefixes', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(getSubIssues).mockResolvedValue([
+        { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
+        { id: '102', title: 'Task 2', url: 'https://github.com/o/r/issues/102', state: 'open' },
+      ])
+
+      const mockTracker = createMockIssueTracker({
+        fetchIssue: vi.fn()
+          .mockResolvedValueOnce({ number: 101, title: 'Task 1', body: 'Body 1', state: 'open', labels: [], assignees: [], url: 'url1' })
+          .mockResolvedValueOnce({ number: 102, title: 'Task 2', body: 'Body 2', state: 'open', labels: [], assignees: [], url: 'url2' }),
+      })
+
+      const settings = createSettings()
+      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+
+      expect(result).toHaveLength(2)
+      expect(result[0]).toEqual({
+        number: '#101',
+        title: 'Task 1',
+        body: 'Body 1',
+        url: 'https://github.com/o/r/issues/101',
+      })
+      expect(result[1]).toEqual({
+        number: '#102',
+        title: 'Task 2',
+        body: 'Body 2',
+        url: 'https://github.com/o/r/issues/102',
+      })
+    })
+
+    it('should use Linear prefix format for Linear issues', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+      vi.mocked(getLinearChildIssues).mockResolvedValue([
+        { id: 'ENG-101', title: 'Linear Task', url: 'https://linear.app/issue/ENG-101', state: 'In Progress' },
+      ])
+
+      const mockTracker = createMockIssueTracker({
+        fetchIssue: vi.fn().mockResolvedValue({
+          number: 'ENG-101', title: 'Linear Task', body: 'Linear body', state: 'open', labels: [], assignees: [], url: 'url',
+        }),
+      })
+
+      const settings = createSettings({ issueManagement: { provider: 'linear' } })
+      const result = await fetchChildIssueDetails('ENG-100', mockTracker, settings)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].number).toBe('ENG-101') // No prefix added for Linear
+    })
+
+    it('should fall back to child list data when full fetch fails', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(getSubIssues).mockResolvedValue([
+        { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
+      ])
+
+      const mockTracker = createMockIssueTracker({
+        fetchIssue: vi.fn().mockRejectedValue(new Error('API Error')),
+      })
+
+      const settings = createSettings()
+      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        number: '#101',
+        title: 'Task 1',
+        body: '', // Empty body when fetch fails
+        url: 'https://github.com/o/r/issues/101',
+      })
+    })
+
+    it('should return empty array when no child issues exist', async () => {
+      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      vi.mocked(getSubIssues).mockResolvedValue([])
+
+      const mockTracker = createMockIssueTracker()
+      const settings = createSettings()
+      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+
+      expect(result).toEqual([])
     })
   })
 })
