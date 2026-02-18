@@ -12,13 +12,15 @@ import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber, isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
 import type { OneShotMode } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
+import { SwarmSetupService } from '../lib/SwarmSetupService.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -229,6 +231,21 @@ export class IgniteCommand {
 				&& ((metadata.childIssues?.length ?? 0) > 0 || (metadata.issueType as string) === 'epic')
 			if (isEpicLoom && this.settings) {
 				await this.fetchAndStoreEpicChildData(metadataManager, metadata, context.workspacePath, this.settings)
+			}
+
+			// Step 2.1.1: If this is an epic loom, enter swarm mode
+			if (isEpicLoom && this.settings) {
+				// Re-read metadata to get freshly persisted child data
+				const freshMetadata = await metadataManager.readMetadata(context.workspacePath)
+				if (freshMetadata && freshMetadata.childIssues.length > 0) {
+					await this.executeSwarmMode(
+						freshMetadata,
+						context.workspacePath,
+						context.branchName ?? '',
+						metadataManager,
+					)
+					return
+				}
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
@@ -774,6 +791,158 @@ export class IgniteCommand {
 			// Non-fatal: epic can still spin without child data
 			logger.warn(`Failed to fetch epic child data: ${error instanceof Error ? error.message : String(error)}`)
 		}
+	}
+
+	/**
+	 * Execute swarm mode for an epic loom.
+	 *
+	 * Creates child worktrees, renders swarm agents/skill, builds the
+	 * orchestrator prompt, and launches Claude with agent teams enabled.
+	 */
+	private async executeSwarmMode(
+		metadata: LoomMetadata,
+		epicWorktreePath: string,
+		epicBranch: string,
+		metadataManager: MetadataManager,
+	): Promise<void> {
+		if (!this.settings) {
+			throw new Error('Settings not loaded. Cannot enter swarm mode.')
+		}
+		const settings = this.settings
+		const epicIssueNumber = metadata.issue_numbers[0]
+		if (!epicIssueNumber) {
+			throw new Error('Epic loom has no issue number in metadata')
+		}
+
+		logger.info('Epic loom detected - entering swarm mode...')
+
+		// Determine main worktree path and issue tracker provider
+		const mainWorktreePath = await findMainWorktreePathWithSettings()
+		const providerName = IssueTrackerFactory.getProviderName(settings)
+
+		// Create SwarmSetupService
+		const swarmSetup = new SwarmSetupService(
+			this.gitWorktreeManager,
+			metadataManager,
+			this.agentManager,
+			this.settingsManager,
+		)
+
+		// Run swarm setup: child worktrees, agents, skill
+		const swarmResult = await swarmSetup.setupSwarm(
+			epicIssueNumber,
+			epicBranch,
+			epicWorktreePath,
+			metadata.childIssues,
+			mainWorktreePath,
+			providerName,
+		)
+
+		// Build template variables for orchestrator prompt
+		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
+		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
+
+		const childIssuesData = metadata.childIssues
+			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
+			.map((ci) => {
+				const rawId = ci.number.replace(/^#/, '')
+				const wt = worktreeMap.get(rawId)
+				return {
+					number: rawId,
+					title: ci.title,
+					worktreePath: wt?.worktreePath ?? '',
+					branchName: wt?.branch ?? '',
+				}
+			})
+
+		// Get metadata file path for the orchestrator prompt template
+		const epicMetadataPath = metadataManager.getMetadataFilePath(epicWorktreePath)
+
+		const variables: TemplateVariables = {
+			EPIC_ISSUE_NUMBER: epicIssueNumber,
+			EPIC_WORKTREE_PATH: epicWorktreePath,
+			EPIC_METADATA_PATH: epicMetadataPath,
+			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
+			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
+		}
+
+		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)
+
+		// Build MCP configs
+		const mcpConfigs: Record<string, unknown>[] = []
+
+		// Issue management MCP
+		try {
+			const issueMcpConfigs = await generateIssueManagementMcpConfig(
+				'issue',
+				undefined,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			mcpConfigs.push(...issueMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate issue management MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Recap MCP for the epic loom
+		try {
+			const recapMcpConfigs = generateRecapMcpConfig(epicWorktreePath, metadata)
+			mcpConfigs.push(...recapMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Build allowed tools
+		const allowedTools = [
+			'mcp__issue_management__get_issue',
+			'mcp__issue_management__get_comment',
+			'mcp__issue_management__create_comment',
+			'mcp__issue_management__update_comment',
+			'mcp__issue_management__create_issue',
+			'mcp__recap__add_entry',
+			'mcp__recap__get_recap',
+			'mcp__recap__add_artifact',
+			'mcp__recap__set_complexity',
+		]
+
+		// Launch Claude with agent teams enabled
+		const model = this.settingsManager.getSpinModel(settings)
+
+		logger.info('Launching swarm orchestrator...')
+		logger.info(`   Model: ${model ?? 'default'}`)
+		logger.info(`   Permission mode: bypassPermissions`)
+		logger.info(`   Agent teams: enabled`)
+		logger.info(`   Child worktrees: ${successfulWorktrees.length}`)
+
+		// Load agents for the orchestrator
+		let agents: Record<string, unknown> | undefined
+		try {
+			const loadedAgents = await this.agentManager.loadAgents(
+				settings,
+				variables,
+				['*.md', '!iloom-framework-detector.md']
+			)
+			agents = this.agentManager.formatForCli(loadedAgents)
+		} catch (error) {
+			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		await launchClaude(
+			`You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`,
+			{
+				model,
+				permissionMode: 'bypassPermissions',
+				addDir: epicWorktreePath,
+				headless: false,
+				appendSystemPrompt: orchestratorPrompt,
+				mcpConfig: mcpConfigs,
+				allowedTools,
+				...(agents && { agents }),
+				env: {
+					CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+				},
+			},
+		)
 	}
 
 	/**
