@@ -13,6 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import path from 'path'
+import os from 'os'
 import fs from 'fs-extra'
 import { randomUUID } from 'crypto'
 import type { RecapFile, RecapEntry, RecapOutput, RecapArtifact } from './recap-types.js'
@@ -99,6 +100,43 @@ function getMetadataFilePath(): string {
 }
 
 /**
+ * Convert worktree path to filename slug
+ * Same algorithm as MetadataManager.slugifyPath() and src/utils/mcp.ts slugifyPath()
+ */
+function slugifyPath(worktreePath: string): string {
+	let slug = worktreePath.replace(/[/\\]+$/, '')
+	slug = slug.replace(/[/\\]/g, '___')
+	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
+	return `${slug}.json`
+}
+
+/**
+ * Resolve the recap file path.
+ * When worktreePath is provided, derives the path dynamically.
+ * Otherwise falls back to the env var default.
+ */
+export function resolveRecapFilePath(worktreePath?: string): string {
+	if (worktreePath) {
+		const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+		return path.join(recapsDir, slugifyPath(worktreePath))
+	}
+	return getRecapFilePath()
+}
+
+/**
+ * Resolve the metadata file path.
+ * When worktreePath is provided, derives the path dynamically.
+ * Otherwise falls back to the env var default.
+ */
+export function resolveMetadataFilePath(worktreePath?: string): string {
+	if (worktreePath) {
+		const loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
+		return path.join(loomsDir, slugifyPath(worktreePath))
+	}
+	return getMetadataFilePath()
+}
+
+/**
  * Read recap file (returns empty object if not found or invalid)
  */
 async function readRecapFile(filePath: string): Promise<RecapFile> {
@@ -135,13 +173,14 @@ server.registerTool(
 		description: 'Set the initial goal (called once at session start)',
 		inputSchema: {
 			goal: z.string().describe('The original problem statement'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
 		},
 		outputSchema: {
 			success: z.literal(true),
 		},
 	},
-	async ({ goal }) => {
-		const filePath = getRecapFilePath()
+	async ({ goal, worktreePath }) => {
+		const filePath = resolveRecapFilePath(worktreePath)
 		const recap = await readRecapFile(filePath)
 		recap.goal = goal
 		await writeRecapFile(filePath, recap)
@@ -161,14 +200,15 @@ server.registerTool(
 		inputSchema: {
 			complexity: z.enum(['trivial', 'simple', 'complex']).describe('Task complexity level'),
 			reason: z.string().optional().describe('Brief explanation for the assessment'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
 		},
 		outputSchema: {
 			success: z.literal(true),
 			timestamp: z.string(),
 		},
 	},
-	async ({ complexity, reason }) => {
-		const filePath = getRecapFilePath()
+	async ({ complexity, reason, worktreePath }) => {
+		const filePath = resolveRecapFilePath(worktreePath)
 		const recap = await readRecapFile(filePath)
 		const timestamp = new Date().toISOString()
 		recap.complexity = reason !== undefined ? { level: complexity, reason, timestamp } : { level: complexity, timestamp }
@@ -193,6 +233,7 @@ server.registerTool(
 				.enum(['decision', 'insight', 'risk', 'assumption', 'other'])
 				.describe('Entry type'),
 			content: z.string().describe('Entry content'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -200,8 +241,8 @@ server.registerTool(
 			skipped: z.boolean(),
 		},
 	},
-	async ({ type, content }) => {
-		const filePath = getRecapFilePath()
+	async ({ type, content, worktreePath }) => {
+		const filePath = resolveRecapFilePath(worktreePath)
 		const recap = await readRecapFile(filePath)
 		recap.entries ??= []
 
@@ -245,6 +286,7 @@ server.registerTool(
 			description: z.string().describe('Brief description of the artifact'),
 			id: z.string().optional().describe('Optional artifact ID (e.g., comment ID, issue number)'),
 			urls: z.record(z.string()).optional().describe('Optional additional URLs (e.g., { api: "..." })'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -252,8 +294,8 @@ server.registerTool(
 			replaced: z.boolean(),
 		},
 	},
-	async ({ type, primaryUrl, description, id, urls }) => {
-		const filePath = getRecapFilePath()
+	async ({ type, primaryUrl, description, id, urls, worktreePath }) => {
+		const filePath = resolveRecapFilePath(worktreePath)
 		const recap = await readRecapFile(filePath)
 
 		const artifact: RecapArtifact = {
@@ -297,7 +339,9 @@ server.registerTool(
 	{
 		title: 'Get Recap',
 		description: 'Read current recap (for catching up or review)',
-		inputSchema: {},
+		inputSchema: {
+			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
+		},
 		outputSchema: {
 			filePath: z.string(),
 			goal: z.string().nullable(),
@@ -328,11 +372,26 @@ server.registerTool(
 			),
 		},
 	},
-	async () => {
-		const filePath = getRecapFilePath()
+	async ({ worktreePath }) => {
+		const filePath = resolveRecapFilePath(worktreePath)
 		const recap = await readRecapFile(filePath)
 		// Use loom description as default goal for new/missing recap files
-		const defaultGoal = getLoomMetadata().description || null
+		// When worktreePath is provided, read metadata from the target worktree's metadata file
+		let defaultGoal: string | null = null
+		if (worktreePath) {
+			try {
+				const metaPath = resolveMetadataFilePath(worktreePath)
+				if (await fs.pathExists(metaPath)) {
+					const metaContent = await fs.readFile(metaPath, 'utf8')
+					const meta = JSON.parse(metaContent) as MetadataFile
+					defaultGoal = meta.description || null
+				}
+			} catch {
+				// Fall through to null default goal
+			}
+		} else {
+			defaultGoal = getLoomMetadata().description || null
+		}
 		const result: RecapOutput = {
 			filePath,
 			goal: recap.goal ?? defaultGoal,
@@ -358,14 +417,15 @@ server.registerTool(
 		description: 'Set the swarm lifecycle state of the current loom',
 		inputSchema: {
 			state: swarmStateSchema.describe('The new state for the loom'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope state operations to a specific loom'),
 		},
 		outputSchema: {
 			success: z.literal(true),
 			state: swarmStateSchema,
 		},
 	},
-	async ({ state }) => {
-		const metadataFilePath = getMetadataFilePath()
+	async ({ state, worktreePath }) => {
+		const metadataFilePath = resolveMetadataFilePath(worktreePath)
 
 		// Read existing metadata
 		let metadata: MetadataFile
@@ -396,13 +456,15 @@ server.registerTool(
 	{
 		title: 'Get Loom State',
 		description: 'Get the current swarm lifecycle state of the loom',
-		inputSchema: {},
+		inputSchema: {
+			worktreePath: z.string().optional().describe('Optional worktree path to scope state operations to a specific loom'),
+		},
 		outputSchema: {
 			state: swarmStateSchema.nullable(),
 		},
 	},
-	async () => {
-		const metadataFilePath = getMetadataFilePath()
+	async ({ worktreePath }) => {
+		const metadataFilePath = resolveMetadataFilePath(worktreePath)
 
 		// Read metadata
 		let metadata: MetadataFile
