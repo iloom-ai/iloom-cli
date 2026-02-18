@@ -8,7 +8,7 @@ import type { ProjectCapability } from '../types/loom.js'
  * Matches the structure in LoomMetadata.parentLoom
  */
 export interface ParentLoomRef {
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   branchName: string
   worktreePath: string
@@ -62,7 +62,7 @@ export interface LoomJsonOutput {
   name: string
   worktreePath: string | null
   branch: string | null
-  type: 'branch' | 'issue' | 'pr'
+  type: 'branch' | 'issue' | 'pr' | 'epic'
   issue_numbers: string[]
   pr_numbers: string[]
   isMainWorktree: boolean

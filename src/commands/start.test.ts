@@ -5,6 +5,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { fetchChildIssues } from '../utils/list-children.js'
 
 // Mock the GitHubService
 vi.mock('../lib/GitHubService.js')
@@ -70,12 +71,18 @@ vi.mock('../utils/prompt.js', () => ({
 	waitForKeypress: vi.fn().mockResolvedValue('a'),
 	promptInput: vi.fn(),
 	promptConfirmation: vi.fn(),
+	isInteractiveEnvironment: vi.fn().mockReturnValue(true),
 }))
 
 // Mock first-run-setup utilities
 vi.mock('../utils/first-run-setup.js', () => ({
 	needsFirstRunSetup: vi.fn().mockResolvedValue(false),
 	launchFirstRunSetup: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock list-children utilities for epic detection
+vi.mock('../utils/list-children.js', () => ({
+	fetchChildIssues: vi.fn().mockResolvedValue([]),
 }))
 
 // Mock the logger to prevent console output during tests
@@ -106,6 +113,9 @@ describe('StartCommand', () => {
 		mockGitHubService.supportsPullRequests = true
 		mockGitHubService.providerName = 'github'
 		command = new StartCommand(mockGitHubService)
+
+		// Default: no child issues (epic detection returns empty)
+		vi.mocked(fetchChildIssues).mockResolvedValue([])
 	})
 
 	afterEach(() => {
@@ -1825,6 +1835,196 @@ describe('StartCommand', () => {
 				// LinearService.detectInputType should be called for Linear identifier format
 				expect(mockLinearService.detectInputType).toHaveBeenCalledWith('ENG-123', undefined)
 			})
+		})
+	})
+
+	describe('epic detection', () => {
+		let epicCommand: StartCommand
+		let epicMockGitHubService: GitHubService
+		let epicMockLoomManager: { createIloom: ReturnType<typeof vi.fn> }
+
+		beforeEach(() => {
+			epicMockGitHubService = new GitHubService()
+			epicMockGitHubService.supportsPullRequests = true
+			epicMockGitHubService.providerName = 'github'
+
+			epicMockLoomManager = new LoomManager() as unknown as { createIloom: ReturnType<typeof vi.fn> }
+
+			epicCommand = new StartCommand(epicMockGitHubService, epicMockLoomManager as unknown as LoomManager)
+
+			// Setup issue detection
+			vi.mocked(epicMockGitHubService.detectInputType).mockResolvedValue({
+				type: 'issue',
+				identifier: '100',
+				rawInput: '100',
+			})
+			vi.mocked(epicMockGitHubService.fetchIssue).mockResolvedValue({
+				number: 100,
+				title: 'Epic Issue',
+				body: 'Parent issue with children',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/100',
+			})
+			vi.mocked(epicMockGitHubService.validateIssueState).mockResolvedValue()
+		})
+
+		it('should prompt user when issue has children and no --epic flag', async () => {
+			const { promptConfirmation, isInteractiveEnvironment } = await import('../utils/prompt.js')
+			vi.mocked(isInteractiveEnvironment).mockReturnValue(true)
+			vi.mocked(promptConfirmation).mockResolvedValue(true)
+
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+				{ id: '102', title: 'Child 2', url: 'https://github.com/test/repo/issues/102', state: 'open' },
+			])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: {},
+			})
+
+			expect(promptConfirmation).toHaveBeenCalledWith(
+				'This issue has 2 child issue(s). Create as epic loom?',
+				true
+			)
+		})
+
+		it('should create epic loom with --epic flag without prompting', async () => {
+			const { promptConfirmation } = await import('../utils/prompt.js')
+
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+			])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: { epic: true },
+			})
+
+			expect(promptConfirmation).not.toHaveBeenCalled()
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'epic',
+					options: expect.objectContaining({
+						childIssueNumbers: ['101'],
+					}),
+				})
+			)
+		})
+
+		it('should create normal loom with --no-epic flag without prompting', async () => {
+			const { promptConfirmation } = await import('../utils/prompt.js')
+
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+			])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: { epic: false },
+			})
+
+			expect(promptConfirmation).not.toHaveBeenCalled()
+			// type should remain 'issue', not 'epic'
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'issue',
+				})
+			)
+		})
+
+		it('should throw in JSON mode when children detected but no explicit --epic/--no-epic flag', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '101', title: 'Child 1', url: 'https://github.com/test/repo/issues/101', state: 'open' },
+			])
+
+			await expect(
+				epicCommand.execute({
+					identifier: '100',
+					options: { json: true },
+				})
+			).rejects.toThrow('JSON mode requires explicit --epic or --no-epic flag when issue has child issues')
+		})
+
+		it('should proceed normally when issue has no children', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: {},
+			})
+
+			// type should remain 'issue', not 'epic'
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'issue',
+				})
+			)
+		})
+
+		it('should warn and proceed normally when --epic flag used but no children exist', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([])
+
+			await epicCommand.execute({
+				identifier: '100',
+				options: { epic: true },
+			})
+
+			// type should remain 'issue' since there are no children
+			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'issue',
+				})
+			)
+		})
+
+		it('should pass childIssueNumbers in JSON result when epic', async () => {
+			vi.mocked(fetchChildIssues).mockResolvedValue([
+				{ id: '201', title: 'Child A', url: 'https://github.com/test/repo/issues/201', state: 'open' },
+				{ id: '202', title: 'Child B', url: 'https://github.com/test/repo/issues/202', state: 'closed' },
+			])
+
+			const result = await epicCommand.execute({
+				identifier: '100',
+				options: { epic: true, json: true },
+			})
+
+			expect(result).toEqual(expect.objectContaining({
+				type: 'epic',
+				childIssueNumbers: ['201', '202'],
+			}))
+		})
+
+		it('should not fetch children for non-issue types (branch)', async () => {
+			await epicCommand.execute({
+				identifier: 'feature/my-branch',
+				options: {},
+			})
+
+			expect(fetchChildIssues).not.toHaveBeenCalled()
+		})
+
+		it('should not fetch children for non-issue types (PR)', async () => {
+			vi.mocked(epicMockGitHubService.fetchPR).mockResolvedValue({
+				number: 50,
+				title: 'Test PR',
+				body: 'PR body',
+				state: 'open',
+				branch: 'feature-branch',
+				baseBranch: 'main',
+				url: 'https://github.com/test/repo/pull/50',
+				isDraft: false,
+			})
+			vi.mocked(epicMockGitHubService.validatePRState).mockResolvedValue()
+
+			await epicCommand.execute({
+				identifier: 'pr/50',
+				options: {},
+			})
+
+			expect(fetchChildIssues).not.toHaveBeenCalled()
 		})
 	})
 })

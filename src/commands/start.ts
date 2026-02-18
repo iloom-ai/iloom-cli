@@ -20,6 +20,7 @@ import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions, StartResult } from '../types/index.js'
+import { fetchChildIssues } from '../utils/list-children.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 
@@ -29,7 +30,7 @@ export interface StartCommandInput {
 }
 
 export interface ParsedInput {
-	type: 'issue' | 'pr' | 'branch' | 'description'
+	type: 'issue' | 'pr' | 'branch' | 'description' | 'epic'
 	number?: string | number
 	branchName?: string
 	originalInput: string
@@ -223,6 +224,61 @@ export class StartCommand {
 				parsed.number = result.number
 			}
 
+			// Step 2.6: Detect epic (issue with child issues) and handle --epic/--no-epic flags
+			let childIssueNumbers: string[] = []
+
+			if (parsed.type === 'issue' && parsed.number) {
+				const settings = await this.settingsManager.loadSettings()
+				let children: Awaited<ReturnType<typeof fetchChildIssues>> = []
+				try {
+					children = await fetchChildIssues(String(parsed.number), settings, repo)
+				} catch (error) {
+					getLogger().warn(`Failed to check for child issues: ${error instanceof Error ? error.message : 'Unknown error'}. Proceeding as normal loom.`)
+				}
+
+				if (children.length > 0) {
+					childIssueNumbers = children.map(c => c.id)
+					let createAsEpic = false
+
+					if (input.options.epic === true) {
+						// --epic flag: force epic mode (no prompt)
+						createAsEpic = true
+						getLogger().info(`Creating as epic loom with ${children.length} child issue(s) (--epic flag)`)
+					} else if (input.options.epic === false) {
+						// --no-epic flag: proceed as normal loom (no prompt)
+						createAsEpic = false
+						getLogger().info('Creating as normal loom (--no-epic flag)')
+					} else {
+						// No flag: prompt or error
+						if (isJsonMode) {
+							throw new Error('JSON mode requires explicit --epic or --no-epic flag when issue has child issues')
+						}
+
+						const { isInteractiveEnvironment, promptConfirmation } = await import('../utils/prompt.js')
+
+						if (isInteractiveEnvironment()) {
+							createAsEpic = await promptConfirmation(
+								`This issue has ${children.length} child issue(s). Create as epic loom?`,
+								true // Default yes
+							)
+						} else {
+							getLogger().error('Non-interactive environment detected, use either --epic or --no-epic to specify behavior')
+							process.exit(1)
+						}
+					}
+
+					if (createAsEpic) {
+						parsed.type = 'epic'
+					} else {
+						// Not creating as epic, clear child issue numbers
+						childIssueNumbers = []
+					}
+				} else if (input.options.epic === true) {
+					// --epic flag but no children found
+					getLogger().warn('--epic flag provided but issue has no child issues, proceeding as normal loom')
+				}
+			}
+
 			// Step 2.7: Confirm bypassPermissions mode if applicable
 			// Only prompt in interactive mode when Claude is enabled.
 			// Skip when: --no-claude (Claude won't launch now), JSON mode (non-interactive).
@@ -243,7 +299,7 @@ export class StartCommand {
 			// Step 2.8: Load workflow-specific settings with CLI overrides
 			const cliOverrides = extractSettingsOverrides()
 			const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
-			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type
+			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type === 'epic' ? 'issue' : parsed.type
 			const workflowConfig = settings.workflows?.[workflowType]
 
 			// Step 2.9: Extract raw --set arguments and executable path for forwarding to spin
@@ -286,6 +342,7 @@ export class StartCommand {
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
+					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
 				},
 			})
 
@@ -297,6 +354,9 @@ export class StartCommand {
 			}
 			if (loom.issueData?.title) {
 				getLogger().info(`   Title: ${loom.issueData.title}`)
+			}
+			if (parsed.type === 'epic') {
+				getLogger().info(`   Epic: yes (${childIssueNumbers.length} child issue(s))`)
 			}
 
 			// Return StartResult in JSON mode
@@ -310,6 +370,7 @@ export class StartCommand {
 					...(loom.port !== undefined && { port: loom.port }),
 					...(loom.issueData?.title && { title: loom.issueData.title }),
 					...(loom.capabilities && { capabilities: loom.capabilities }),
+					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
 				}
 			}
 		} catch (error) {
@@ -524,6 +585,8 @@ export class StartCommand {
 				return `PR #${parsed.number}`
 			case 'issue':
 				return `Issue #${parsed.number}`
+			case 'epic':
+				return `Epic #${parsed.number}`
 			case 'branch':
 				return `Branch '${parsed.branchName}'`
 			case 'description':
@@ -538,7 +601,7 @@ export class StartCommand {
 	 * Returns parent loom info if detected, null otherwise
 	 */
 	private async detectParentLoom(loomManager: LoomManager): Promise<{
-		type: 'issue' | 'pr' | 'branch'
+		type: 'issue' | 'pr' | 'branch' | 'epic'
 		identifier: string | number
 		branchName: string
 		worktreePath: string
@@ -573,7 +636,7 @@ export class StartCommand {
 			getLogger().debug(`Detected parent loom: ${parentLoom.type} ${parentLoom.identifier} at ${parentLoom.path}`)
 
 			const result: {
-				type: 'issue' | 'pr' | 'branch'
+				type: 'issue' | 'pr' | 'branch' | 'epic'
 				identifier: string | number
 				branchName: string
 				worktreePath: string

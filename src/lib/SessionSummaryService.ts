@@ -86,7 +86,7 @@ export interface SessionSummaryInput {
 	worktreePath: string
 	issueNumber: string | number
 	branchName: string
-	loomType: 'issue' | 'pr' | 'branch'
+	loomType: 'issue' | 'pr' | 'branch' | 'epic'
 	/** Optional PR number - when provided, summary is posted to the PR instead of the issue */
 	prNumber?: number
 }
@@ -224,7 +224,7 @@ export class SessionSummaryService {
 	async generateSummary(
 		worktreePath: string,
 		branchName: string,
-		loomType: 'issue' | 'pr' | 'branch',
+		loomType: 'issue' | 'pr' | 'branch' | 'epic',
 		issueNumber?: string | number
 	): Promise<SessionSummaryResult> {
 		// 1. Read metadata or generate deterministic session ID
@@ -317,7 +317,7 @@ export class SessionSummaryService {
 	 * @returns true if summary should be generated
 	 */
 	shouldGenerateSummary(
-		loomType: 'issue' | 'pr' | 'branch',
+		loomType: 'issue' | 'pr' | 'branch' | 'epic',
 		settings: IloomSettings
 	): boolean {
 		// Branch type never generates summaries (no issue to comment on)
