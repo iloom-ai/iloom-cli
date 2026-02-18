@@ -399,6 +399,7 @@ export class MetadataManager {
       getLogger().warn(
         `Failed to update metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
       )
+      throw error
     }
   }
 
