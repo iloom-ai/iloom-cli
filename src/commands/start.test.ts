@@ -2056,7 +2056,7 @@ describe('StartCommand', () => {
 				options: { epic: true },
 			})
 
-			expect(fetchChildIssueDetails).toHaveBeenCalledWith('100', expect.anything(), expect.anything(), undefined)
+			expect(fetchChildIssueDetails).toHaveBeenCalledWith('100', expect.anything(), undefined)
 			expect(buildDependencyMap).toHaveBeenCalledWith(['101', '102'], expect.anything(), undefined)
 			expect(epicMockLoomManager.createIloom).toHaveBeenCalledWith(
 				expect.objectContaining({

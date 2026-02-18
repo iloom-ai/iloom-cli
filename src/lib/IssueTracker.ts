@@ -32,6 +32,7 @@ export interface IssueTracker {
 		labels?: string[]
 	): Promise<{ number: string | number; url: string }>
 	getIssueUrl(identifier: string | number, repo?: string): Promise<string>
+	getChildIssues(parentIdentifier: string, repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>>
 
 	// Pull Request operations - optional, check supportsPullRequests before calling
 	fetchPR?(identifier: string | number, repo?: string): Promise<PullRequest>

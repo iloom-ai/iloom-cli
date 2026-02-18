@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   fetchChildIssues,
   findChildLooms,
@@ -8,22 +8,6 @@ import {
 } from './list-children.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { LoomMetadata, MetadataManager } from '../lib/MetadataManager.js'
-import type { IloomSettings } from '../lib/SettingsManager.js'
-
-// Mock external dependencies
-vi.mock('./github.js', () => ({
-  getSubIssues: vi.fn(),
-}))
-
-vi.mock('./linear.js', () => ({
-  getLinearChildIssues: vi.fn(),
-}))
-
-vi.mock('../lib/IssueTrackerFactory.js', () => ({
-  IssueTrackerFactory: {
-    getProviderName: vi.fn(),
-  },
-}))
 
 vi.mock('./logger.js', () => ({
   logger: {
@@ -34,23 +18,26 @@ vi.mock('./logger.js', () => ({
   },
 }))
 
-// Import mocked modules for setting up test behavior
-import { getSubIssues } from './github.js'
-import { getLinearChildIssues } from './linear.js'
-import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
-
 // Helper factories
 
 /**
- * Create a minimal IloomSettings object for testing
+ * Create a mock IssueTracker with getChildIssues method
  */
-function createSettings(overrides: Partial<IloomSettings> = {}): IloomSettings {
+function createMockIssueTracker(overrides: Partial<IssueTracker> = {}): IssueTracker {
   return {
-    issueManagement: {
-      provider: 'github',
-    },
+    providerName: 'github',
+    supportsPullRequests: true,
+    detectInputType: vi.fn(),
+    fetchIssue: vi.fn(),
+    isValidIssue: vi.fn(),
+    validateIssueState: vi.fn(),
+    createIssue: vi.fn(),
+    getIssueUrl: vi.fn(),
+    getChildIssues: vi.fn().mockResolvedValue([]),
+    normalizeIdentifier: vi.fn((id) => String(id)),
+    extractContext: vi.fn(),
     ...overrides,
-  } as IloomSettings
+  }
 }
 
 /**
@@ -128,93 +115,38 @@ function createMockMetadataManager(metadata: LoomMetadata[] = []): MockMetadataM
 }
 
 describe('list-children', () => {
-  beforeEach(() => {
-    vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-  })
-
   describe('fetchChildIssues', () => {
-    it('should fetch GitHub sub-issues when issueTracker is github', async () => {
+    it('should delegate to issueTracker.getChildIssues()', async () => {
       const mockChildIssues = [
         { id: '101', title: 'Sub-task 1', url: 'https://github.com/owner/repo/issues/101', state: 'open' },
         { id: '102', title: 'Sub-task 2', url: 'https://github.com/owner/repo/issues/102', state: 'closed' },
       ]
-      vi.mocked(getSubIssues).mockResolvedValue(mockChildIssues)
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue(mockChildIssues),
+      })
 
-      const settings = createSettings()
-      const result = await fetchChildIssues('100', settings)
+      const result = await fetchChildIssues('100', mockTracker)
 
-      expect(getSubIssues).toHaveBeenCalledWith(100, undefined)
+      expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', undefined)
       expect(result).toEqual(mockChildIssues)
     })
 
-    it('should pass repo parameter to getSubIssues when provided', async () => {
-      const mockChildIssues = [
-        { id: '101', title: 'Sub-task', url: 'https://github.com/owner/repo/issues/101', state: 'open' },
-      ]
-      vi.mocked(getSubIssues).mockResolvedValue(mockChildIssues)
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+    it('should pass repo parameter to issueTracker.getChildIssues()', async () => {
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue([]),
+      })
 
-      const settings = createSettings()
-      await fetchChildIssues('100', settings, 'owner/repo')
+      await fetchChildIssues('100', mockTracker, 'owner/repo')
 
-      expect(getSubIssues).toHaveBeenCalledWith(100, 'owner/repo')
-    })
-
-    it('should fetch Linear child issues when issueTracker is linear', async () => {
-      const mockChildIssues = [
-        { id: 'ENG-101', title: 'Sub-task 1', url: 'https://linear.app/org/issue/ENG-101', state: 'In Progress' },
-        { id: 'ENG-102', title: 'Sub-task 2', url: 'https://linear.app/org/issue/ENG-102', state: 'Done' },
-      ]
-      vi.mocked(getLinearChildIssues).mockResolvedValue(mockChildIssues)
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
-
-      const settings = createSettings({
-        issueManagement: { provider: 'linear' },
-      } as Partial<IloomSettings>)
-      const result = await fetchChildIssues('ENG-100', settings)
-
-      expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100', undefined)
-      expect(result).toEqual(mockChildIssues)
+      expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', 'owner/repo')
     })
 
     it('should return empty array when API fails (fault tolerance)', async () => {
-      vi.mocked(getSubIssues).mockRejectedValue(new Error('API Error'))
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockRejectedValue(new Error('API Error')),
+      })
 
-      const settings = createSettings()
-      const result = await fetchChildIssues('100', settings)
-
-      expect(result).toEqual([])
-    })
-
-    it('should return empty array when Linear API fails (fault tolerance)', async () => {
-      vi.mocked(getLinearChildIssues).mockRejectedValue(new Error('Linear API Error'))
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
-
-      const settings = createSettings({
-        issueManagement: { provider: 'linear' },
-      } as Partial<IloomSettings>)
-      const result = await fetchChildIssues('ENG-100', settings)
-
-      expect(result).toEqual([])
-    })
-
-    it('should return empty array for invalid GitHub issue number', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-
-      const settings = createSettings()
-      const result = await fetchChildIssues('not-a-number', settings)
-
-      expect(getSubIssues).not.toHaveBeenCalled()
-      expect(result).toEqual([])
-    })
-
-    it('should return empty array for unsupported provider', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('jira' as 'github' | 'linear')
-
-      const settings = createSettings()
-      const result = await fetchChildIssues('100', settings)
+      const result = await fetchChildIssues('100', mockTracker)
 
       expect(result).toEqual([])
     })
@@ -454,9 +386,9 @@ describe('list-children', () => {
         issue_numbers: [],
       })
       const mockManager = createMockMetadataManager()
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker()
 
-      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       expect(result).toBeNull()
     })
@@ -466,9 +398,9 @@ describe('list-children', () => {
       // @ts-expect-error - Testing edge case
       parentLoom.issue_numbers = undefined
       const mockManager = createMockMetadataManager()
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker()
 
-      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       expect(result).toBeNull()
     })
@@ -479,9 +411,9 @@ describe('list-children', () => {
         issue_numbers: ['100'],
       })
       const mockManager = createMockMetadataManager()
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker()
 
-      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       expect(result).toBeNull()
     })
@@ -496,14 +428,14 @@ describe('list-children', () => {
       const mockChildIssues = [
         { id: '101', title: 'Sub-task 1', url: 'https://github.com/owner/repo/issues/101', state: 'open' },
       ]
-      vi.mocked(getSubIssues).mockResolvedValue(mockChildIssues)
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
 
       const childLoom = createChildLoomMetadata(parentBranchName, '101')
       const mockManager = createMockMetadataManager([childLoom])
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue(mockChildIssues),
+      })
 
-      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       expect(result).not.toBeNull()
       expect(result!.issues).toHaveLength(1)
@@ -520,14 +452,13 @@ describe('list-children', () => {
         issue_numbers: ['100'],
       })
 
-      vi.mocked(getSubIssues).mockRejectedValue(new Error('API Error'))
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-
       const childLoom = createChildLoomMetadata(parentBranchName, '101')
       const mockManager = createMockMetadataManager([childLoom])
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockRejectedValue(new Error('API Error')),
+      })
 
-      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      const result = await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       // Should return data even if API fails - just with empty issues
       expect(result).not.toBeNull()
@@ -543,16 +474,15 @@ describe('list-children', () => {
         issue_numbers: ['100', '99'], // Multiple issue numbers
       })
 
-      vi.mocked(getSubIssues).mockResolvedValue([])
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-
       const mockManager = createMockMetadataManager([])
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue([]),
+      })
 
-      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       // Should use first issue number (100)
-      expect(getSubIssues).toHaveBeenCalledWith(100, undefined)
+      expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', undefined)
     })
 
     it('should pass repo parameter when provided', async () => {
@@ -562,15 +492,14 @@ describe('list-children', () => {
         issue_numbers: ['100'],
       })
 
-      vi.mocked(getSubIssues).mockResolvedValue([])
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-
       const mockManager = createMockMetadataManager([])
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue([]),
+      })
 
-      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings, 'owner/repo')
+      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker, 'owner/repo')
 
-      expect(getSubIssues).toHaveBeenCalledWith(100, 'owner/repo')
+      expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', 'owner/repo')
     })
 
     it('should fetch child issues and child looms in parallel', async () => {
@@ -583,13 +512,6 @@ describe('list-children', () => {
       // Track call order
       const callOrder: string[] = []
 
-      vi.mocked(getSubIssues).mockImplementation(async () => {
-        callOrder.push('getSubIssues-start')
-        await new Promise((resolve) => globalThis.setTimeout(resolve, 10))
-        callOrder.push('getSubIssues-end')
-        return []
-      })
-
       const mockManager = createMockMetadataManager([])
       vi.mocked(mockManager.listAllMetadata).mockImplementation(async () => {
         callOrder.push('listAllMetadata-start')
@@ -598,55 +520,43 @@ describe('list-children', () => {
         return []
       })
 
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-      const settings = createSettings()
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockImplementation(async () => {
+          callOrder.push('getChildIssues-start')
+          await new Promise((resolve) => globalThis.setTimeout(resolve, 10))
+          callOrder.push('getChildIssues-end')
+          return []
+        }),
+      })
 
-      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, settings)
+      await assembleChildrenData(parentLoom, mockManager as unknown as MetadataManager, mockTracker)
 
       // Both should start before either finishes (parallel execution)
-      const subIssuesStartIndex = callOrder.indexOf('getSubIssues-start')
+      const childIssuesStartIndex = callOrder.indexOf('getChildIssues-start')
       const metadataStartIndex = callOrder.indexOf('listAllMetadata-start')
-      const subIssuesEndIndex = callOrder.indexOf('getSubIssues-end')
+      const childIssuesEndIndex = callOrder.indexOf('getChildIssues-end')
       const metadataEndIndex = callOrder.indexOf('listAllMetadata-end')
 
       // Both starts should happen before any end (they run in parallel)
-      expect(subIssuesStartIndex).toBeLessThan(Math.max(subIssuesEndIndex, metadataEndIndex))
-      expect(metadataStartIndex).toBeLessThan(Math.max(subIssuesEndIndex, metadataEndIndex))
+      expect(childIssuesStartIndex).toBeLessThan(Math.max(childIssuesEndIndex, metadataEndIndex))
+      expect(metadataStartIndex).toBeLessThan(Math.max(childIssuesEndIndex, metadataEndIndex))
     })
   })
 
   describe('fetchChildIssueDetails', () => {
-    function createMockIssueTracker(overrides: Partial<IssueTracker> = {}): IssueTracker {
-      return {
-        providerName: 'github',
-        supportsPullRequests: true,
-        detectInputType: vi.fn(),
-        fetchIssue: vi.fn(),
-        isValidIssue: vi.fn(),
-        validateIssueState: vi.fn(),
-        createIssue: vi.fn(),
-        getIssueUrl: vi.fn(),
-        normalizeIdentifier: vi.fn((id) => String(id)),
-        extractContext: vi.fn(),
-        ...overrides,
-      }
-    }
-
     it('should fetch child issues with details and proper GitHub prefixes', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-      vi.mocked(getSubIssues).mockResolvedValue([
-        { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
-        { id: '102', title: 'Task 2', url: 'https://github.com/o/r/issues/102', state: 'open' },
-      ])
-
       const mockTracker = createMockIssueTracker({
+        providerName: 'github',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
+          { id: '102', title: 'Task 2', url: 'https://github.com/o/r/issues/102', state: 'open' },
+        ]),
         fetchIssue: vi.fn()
           .mockResolvedValueOnce({ number: 101, title: 'Task 1', body: 'Body 1', state: 'open', labels: [], assignees: [], url: 'url1' })
           .mockResolvedValueOnce({ number: 102, title: 'Task 2', body: 'Body 2', state: 'open', labels: [], assignees: [], url: 'url2' }),
       })
 
-      const settings = createSettings()
-      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+      const result = await fetchChildIssueDetails('100', mockTracker)
 
       expect(result).toHaveLength(2)
       expect(result[0]).toEqual({
@@ -664,36 +574,32 @@ describe('list-children', () => {
     })
 
     it('should use Linear prefix format for Linear issues', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
-      vi.mocked(getLinearChildIssues).mockResolvedValue([
-        { id: 'ENG-101', title: 'Linear Task', url: 'https://linear.app/issue/ENG-101', state: 'In Progress' },
-      ])
-
       const mockTracker = createMockIssueTracker({
+        providerName: 'linear',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: 'ENG-101', title: 'Linear Task', url: 'https://linear.app/issue/ENG-101', state: 'In Progress' },
+        ]),
         fetchIssue: vi.fn().mockResolvedValue({
           number: 'ENG-101', title: 'Linear Task', body: 'Linear body', state: 'open', labels: [], assignees: [], url: 'url',
         }),
       })
 
-      const settings = createSettings({ issueManagement: { provider: 'linear' } })
-      const result = await fetchChildIssueDetails('ENG-100', mockTracker, settings)
+      const result = await fetchChildIssueDetails('ENG-100', mockTracker)
 
       expect(result).toHaveLength(1)
       expect(result[0].number).toBe('ENG-101') // No prefix added for Linear
     })
 
     it('should fall back to child list data when full fetch fails', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-      vi.mocked(getSubIssues).mockResolvedValue([
-        { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
-      ])
-
       const mockTracker = createMockIssueTracker({
+        providerName: 'github',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
+        ]),
         fetchIssue: vi.fn().mockRejectedValue(new Error('API Error')),
       })
 
-      const settings = createSettings()
-      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+      const result = await fetchChildIssueDetails('100', mockTracker)
 
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({
@@ -705,14 +611,23 @@ describe('list-children', () => {
     })
 
     it('should return empty array when no child issues exist', async () => {
-      vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-      vi.mocked(getSubIssues).mockResolvedValue([])
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue([]),
+      })
 
-      const mockTracker = createMockIssueTracker()
-      const settings = createSettings()
-      const result = await fetchChildIssueDetails('100', mockTracker, settings)
+      const result = await fetchChildIssueDetails('100', mockTracker)
 
       expect(result).toEqual([])
+    })
+
+    it('should pass repo parameter when provided', async () => {
+      const mockTracker = createMockIssueTracker({
+        getChildIssues: vi.fn().mockResolvedValue([]),
+      })
+
+      await fetchChildIssueDetails('100', mockTracker, 'owner/repo')
+
+      expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', 'owner/repo')
     })
   })
 })
