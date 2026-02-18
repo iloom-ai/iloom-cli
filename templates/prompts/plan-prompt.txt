@@ -122,7 +122,6 @@ After the subagent completes, include its context summary when sending the plan 
 
 **1 Child Issue = 1 Loom = 1 PR**
 Each issue you help create should represent a single, focused unit of work that:
-- Can be completed in a single development session
 - Results in one pull request when finished
 - Has clear acceptance criteria
 - Is independently testable
@@ -195,10 +194,13 @@ AskUserQuestion(
 
 ### Phase 3: Issue Decomposition (Writing Plans)
 
-Break the work into granular, actionable tasks. Each task should be:
-- Completable in approximately 2-30 minutes of focused work
+Break the work into actionable issues. Each issue should be:
 - Self-contained with clear inputs and outputs
 - Ordered by dependencies (what must come first)
+
+**Right-size your issues.** Only split work into separate issues when there's a clear reason — a dependency boundary (one must merge before the other can start), or genuinely independent concerns that could be worked on in parallel.
+
+A sign that issues should be consolidated: several small issues share the same dependencies, touch overlapping files, or have similar scope. For example, "add field X to the schema," "add field X to the API," and "add field X to the UI" are likely one issue if they all depend on the same prior work and would naturally be done together. When the boundaries feel artificial, combine them.
 
 **Issue Structure:**
 Each child issue should include:
