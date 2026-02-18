@@ -826,6 +826,7 @@ export class IgniteCommand {
 			metadataManager,
 			this.agentManager,
 			this.settingsManager,
+			this.templateManager,
 		)
 
 		// Run swarm setup: child worktrees, agents, skill

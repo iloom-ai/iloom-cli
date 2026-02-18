@@ -1,11 +1,10 @@
 import path from 'path'
 import fs from 'fs-extra'
-import { fileURLToPath } from 'url'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { MetadataManager, type WriteMetadataInput, type SwarmState } from './MetadataManager.js'
 import { AgentManager } from './AgentManager.js'
 import { SettingsManager } from './SettingsManager.js'
-import type { TemplateVariables } from './PromptTemplateManager.js'
+import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
@@ -50,6 +49,7 @@ export class SwarmSetupService {
 		private metadataManager: MetadataManager,
 		private agentManager: AgentManager,
 		private settingsManager: SettingsManager,
+		private templateManager: PromptTemplateManager,
 	) {}
 
 	/**
@@ -230,50 +230,31 @@ export class SwarmSetupService {
 
 		await fs.ensureDir(skillDir)
 
-		const skillTemplatePath = this.findSkillTemplate()
-
-		if (!skillTemplatePath) {
-			getLogger().warn('Could not find swarm workflow skill template')
-			return false
-		}
-
 		try {
-			const skillContent = await fs.readFile(skillTemplatePath, 'utf-8')
+			// Load settings for review configuration
+			const settings = await this.settingsManager.loadSettings()
+
+			// Build template variables for swarm skill rendering
+			const variables: TemplateVariables = {
+				SWARM_MODE: true,
+				ONE_SHOT_MODE: true,
+				...buildReviewTemplateVariables(settings?.agents),
+			}
+
+			// Render issue prompt template with swarm variables
+			const skillContent = await this.templateManager.getPrompt('issue', variables)
 			await fs.writeFile(skillOutputPath, skillContent, 'utf-8')
 			getLogger().success(`Rendered swarm skill to ${skillOutputPath}`)
 			return true
 		} catch (error) {
+			// Intentional graceful degradation: setupSwarm reports skillRendered=false
+			// in its result rather than aborting the entire swarm setup. The caller
+			// (ignite.ts) can decide whether a missing skill is fatal.
 			getLogger().warn(
 				`Failed to render swarm skill: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			)
 			return false
 		}
-	}
-
-	/**
-	 * Find the swarm workflow skill template by walking up from the package directory.
-	 */
-	private findSkillTemplate(): string | null {
-		const currentFilePath = fileURLToPath(import.meta.url)
-		let currentDir = path.dirname(currentFilePath)
-
-		while (currentDir !== path.dirname(currentDir)) {
-			const candidatePath = path.join(
-				currentDir,
-				'templates',
-				'skills',
-				'iloom-swarm-workflow',
-				'SKILL.md',
-			)
-			try {
-				fs.accessSync(candidatePath)
-				return candidatePath
-			} catch {
-				currentDir = path.dirname(currentDir)
-			}
-		}
-
-		return null
 	}
 
 	/**
