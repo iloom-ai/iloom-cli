@@ -9,11 +9,7 @@
  */
 
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
-import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
-import type { IloomSettings } from '../lib/SettingsManager.js'
-import { getSubIssues } from './github.js'
-import { getLinearChildIssues } from './linear.js'
 import { logger } from './logger.js'
 
 // ============================================================================
@@ -75,54 +71,27 @@ interface RawChildIssue {
 }
 
 /**
- * Fetch child issues from the appropriate provider (GitHub or Linear)
+ * Fetch child issues from the appropriate provider via IssueTracker interface
  *
  * Uses Promise.allSettled for fault tolerance - API failures return empty array
  * with a warning logged rather than crashing.
  *
  * @param parentIssueNumber - The issue number/identifier of the parent
- * @param settings - IloomSettings to determine which provider to use
+ * @param issueTracker - IssueTracker instance to delegate to
  * @param repo - Optional repo in "owner/repo" format for GitHub
  * @returns Array of raw child issues, or empty array on failure
  */
 export async function fetchChildIssues(
   parentIssueNumber: string,
-  settings: IloomSettings,
+  issueTracker: IssueTracker,
   repo?: string,
 ): Promise<RawChildIssue[]> {
-  const providerName = IssueTrackerFactory.getProviderName(settings)
+  logger.debug('Fetching child issues', { parentIssueNumber, provider: issueTracker.providerName, repo })
 
-  logger.debug('Fetching child issues', { parentIssueNumber, provider: providerName, repo })
-
-  // Use Promise.allSettled for fault tolerance
-  const results = await Promise.allSettled([
-    (async (): Promise<RawChildIssue[]> => {
-      if (providerName === 'github') {
-        // GitHub uses numeric issue numbers
-        const issueNum = parseInt(parentIssueNumber, 10)
-        if (isNaN(issueNum)) {
-          logger.warn(`Invalid GitHub issue number: ${parentIssueNumber}`)
-          return []
-        }
-        return getSubIssues(issueNum, repo)
-      } else if (providerName === 'linear') {
-        // Linear uses identifiers like "ENG-123"
-        // Pass API token from settings since LinearService may not have been instantiated
-        const apiToken = settings.issueManagement?.linear?.apiToken
-        return getLinearChildIssues(parentIssueNumber, apiToken ? { apiToken } : undefined)
-      } else {
-        logger.warn(`Unsupported issue tracker provider: ${providerName}`)
-        return []
-      }
-    })(),
-  ])
-
-  // Extract result from Promise.allSettled
-  const result = results[0]
-  if (result.status === 'fulfilled') {
-    return result.value
-  } else {
-    logger.warn(`Failed to fetch child issues for ${parentIssueNumber}`, { error: result.reason })
+  try {
+    return await issueTracker.getChildIssues(parentIssueNumber, repo)
+  } catch (error) {
+    logger.warn(`Failed to fetch child issues for ${parentIssueNumber}`, { error })
     return []
   }
 }
@@ -252,14 +221,14 @@ export function matchChildrenData(
  *
  * @param parentLoom - The parent loom metadata
  * @param metadataManager - MetadataManager instance
- * @param settings - IloomSettings for determining provider
+ * @param issueTracker - IssueTracker instance for fetching child issues
  * @param repo - Optional repo in "owner/repo" format for GitHub
  * @returns ChildrenData or null if no parent issue to query
  */
 export async function assembleChildrenData(
   parentLoom: LoomMetadata,
   metadataManager: MetadataManager,
-  settings: IloomSettings,
+  issueTracker: IssueTracker,
   repo?: string,
 ): Promise<ChildrenData | null> {
   // Can't fetch children if there's no parent issue
@@ -286,7 +255,7 @@ export async function assembleChildrenData(
 
   // Fetch child issues and find child looms in parallel for performance
   const [childIssues, childLooms] = await Promise.all([
-    fetchChildIssues(parentIssueNumber, settings, repo),
+    fetchChildIssues(parentIssueNumber, issueTracker, repo),
     findChildLooms(parentLoom.branchName, metadataManager),
   ])
 
@@ -317,22 +286,20 @@ export interface ChildIssueDetail {
  *
  * @param parentIssueNumber - The parent issue number/identifier
  * @param issueTracker - IssueTracker instance for fetching full issue details
- * @param settings - IloomSettings to determine provider and fetch children
  * @param repo - Optional repo in "owner/repo" format for GitHub
  * @returns Array of child issue details, or empty array on failure
  */
 export async function fetchChildIssueDetails(
   parentIssueNumber: string,
   issueTracker: IssueTracker,
-  settings: IloomSettings,
   repo?: string,
 ): Promise<ChildIssueDetail[]> {
-  const providerName = IssueTrackerFactory.getProviderName(settings)
+  const providerName = issueTracker.providerName
 
   logger.debug('Fetching child issue details', { parentIssueNumber, provider: providerName })
 
   // First fetch the list of child issues (lightweight)
-  const childIssues = await fetchChildIssues(parentIssueNumber, settings, repo)
+  const childIssues = await fetchChildIssues(parentIssueNumber, issueTracker, repo)
 
   if (childIssues.length === 0) {
     return []

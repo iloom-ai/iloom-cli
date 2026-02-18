@@ -767,7 +767,7 @@ export class IgniteCommand {
 
 			// Fetch child issue details and build dependency map in parallel
 			const childIssueDetails = await fetchChildIssueDetails(
-				parentIssueNumber, issueTracker, settings
+				parentIssueNumber, issueTracker
 			)
 
 			if (childIssueDetails.length === 0) {

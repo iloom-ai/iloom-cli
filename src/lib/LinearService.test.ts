@@ -6,7 +6,10 @@ vi.mock('../utils/linear.js', () => ({
 	fetchLinearIssue: vi.fn(),
 	createLinearIssue: vi.fn(),
 	updateLinearIssueState: vi.fn(),
+	getLinearChildIssues: vi.fn(),
 }))
+
+import { getLinearChildIssues } from '../utils/linear.js'
 
 describe('LinearService', () => {
 	describe('constructor', () => {
@@ -63,6 +66,39 @@ describe('LinearService', () => {
 			new LinearService({ teamId: 'ENG' })
 
 			expect(process.env.LINEAR_API_TOKEN).toBe(existingToken)
+		})
+	})
+
+	describe('getChildIssues', () => {
+		it('should call getLinearChildIssues with identifier', async () => {
+			const mockChildren = [
+				{ id: 'ENG-101', title: 'Sub-task', url: 'https://linear.app/issue/ENG-101', state: 'In Progress' },
+			]
+			vi.mocked(getLinearChildIssues).mockResolvedValue(mockChildren)
+
+			const service = new LinearService()
+			const result = await service.getChildIssues('ENG-100')
+
+			expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100', undefined)
+			expect(result).toEqual(mockChildren)
+		})
+
+		it('should pass apiToken from config when available', async () => {
+			vi.mocked(getLinearChildIssues).mockResolvedValue([])
+
+			const service = new LinearService({ apiToken: 'lin_api_test' })
+			await service.getChildIssues('ENG-100')
+
+			expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100', { apiToken: 'lin_api_test' })
+		})
+
+		it('should pass undefined options when no apiToken configured', async () => {
+			vi.mocked(getLinearChildIssues).mockResolvedValue([])
+
+			const service = new LinearService({ teamId: 'ENG' })
+			await service.getChildIssues('ENG-100')
+
+			expect(getLinearChildIssues).toHaveBeenCalledWith('ENG-100', undefined)
 		})
 	})
 })
