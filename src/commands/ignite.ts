@@ -228,7 +228,7 @@ export class IgniteCommand {
 			// Detection: check for childIssues already stored (re-spin of an epic)
 			// or check for 'epic' issueType once issue #624 adds it
 			const isEpicLoom = metadata && metadata.issue_numbers.length > 0 && !metadata.parentLoom
-				&& ((metadata.childIssues?.length ?? 0) > 0 || (metadata.issueType as string) === 'epic')
+				&& ((metadata.childIssues?.length ?? 0) > 0 || metadata.issueType === 'epic')
 			if (isEpicLoom && this.settings) {
 				await this.fetchAndStoreEpicChildData(metadataManager, metadata, context.workspacePath, this.settings)
 			}

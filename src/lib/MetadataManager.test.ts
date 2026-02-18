@@ -1367,14 +1367,14 @@ describe('MetadataManager', () => {
       expect(fs.writeFile).not.toHaveBeenCalled()
     })
 
-    it('should not throw on write error', async () => {
+    it('should re-throw on write error', async () => {
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ description: 'test', version: 1 }))
       vi.mocked(fs.writeFile).mockRejectedValue(new Error('Write error'))
 
       await expect(
         manager.updateMetadata(worktreePath, { childIssues: [] })
-      ).resolves.not.toThrow()
+      ).rejects.toThrow('Write error')
     })
   })
 
