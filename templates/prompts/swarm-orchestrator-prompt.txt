@@ -12,9 +12,21 @@ You are running with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. You have access t
 
 ## Available Data
 
-### Child Issues
+### Reading Child Data from Metadata
 
-The following child issues are part of this epic:
+Child issue details and dependency relationships are stored in the epic's metadata file. Read the metadata file to get this data:
+
+```bash
+cat {{EPIC_METADATA_PATH}}
+```
+
+The metadata file contains:
+- `childIssues`: JSON array where each entry has `{ number, title, body, url }` — the number is prefixed (`#123` for GitHub, `ENG-123` for Linear)
+- `dependencyMap`: JSON object representing the dependency DAG — keys are issue numbers (as strings), values are arrays of issue numbers that must complete before the key issue can start
+
+### Child Issues (from template)
+
+If child issues are provided directly (e.g., with worktree paths assigned during loom creation), they are available here:
 
 ```json
 {{CHILD_ISSUES}}
@@ -22,15 +34,17 @@ The following child issues are part of this epic:
 
 This is a JSON array where each entry has: `{ number, title, worktreePath, branchName }`
 
-### Dependency Map
+### Dependency Map (from template)
 
-The dependency relationships between child issues:
+If provided directly as a template variable:
 
 ```json
 {{DEPENDENCY_MAP}}
 ```
 
 This is a JSON object representing the dependency DAG. Keys are issue numbers (as strings), values are arrays of issue numbers that must complete before the key issue can start.
+
+**Priority**: Use the template variables if populated. Otherwise, read from the metadata file.
 
 ---
 

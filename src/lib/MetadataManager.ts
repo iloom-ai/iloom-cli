@@ -40,6 +40,14 @@ export interface MetadataFile {
     worktreePath: string
     databaseBranch?: string
   }
+  // Epic/swarm child issue data (populated during spin setup)
+  childIssues?: Array<{
+    number: string   // Prefixed: "#123" for GitHub, "ENG-123" for Linear
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
 }
 
 /**
@@ -73,6 +81,14 @@ export interface WriteMetadataInput {
     worktreePath: string
     databaseBranch?: string
   }
+  // Epic/swarm child issue data (populated during spin setup)
+  childIssues?: Array<{
+    number: string   // Prefixed: "#123" for GitHub, "ENG-123" for Linear
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
 }
 
 /**
@@ -107,6 +123,14 @@ export interface LoomMetadata {
     worktreePath: string
     databaseBranch?: string
   } | null
+  // Epic/swarm child issue data (empty arrays/objects for non-epic looms)
+  childIssues: Array<{
+    number: string
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap: Record<string, string[]>
 }
 
 /**
@@ -154,6 +178,8 @@ export class MetadataManager {
       state: data.state ?? null,
       childIssueNumbers: data.childIssueNumbers ?? [],
       parentLoom: data.parentLoom ?? null,
+      childIssues: data.childIssues ?? [],
+      dependencyMap: data.dependencyMap ?? {},
     }
   }
 
@@ -235,6 +261,8 @@ export class MetadataManager {
         ...(input.state && { state: input.state }),
         ...(input.childIssueNumbers && input.childIssueNumbers.length > 0 && { childIssueNumbers: input.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
+        ...(input.childIssues && input.childIssues.length > 0 && { childIssues: input.childIssues }),
+        ...(input.dependencyMap && Object.keys(input.dependencyMap).length > 0 && { dependencyMap: input.dependencyMap }),
       }
 
       // 3. Write to slugified filename
@@ -335,6 +363,43 @@ export class MetadataManager {
     }
 
     return results
+  }
+
+  /**
+   * Update existing metadata for a worktree by merging new fields
+   *
+   * Reads the existing metadata file, merges the provided updates,
+   * and writes back. Only provided fields are overwritten.
+   *
+   * @param worktreePath - Absolute path to the worktree
+   * @param updates - Partial metadata fields to merge
+   */
+  async updateMetadata(worktreePath: string, updates: Partial<MetadataFile>): Promise<void> {
+    try {
+      const filePath = this.getFilePath(worktreePath)
+
+      // Check if file exists
+      if (!(await fs.pathExists(filePath))) {
+        getLogger().warn(`No metadata file to update for worktree: ${worktreePath}`)
+        return
+      }
+
+      // Read existing data
+      const content = await fs.readFile(filePath, 'utf8')
+      const data: MetadataFile = JSON.parse(content)
+
+      // Merge updates
+      const merged = { ...data, ...updates }
+
+      // Write back
+      await fs.writeFile(filePath, JSON.stringify(merged, null, 2), { mode: 0o644 })
+
+      getLogger().debug(`Metadata updated for worktree: ${worktreePath}`)
+    } catch (error) {
+      getLogger().warn(
+        `Failed to update metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
   }
 
   /**
