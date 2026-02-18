@@ -104,6 +104,10 @@ export interface TemplateVariables {
 	HAS_REVIEWER?: boolean
 	// Git remote configuration
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
+	// Swarm orchestrator variables
+	EPIC_ISSUE_NUMBER?: string | number
+	EPIC_WORKTREE_PATH?: string
+	EPIC_METADATA_PATH?: string  // Path to the epic's metadata JSON file
 }
 
 /**

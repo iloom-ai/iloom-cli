@@ -10,6 +10,7 @@
 
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import { getSubIssues } from './github.js'
 import { getLinearChildIssues } from './linear.js'
@@ -291,4 +292,99 @@ export async function assembleChildrenData(
 
   // Match and return
   return matchChildrenData(childIssues, childLooms)
+}
+
+// ============================================================================
+// Child Issue Details (for epic metadata persistence)
+// ============================================================================
+
+/**
+ * Child issue detail for persistence in epic metadata
+ */
+export interface ChildIssueDetail {
+  number: string   // Prefixed: "#123" for GitHub, "ENG-123" for Linear
+  title: string
+  body: string
+  url: string
+}
+
+/**
+ * Fetch child issue details with body content and properly-prefixed numbers
+ *
+ * Unlike fetchChildIssues (which returns minimal data for list display),
+ * this function fetches full issue details including body/description
+ * and formats the issue number with the appropriate provider prefix.
+ *
+ * @param parentIssueNumber - The parent issue number/identifier
+ * @param issueTracker - IssueTracker instance for fetching full issue details
+ * @param settings - IloomSettings to determine provider and fetch children
+ * @param repo - Optional repo in "owner/repo" format for GitHub
+ * @returns Array of child issue details, or empty array on failure
+ */
+export async function fetchChildIssueDetails(
+  parentIssueNumber: string,
+  issueTracker: IssueTracker,
+  settings: IloomSettings,
+  repo?: string,
+): Promise<ChildIssueDetail[]> {
+  const providerName = IssueTrackerFactory.getProviderName(settings)
+
+  logger.debug('Fetching child issue details', { parentIssueNumber, provider: providerName })
+
+  // First fetch the list of child issues (lightweight)
+  const childIssues = await fetchChildIssues(parentIssueNumber, settings, repo)
+
+  if (childIssues.length === 0) {
+    return []
+  }
+
+  // Fetch full details for each child in parallel
+  const results = await Promise.allSettled(
+    childIssues.map(async (child): Promise<ChildIssueDetail> => {
+      try {
+        const fullIssue = await issueTracker.fetchIssue(child.id, repo)
+        return {
+          number: formatIssueNumber(child.id, providerName),
+          title: fullIssue.title,
+          body: fullIssue.body,
+          url: child.url,
+        }
+      } catch {
+        // Fall back to data from child list if full fetch fails
+        return {
+          number: formatIssueNumber(child.id, providerName),
+          title: child.title,
+          body: '',
+          url: child.url,
+        }
+      }
+    }),
+  )
+
+  // Collect fulfilled results
+  const details: ChildIssueDetail[] = []
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      details.push(result.value)
+    } else {
+      logger.warn('Failed to fetch details for a child issue', { error: result.reason })
+    }
+  }
+
+  return details
+}
+
+/**
+ * Format an issue number with the appropriate provider prefix
+ *
+ * @param issueId - Raw issue ID (e.g., "123" for GitHub, "ENG-123" for Linear)
+ * @param providerName - Provider type
+ * @returns Prefixed number: "#123" for GitHub, "ENG-123" for Linear (already prefixed)
+ */
+function formatIssueNumber(issueId: string, providerName: string): string {
+  if (providerName === 'github') {
+    return `#${issueId}`
+  }
+  // Linear and Jira identifiers are already prefixed (e.g., "ENG-123", "PROJ-456")
+  return issueId
 }
