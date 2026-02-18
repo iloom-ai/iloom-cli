@@ -446,6 +446,8 @@ export class LoomManager {
       ...(draftPrNumber && { draftPrNumber }),
       ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
       ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
+      ...(input.options?.childIssues && input.options.childIssues.length > 0 && { childIssues: input.options.childIssues }),
+      ...(input.options?.dependencyMap && Object.keys(input.options.dependencyMap).length > 0 && { dependencyMap: input.options.dependencyMap }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)

@@ -56,6 +56,15 @@ export interface CreateLoomInput {
     sourceEnvOnStart?: boolean
     // Child issue numbers for epic looms
     childIssueNumbers?: string[]
+    // Rich child issue data for epic looms (number with prefix, title, body, url)
+    childIssues?: Array<{
+      number: string
+      title: string
+      body: string
+      url: string
+    }>
+    // Dependency map for epic looms (issueNumber -> array of blocking issueNumbers)
+    dependencyMap?: Record<string, string[]>
   }
 }
 
