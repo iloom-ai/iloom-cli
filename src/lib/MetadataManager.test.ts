@@ -300,6 +300,34 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.state).toBeUndefined()
     })
+
+    it('should write issueType epic and childIssueNumbers to metadata when provided', async () => {
+      const inputWithEpic = {
+        ...metadataInput,
+        issueType: 'epic' as const,
+        childIssueNumbers: ['101', '102', '103'],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithEpic)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.issueType).toBe('epic')
+      expect(writtenContent.childIssueNumbers).toEqual(['101', '102', '103'])
+    })
+
+    it('should not include childIssueNumbers when array is empty', async () => {
+      const inputWithEmptyChildren = {
+        ...metadataInput,
+        childIssueNumbers: [],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithEmptyChildren)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.childIssueNumbers).toBeUndefined()
+    })
   })
 
   describe('readMetadata', () => {
@@ -347,6 +375,7 @@ describe('MetadataManager', () => {
         oneShot: null,
         capabilities: ['web'],
         state: null,
+        childIssueNumbers: [],
         parentLoom: null,
       })
     })
@@ -363,6 +392,36 @@ describe('MetadataManager', () => {
 
       const result = await manager.readMetadata(worktreePath)
       expect(result?.projectPath).toBe('/Users/jane/dev/main-repo')
+    })
+
+    it('should return issueType epic and childIssueNumbers when present in metadata', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Epic loom',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        issueType: 'epic',
+        childIssueNumbers: ['101', '102'],
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueType).toBe('epic')
+      expect(result?.childIssueNumbers).toEqual(['101', '102'])
+    })
+
+    it('should default childIssueNumbers to empty for legacy looms', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without epic fields',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueType).toBeNull()
+      expect(result?.childIssueNumbers).toEqual([])
     })
 
     it('should return null projectPath for legacy looms', async () => {
@@ -444,6 +503,7 @@ describe('MetadataManager', () => {
         oneShot: null,
         capabilities: [],
         state: null,
+        childIssueNumbers: [],
         parentLoom: null,
       })
     })
@@ -809,6 +869,7 @@ describe('MetadataManager', () => {
         oneShot: null,
         capabilities: ['cli'],
         state: null,
+        childIssueNumbers: [],
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -830,6 +891,7 @@ describe('MetadataManager', () => {
         oneShot: null,
         capabilities: ['web'],
         state: null,
+        childIssueNumbers: [],
         parentLoom: null,
       })
     })
@@ -935,6 +997,7 @@ describe('MetadataManager', () => {
         oneShot: null,
         capabilities: [],
         state: null,
+        childIssueNumbers: [],
         parentLoom: null,
       })
     })

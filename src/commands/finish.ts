@@ -36,7 +36,7 @@ export interface FinishCommandInput {
 }
 
 export interface ParsedFinishInput {
-	type: 'issue' | 'pr' | 'branch'
+	type: 'issue' | 'pr' | 'branch' | 'epic'
 	number?: string | number // For issues and PRs
 	branchName?: string // For branch inputs
 	originalInput: string // Raw input for error messages
