@@ -28,6 +28,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il issues](#il-issues)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
+- [Swarm Mode (Epic Orchestration)](#swarm-mode-epic-orchestration)
 - [Configuration & Maintenance](#configuration--maintenance)
   - [il init / il config](#il-init--il-config)
   - [il update](#il-update)
@@ -66,6 +67,8 @@ il start "<issue-description>"
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
+| `--epic` | - | Force create as epic loom with child issues (skip prompt) |
+| `--no-epic` | - | Skip epic loom creation even if issue has children |
 | `--claude` / `--no-claude` | - | Enable/disable Claude integration (default: enabled) |
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
@@ -82,14 +85,15 @@ il start "<issue-description>"
 The `il start` command orchestrates multiple AI agents:
 
 1. **Fetch** - Retrieves issue/PR details from GitHub or Linear
-2. **Enhance** (conditional) - Expands brief issues into detailed requirements
-3. **Evaluate** - Assesses complexity and determines workflow approach (Simple vs Complex)
-4. **Analyze** (complex issues only) - Investigates root causes and technical constraints
-5. **Plan** - Creates implementation roadmap
+2. **Epic Detection** - Checks for child issues; prompts for epic loom creation (or uses `--epic`/`--no-epic` flags). If creating as epic, fetches child issue details and builds dependency map.
+3. **Enhance** (conditional) - Expands brief issues into detailed requirements
+4. **Evaluate** - Assesses complexity and determines workflow approach (Simple vs Complex)
+5. **Analyze** (complex issues only) - Investigates root causes and technical constraints
+6. **Plan** - Creates implementation roadmap
    - Complex issues: Detailed dedicated planning phase
    - Simple issues: Combined analysis + planning in one step
-6. **Environment Setup** - Creates worktree, database branch, environment variables
-7. **Launch** - Opens IDE with color theme and starts development server
+7. **Environment Setup** - Creates worktree, database branch, environment variables. For epic looms, stores child issue details and dependency map in metadata.
+8. **Launch** - Opens IDE with color theme and starts development server
 
 **Examples:**
 
@@ -114,6 +118,15 @@ il start 42 --child-loom
 
 # Create independent loom even when inside another loom
 il start 99 --no-child-loom
+
+# Start an epic loom (auto-detect children, prompt for confirmation)
+il start 100
+
+# Force epic mode (skip prompt)
+il start 100 --epic
+
+# Force normal loom even if issue has children
+il start 100 --no-epic
 ```
 
 **Notes:**
@@ -121,6 +134,8 @@ il start 99 --no-child-loom
 - Creates isolated environment: Git worktree, database branch, unique port
 - All AI analysis is posted as issue comments for team visibility
 - Color codes the VS Code window for visual context switching
+- When an issue has child issues, prompts whether to create an epic loom (use `--epic`/`--no-epic` to skip the prompt)
+- Epic looms store child issue details and the dependency map in metadata for use by swarm mode during `il spin`
 
 ---
 
@@ -443,6 +458,28 @@ il list [options]
 - Database branch name (if configured)
 - Current status (active, has uncommitted changes, etc.)
 - Finish time (for finished looms with `--finished` or `--all`)
+- Swarm lifecycle state (`state`) for child looms in swarm mode
+- Swarm issues and dependency map for epic looms (JSON output only)
+
+**JSON Output - Epic Loom Fields:**
+
+When using `--json`, epic looms include additional fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | `string \| null` | Swarm lifecycle state: `pending`, `in_progress`, `code_review`, `done`, or `failed`. `null` for non-swarm looms. |
+| `swarmIssues` | `array` | Array of child issues with enriched state. Only present for epic looms. |
+| `dependencyMap` | `object` | Dependency DAG. Keys are issue numbers, values are arrays of blocking issue numbers. Only present for epic looms. |
+
+Each entry in `swarmIssues` has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `number` | `string` | Issue number with prefix (e.g., `"#123"` for GitHub, `"ENG-123"` for Linear) |
+| `title` | `string` | Issue title |
+| `url` | `string` | Issue URL |
+| `state` | `string \| null` | Current lifecycle state (`pending`, `in_progress`, `code_review`, `done`, `failed`) or `null` |
+| `worktreePath` | `string \| null` | Path to the child's worktree, or `null` if not yet created |
 
 **Examples:**
 
@@ -497,6 +534,7 @@ il spin [options]
 **Behavior:**
 
 - **Inside a loom:** Launches Claude with that loom's context preloaded
+- **Inside an epic loom:** Enters [swarm mode](#swarm-mode-epic-orchestration) — creates child worktrees and launches orchestrator with parallel agent teams
 - **Outside a loom:** Launches Claude with general project context
 
 **Context Loading:**
@@ -506,6 +544,24 @@ When launched from inside a loom, Claude receives:
 - AI-generated enhancement, analysis, and planning
 - Current file tree and recent changes
 - Environment details (port, database branch, etc.)
+
+**Swarm Mode (Epic Looms):**
+
+When `il spin` detects an epic loom (created via `il start --epic` or by confirming the epic prompt), it enters swarm mode instead of launching a standard Claude session:
+
+1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
+2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
+3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
+4. **Renders swarm skill** - Writes the iloom workflow skill to `.claude/skills/iloom-swarm-workflow/SKILL.md`
+5. **Launches orchestrator** - Starts Claude with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and `bypassPermissions` mode
+
+The orchestrator then:
+- Analyzes the dependency DAG to identify initially unblocked issues
+- Spawns parallel agents for all unblocked child issues simultaneously
+- Each agent invokes the swarm workflow skill to implement its assigned issue
+- Completed work is merged back to the epic branch with `--no-ff`
+- Newly unblocked issues are spawned as their dependencies complete
+- Failed children are isolated and do not block unrelated issues
 
 **Examples:**
 
@@ -1429,6 +1485,131 @@ il enhance 127
 - Can be run multiple times as issue evolves
 - Does NOT create a loom workspace
 - Useful for CI/automation with `--no-browser` and `--author` flags
+
+---
+
+## Swarm Mode (Epic Orchestration)
+
+Swarm mode provides automatic, parallel execution of epic issues by coordinating a team of AI agents. Each child issue is implemented in its own isolated worktree by a dedicated agent, with all work merged back into the epic branch.
+
+### Prerequisites
+
+1. **Decompose the epic** into child issues using `il plan <epic-number>` or by manually creating child issues
+2. **Set up dependencies** between child issues (blocking relationships) so the orchestrator knows execution order
+3. **Claude CLI** must be installed with a Claude Max subscription (swarm mode runs multiple agents)
+
+### Lifecycle States
+
+Each child issue in swarm mode tracks its progress through lifecycle states:
+
+| State | Description |
+|-------|-------------|
+| `pending` | Child worktree created, waiting for dependencies to complete |
+| `in_progress` | Agent is actively implementing the issue |
+| `code_review` | Implementation complete, under review |
+| `done` | Successfully implemented and merged to epic branch |
+| `failed` | Implementation failed or blocked by a failed dependency |
+
+### Triggering Swarm Mode
+
+Swarm mode is a two-step process:
+
+**Step 1: Create the epic loom**
+
+```bash
+il start 100          # Auto-detect children, prompt for epic mode
+il start 100 --epic   # Force epic mode
+il start 100 --no-epic # Force normal loom (ignore children)
+```
+
+When creating an epic loom, `il start`:
+- Checks for child issues via the configured issue tracker
+- Fetches full details (title, body, URL) for each child issue
+- Builds the dependency map by querying blocking relationships between siblings
+- Stores all child data and the dependency map in loom metadata
+
+**Step 2: Launch swarm mode**
+
+```bash
+il spin
+```
+
+When `il spin` detects an epic loom, it automatically enters swarm mode.
+
+### Dependency Map Format
+
+The dependency map is a JSON object representing a directed acyclic graph (DAG). Keys are child issue numbers (as strings), values are arrays of issue numbers that must complete before the key issue can start.
+
+```json
+{
+  "101": [],
+  "102": ["101"],
+  "103": ["101"],
+  "104": ["102", "103"]
+}
+```
+
+In this example:
+- Issue 101 has no dependencies (starts immediately)
+- Issues 102 and 103 both depend on 101 (start in parallel after 101 completes)
+- Issue 104 depends on both 102 and 103 (starts after both complete)
+
+Only sibling dependencies (between child issues of the same epic) are included. External blockers are filtered out.
+
+### How Agents Work
+
+Each child agent runs in complete isolation:
+
+1. The orchestrator spawns the agent with a reference to the child's worktree path
+2. The agent invokes the `iloom-swarm-workflow` skill, which is the standard iloom issue workflow adapted for swarm mode
+3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
+4. On completion, the agent reports back to the orchestrator with status and summary
+
+The orchestrator uses `bypassPermissions` mode and Claude's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), both set automatically.
+
+### Merge Strategy
+
+When a child agent completes successfully:
+
+1. The orchestrator navigates to the epic worktree
+2. Merges the child's branch with `--no-ff` to preserve branch history
+3. If merge conflicts occur, a subagent is spawned to resolve them
+4. If conflict resolution fails, the merge is aborted and the child is marked as `failed`
+5. The child's metadata state is updated to `done`
+6. Any newly unblocked children are spawned
+
+### Failure Handling
+
+Swarm mode is designed to maximize throughput despite individual failures:
+
+- **Failed agents** are marked as `failed` but do not halt the orchestrator
+- **Downstream dependencies** of a failed child are also marked as `failed` (with reason: blocked by failed dependency)
+- **Unrelated children** continue executing normally
+- **Merge conflicts** that cannot be auto-resolved cause the child to be marked `failed`; the merge is aborted cleanly
+- A **final summary** reports the status of all children with success/failure counts
+
+### File Structure
+
+During swarm mode, the following files are created:
+
+```
+~/project-looms/
+├── epic-issue-100/                    # Epic worktree
+│   └── .claude/
+│       ├── agents/
+│       │   ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
+│       │   └── ...
+│       └── skills/
+│           └── iloom-swarm-workflow/
+│               └── SKILL.md           # Issue workflow adapted for swarm
+├── issue-101/                         # Child worktree (branched off epic)
+│   └── iloom-metadata.json            # state: pending -> in_progress -> done
+├── issue-102/                         # Another child worktree
+│   └── iloom-metadata.json
+└── ...
+```
+
+Swarm agent and skill files are automatically added to `.gitignore` by iloom migrations.
 
 ---
 
