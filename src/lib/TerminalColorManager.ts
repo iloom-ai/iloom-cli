@@ -1,6 +1,7 @@
 import { execa } from 'execa'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { logger } from '../utils/logger.js'
+import { isWSL } from '../utils/platform-detect.js'
 
 /**
  * Platform type for color application
@@ -76,15 +77,22 @@ export class TerminalColorManager {
 
 	/**
 	 * Apply terminal color on Linux
-	 * Limited support - graceful degradation with warning
+	 * On WSL, tab colors are applied at launch time via Windows Terminal's --tabColor flag.
+	 * On native Linux, terminal background colors have limited CLI support.
 	 */
 	private async applyLinuxColor(_rgb: { r: number; g: number; b: number }): Promise<void> {
-		logger.warn(
-			'Terminal background colors have limited support on Linux. ' +
-				'VSCode title bar colors will still be applied. ' +
-				'Future versions may add support for specific terminal emulators.'
-		)
-		// Future: Detect terminal emulator (gnome-terminal, konsole, etc.) and apply accordingly
+		if (isWSL()) {
+			logger.debug(
+				'Windows Terminal tab colors are applied at launch time via --tabColor. ' +
+					'VSCode title bar colors will still be applied.'
+			)
+		} else {
+			logger.warn(
+				'Terminal background colors have limited support on Linux. ' +
+					'VSCode title bar colors will still be applied. ' +
+					'Future versions may add support for specific terminal emulators.'
+			)
+		}
 	}
 
 	/**

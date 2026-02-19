@@ -1672,6 +1672,32 @@ iloom respects these environment variables:
 
 ---
 
+## Platform Support
+
+Terminal window launching (`il start` opening Claude, dev-server, and shell tabs) is supported on the following platforms:
+
+| Platform | Terminal Emulator | Tab Colors | Tab Titles |
+|----------|-------------------|------------|------------|
+| macOS | Terminal.app | Yes (background) | No |
+| macOS | iTerm2 | Yes (background) | Yes |
+| WSL | Windows Terminal (`wt.exe`) | Yes (`--tabColor`) | Yes |
+| Linux | gnome-terminal | No | Yes |
+| Linux | konsole | No | Yes |
+| Linux | xterm (fallback) | No | Yes (window title) |
+
+**WSL Notes:**
+- Windows Terminal must be installed (available from the [Microsoft Store](https://aka.ms/terminal))
+- `wt.exe` is automatically available on `PATH` inside WSL when Windows Terminal is installed
+- The WSL distribution is detected from the `WSL_DISTRO_NAME` environment variable
+- Tab colors are applied via the `--tabColor` flag at launch time
+
+**Linux Notes:**
+- Terminal emulators are detected in preference order: gnome-terminal, konsole, xterm
+- gnome-terminal supports opening multiple tabs in a single invocation
+- Background colors are not controllable via CLI on most Linux terminals
+
+---
+
 ## Additional Resources
 
 - [Main README](../README.md) - Overview and quick start

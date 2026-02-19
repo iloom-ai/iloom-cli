@@ -3,9 +3,15 @@ import { TerminalColorManager } from './TerminalColorManager.js'
 import { execa } from 'execa'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { logger } from '../utils/logger.js'
+import { isWSL } from '../utils/platform-detect.js'
 
 // Mock execa
 vi.mock('execa')
+
+// Mock platform-detect
+vi.mock('../utils/platform-detect.js', () => ({
+	isWSL: vi.fn().mockReturnValue(false),
+}))
 
 // Mock logger
 vi.mock('../utils/logger.js', () => ({
@@ -147,13 +153,25 @@ describe('TerminalColorManager', () => {
 			await expect(manager.applyTerminalColor('feature/test-branch')).resolves.not.toThrow()
 		})
 
-		it('should log warning about limited Linux support', async () => {
+		it('should log warning about limited Linux support on native Linux', async () => {
+			vi.mocked(isWSL).mockReturnValue(false)
 
 			await manager.applyTerminalColor('feature/test-branch')
 
 			expect(logger.warn).toHaveBeenCalledWith(
 				expect.stringContaining('limited support on Linux')
 			)
+		})
+
+		it('should log debug message about tab colors on WSL', async () => {
+			vi.mocked(isWSL).mockReturnValue(true)
+
+			await manager.applyTerminalColor('feature/test-branch')
+
+			expect(logger.debug).toHaveBeenCalledWith(
+				expect.stringContaining('Windows Terminal tab colors are applied at launch time')
+			)
+			expect(logger.warn).not.toHaveBeenCalled()
 		})
 	})
 

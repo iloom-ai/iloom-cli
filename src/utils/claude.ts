@@ -1,10 +1,131 @@
 import { execa } from 'execa'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { logger } from './logger.js'
 import { getLogger } from './logger-context.js'
 import { openTerminalWindow } from './terminal.js'
+
+/**
+ * Linux has a per-argument size limit (MAX_ARG_STRLEN = 128KB) and a total
+ * argv+envp limit (ARG_MAX ≈ 2MB). Large CLI arguments like --append-system-prompt,
+ * --mcp-config, --agents, and the prompt can exceed these limits, causing E2BIG.
+ *
+ * This helper externalises large arguments to temp files:
+ *   - appendSystemPrompt → temp dir with CLAUDE.md, added via --add-dir
+ *   - mcpConfig entries  → temp JSON files (--mcp-config accepts file paths)
+ *   - prompt             → temp file in workspace, short proxy prompt references it
+ *   - agents JSON        → temp file, read back as arg value (typically small)
+ *
+ * Returns a cleanup function to remove all temp artefacts.
+ */
+interface ExternalizedArgs {
+	args: string[]
+	prompt: string
+	cleanupFiles: string[]
+	cleanupDirs: string[]
+}
+
+function externalizeIfNeeded(
+	args: string[],
+	prompt: string,
+	appendSystemPrompt: string | undefined,
+	mcpConfig: Record<string, unknown>[] | undefined,
+	_agents: Record<string, unknown> | undefined,
+	_workspacePath: string | undefined,
+): ExternalizedArgs {
+	// On non-Linux platforms, skip externalisation (macOS has higher limits)
+	if (process.platform !== 'linux') {
+		return { args, prompt, cleanupFiles: [], cleanupDirs: [] }
+	}
+
+	// Linux has a 128KB per-argument limit (MAX_ARG_STRLEN) and 2MB total argv+envp
+	// (ARG_MAX ≈ 2MB). Check if any single arg or the total exceeds safe thresholds.
+	const MAX_SINGLE_ARG = 120_000   // 128KB limit minus safety margin
+	const MAX_TOTAL_ARGS = 1_500_000 // 2MB minus env vars headroom
+
+	const totalArgSize = args.reduce((sum, a) => sum + Buffer.byteLength(a), 0)
+		+ Buffer.byteLength(prompt)
+	const maxSingleArg = Math.max(
+		...args.map(a => Buffer.byteLength(a)),
+		Buffer.byteLength(prompt),
+	)
+
+	if (totalArgSize < MAX_TOTAL_ARGS && maxSingleArg < MAX_SINGLE_ARG) {
+		return { args, prompt, cleanupFiles: [], cleanupDirs: [] }
+	}
+
+	getLogger().debug('CLI args exceed Linux limits, externalising', {
+		totalArgSize, maxSingleArg, MAX_TOTAL_ARGS, MAX_SINGLE_ARG,
+	})
+
+	const cleanupFiles: string[] = []
+	const cleanupDirs: string[] = []
+	const newArgs = [...args]
+
+	// 1. Externalise --append-system-prompt → CLAUDE.md in temp --add-dir
+	if (appendSystemPrompt) {
+		const tempDir = join(tmpdir(), `iloom-sp-${randomUUID()}`)
+		mkdirSync(tempDir, { recursive: true })
+		writeFileSync(join(tempDir, 'CLAUDE.md'), appendSystemPrompt, 'utf-8')
+		cleanupDirs.push(tempDir)
+
+		// Remove the --append-system-prompt arg pair and add --add-dir instead
+		const spIdx = newArgs.indexOf('--append-system-prompt')
+		if (spIdx !== -1) {
+			newArgs.splice(spIdx, 2) // remove flag + value
+		}
+		newArgs.push('--add-dir', tempDir)
+		getLogger().debug('Externalised --append-system-prompt to temp CLAUDE.md', { tempDir })
+	}
+
+	// 2. Externalise --mcp-config entries → temp JSON files (--mcp-config accepts file paths)
+	if (mcpConfig && mcpConfig.length > 0) {
+		const mcpIndices: number[] = []
+		for (let i = 0; i < newArgs.length; i++) {
+			if (newArgs[i] === '--mcp-config') mcpIndices.push(i)
+		}
+		// Process in reverse to preserve indices during splice
+		for (let j = mcpIndices.length - 1; j >= 0; j--) {
+			const idx = mcpIndices[j]
+			if (idx === undefined) continue
+			const value = newArgs[idx + 1]
+			if (value) {
+				const tmpFile = join(tmpdir(), `iloom-mcp-${randomUUID()}.json`)
+				writeFileSync(tmpFile, value, 'utf-8')
+				cleanupFiles.push(tmpFile)
+				newArgs[idx + 1] = tmpFile
+				getLogger().debug('Externalised --mcp-config to temp file', { tmpFile })
+			}
+		}
+	}
+
+	// 3. Externalise --agents JSON → temp file (--agents accepts file paths)
+	const agentsIdx = newArgs.indexOf('--agents')
+	if (agentsIdx !== -1 && newArgs[agentsIdx + 1]) {
+		const tmpFile = join(tmpdir(), `iloom-agents-${randomUUID()}.json`)
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		writeFileSync(tmpFile, newArgs[agentsIdx + 1]!, 'utf-8')
+		cleanupFiles.push(tmpFile)
+		newArgs[agentsIdx + 1] = tmpFile
+		getLogger().debug('Externalised --agents to temp file', { tmpFile })
+	}
+
+	// 4. Prompt: kept as CLI arg. With agents/system-prompt/mcp-config externalised,
+	// the prompt alone should be well within Linux's 128KB per-arg limit.
+
+	return { args: newArgs, prompt, cleanupFiles, cleanupDirs }
+}
+
+function cleanupExternalizedFiles(files: string[], dirs: string[]): void {
+	for (const f of files) {
+		try { unlinkSync(f) } catch { /* ignore */ }
+	}
+	for (const d of dirs) {
+		try { rmSync(d, { recursive: true }) } catch { /* ignore */ }
+	}
+}
 
 /**
  * Generate a deterministic UUID v5 from a worktree path
@@ -216,6 +337,11 @@ export async function launchClaude(
 		args.push('--no-session-persistence')
 	}
 
+	// Externalise large arguments to temp files on Linux to avoid E2BIG
+	const ext = externalizeIfNeeded(args, prompt, appendSystemPrompt, mcpConfig, agents, addDir)
+	const effectiveArgs = ext.args
+	const effectivePrompt = ext.prompt
+
 	try {
 		if (headless) {
 			// Headless mode: capture and return output
@@ -223,17 +349,17 @@ export async function launchClaude(
 
 			// Set up execa options based on debug mode
 			const execaOptions = {
-				input: prompt,
+				input: effectivePrompt,
 				timeout: 0, // Disable timeout for long responses
 				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 				verbose: isDebugMode,
 				...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }), // Enable streaming in debug mode
 			}
 
-			const subprocess = execa('claude', args, execaOptions)
+			const subprocess = execa('claude', effectiveArgs, execaOptions)
 
 			// Check if JSON streaming format is enabled (always true in headless mode)
-			const isJsonStreamFormat = args.includes('--output-format') && args.includes('stream-json')
+			const isJsonStreamFormat = effectiveArgs.includes('--output-format') && effectiveArgs.includes('stream-json')
 
 			// Handle real-time streaming (enabled for progress tracking)
 			let outputBuffer = ''
@@ -301,7 +427,7 @@ export async function launchClaude(
 			// First attempt: capture stderr to detect session ID conflicts
 			// stdin/stdout inherit for interactivity, stderr captured for error detection
 			try {
-				await execa('claude', [...args, '--', prompt], {
+				await execa('claude', [...effectiveArgs, '--', effectivePrompt], {
 					...(addDir && { cwd: addDir }),
 					stdio: ['inherit', 'inherit', 'pipe'], // Capture stderr to detect session conflicts
 					timeout: 0, // Disable timeout
@@ -319,9 +445,9 @@ export async function launchClaude(
 					log.debug(`Session ID ${conflictSessionId} already in use, retrying with --resume`)
 
 					// Rebuild args with --resume instead of --session-id
-					const resumeArgs = args.filter((arg, idx) => {
+					const resumeArgs = effectiveArgs.filter((arg, idx) => {
 						if (arg === '--session-id') return false
-						if (idx > 0 && args[idx - 1] === '--session-id') return false
+						if (idx > 0 && effectiveArgs[idx - 1] === '--session-id') return false
 						return true
 					})
 					resumeArgs.push('--resume', conflictSessionId)
@@ -349,7 +475,9 @@ export async function launchClaude(
 			exitCode?: number
 		}
 
-		const errorMessage = execaError.stderr ?? execaError.message ?? 'Unknown Claude CLI error'
+		// Use || (not ??) intentionally: stderr can be empty string "" which ?? treats as truthy
+		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+		const errorMessage = execaError.stderr || execaError.message || 'Unknown Claude CLI error'
 
 		// Check for "Session ID ... is already in use" error and retry with --resume
 		const sessionInUseMatch = errorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
@@ -358,10 +486,10 @@ export async function launchClaude(
 			log.debug(`Session ID ${extractedSessionId} already in use, retrying with --resume`)
 
 			// Rebuild args with --resume instead of --session-id
-			const resumeArgs = args.filter((arg, idx) => {
+			const resumeArgs = effectiveArgs.filter((arg, idx) => {
 				// Filter out --session-id and its value
 				if (arg === '--session-id') return false
-				if (idx > 0 && args[idx - 1] === '--session-id') return false
+				if (idx > 0 && effectiveArgs[idx - 1] === '--session-id') return false
 				return true
 			})
 			resumeArgs.push('--resume', extractedSessionId)
@@ -372,7 +500,7 @@ export async function launchClaude(
 					// Note: In headless mode, we still need to pass the prompt even with --resume
 					// because there's no interactive input mechanism
 					const execaOptions = {
-						input: prompt,
+						input: effectivePrompt,
 						timeout: 0,
 						...(addDir && { cwd: addDir }),
 						verbose: isDebugMode,
@@ -440,13 +568,17 @@ export async function launchClaude(
 				}
 			} catch (retryError) {
 				const retryExecaError = retryError as { stderr?: string; message?: string }
-				const retryErrorMessage = retryExecaError.stderr ?? retryExecaError.message ?? 'Unknown Claude CLI error'
+				// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+				const retryErrorMessage = retryExecaError.stderr || retryExecaError.message || 'Unknown Claude CLI error'
 				throw new Error(`Claude CLI error: ${retryErrorMessage}`)
 			}
 		}
 
 		// Re-throw with more context
 		throw new Error(`Claude CLI error: ${errorMessage}`)
+	} finally {
+		// Clean up any temp files created for large argument externalisation
+		cleanupExternalizedFiles(ext.cleanupFiles, ext.cleanupDirs)
 	}
 }
 

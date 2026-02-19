@@ -345,46 +345,8 @@ export class LoomManager {
       }
     }
 
-    // 11.5. Launch workspace components based on individual flags
-    const enableClaude = input.options?.enableClaude !== false
-    const enableCode = input.options?.enableCode !== false
-    const enableDevServer = input.options?.enableDevServer !== false
-    const enableTerminal = input.options?.enableTerminal ?? false
-    const oneShot = input.options?.oneShot ?? 'default'
-    const setArguments = input.options?.setArguments
-    const executablePath = input.options?.executablePath
-
-    // Only launch if at least one component is enabled
-    if (enableClaude || enableCode || enableDevServer || enableTerminal) {
-      const { LoomLauncher } = await import('./LoomLauncher.js')
-      const { ClaudeContextManager } = await import('./ClaudeContextManager.js')
-
-      // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
-      const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
-      const launcher = new LoomLauncher(claudeContext, this.settings)
-
-      await launcher.launchLoom({
-        enableClaude,
-        enableCode,
-        enableDevServer,
-        enableTerminal,
-        worktreePath,
-        branchName,
-        port,
-        capabilities,
-        workflowType: input.type === 'branch' ? 'regular' : input.type,
-        identifier: input.identifier,
-        ...(issueData?.title && { title: issueData.title }),
-        oneShot,
-        ...(setArguments && { setArguments }),
-        ...(executablePath && { executablePath }),
-        sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
-        colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
-        colorHex: colorData.hex,
-      })
-    }
-
     // 12. Write loom metadata (spec section 3.1)
+    // Must happen BEFORE launching terminals so that `il spin` can read the session ID
     // Derive description from issue/PR title or branch name
     const description = issueData?.title ?? branchName
 
@@ -448,6 +410,45 @@ export class LoomManager {
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+
+    // 11.5. Launch workspace components based on individual flags
+    const enableClaude = input.options?.enableClaude !== false
+    const enableCode = input.options?.enableCode !== false
+    const enableDevServer = input.options?.enableDevServer !== false
+    const enableTerminal = input.options?.enableTerminal ?? false
+    const oneShot = input.options?.oneShot ?? 'default'
+    const setArguments = input.options?.setArguments
+    const executablePath = input.options?.executablePath
+
+    // Only launch if at least one component is enabled
+    if (enableClaude || enableCode || enableDevServer || enableTerminal) {
+      const { LoomLauncher } = await import('./LoomLauncher.js')
+      const { ClaudeContextManager } = await import('./ClaudeContextManager.js')
+
+      // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
+      const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
+      const launcher = new LoomLauncher(claudeContext, this.settings)
+
+      await launcher.launchLoom({
+        enableClaude,
+        enableCode,
+        enableDevServer,
+        enableTerminal,
+        worktreePath,
+        branchName,
+        port,
+        capabilities,
+        workflowType: input.type === 'branch' ? 'regular' : input.type,
+        identifier: input.identifier,
+        ...(issueData?.title && { title: issueData.title }),
+        oneShot,
+        ...(setArguments && { setArguments }),
+        ...(executablePath && { executablePath }),
+        sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
+        colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
+        colorHex: colorData.hex,
+      })
+    }
 
     // 13. Create and return loom metadata
     const loom: Loom = {
