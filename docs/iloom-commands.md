@@ -559,7 +559,7 @@ The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
 - Spawns parallel agents for all unblocked child issues simultaneously
 - Each agent invokes the swarm workflow skill to implement its assigned issue
-- Completed work is merged back to the epic branch with `--no-ff`
+- Completed work is rebased and fast-forward merged into the epic branch for clean linear history
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
 
@@ -1569,7 +1569,7 @@ The orchestrator uses `bypassPermissions` mode and Claude's experimental agent t
 When a child agent completes successfully:
 
 1. The orchestrator navigates to the epic worktree
-2. Merges the child's branch with `--no-ff` to preserve branch history
+2. Rebases the child's branch onto the epic branch and fast-forward merges for clean linear history
 3. If merge conflicts occur, a subagent is spawned to resolve them
 4. If conflict resolution fails, the merge is aborted and the child is marked as `failed`
 5. The child's metadata state is updated to `done`
