@@ -257,30 +257,30 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('passes MCP_CONFIG_FILE_PATH and SWARM_AGENT_METADATA as template variables', async () => {
+		it('passes MCP_CONFIG_JSON and SWARM_AGENT_METADATA as template variables', async () => {
 			const agentMetadata: SwarmAgentMetadata = {
 				'iloom-swarm-issue-implementer': { model: 'opus', tools: ['Bash'] },
 			}
 			await service.renderSwarmWorkerAgent(
 				'/Users/dev/project-epic-610',
-				'/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+				'{"mcpServers":{"issue_management":{"command":"node","args":["server.js"]}}}',
 				agentMetadata,
 			)
 
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
 				expect.objectContaining({
-					MCP_CONFIG_FILE_PATH: '/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+					MCP_CONFIG_JSON: '{"mcpServers":{"issue_management":{"command":"node","args":["server.js"]}}}',
 					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
 				}),
 			)
 		})
 
-		it('omits MCP_CONFIG_FILE_PATH when not provided', async () => {
+		it('omits MCP_CONFIG_JSON when not provided', async () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
-			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_FILE_PATH')
+			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
 		})
 
 		it('omits SWARM_AGENT_METADATA when not provided', async () => {
@@ -375,7 +375,7 @@ describe('SwarmSetupService', () => {
 			expect(result.workerAgentRendered).toBe(true)
 		})
 
-		it('passes mcpConfigFilePath and agent metadata to renderSwarmWorkerAgent', async () => {
+		it('passes mcpConfigJson and agent metadata to renderSwarmWorkerAgent', async () => {
 			await service.setupSwarm(
 				'610',
 				'epic/610',
@@ -383,15 +383,15 @@ describe('SwarmSetupService', () => {
 				childIssues,
 				'/Users/dev/project',
 				'github',
-				'/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+				'{"mcpServers":{"issue_management":{"command":"node","args":["server.js"]}}}',
 			)
 
 			// Verify that getPrompt was called with SWARM_AGENT_METADATA containing agent metadata
-			// and MCP_CONFIG_FILE_PATH from the mcpConfigFilePath parameter
+			// and MCP_CONFIG_JSON from the mcpConfigJson parameter
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
 				expect.objectContaining({
-					MCP_CONFIG_FILE_PATH: '/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+					MCP_CONFIG_JSON: '{"mcpServers":{"issue_management":{"command":"node","args":["server.js"]}}}',
 					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
 					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
 				}),

@@ -14,7 +14,7 @@ import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
-import { readFile, mkdir, writeFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
 import type { OneShotMode } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
@@ -861,8 +861,8 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
-		// Write merged MCP config to file for swarm worker claude -p commands
-		let mcpConfigFilePath: string | undefined
+		// Build merged MCP config as JSON string for swarm worker claude -p commands
+		let mcpConfigJson: string | undefined
 		if (mcpConfigs.length > 0) {
 			const mergedServers: Record<string, unknown> = {}
 			for (const config of mcpConfigs) {
@@ -873,12 +873,8 @@ export class IgniteCommand {
 				Object.assign(mergedServers, config.mcpServers)
 			}
 			const mergedConfig = { mcpServers: mergedServers }
-
-			const claudeDir = path.join(epicWorktreePath, '.claude')
-			await mkdir(claudeDir, { recursive: true })
-			mcpConfigFilePath = path.join(claudeDir, 'swarm-mcp-config.json')
-			await writeFile(mcpConfigFilePath, JSON.stringify(mergedConfig, null, 2), 'utf-8')
-			logger.debug('Wrote swarm MCP config', { mcpConfigFilePath })
+			mcpConfigJson = JSON.stringify(mergedConfig)
+			logger.debug('Built swarm MCP config JSON string')
 		}
 
 		// Run swarm setup: child worktrees, agents, worker agent
@@ -889,7 +885,7 @@ export class IgniteCommand {
 			metadata.childIssues,
 			mainWorktreePath,
 			providerName,
-			mcpConfigFilePath,
+			mcpConfigJson,
 		)
 
 		// Build template variables for orchestrator prompt

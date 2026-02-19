@@ -249,7 +249,7 @@ export class SwarmSetupService {
 	 */
 	async renderSwarmWorkerAgent(
 		epicWorktreePath: string,
-		mcpConfigFilePath?: string,
+		mcpConfigJson?: string,
 		agentMetadata?: SwarmAgentMetadata,
 	): Promise<boolean> {
 		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
@@ -266,7 +266,7 @@ export class SwarmSetupService {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
-				...(mcpConfigFilePath && { MCP_CONFIG_FILE_PATH: mcpConfigFilePath }),
+				...(mcpConfigJson && { MCP_CONFIG_JSON: mcpConfigJson }),
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
@@ -310,7 +310,7 @@ export class SwarmSetupService {
 		childIssues: SwarmChildIssue[],
 		mainWorktreePath: string,
 		issueTrackerName: string,
-		mcpConfigFilePath?: string,
+		mcpConfigJson?: string,
 	): Promise<SwarmSetupResult> {
 		// 1. Create child worktrees
 		const childWorktrees = await this.createChildWorktrees(
@@ -326,10 +326,10 @@ export class SwarmSetupService {
 		const { renderedFiles: agentsRendered, metadata: agentMetadata } =
 			await this.renderSwarmAgents(epicWorktreePath)
 
-		// 3. Render the swarm worker agent file with MCP config path and agent metadata
+		// 3. Render the swarm worker agent file with MCP config JSON and agent metadata
 		const workerAgentRendered = await this.renderSwarmWorkerAgent(
 			epicWorktreePath,
-			mcpConfigFilePath,
+			mcpConfigJson,
 			agentMetadata,
 		)
 
