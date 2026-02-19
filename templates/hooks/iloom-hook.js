@@ -308,6 +308,12 @@ async function main() {
 
     // Special handling for UserPromptSubmit - output JSON additionalContext instead of broadcasting
     if (status === 'user_prompt_submit') {
+      // In swarm mode, skip the guidance entirely — agents handle their own workflow
+      if (process.env.ILOOM_SWARM === '1') {
+        debug('UserPromptSubmit: swarm mode, skipping guidance');
+        process.exit(0);
+      }
+
       const reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
