@@ -216,6 +216,31 @@ Since this is a first-time user:
 {{#if SWARM_MODE}}
 ## Swarm Mode - Autonomous Workflow
 
+### CRITICAL: Delegation Rules
+
+**You are a workflow ORCHESTRATOR, not an implementer.** You MUST NOT:
+- Perform complexity evaluations yourself -- delegate to the complexity evaluator agent via `claude -p`
+- Analyze code or investigate issues yourself -- delegate to the analyzer agent via `claude -p`
+- Create implementation plans yourself -- delegate to the planner agent via `claude -p`
+- Write, edit, or modify any code files -- delegate to the implementer agent via `claude -p`
+- Enhance issue descriptions yourself -- delegate to the enhancer agent via `claude -p`
+- Review code yourself -- delegate to the code reviewer agent via `claude -p`
+
+**Your ONLY responsibilities are:**
+1. Navigate to your child worktree
+2. Read `.claude/swarm-mcp-config-path` to get the MCP config file path
+3. Read the issue details via MCP tools
+4. Perform the workflow scan (STEP 0) to determine which phases are needed -- but ONLY by checking if comments/artifacts already exist, NOT by analyzing complexity or code yourself
+5. For each needed phase, invoke the appropriate agent via `claude -p` using the Bash tool
+6. Parse the output from each `claude -p` call
+7. Create and update the implementation progress comment (STEP 4, step 2)
+8. Stage and commit changes after all phases complete
+9. Report results back to the orchestrator
+
+**Every workflow phase MUST be executed via `claude -p`.** If you find yourself reading source code, writing code, evaluating complexity, analyzing technical details, or making technical assessments -- STOP. You are doing the wrong thing. Delegate it to the appropriate agent.
+
+---
+
 **You are running in swarm mode as part of an autonomous workflow.**
 
 ### Issue Context
@@ -226,7 +251,7 @@ Your issue-specific context (issue number, worktree path, issue title, and issue
 - **Fully autonomous**: Do NOT pause for user input, call AskUserQuestion, or wait for human checkpoints
 - **Report results**: Post implementation comments on the issue as you would in the normal workflow. Also return results directly to the caller.
 - **Issue number**: Your issue number comes from the Task prompt. Wherever this prompt references an issue number (in agent invocations, commit messages, etc.), use the issue number from your Task prompt.
-- **Worktree**: `cd` to the worktree path from the Task prompt before beginning work. Read `iloom-metadata.json` from the worktree root for full context.
+- **Worktree**: `cd` to the worktree path from the Task prompt before beginning work.
 - **Error handling**: Never silently swallow errors. Report failures with details back to the orchestrator.
 
 ### State Transitions
@@ -259,13 +284,13 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 
 **CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE` to unset the CLAUDECODE environment variable. Without this, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session".**
 
-**MCP Config:** Read `iloom-metadata.json` from your worktree root and extract the `mcpConfigPath` field. This is the path to the per-loom MCP config file. Use it with `--mcp-config <path>` in all `claude -p` commands.
+**MCP Config:** Read the file `.claude/swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
 
 **Command template:**
 ```bash
 env -u CLAUDECODE claude -p \
   --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
-  --mcp-config <mcpConfigPath-from-metadata> \
+  --mcp-config <path-from-.claude/swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
   --output-format text \
@@ -297,10 +322,10 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - Do NOT use the `@agent-iloom-*` syntax -- it will not work from a sub-agent
 - The agent `.md` files are pre-rendered and available at the paths above
 - Always include `env -u CLAUDECODE` prefix -- this is mandatory
-- The `mcpConfigPath` in metadata points to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
+- The `.claude/swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
 
 **Todo List:**
-1. Initialize: cd to worktree, read iloom-metadata.json, set state to `in_progress`, read issue
+1. Initialize: cd to worktree, read `.claude/swarm-mcp-config-path` for MCP config path, set state to `in_progress`, read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
 3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
@@ -388,6 +413,12 @@ You are orchestrating a set of agents through a development process, with human 
 **STEP 0 - Workflow Planning (Upfront Scan):**
 
 Perform ONE comprehensive scan to determine which agents need to run:
+
+{{#if SWARM_MODE}}
+**SWARM MODE SCAN RULES:** This scan ONLY checks whether comments/artifacts already exist on the issue. You are checking for the PRESENCE or ABSENCE of previously-posted comments (enhancement, complexity evaluation, analysis, plan, implementation results). You are NOT making your own technical judgments about complexity, code quality, or whether work is needed. The scan is a simple comment-existence check -- nothing more. Each decision below should be answered by: "Does a comment matching these criteria already exist? If yes, SKIP. If no, NEEDS."
+
+For the Enhancement Decision specifically: you check whether an existing comment or the issue body itself contains a thorough enhancement (word count, structure, etc.). You do NOT read source code or make judgments about the issue's technical merits.
+{{/if}}
 
 1. Fetch complete issue data using the MCP tool `mcp__issue_management__get_issue` with `{ number: "ISSUE_NUMBER", includeComments: true }`
 2. Analyze the issue body and ALL comments in a single pass to determine:

@@ -217,6 +217,27 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
+		it('writes swarm-mcp-config-path file to .claude/ in each child worktree', async () => {
+			await service.createChildWorktrees(
+				childIssues,
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project',
+				'610',
+				'github',
+			)
+
+			// Should write swarm-mcp-config-path for each child
+			const writeFileCalls = vi.mocked(fs.writeFile).mock.calls
+			const configPathWrites = writeFileCalls.filter(
+				(call) => typeof call[0] === 'string' && (call[0] as string).endsWith('swarm-mcp-config-path'),
+			)
+			expect(configPathWrites).toHaveLength(2)
+			// Each file should contain just the MCP config path string
+			expect(configPathWrites[0]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+			expect(configPathWrites[1]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+		})
+
 		it('handles individual worktree creation failures gracefully', async () => {
 			vi.mocked(mockGitWorktree.createWorktree)
 				.mockResolvedValueOnce(undefined)

@@ -1,4 +1,5 @@
 import path from 'path'
+import fs from 'fs-extra'
 import { logger, createStderrLogger } from '../utils/logger.js'
 import { withLogger } from '../utils/logger-context.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
@@ -845,6 +846,16 @@ export class IgniteCommand {
 				settings,
 			)
 			await metadataManager.updateMetadata(epicWorktreePath, { mcpConfigPath: epicMcpConfigPath })
+
+			// Write MCP config path to .claude/swarm-mcp-config-path for worker discovery
+			const epicClaudeDir = path.join(epicWorktreePath, '.claude')
+			await fs.ensureDir(epicClaudeDir)
+			await fs.writeFile(
+				path.join(epicClaudeDir, 'swarm-mcp-config-path'),
+				epicMcpConfigPath,
+				'utf-8',
+			)
+
 			logger.debug('Wrote MCP config for epic loom', { epicMcpConfigPath })
 		} catch (error) {
 			logger.warn(`Failed to write MCP config for epic loom: ${error instanceof Error ? error.message : 'Unknown error'}`)

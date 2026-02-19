@@ -169,6 +169,16 @@ export class SwarmSetupService {
 							settings,
 						)
 						await this.metadataManager.updateMetadata(childWorktreePath, { mcpConfigPath })
+
+						// Write MCP config path to .claude/swarm-mcp-config-path for worker discovery
+						const claudeDir = path.join(childWorktreePath, '.claude')
+						await fs.ensureDir(claudeDir)
+						await fs.writeFile(
+							path.join(claudeDir, 'swarm-mcp-config-path'),
+							mcpConfigPath,
+							'utf-8',
+						)
+
 						getLogger().debug(`Wrote MCP config for ${child.number}: ${mcpConfigPath}`)
 					}
 				} catch (error) {
