@@ -5,7 +5,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -836,8 +836,21 @@ export class IgniteCommand {
 			this.templateManager,
 		)
 
-		// Build MCP configs BEFORE setupSwarm so we can write the merged config file
-		// and pass its path to the swarm worker agent for claude -p commands
+		// Generate and write per-loom MCP config file for the epic worktree
+		try {
+			const epicMcpConfigPath = await generateAndWriteMcpConfigFile(
+				epicWorktreePath,
+				metadata,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			await metadataManager.updateMetadata(epicWorktreePath, { mcpConfigPath: epicMcpConfigPath })
+			logger.debug('Wrote MCP config for epic loom', { epicMcpConfigPath })
+		} catch (error) {
+			logger.warn(`Failed to write MCP config for epic loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Build MCP configs for the orchestrator's own launchClaude call
 		const mcpConfigs: Record<string, unknown>[] = []
 
 		// Issue management MCP
@@ -861,22 +874,6 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
-		// Build merged MCP config as JSON string for swarm worker claude -p commands
-		let mcpConfigJson: string | undefined
-		if (mcpConfigs.length > 0) {
-			const mergedServers: Record<string, unknown> = {}
-			for (const config of mcpConfigs) {
-				if (!('mcpServers' in config) || typeof config.mcpServers !== 'object') {
-					logger.warn('Unexpected MCP config shape, skipping entry')
-					continue
-				}
-				Object.assign(mergedServers, config.mcpServers)
-			}
-			const mergedConfig = { mcpServers: mergedServers }
-			mcpConfigJson = JSON.stringify(mergedConfig)
-			logger.debug('Built swarm MCP config JSON string')
-		}
-
 		// Run swarm setup: child worktrees, agents, worker agent
 		const swarmResult = await swarmSetup.setupSwarm(
 			epicIssueNumber,
@@ -885,7 +882,7 @@ export class IgniteCommand {
 			metadata.childIssues,
 			mainWorktreePath,
 			providerName,
-			mcpConfigJson,
+			settings,
 		)
 
 		// Build template variables for orchestrator prompt

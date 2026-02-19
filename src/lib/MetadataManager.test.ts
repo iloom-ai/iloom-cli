@@ -379,6 +379,7 @@ describe('MetadataManager', () => {
         parentLoom: null,
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -509,6 +510,7 @@ describe('MetadataManager', () => {
         parentLoom: null,
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -877,6 +879,7 @@ describe('MetadataManager', () => {
         parentLoom: null,
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -901,6 +904,7 @@ describe('MetadataManager', () => {
         parentLoom: null,
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -1009,6 +1013,7 @@ describe('MetadataManager', () => {
         parentLoom: null,
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -1465,6 +1470,7 @@ describe('MetadataManager', () => {
         capabilities: [],
         childIssues: [],
         dependencyMap: {},
+        mcpConfigPath: null,
       })
 
       const writtenContent = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string)

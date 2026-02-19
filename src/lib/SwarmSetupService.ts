@@ -3,11 +3,13 @@ import fs from 'fs-extra'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { MetadataManager, type WriteMetadataInput, type SwarmState } from './MetadataManager.js'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager } from './SettingsManager.js'
+import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
+import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
+import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 
 /**
  * Result of the swarm setup process
@@ -66,6 +68,7 @@ export class SwarmSetupService {
 	/**
 	 * Create child worktrees for each child issue, branched off the epic branch.
 	 * Writes iloom-metadata.json for each child with state: 'pending' and parentLoom.
+	 * Generates and writes per-loom MCP config file for each child.
 	 *
 	 * Uses standard iloom naming conventions via generateWorktreePath().
 	 *
@@ -75,6 +78,7 @@ export class SwarmSetupService {
 	 * @param mainWorktreePath - Path to the main worktree (project root)
 	 * @param epicIssueNumber - The parent epic issue number
 	 * @param issueTrackerName - The issue tracker provider name (e.g., 'github')
+	 * @param settings - Optional settings for MCP config generation
 	 * @returns Array of results for each child worktree creation
 	 */
 	async createChildWorktrees(
@@ -84,6 +88,7 @@ export class SwarmSetupService {
 		mainWorktreePath: string,
 		epicIssueNumber: string | number,
 		issueTrackerName: string,
+		settings?: IloomSettings,
 	): Promise<SwarmSetupResult['childWorktrees']> {
 		const results: SwarmSetupResult['childWorktrees'] = []
 
@@ -148,6 +153,29 @@ export class SwarmSetupService {
 						getLogger().debug(`Could not clean up worktree at ${childWorktreePath}`)
 					}
 					throw metaError
+				}
+
+				// Generate and write per-loom MCP config file
+				try {
+					const childMetadata = await this.metadataManager.readMetadata(childWorktreePath)
+					if (childMetadata) {
+						const providerName = IssueTrackerFactory.getProviderName(
+							settings ?? await this.settingsManager.loadSettings(),
+						) as 'github' | 'linear' | 'jira'
+						const mcpConfigPath = await generateAndWriteMcpConfigFile(
+							childWorktreePath,
+							childMetadata,
+							providerName,
+							settings,
+						)
+						await this.metadataManager.updateMetadata(childWorktreePath, { mcpConfigPath })
+						getLogger().debug(`Wrote MCP config for ${child.number}: ${mcpConfigPath}`)
+					}
+				} catch (error) {
+					// Non-fatal: child can still work without MCP config
+					getLogger().warn(
+						`Failed to write MCP config for child ${child.number}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+					)
 				}
 
 				// Install dependencies in the child worktree
@@ -249,7 +277,6 @@ export class SwarmSetupService {
 	 */
 	async renderSwarmWorkerAgent(
 		epicWorktreePath: string,
-		mcpConfigJson?: string,
 		agentMetadata?: SwarmAgentMetadata,
 	): Promise<boolean> {
 		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
@@ -266,7 +293,6 @@ export class SwarmSetupService {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
-				...(mcpConfigJson && { MCP_CONFIG_JSON: mcpConfigJson }),
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
@@ -310,9 +336,9 @@ export class SwarmSetupService {
 		childIssues: SwarmChildIssue[],
 		mainWorktreePath: string,
 		issueTrackerName: string,
-		mcpConfigJson?: string,
+		settings?: IloomSettings,
 	): Promise<SwarmSetupResult> {
-		// 1. Create child worktrees
+		// 1. Create child worktrees (with per-loom MCP config generation)
 		const childWorktrees = await this.createChildWorktrees(
 			childIssues,
 			epicBranch,
@@ -320,16 +346,16 @@ export class SwarmSetupService {
 			mainWorktreePath,
 			epicIssueNumber,
 			issueTrackerName,
+			settings,
 		)
 
 		// 2. Render swarm agents to epic worktree's .claude/ directory (returns metadata)
 		const { renderedFiles: agentsRendered, metadata: agentMetadata } =
 			await this.renderSwarmAgents(epicWorktreePath)
 
-		// 3. Render the swarm worker agent file with MCP config JSON and agent metadata
+		// 3. Render the swarm worker agent file with agent metadata
 		const workerAgentRendered = await this.renderSwarmWorkerAgent(
 			epicWorktreePath,
-			mcpConfigJson,
 			agentMetadata,
 		)
 

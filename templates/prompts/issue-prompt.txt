@@ -259,11 +259,13 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 
 **CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE` to unset the CLAUDECODE environment variable. Without this, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session".**
 
+**MCP Config:** Read `iloom-metadata.json` from your worktree root and extract the `mcpConfigPath` field. This is the path to the per-loom MCP config file. Use it with `--mcp-config <path>` in all `claude -p` commands.
+
 **Command template:**
 ```bash
 env -u CLAUDECODE claude -p \
   --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
-  --mcp-config '{{{MCP_CONFIG_JSON}}}' \
+  --mcp-config <mcpConfigPath-from-metadata> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
   --output-format text \
@@ -295,6 +297,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - Do NOT use the `@agent-iloom-*` syntax -- it will not work from a sub-agent
 - The agent `.md` files are pre-rendered and available at the paths above
 - Always include `env -u CLAUDECODE` prefix -- this is mandatory
+- The `mcpConfigPath` in metadata points to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
 
 **Todo List:**
 1. Initialize: cd to worktree, read iloom-metadata.json, set state to `in_progress`, read issue
