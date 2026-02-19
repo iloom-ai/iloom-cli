@@ -357,7 +357,9 @@ export class IgniteCommand {
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
 						'mcp__recap__add_artifact',
-						'mcp__recap__set_complexity'
+						'mcp__recap__set_complexity',
+						'mcp__recap__set_loom_state',
+						'mcp__recap__get_loom_state'
 					]
 					allowedTools = context.type === 'pr'
 						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__recap__set_goal']
@@ -376,6 +378,8 @@ export class IgniteCommand {
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				]
 				logger.debug('Configured tool filtering for regular workflow', { allowedTools })
 			}
@@ -851,6 +855,7 @@ export class IgniteCommand {
 				return {
 					number: rawId,
 					title: ci.title,
+					body: ci.body,
 					worktreePath: wt?.worktreePath ?? '',
 					branchName: wt?.branch ?? '',
 				}
@@ -904,6 +909,8 @@ export class IgniteCommand {
 			'mcp__recap__get_recap',
 			'mcp__recap__add_artifact',
 			'mcp__recap__set_complexity',
+			'mcp__recap__set_loom_state',
+			'mcp__recap__get_loom_state',
 		]
 
 		// Launch Claude with agent teams enabled
