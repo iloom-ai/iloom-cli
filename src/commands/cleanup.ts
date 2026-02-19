@@ -100,14 +100,14 @@ export class CleanupCommand {
 
     // Initialize LoomManager if not provided (for child loom detection)
     if (!this.loomManager) {
-      const { GitHubService } = await import('../lib/GitHubService.js')
+      const { IssueTrackerFactory } = await import('../lib/IssueTrackerFactory.js')
       const { ClaudeContextManager } = await import('../lib/ClaudeContextManager.js')
       const { ProjectCapabilityDetector } = await import('../lib/ProjectCapabilityDetector.js')
       const { DefaultBranchNamingService } = await import('../lib/BranchNamingService.js')
 
       this.loomManager = new LoomManager(
         this.gitWorktreeManager,
-        new GitHubService(),
+        IssueTrackerFactory.create(settings),
         new DefaultBranchNamingService({ useClaude: true }),
         environmentManager,
         new ClaudeContextManager(),
@@ -462,7 +462,7 @@ export class CleanupCommand {
 
     const { force, dryRun } = parsed.options
 
-    getLogger().info(`Finding worktrees related to GitHub issue/PR #${issueNumber}...`)
+    getLogger().info(`Finding worktrees related to issue/PR #${issueNumber}...`)
 
     // Step 1: Get all worktrees and filter by path pattern
     const worktrees = await this.gitWorktreeManager.listWorktrees()
@@ -479,7 +479,7 @@ export class CleanupCommand {
     })
 
     if (matchingWorktrees.length === 0) {
-      getLogger().warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
+      getLogger().warn(`No worktrees found for issue/PR #${issueNumber}`)
       getLogger().info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
       return {
         identifier: String(issueNumber),

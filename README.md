@@ -130,6 +130,15 @@ Each loom is a fully isolated container for your work:
 
 *   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`. See [Secret Storage Limitations](#multi-language-project-support) for frameworks with encrypted credentials.
 
+    When inside a loom shell (`il shell`), the following environment variables are automatically set:
+
+    | Variable | Description | Example |
+    |----------|-------------|---------|
+    | `ILOOM_LOOM` | Loom identifier for PS1 customization | `issue-87` |
+    | `ILOOM_COLOR_HEX` | Hex color assigned to this loom (if available) | `#dcebff` |
+
+    `ILOOM_COLOR_HEX` is useful for downstream tools that want to visually distinguish looms. For example, a Vite app can read it via `import.meta.env.VITE_ILOOM_COLOR_HEX` to tint the UI. See [Vite Integration Guide](docs/vite-iloom-color.md) for details.
+
 *   **Unique Runtime:**
     
     *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
@@ -707,6 +716,11 @@ This command:
 4. Sets merge behavior to `github-draft-pr` (creates a draft PR immediately when you start work)
 
 The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
+
+Acknowledgments
+----------------
+
+- [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
 
 License & Name
 --------------

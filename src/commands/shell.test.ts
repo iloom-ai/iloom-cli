@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ShellCommand } from './shell.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -9,6 +10,7 @@ import { execa } from 'execa'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
+vi.mock('../lib/MetadataManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('../lib/SettingsManager.js')
 vi.mock('fs-extra')
@@ -37,6 +39,7 @@ import { loadWorkspaceEnv, getDotenvFlowFiles } from '../utils/env.js'
 describe('ShellCommand', () => {
 	let command: ShellCommand
 	let mockGitWorktreeManager: GitWorktreeManager
+	let mockMetadataManager: MetadataManager
 	let mockIdentifierParser: IdentifierParser
 	let mockSettingsManager: SettingsManager
 
@@ -49,12 +52,34 @@ describe('ShellCommand', () => {
 
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
+		mockMetadataManager = new MetadataManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 		mockSettingsManager = new SettingsManager()
 
 		// Default settings mock
 		vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
 			sourceEnvOnStart: true,
+		})
+
+		// Default metadata mock - return colorHex
+		vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+			description: 'test',
+			created_at: null,
+			branchName: null,
+			worktreePath: null,
+			issueType: null,
+			issueKey: null,
+			issue_numbers: [],
+			pr_numbers: [],
+			issueTracker: null,
+			colorHex: '#dcebff',
+			sessionId: null,
+			projectPath: null,
+			issueUrls: {},
+			prUrls: {},
+			draftPrNumber: null,
+			capabilities: [],
+			parentLoom: null,
 		})
 
 		// Set up env mocks
@@ -64,7 +89,8 @@ describe('ShellCommand', () => {
 		command = new ShellCommand(
 			mockGitWorktreeManager,
 			mockIdentifierParser,
-			mockSettingsManager
+			mockSettingsManager,
+			mockMetadataManager
 		)
 	})
 
@@ -226,6 +252,52 @@ describe('ShellCommand', () => {
 			const execaCall = vi.mocked(execa).mock.calls[0]
 			const envArg = execaCall[2]?.env as Record<string, string>
 			expect(envArg.ILOOM_LOOM).toBe('pr-42')
+		})
+
+		it('should set ILOOM_COLOR_HEX when metadata has colorHex', async () => {
+			await command.execute({ identifier: '87' })
+
+			const execaCall = vi.mocked(execa).mock.calls[0]
+			const envArg = execaCall[2]?.env as Record<string, string>
+			expect(envArg.ILOOM_COLOR_HEX).toBe('#dcebff')
+		})
+
+		it('should not set ILOOM_COLOR_HEX when metadata is null', async () => {
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue(null)
+
+			await command.execute({ identifier: '87' })
+
+			const execaCall = vi.mocked(execa).mock.calls[0]
+			const envArg = execaCall[2]?.env as Record<string, string>
+			expect(envArg.ILOOM_COLOR_HEX).toBeUndefined()
+		})
+
+		it('should not set ILOOM_COLOR_HEX when metadata.colorHex is null', async () => {
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				description: 'test',
+				created_at: null,
+				branchName: null,
+				worktreePath: null,
+				issueType: null,
+				issueKey: null,
+				issue_numbers: [],
+				pr_numbers: [],
+				issueTracker: null,
+				colorHex: null,
+				sessionId: null,
+				projectPath: null,
+				issueUrls: {},
+				prUrls: {},
+				draftPrNumber: null,
+				capabilities: [],
+				parentLoom: null,
+			})
+
+			await command.execute({ identifier: '87' })
+
+			const execaCall = vi.mocked(execa).mock.calls[0]
+			const envArg = execaCall[2]?.env as Record<string, string>
+			expect(envArg.ILOOM_COLOR_HEX).toBeUndefined()
 		})
 	})
 

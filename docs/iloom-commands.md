@@ -1299,7 +1299,7 @@ il issues [options] [project-path]
 | `--json` | Output as JSON (default behavior) | `true` |
 | `--limit <n>` | Maximum number of items to return (combined issues + PRs) | `100` |
 | `--sprint <name>` | **Jira only:** filter by sprint name (e.g., `"Sprint 17"`) or `"current"` for the active sprint | - |
-| `--mine` | **Jira only:** show only issues assigned to the authenticated user | `false` |
+| `--mine` | Show only issues and PRs assigned to the authenticated user | `false` |
 
 **Output Format:**
 ```json
@@ -1338,10 +1338,10 @@ il issues [options] [project-path]
 - For issues on GitHub: uses `gh issue list` with `--search sort:updated-desc`
 - For issues on Linear: uses `@linear/sdk` with team key filter from settings
 - For issues on Jira: uses Jira REST API with JQL, excluding statuses listed in `doneStatuses` (default: `["Done"]`)
-- `--sprint` and `--mine` flags are Jira-only. When used with other providers, a warning is logged and the flags are ignored.
+- `--sprint` is Jira-only. When used with other providers, a warning is logged and the flag is ignored.
 - `--sprint current` uses Jira's `openSprints()` JQL function to match the active sprint
 - `--sprint "Sprint 17"` filters to a specific named sprint
-- `--mine` uses Jira's `currentUser()` JQL function to filter by the authenticated user
+- `--mine` works across all providers: GitHub uses `--assignee @me` for both issues and PRs, Linear uses the SDK's `assignee: { isMe: { eq: true } }` filter, and Jira uses `currentUser()` JQL
 - For PRs: uses `gh pr list --state open` with draft filtering
 
 **Examples:**
@@ -1368,11 +1368,14 @@ il issues --sprint current
 # Jira: show issues in a specific sprint
 il issues --sprint "Sprint 17"
 
-# Jira: show only my issues
+# Show only my issues and PRs (works with any provider)
 il issues --mine
 
 # Jira: my issues in the current sprint
 il issues --sprint current --mine
+
+# GitHub/Linear: my assigned issues and PRs
+il issues --mine --limit 25
 ```
 
 **Notes:**
@@ -1654,7 +1657,7 @@ il init "configure neon database with project ID abc-123"
 ```
 
 **Configuration Areas:**
-- Issue tracker (GitHub/Linear)
+- Issue tracker (GitHub/Linear/Jira)
 - Database provider (Neon)
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local vs github-pr)
@@ -1662,6 +1665,24 @@ il init "configure neon database with project ID abc-123"
 - Project type (web app, CLI tool, etc.)
 - Base port for development servers
 - Environment variable names
+
+**Jira Advanced Settings:**
+
+The following Jira settings can be configured in `.iloom/settings.json` under `issueManagement.jira`:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `host` | string | (required) | Jira instance URL (e.g., `"https://yourcompany.atlassian.net"`) |
+| `username` | string | (required) | Jira username or email address |
+| `apiToken` | string | (required) | Jira API token (store in `settings.local.json`) |
+| `projectKey` | string | (required) | Jira project key (e.g., `"PROJ"`, `"ENG"`) |
+| `boardId` | string | - | Jira board ID for sprint filtering |
+| `transitionMappings` | object | - | Map iloom states to Jira transition names (e.g., `{"In Review": "Start Review"}`) |
+| `defaultIssueType` | string | `"Task"` | Issue type name for creating issues (e.g., `"Task"`, `"Story"`, `"Bug"`) |
+| `defaultSubtaskType` | string | `"Subtask"` | Issue type name for creating child issues (e.g., `"Subtask"`, `"Sub-task"`) |
+| `doneStatuses` | string[] | `["Done"]` | Status names to exclude from `il issues` output |
+
+**Note:** Different Jira instances may use different issue type names. If issue creation fails with a 400 error, check your Jira project's available issue types and configure `defaultIssueType` and `defaultSubtaskType` accordingly.
 
 ---
 
@@ -1823,6 +1844,12 @@ iloom respects these environment variables:
 | `ILOOM_DEBUG` | Enable debug logging | `false` |
 | `ILOOM_DEV_SERVER_TIMEOUT` | Dev server startup timeout in milliseconds | `180000` (180 seconds) |
 | `CLAUDE_API_KEY` | Claude API key (if not using Claude CLI) | - |
+| `JIRA_HOST` | Jira instance URL (MCP server) | - |
+| `JIRA_USERNAME` | Jira username/email (MCP server) | - |
+| `JIRA_API_TOKEN` | Jira API token (MCP server) | - |
+| `JIRA_PROJECT_KEY` | Jira project key (MCP server) | - |
+| `JIRA_DEFAULT_ISSUE_TYPE` | Default issue type for Jira issue creation (MCP server) | `"Task"` |
+| `JIRA_DEFAULT_SUBTASK_TYPE` | Default subtask type for Jira child issue creation (MCP server) | `"Subtask"` |
 
 ---
 

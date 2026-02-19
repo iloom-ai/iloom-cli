@@ -2,6 +2,7 @@ import path from 'path'
 import { execa } from 'execa'
 import fs from 'fs-extra'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, getDotenvFlowFiles } from '../utils/env.js'
@@ -29,7 +30,8 @@ export class ShellCommand {
 	constructor(
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
-		private settingsManager = new SettingsManager()
+		private settingsManager = new SettingsManager(),
+		private metadataManager = new MetadataManager()
 	) {}
 
 	async execute(input: ShellCommandInput): Promise<void> {
@@ -65,6 +67,12 @@ export class ShellCommand {
 		// 5. Set ILOOM_LOOM for PS1 customization
 		const loomIdentifier = this.formatLoomIdentifier(parsed)
 		envVars.ILOOM_LOOM = loomIdentifier
+
+		// 5b. Set ILOOM_COLOR_HEX from loom metadata if available
+		const metadata = await this.metadataManager.readMetadata(worktree.path)
+		if (metadata?.colorHex) {
+			envVars.ILOOM_COLOR_HEX = metadata.colorHex
+		}
 
 		// 6. Detect shell
 		const shell = this.detectShell()

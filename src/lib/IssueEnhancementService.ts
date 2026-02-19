@@ -146,7 +146,7 @@ Your response should be the raw markdown that will become the issue body.`
 		repository?: string,
 		labels?: string[]
 	): Promise<{ number: string | number; url: string }> {
-		getLogger().info('Creating GitHub issue from description...')
+		getLogger().info('Creating issue from description...')
 
 		const result = await this.issueTrackerService.createIssue(
 			originalDescription,  // Use original description as title

@@ -145,6 +145,9 @@ export class JiraApiClient {
 	): Promise<T> {
 		const url = new URL(`${this.baseUrl}${endpoint}`)
 		getLogger().debug(`Jira API ${method} request`, { url: url.toString() })
+		if (body) {
+			getLogger().debug('Jira API request body', JSON.stringify(body, null, 2))
+		}
 
 		return new Promise((resolve, reject) => {
 			const options: https.RequestOptions = {
@@ -159,16 +162,34 @@ export class JiraApiClient {
 				},
 			}
 
-			const req = https.request(options, (res) => {
-				let data = ''
+			const req = https.request({ ...options, timeout: 30000 }, (res) => {
+				const chunks: Buffer[] = []
 
-				res.on('data', (chunk) => {
-					data += chunk
+				res.on('data', (chunk: Buffer) => {
+					chunks.push(chunk)
 				})
 
 				res.on('end', () => {
+					const data = Buffer.concat(chunks).toString('utf8')
+
 					if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-						reject(new Error(`Jira API error (${res.statusCode}): ${data}`))
+						let errorDetail = data
+						try {
+							const parsed = JSON.parse(data)
+							const parts: string[] = []
+							if (parsed.errorMessages?.length) {
+								parts.push(`messages: ${parsed.errorMessages.join(', ')}`)
+							}
+							if (parsed.errors && Object.keys(parsed.errors).length) {
+								parts.push(`field errors: ${JSON.stringify(parsed.errors)}`)
+							}
+							if (parts.length) {
+								errorDetail = parts.join('; ')
+							}
+						} catch {
+							// Use raw data if not JSON
+						}
+						reject(new Error(`Jira API error (${res.statusCode}): ${errorDetail}`))
 						return
 					}
 
@@ -184,6 +205,11 @@ export class JiraApiClient {
 						reject(new Error(`Failed to parse Jira API response: ${error}`))
 					}
 				})
+			})
+
+			req.on('timeout', () => {
+				req.destroy()
+				reject(new Error('Jira API request timed out after 30 seconds'))
 			})
 
 			req.on('error', (error) => {
@@ -222,7 +248,7 @@ export class JiraApiClient {
 	/**
 	 * Make a DELETE request to Jira API
 	 */
-	async delete(endpoint: string): Promise<void> {
+	private async delete(endpoint: string): Promise<void> {
 		await this.request('DELETE', endpoint)
 	}
 
@@ -239,7 +265,7 @@ export class JiraApiClient {
 	 */
 	async addComment(issueKey: string, body: string): Promise<JiraComment> {
 		const adfBody = markdownToAdf(body);
-		getLogger().debug('Adding comment to Jira issue', { issueKey, body, adfBody })
+		getLogger().debug('Adding comment to Jira issue', { issueKey, bodyLength: body.length })
 		return this.post<JiraComment>(`/issue/${issueKey}/comment`, {
 			body: adfBody
 		})
@@ -249,7 +275,10 @@ export class JiraApiClient {
 	 * Get all comments for an issue
 	 */
 	async getComments(issueKey: string): Promise<JiraComment[]> {
-		const response = await this.get<{ comments: JiraComment[] }>(`/issue/${issueKey}/comment`)
+		const response = await this.get<{ comments: JiraComment[]; total: number; maxResults: number }>(`/issue/${issueKey}/comment?maxResults=5000`)
+		if (response.total > response.comments.length) {
+			getLogger().warn(`Comments truncated for issue ${issueKey}: returned ${response.comments.length} of ${response.total} total comments`)
+		}
 		return response.comments
 	}
 
@@ -310,7 +339,7 @@ export class JiraApiClient {
 		summary: string,
 		description: string,
 		parentKey: string,
-		issueType = 'Sub-task'
+		issueType = 'Subtask'
 	): Promise<JiraIssue> {
 		return this.post<JiraIssue>('/issue', {
 			fields: {
@@ -358,13 +387,45 @@ export class JiraApiClient {
 
 	/**
 	 * Search issues using JQL
+	 * Automatically paginates through all results up to MAX_SEARCH_RESULTS.
 	 */
 	async searchIssues(jql: string): Promise<JiraIssue[]> {
-		const response = await this.post<{ issues: JiraIssue[] }>(
-			'/search/jql',
-			{ jql, fields: ['*all'] }
-		)
-		return response.issues
+		const MAX_SEARCH_RESULTS = 5000
+		const allIssues: JiraIssue[] = []
+		let nextPageToken: string | undefined
+		const maxResults = 100
+
+		while (allIssues.length < MAX_SEARCH_RESULTS) {
+			const body: Record<string, unknown> = {
+				jql,
+				maxResults,
+				fields: [
+					'summary', 'description', 'status', 'issuetype', 'project',
+					'assignee', 'reporter', 'labels', 'created', 'updated',
+					'issuelinks', 'parent',
+				],
+			}
+			if (nextPageToken) {
+				body.nextPageToken = nextPageToken
+			}
+			const response = await this.post<{ issues: JiraIssue[]; nextPageToken?: string }>(
+				'/search/jql',
+				body
+			)
+			allIssues.push(...response.issues)
+
+			if (!response.nextPageToken || response.issues.length === 0) {
+				break
+			}
+
+			nextPageToken = response.nextPageToken
+		}
+
+		if (allIssues.length >= MAX_SEARCH_RESULTS) {
+			getLogger().warn(`Search results truncated at ${MAX_SEARCH_RESULTS} issues. The query matched more results than the safety cap allows.`, { jql, returnedCount: allIssues.length })
+		}
+
+		return allIssues
 	}
 
 	/**
@@ -375,8 +436,12 @@ export class JiraApiClient {
 			await this.get('/myself')
 			return true
 		} catch (error) {
-			getLogger().error('Jira connection test failed', { error })
-			return false
+			const message = error instanceof Error ? error.message : String(error)
+			if (message.includes('Jira API error (401)') || message.includes('Jira API error (403)')) {
+				getLogger().error('Jira connection test failed: authentication error', { error })
+				return false
+			}
+			throw error
 		}
 	}
 }

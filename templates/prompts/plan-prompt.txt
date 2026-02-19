@@ -118,11 +118,19 @@ After the subagent completes, include its context summary when sending the plan 
 
 ---
 
+## Formatting Rules
+
+**Always write in standard GitHub-flavored Markdown.** The MCP issue management tools handle any necessary format conversion automatically (e.g., Markdown to ADF for Jira). This means:
+- Use standard Markdown: `##` headings, `**bold**`, `| tables |`, `` ``` `` code blocks, `- bullet lists`
+- Use `<details><summary>` tags for collapsed/expandable sections — the converter handles these
+- Do NOT use platform-specific markup (e.g., Jira wiki syntax like `h2.`, `||header||`, `{code}`)
+
+---
+
 ## Core Principles
 
 **1 Child Issue = 1 Loom = 1 PR**
 Each issue you help create should represent a single, focused unit of work that:
-- Can be completed in a single development session
 - Results in one pull request when finished
 - Has clear acceptance criteria
 - Is independently testable
@@ -195,10 +203,13 @@ AskUserQuestion(
 
 ### Phase 3: Issue Decomposition (Writing Plans)
 
-Break the work into granular, actionable tasks. Each task should be:
-- Completable in approximately 2-30 minutes of focused work
+Break the work into actionable issues. Each issue should be:
 - Self-contained with clear inputs and outputs
 - Ordered by dependencies (what must come first)
+
+**Right-size your issues.** Only split work into separate issues when there's a clear reason — a dependency boundary (one must merge before the other can start), or genuinely independent concerns that could be worked on in parallel.
+
+A sign that issues should be consolidated: several small issues share the same dependencies, touch overlapping files, or have similar scope. For example, "add field X to the schema," "add field X to the API," and "add field X to the UI" are likely one issue if they all depend on the same prior work and would naturally be done together. When the boundaries feel artificial, combine them.
 
 **Issue Structure:**
 Each child issue should include:
@@ -326,9 +337,9 @@ Use clear, action-oriented titles:
 **Summary Comment with Dependency Diagram:**
 After creating all child issues and dependencies, post a summary comment on the parent epic that includes:
 1. A list of the child issues created with their numbers and titles
-2. A Mermaid diagram visualizing the dependency DAG
+2. A dependency diagram visualizing the DAG
 
-The Mermaid diagram should:
+**For GitHub and Linear**, use a Mermaid diagram. The Mermaid diagram should:
 - Use `graph TD` (top-down) format
 - Include each child issue as a node with format: `ISSUE_ID[Short Title]`
 - Use the appropriate issue ID format for the tracker:
@@ -382,6 +393,27 @@ graph TD
     ENG-101[Bootstrap plan command] --> ENG-103[Implement creation flow]
     ENG-102[Add dependency management] --> ENG-103
 ```
+```
+
+**For Jira**, use ASCII art diagrams instead of Mermaid:
+- Jira does not render Mermaid diagrams — they appear as raw text. Use simple ASCII box-and-arrow diagrams instead.
+- **Write in standard Markdown, NOT Jira wiki markup.** The MCP tools automatically convert Markdown to Atlassian Document Format (ADF) before sending to Jira. If you write Jira wiki markup (e.g., `h2.`, `||header||`, `{code}`), it will be treated as literal text and displayed raw. Use standard Markdown headings (`##`), tables (`| col |`), code blocks (`` ``` ``), etc.
+
+Example summary comment format (Jira):
+```
+## Child Issues Created
+
+| Issue | Title | Dependencies |
+|-------|-------|--------------|
+| PROJ-101 | Bootstrap plan command | None |
+| PROJ-102 | Add dependency management | None |
+| PROJ-103 | Implement creation flow | PROJ-101, PROJ-102 |
+
+## Dependency Graph
+
+PROJ-101 [Bootstrap plan command] ──┐
+                                    ├──> PROJ-103 [Implement creation flow]
+PROJ-102 [Add dependency management] ──┘
 ```
 
 Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.

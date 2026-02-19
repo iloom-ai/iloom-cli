@@ -770,11 +770,24 @@ export interface GitHubIssueListItem {
  * @returns Array of issues
  */
 export async function fetchGitHubIssueList(
-	options?: { limit?: number; cwd?: string }
+	options?: { limit?: number; cwd?: string; mine?: boolean }
 ): Promise<GitHubIssueListItem[]> {
 	const limit = options?.limit ?? 100
 
-	logger.debug('Fetching GitHub issue list', { limit, cwd: options?.cwd })
+	logger.debug('Fetching GitHub issue list', { limit, cwd: options?.cwd, mine: options?.mine })
+
+	const args = [
+		'issue',
+		'list',
+		'--state', 'open',
+		'--json', 'number,title,updatedAt,url,state',
+		'--limit', String(limit),
+		'--search', 'sort:updated-desc',
+	]
+
+	if (options?.mine) {
+		args.push('--assignee', '@me')
+	}
 
 	const result = await executeGhCommand<Array<{
 		number: number
@@ -782,14 +795,7 @@ export async function fetchGitHubIssueList(
 		updatedAt: string
 		url: string
 		state: string
-	}>>([
-		'issue',
-		'list',
-		'--state', 'open',
-		'--json', 'number,title,updatedAt,url,state',
-		'--limit', String(limit),
-		'--search', 'sort:updated-desc',
-	], options?.cwd ? { cwd: options.cwd } : undefined)
+	}>>(args, options?.cwd ? { cwd: options.cwd } : undefined)
 
 	return (result ?? []).map(item => ({
 		id: String(item.number),
@@ -808,14 +814,25 @@ export async function fetchGitHubIssueList(
  * @returns Array of PRs mapped to GitHubIssueListItem (with [PR] title prefix)
  */
 export async function fetchGitHubPRList(
-	options?: { limit?: number; cwd?: string }
+	options?: { limit?: number; cwd?: string; mine?: boolean }
 ): Promise<GitHubIssueListItem[]> {
 	const limit = options?.limit ?? 100
 	// Over-fetch to account for draft PRs that will be filtered out client-side
 	// gh pr list has no --draft=false flag
 	const fetchLimit = Math.max(limit * 2, 50)
 
-	logger.debug('Fetching GitHub PR list', { limit, fetchLimit, cwd: options?.cwd })
+	logger.debug('Fetching GitHub PR list', { limit, fetchLimit, cwd: options?.cwd, mine: options?.mine })
+
+	const args = [
+		'pr', 'list',
+		'--state', 'open',
+		'--json', 'number,title,updatedAt,url,state,isDraft',
+		'--limit', String(fetchLimit),
+	]
+
+	if (options?.mine) {
+		args.push('--assignee', '@me')
+	}
 
 	const result = await executeGhCommand<Array<{
 		number: number
@@ -824,12 +841,7 @@ export async function fetchGitHubPRList(
 		url: string
 		state: string
 		isDraft: boolean
-	}>>([
-		'pr', 'list',
-		'--state', 'open',
-		'--json', 'number,title,updatedAt,url,state,isDraft',
-		'--limit', String(fetchLimit),
-	], options?.cwd ? { cwd: options.cwd } : undefined)
+	}>>(args, options?.cwd ? { cwd: options.cwd } : undefined)
 
 	return (result ?? [])
 		.filter(item => !item.isDraft)

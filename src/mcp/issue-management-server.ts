@@ -529,7 +529,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey, repo })
 
@@ -590,7 +591,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			await provider.createDependency({ blockingIssue, blockedIssue, repo })
 
@@ -644,7 +646,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getDependencies({ number, direction, repo })
 
@@ -695,7 +698,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			await provider.removeDependency({ blockingIssue, blockedIssue, repo })
 
@@ -753,7 +757,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getChildIssues({ number, repo })
 

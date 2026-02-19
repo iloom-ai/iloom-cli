@@ -408,7 +408,7 @@ export class SessionSummaryService {
 		const providerType = prNumber !== undefined
 			? 'github'
 			: (settings.issueManagement?.provider ?? 'github') as IssueProvider
-		const provider = IssueManagementProviderFactory.create(providerType)
+		const provider = IssueManagementProviderFactory.create(providerType, settings)
 
 		// Apply attribution if configured
 		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)

@@ -720,12 +720,12 @@ export interface LinearIssueListItem {
  */
 export async function fetchLinearIssueList(
   teamKey: string,
-  options?: { limit?: number; apiToken?: string },
+  options?: { limit?: number; apiToken?: string; mine?: boolean },
 ): Promise<LinearIssueListItem[]> {
   try {
     const limit = options?.limit ?? 100
 
-    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit })
+    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit, mine: options?.mine })
     const client = createLinearClient(options?.apiToken)
 
     // Get team by key
@@ -736,18 +736,27 @@ export async function fetchLinearIssueList(
       throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
     }
 
+    // Build filter: always exclude completed/canceled states
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Linear SDK filter types are complex and not fully exported
+    const filter: any = {
+      state: {
+        type: {
+          nin: ['completed', 'canceled'],
+        },
+      },
+    }
+
+    // When --mine is set, filter to issues assigned to the authenticated user
+    if (options?.mine) {
+      filter.assignee = { isMe: { eq: true } }
+    }
+
     // Fetch issues: filter out completed and canceled states, order by updatedAt
     const issues = await team.issues({
       first: limit,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PaginationOrderBy is a const enum incompatible with isolatedModules
       orderBy: 'updatedAt' as any,
-      filter: {
-        state: {
-          type: {
-            nin: ['completed', 'canceled'],
-          },
-        },
-      },
+      filter,
     })
 
     // Build results, resolving state names in parallel

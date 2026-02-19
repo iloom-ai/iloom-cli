@@ -114,6 +114,12 @@ export async function generateIssueManagementMcpConfig(
 		if (jiraSettings?.transitionMappings) {
 			envVars.JIRA_TRANSITION_MAPPINGS = JSON.stringify(jiraSettings.transitionMappings)
 		}
+		if (jiraSettings?.defaultIssueType) {
+			envVars.JIRA_DEFAULT_ISSUE_TYPE = jiraSettings.defaultIssueType
+		}
+		if (jiraSettings?.defaultSubtaskType) {
+			envVars.JIRA_DEFAULT_SUBTASK_TYPE = jiraSettings.defaultSubtaskType
+		}
 
 		logger.debug('Generated MCP config for Jira issue management', {
 			provider,

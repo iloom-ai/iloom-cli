@@ -54,7 +54,7 @@ export class TestJiraCommand {
       direction: 'both',
     })
 
-    logger.info(`\nBlocking (${issueKey} blocks):`)
+    logger.info(`Blocking (${issueKey} blocks):`)
     if (result.blocking.length === 0) {
       logger.info('  (none)')
     } else {
@@ -63,7 +63,7 @@ export class TestJiraCommand {
       }
     }
 
-    logger.info(`\nBlocked by (blocks ${issueKey}):`)
+    logger.info(`Blocked by (blocks ${issueKey}):`)
     if (result.blockedBy.length === 0) {
       logger.info('  (none)')
     } else {
@@ -94,7 +94,7 @@ export class TestJiraCommand {
     if (children.length === 0) {
       logger.info('No child issues found')
     } else {
-      logger.info(`\nChild issues (${children.length}):`)
+      logger.info(`Child issues (${children.length}):`)
       for (const child of children) {
         logger.info(`  ${child.id}: ${child.title} [${child.state}] ${child.url}`)
       }

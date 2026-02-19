@@ -130,9 +130,9 @@ export class IssuesCommand {
     // 3. Determine provider
     const provider = IssueTrackerFactory.getProviderName(settings)
 
-    // Warn if Jira-only flags used with non-Jira provider
-    if (provider !== 'jira' && (sprint || mine)) {
-      logger.warn('--sprint and --mine flags are only supported with the Jira issue tracker. Ignoring.')
+    // Warn if Jira-only flags used with non-Jira provider (--sprint is Jira-only; --mine works across all providers)
+    if (provider !== 'jira' && sprint) {
+      logger.warn('--sprint flag is only supported with the Jira issue tracker. Ignoring.')
     }
 
     // 4. Check file-based cache
@@ -151,6 +151,7 @@ export class IssuesCommand {
       results = await fetchGitHubIssueList({
         limit,
         cwd: resolvedProjectPath,
+        ...(mine ? { mine } : {}),
       })
     } else if (provider === 'linear') {
       const teamId = settings.issueManagement?.linear?.teamId
@@ -163,6 +164,7 @@ export class IssuesCommand {
       results = await fetchLinearIssueList(teamId, {
         limit,
         ...(apiToken ? { apiToken } : {}),
+        ...(mine ? { mine } : {}),
       })
     } else if (provider === 'jira') {
       const jiraSettings = settings.issueManagement?.jira
@@ -206,6 +208,7 @@ export class IssuesCommand {
       const prs = await fetchGitHubPRList({
         limit,
         cwd: resolvedProjectPath,
+        ...(mine ? { mine } : {}),
       })
       const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
       results = [...results, ...prItems]
@@ -219,6 +222,7 @@ export class IssuesCommand {
         error.message.includes('rate limit') ||
         error.message.includes('ETIMEDOUT') ||
         error.message.includes('ECONNREFUSED') ||
+        error.message.includes('no git remotes found') ||
         stderr.includes('not logged in') ||
         stderr.includes('rate limit')
       )

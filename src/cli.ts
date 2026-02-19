@@ -1380,7 +1380,7 @@ program
   .option('--json', 'Output as JSON (default behavior)')
   .option('--limit <n>', 'Max issues to return', '100')
   .option('--sprint <name>', 'Jira only: filter by sprint name (e.g., "Sprint 17") or "current" for active sprint')
-  .option('--mine', 'Jira only: show only issues assigned to me')
+  .option('--mine', 'Show only issues and PRs assigned to me')
   .action(async (projectPath?: string, options?: { json?: boolean; limit?: string; sprint?: string; mine?: boolean }) => {
     try {
       const { IssuesCommand } = await import('./commands/issues.js')
@@ -1943,7 +1943,7 @@ program
     }
   })
 
-// Test command for Jira integration
+// Test command for Jira integration (hidden from help output)
 const testJiraCommand = program
   .command('test-jira')
   .description('Test Jira integration methods against a real Jira instance')

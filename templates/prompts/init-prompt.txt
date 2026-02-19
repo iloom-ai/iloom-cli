@@ -200,6 +200,10 @@ Extract these current values if they exist:
 - `currentIssueProvider` from `issueManagement.provider` field (default: "github")
 - `currentLinearTeamId` from `issueManagement.linear.teamId` field (if Linear is provider)
 - `currentGitHubRemote` from `issueManagement.github.remote` field (if GitHub is provider and multiple remotes)
+- `currentJiraHost` from `issueManagement.jira.host` field (if Jira is provider)
+- `currentJiraUsername` from `issueManagement.jira.username` field (if Jira is provider)
+- `currentJiraProjectKey` from `issueManagement.jira.projectKey` field (if Jira is provider)
+- `currentJiraBoardId` from `issueManagement.jira.boardId` field (if Jira is provider, optional)
 
 **If configuration already exists, display current configuration summary:**
 
@@ -213,6 +217,9 @@ IDE: [currentIdeType or "vscode (default)"]
 Issue Tracker: [currentIssueProvider or "github (default)"]
 Linear Team ID: [currentLinearTeamId] (only if currentIssueProvider == linear)
 {{#if MULTIPLE_REMOTES}}GitHub Remote: [currentGitHubRemote] (only if currentIssueProvider == github){{/if}}
+Jira Host: [currentJiraHost] (only if currentIssueProvider == jira)
+Jira Project Key: [currentJiraProjectKey] (only if currentIssueProvider == jira)
+Jira Board ID: [currentJiraBoardId] (only if currentIssueProvider == jira and boardId is set)
 ```
 
 **Then ask the user what they want to do:**
@@ -353,7 +360,7 @@ This phase configures external tooling integrations. Use AskUserQuestion to gath
 **Step 1: Issue Tracker Provider**
 
 {{#if MULTIPLE_REMOTES}}
-Since this repository has multiple git remotes, GitHub Issues is suggested as the default since it integrates with your existing GitHub workflow. However, you can choose Linear if that's your team's issue tracker.
+Since this repository has multiple git remotes, GitHub Issues is suggested as the default since it integrates with your existing GitHub workflow. However, you can choose Linear or Jira if that's your team's issue tracker.
 {{/if}}
 
 1. **Issue Tracker Provider**
@@ -361,8 +368,9 @@ Since this repository has multiple git remotes, GitHub Issues is suggested as th
    - Options:
      - "github" - GitHub Issues (default)
      - "linear" - Linear Issues
+     - "jira" - Jira Cloud
    - Default: currentIssueProvider or "github"
-   - Validation: Must be one of: github, linear
+   - Validation: Must be one of: github, linear, jira
    - Store answer as: `issueManagement.provider`
 
 **Note on Provider + Merge Mode Combinations:**
@@ -370,6 +378,8 @@ Since this repository has multiple git remotes, GitHub Issues is suggested as th
 - GitHub Issues + github-pr or github-draft-pr: Requires authorized GitHub CLI (`gh`)
 - Linear Issues + local merge: Requires Linear API token only
 - Linear Issues + github-pr or github-draft-pr: Requires BOTH Linear API token AND authorized GitHub CLI (`gh`)
+- Jira Cloud + local merge: Requires Jira credentials (host, username, API token) only
+- Jira Cloud + github-pr or github-draft-pr: Requires BOTH Jira credentials AND authorized GitHub CLI (`gh`)
 
 **Step 2: Provider-Specific Configuration**
 
@@ -425,6 +435,59 @@ This repository has multiple git remotes detected. iloom needs to know which rem
    - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`, regardless of which file the user selected for other settings. This token must never be committed to source control.
    - Context: Get your API token from Linear Settings → API → Personal API Keys (https://linear.app/settings/api)
 
+**If Jira was selected:**
+
+2. **Jira Host URL** (only ask if issue provider is "jira")
+   - Question format: "What is your Jira instance URL?{{#if currentJiraHost}} (Currently: [currentJiraHost]){{/if}}"
+   - Options (as examples):
+     - "https://yourcompany.atlassian.net" - Jira Cloud instance
+   - Default: currentJiraHost or NO DEFAULT (required if Jira is selected)
+   - Validation: Non-empty string, must be a valid URL. If the user provides a value without `https://`, automatically prepend `https://` (e.g., `yourcompany.atlassian.net` becomes `https://yourcompany.atlassian.net`). Strip any trailing slashes.
+   - Store answer as: `issueManagement.jira.host`
+   - Context: This is your Jira Cloud instance URL (e.g., "https://yourcompany.atlassian.net")
+
+3. **Jira Username/Email** (only ask if issue provider is "jira")
+   - Question format: "What is your Atlassian account email?{{#if currentJiraUsername}} (Currently: [currentJiraUsername]){{/if}}"
+   - Default: currentJiraUsername or NO DEFAULT (required if Jira is selected)
+   - Validation: Non-empty string
+   - Store answer as: `issueManagement.jira.username`
+   - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`, regardless of which file the user selected for other settings. This is personal account information that should not be committed to source control.
+   - Context: This is the email address associated with your Atlassian account
+
+4. **Jira API Token** (only ask if issue provider is "jira")
+   - Question format: "What is your Jira API token? (Currently: 'set' or 'unset' - do not print)"
+   - Options:
+     - I have it now - use the "Type something" option to enter it
+     - I'll come back to it
+   - Default: currentJiraApiToken or NO DEFAULT
+   - Validation: Non-empty string
+   - Guidance: Choose "Type something" to enter it
+   - Store answer as: `issueManagement.jira.apiToken`
+   - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`, regardless of which file the user selected for other settings. This token must never be committed to source control.
+   - Context: Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens
+
+5. **Jira Project Key** (only ask if issue provider is "jira")
+   - Question format: "What is your Jira project key?{{#if currentJiraProjectKey}} (Currently: [currentJiraProjectKey]){{/if}}"
+   - Options (as examples):
+     - "PROJ" - Project team
+     - "ENG" - Engineering team
+   - Default: currentJiraProjectKey or NO DEFAULT (required if Jira is selected)
+   - Validation: Non-empty string, typically uppercase letters
+   - Store answer as: `issueManagement.jira.projectKey`
+   - Context: This is the project key prefix shown in your Jira issue IDs (e.g., "PROJ" in "PROJ-123")
+
+6. **Jira Board ID** (only ask if issue provider is "jira")
+   - Question format: "What is your Jira board ID? (optional, used for sprint filtering){{#if currentJiraBoardId}} (Currently: [currentJiraBoardId]){{/if}}"
+   - Options:
+     - Skip - Don't configure board ID now
+     - Enter board ID - use the "Type something" option to enter it
+   - Default: currentJiraBoardId or SKIP (optional)
+   - Validation: If provided, must be a numeric string
+   - Store answer as: `issueManagement.jira.boardId`
+   - Context: The board ID can be found in the URL when viewing a Jira board (e.g., `/board/42`). This is optional and used for sprint-based filtering with `il issues --sprint`.
+
+   **Note:** Advanced Jira settings like `transitionMappings`, `doneStatuses`, `defaultIssueType`, and `defaultSubtaskType` can be configured later by editing the settings files directly. Mention this to the user.
+
 **Step 3: IDE Selection**
 
 4. **IDE Selection**
@@ -462,7 +525,7 @@ This repository has multiple git remotes detected. iloom needs to know which rem
 
 **Implementation Details:**
 - Ask Step 1 first to determine provider
-- Then ask Step 2 based on the provider selected (includes Linear API Token if Linear was selected)
+- Then ask Step 2 based on the provider selected (includes Linear API Token if Linear was selected, or Jira credentials if Jira was selected)
 - Ask Step 3 (IDE) for all users
 - Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config
 - Set multiSelect: false for all questions
@@ -520,6 +583,10 @@ Tooling Configuration (Phase 2):
   Linear Team ID: [value] (only if issue tracker is Linear)
   Linear API Token: [configured/not configured] (only if issue tracker is Linear - never show actual token)
   {{#if MULTIPLE_REMOTES}}GitHub Remote: [value] (only if issue tracker is GitHub){{/if}}
+  Jira Host: [value] (only if issue tracker is Jira)
+  Jira Project Key: [value] (only if issue tracker is Jira)
+  Jira Board ID: [value or "not configured"] (only if issue tracker is Jira)
+  Jira API Token: [configured/not configured] (only if issue tracker is Jira - never show actual token)
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)
 ```
@@ -527,6 +594,7 @@ Tooling Configuration (Phase 2):
 **Note**:
 - Include the GitHub Remote line in the summary ONLY if it was configured in Phase 2 (multiple remotes and GitHub selected)
 - Include Linear Team ID ONLY if Linear was selected as the issue tracker provider
+- Include Jira Host, Project Key, Board ID, and API Token ONLY if Jira was selected as the issue tracker provider
 - Include Merge Mode ONLY if it was asked and configured (multiple remotes or advanced config)
 
 Then ask: "Does this configuration look correct?"
@@ -664,6 +732,46 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
      }
    }
    ```
+
+   **For Jira:**
+
+   In settings.json (committed):
+   ```json
+   {
+     "issueManagement": {
+       "provider": "jira",
+       "jira": {
+         "host": "<user's Jira host URL>",
+         "projectKey": "<user's project key>"
+       }
+     }
+   }
+   ```
+
+   In settings.local.json (gitignored - MUST be separate from settings.json):
+   ```json
+   {
+     "issueManagement": {
+       "jira": {
+         "username": "<user's Atlassian email>",
+         "apiToken": "<user's API token>"
+       }
+     }
+   }
+   ```
+
+   If a boardId was provided, add it to settings.json alongside host and projectKey:
+   ```json
+   {
+     "issueManagement": {
+       "jira": {
+         "boardId": "<user's board ID>"
+       }
+     }
+   }
+   ```
+
+   **CRITICAL:** The `username` and `apiToken` fields MUST be saved to `settings.local.json`, never to `settings.json`. The `host`, `projectKey`, and `boardId` fields are safe to commit in `settings.json`.
 
 6. **Add mergeBehavior ONLY if mode is not "local":**
    ```json
