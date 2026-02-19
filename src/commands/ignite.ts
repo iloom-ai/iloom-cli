@@ -833,7 +833,6 @@ export class IgniteCommand {
 			metadataManager,
 			this.agentManager,
 			this.settingsManager,
-			this.templateManager,
 		)
 
 		// Run swarm setup: child worktrees, agents, skill
@@ -874,6 +873,9 @@ export class IgniteCommand {
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 		}
+
+		// Add review configuration for orchestrator's phase pipeline
+		Object.assign(variables, buildReviewTemplateVariables(settings?.agents))
 
 		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)
 

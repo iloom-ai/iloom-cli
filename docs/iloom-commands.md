@@ -551,14 +551,14 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 
 1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
-3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
-4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
-5. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+3. **Renders swarm agents** - Writes swarm-mode phase agent templates to `.claude/agents/` in the epic worktree
+4. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
-- Spawns parallel agents for all unblocked child issues simultaneously
-- Each agent uses the `iloom-swarm-worker` custom agent type, receiving the full iloom workflow as its system prompt
+- For each unblocked child issue, runs the phase pipeline sequentially (enhancement, complexity evaluation, analysis/planning, implementation, code review)
+- Each phase agent (e.g., `iloom-swarm-issue-implementer`) is spawned directly by the orchestrator as a Task sub-agent
+- Multiple child issues can run their pipelines in parallel
 - Completed work is rebased and fast-forward merged into the epic branch for clean linear history
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
@@ -1558,12 +1558,12 @@ Only sibling dependencies (between child issues of the same epic) are included. 
 
 ### How Agents Work
 
-Each child agent runs in complete isolation:
+The orchestrator manages a per-child phase pipeline directly:
 
-1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm-worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
-2. The agent's system prompt contains the full iloom issue workflow adapted for swarm mode (high-authority instructions)
-3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
-4. On completion, the agent reports back to the orchestrator with status and summary
+1. For each unblocked child issue, the orchestrator runs phases sequentially: enhancement, complexity evaluation, analysis/planning, implementation, and code review
+2. Each phase agent (e.g., `iloom-swarm-issue-enhancer`, `iloom-swarm-issue-implementer`) is spawned as a direct Task sub-agent from the orchestrator
+3. The orchestrator manages all state transitions (`pending` → `in_progress` → `code_review` → `done`/`failed`)
+4. Multiple child issues can have their pipelines running in parallel
 
 The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature, both set automatically.
 
@@ -1597,8 +1597,8 @@ During swarm mode, the following files are created:
 ├── epic-issue-100/                    # Epic worktree
 │   └── .claude/
 │       └── agents/
-│           ├── iloom-swarm-worker.md              # Worker agent with full iloom workflow
-│           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
+│           ├── iloom-swarm-issue-implementer.md   # Swarm phase agent definitions
+│           ├── iloom-swarm-issue-enhancer.md      # Enhancement phase agent
 │           └── ...
 ├── issue-101/                         # Child worktree (branched off epic)
 │   └── iloom-metadata.json            # state: pending -> in_progress -> done

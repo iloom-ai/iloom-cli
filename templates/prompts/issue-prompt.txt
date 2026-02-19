@@ -20,14 +20,12 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
-{{#unless SWARM_MODE}}
 {{#if PORT}}
 <additional_env>
 Dev Server Port: {{PORT}}
 If you need to access the web server for testing purposes, use localhost:{{PORT}}
 </additional_env>
 {{/if}}
-{{/unless}}
 
 ## Loom Recap
 
@@ -54,13 +52,8 @@ Use these Recap MCP tools:
 
 **Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
 
-{{#if SWARM_MODE}}
-**Swarm Mode Recap**: When calling recap tools, the recap server is configured for this worktree. No additional worktreePath parameter is needed.
-{{/if}}
-
 ---
 
-{{#unless SWARM_MODE}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
 
@@ -119,11 +112,9 @@ When calling `mcp__issue_management__create_comment`:
 }
 ```
 {{/if}}
-{{/unless}}
 
 ---
 
-{{#unless SWARM_MODE}}
 {{#if FIRST_TIME_USER}}
 ## First-Time User Context
 
@@ -211,79 +202,7 @@ Since this is a first-time user:
 ---
 
 {{/if}}
-{{/unless}}
 
-{{#if SWARM_MODE}}
-## Swarm Mode - Autonomous Workflow
-
-**You are running in swarm mode as part of an autonomous workflow.**
-
-### Issue Context
-
-Your issue-specific context (issue number, worktree path, issue title, and issue body) is provided in the Task prompt that spawned you. Extract these values from the Task prompt and use them throughout the workflow.
-
-### Operating Rules
-- **Fully autonomous**: Do NOT pause for user input, call AskUserQuestion, or wait for human checkpoints
-- **Report results**: Post implementation comments on the issue as you would in the normal workflow. Also return results directly to the caller.
-- **Issue number**: Your issue number comes from the Task prompt. Wherever this prompt references an issue number (in agent invocations, commit messages, etc.), use the issue number from your Task prompt.
-- **Worktree**: `cd` to the worktree path from the Task prompt before beginning work. Read `iloom-metadata.json` from the worktree root for full context.
-- **Error handling**: Never silently swallow errors. Report failures with details back to the orchestrator.
-
-### State Transitions
-Call `recap.set_loom_state` at these workflow boundaries:
-- `in_progress` - At workflow start (Step 0)
-- `code_review` - Before running code review (Step 5)
-- `done` - On successful completion (after commit)
-- `failed` - On any unrecoverable error
-
-### Completion
-On success: Stage and commit all changes with message `fixes #<issue-number>`, then report structured result.
-On failure: Do NOT commit partial work. Report failure with step, error details.
-
-### Result Format
-Return structured result:
-```
-## Swarm Workflow Result
-
-**Issue:** #<issue-number>
-**Status:** success | failed
-**Summary:** <1-2 sentence description of what was done or what failed>
-**Files Changed:** <count>
-**Complexity:** <TRIVIAL | SIMPLE | COMPLEX>
-**Steps Completed:** <list of completed steps>
-```
-
-**Todo List:**
-1. Initialize: cd to worktree, read iloom-metadata.json, set state to `in_progress`, read issue
-2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) using @agent-iloom-issue-enhancer
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
-3a. Run artifact review on enhancement output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-4. Run complexity evaluation using @agent-iloom-issue-complexity-evaluator
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
-4a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
-6. Run analysis/planning based on route
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
-6a. If COMPLEX: Run artifact review on analysis output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
-6b. If COMPLEX: Run artifact review on plan output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
-6c. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-7. Run implementation using @agent-iloom-issue-implementer
-{{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
-7a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer
-{{/if}}{{/if}}
-8. Set state to `code_review`, run code review using @agent-iloom-code-reviewer
-9. If critical/high issues found, auto-fix and optionally re-review
-10. Stage and commit all changes: `git add -A && git commit -m "fixes #<issue-number>"`
-11. Set state to `done`, report structured result to orchestrator
-{{else}}
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
 
 **IMPORTANT: Unless otherwise instructed, each step requires explicit human approval. Do not proceed to any step until explicitly told to do so.**
@@ -334,7 +253,6 @@ You are orchestrating a set of agents through a development process, with human 
 {{/if}}
 {{else}}
 18. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
-{{/if}}
 {{/if}}
 
 ## Workflow Details
@@ -392,14 +310,6 @@ Perform ONE comprehensive scan to determine which agents need to run:
    - Decision: NEEDS_IMPLEMENTATION or SKIP_IMPLEMENTATION
    - If skipping, log: "Issue #ISSUE_NUMBER already implemented by @[author] from [date], modified [N] files with passing validation, skipping implementation"
 
-{{#if SWARM_MODE}}
-3. Log workflow plan decisions (do not display to user - there is no user):
-   - Enhancement: [NEEDS_ENHANCEMENT/SKIP_ENHANCEMENT] ([reason])
-   - Complexity Evaluation: [NEEDS_COMPLEXITY_EVAL/SKIP_COMPLEXITY_EVAL] ([reason])
-   - Analysis: [NEEDS_ANALYSIS/SKIP_ANALYSIS] ([reason])
-   - Planning: [NEEDS_PLANNING/SKIP_PLANNING] ([reason])
-   - Implementation: [NEEDS_IMPLEMENTATION/SKIP_IMPLEMENTATION] ([reason])
-{{else}}
 3. Display workflow plan summary to user:
    ```
    Workflow Plan for Issue #ISSUE_NUMBER:
@@ -409,7 +319,6 @@ Perform ONE comprehensive scan to determine which agents need to run:
    - Planning: [NEEDS_PLANNING/SKIP_PLANNING] ([reason])
    - Implementation: [NEEDS_IMPLEMENTATION/SKIP_IMPLEMENTATION] ([reason])
    ```
-{{/if}}
 
 4. Mark todo #1 as completed and proceed to execute only the needed phases.
 
@@ -463,7 +372,6 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{/if}}
 {{/if}}
 3. Mark todo #2 and #3 as completed
-{{#unless SWARM_MODE}}
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. See results at: [issue comment URL]. How would you like to proceed?"
    - Options:
@@ -474,7 +382,6 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
    - If user chooses "Provide feedback on enhancement": Process their input and re-run enhancement if needed, telling the agent to edit their comment and provide the comment id
    - If user chooses "Exit workflow": End workflow gracefully
    - If user chooses "Continue to complexity evaluation": Proceed to next step
-{{/unless}}
 
 If workflow plan determined SKIP_ENHANCEMENT:
 1. Mark todos #2 and #3 as completed
@@ -558,7 +465,6 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 
    Reasoning: [reasoning text from evaluator]
    ```
-{{#unless SWARM_MODE}}
 5. Use AskUserQuestion tool with a single question:
    - Question: "Complexity evaluated as [TRIVIAL/SIMPLE/COMPLEX]. See assessment at: [issue comment URL]. Do you agree with this classification?"
    - Options:
@@ -572,7 +478,6 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
    - If user reclassifies: Update confirmed complexity accordingly
    - If user chooses "Provide feedback before deciding": Process and re-evaluate if needed, telling the agent to edit their comment and provide the comment id
    - If user chooses "Exit workflow": End workflow gracefully
-{{/unless}}
 6. Mark todos #5, #6, and #7 as completed
 7. Proceed to ROUTING DECISION POINT with confirmed complexity
 
@@ -637,7 +542,6 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{/if}}
 {{/if}}
 3. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
-{{#unless SWARM_MODE}}
 4. Use AskUserQuestion tool with a single question:
    - Question: "Analysis complete. See findings at: [issue comment URL]. How would you like to proceed?"
    - Options:
@@ -648,7 +552,6 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
    - If user chooses "Provide feedback on analysis": Process their input and re-run analysis if needed, telling the agent to edit their comment and provide the comment id
    - If user chooses "Exit workflow": End workflow gracefully
    - If user chooses "Continue to planning phase": Proceed to planning phase
-{{/unless}}
 
 If workflow plan determined SKIP_ANALYSIS:
 1. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
@@ -744,7 +647,6 @@ Execute combined analyze-and-plan agent:
 {{/if}}
 {{/if}}
 4. Mark todo #9 as completed (COMPLEX todos #10-15 were already marked at routing decision point)
-{{#unless SWARM_MODE}}
 5. Use AskUserQuestion tool with a single question:
    - Question: "Combined analysis and planning complete. See results at: [issue comment URL]. How would you like to proceed?"
    - Options:
@@ -755,7 +657,6 @@ Execute combined analyze-and-plan agent:
    - If user chooses "Provide feedback on plan": Process their input and re-run planning if needed, telling the agent to edit their comment and provide the comment id
    - If user chooses "Exit workflow": End workflow gracefully
    - If user chooses "Continue to implementation": Proceed to STEP 4 (Implementation Phase)
-{{/unless}}
 
 ---
 
@@ -813,7 +714,6 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{/if}}
 {{/if}}
 3. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
-{{#unless SWARM_MODE}}
 4. Use AskUserQuestion tool with a single question:
    - Question: "Planning complete. See implementation plan at: [issue comment URL]. How would you like to proceed?"
    - Options:
@@ -824,7 +724,6 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
    - If user chooses "Provide feedback on plan": Process their input and re-run planning if needed, telling the agent to edit their comment and provide the comment id
    - If user chooses "Exit workflow": End workflow gracefully
    - If user chooses "Continue to implementation": Proceed to STEP 4 (Implementation Phase)
-{{/unless}}
 
 If workflow plan determined SKIP_PLANNING AND complexity is COMPLEX:
 1. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
@@ -951,10 +850,6 @@ If workflow plan determined SKIP_IMPLEMENTATION:
 
 This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
 
-{{#if SWARM_MODE}}
-**State transition**: Before running review, call `recap.set_loom_state('code_review')`.
-{{/if}}
-
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
@@ -993,7 +888,6 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 5. Mark todos #17 and #18 as completed
 6. Proceed to Post-Workflow Help
 
-{{#unless SWARM_MODE}}
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 ---
@@ -1104,12 +998,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
 {{/if}}
 {{/if}}
-{{/unless}}
 ---
-
-{{#if SWARM_MODE}}
-**MANDATORY CHECKPOINT: You MUST complete the code review before committing. After review, stage and commit all changes with `git add -A && git commit -m "fixes #<issue-number>"` (using your issue number from invocation arguments). Then set state to `done` and report results.**
-{{else}}
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 **MANDATORY CHECKPOINT: You MUST complete STEP 5.5 - Auto-Commit and Push before proceeding below. Do NOT skip the auto-commit/push.**
@@ -1119,22 +1008,8 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 {{else}}
 **MANDATORY CHECKPOINT: You MUST complete STEP 5 - Review Phase before proceeding below. Do NOT skip the review.**
 {{/if}}
-{{/if}}
 
 ---
-
-{{#if SWARM_MODE}}
-## Post-Workflow: Report to Orchestrator
-
-After committing changes successfully:
-1. Call `recap.set_loom_state('done')`
-2. Return the structured Swarm Workflow Result (see format in preamble above)
-
-If any step failed unrecoverably:
-1. Call `recap.set_loom_state('failed')`
-2. Return the structured result with status: `failed` and error details
-3. Do NOT commit partial work
-{{else}}
 ## Post-Workflow Help
 
 After completing the implementation phase, tell the user:
@@ -1159,11 +1034,9 @@ When the user requests help, **YOU MUST USE subagents** to preserve your context
 After handling each request, summarize what was done and confirm you're still available.
 
 Use `recap.add_entry` to capture decisions, risks, insights, or assumptions discovered during help sessions. Do not log status updates or task completions.
-{{/if}}
 
 ---
 
-{{#unless SWARM_MODE}}
 ## Wrapping Up Instructions
 
 When the user says they're done or ready to wrap up, provide these instructions:
@@ -1186,4 +1059,3 @@ This will automatically detect the current issue and:
 - Remove the workspace
 
 3. Once the finish command completes, you can close any terminal or IDE windows that were opened specifically for this issue"
-{{/unless}}

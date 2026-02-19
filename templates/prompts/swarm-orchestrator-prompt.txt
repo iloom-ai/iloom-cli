@@ -53,12 +53,17 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 1. Parse child issues and dependency map
 2. Validate dependencies and identify initially unblocked issues
 3. Create the agent team
-4. Spawn agents for all initially unblocked child issues
-5. Monitor agent completions and merge completed work
-6. Spawn agents for newly unblocked child issues (repeat as needed)
-7. Handle any failures (mark failed, continue with others)
-8. When all children are done or failed, finalize and clean up
-9. Print final summary
+4. For each unblocked child: run upfront scan to determine needed phases
+5. For each unblocked child: run enhancement phase (if needed)
+6. For each unblocked child: run complexity evaluation (if needed)
+7. For each unblocked child: route based on complexity, run analysis/planning
+8. For each unblocked child: run implementation
+9. For each unblocked child: run code review
+10. For each unblocked child: commit and merge
+11. Handle any failures
+12. Spawn agents for newly unblocked issues (repeat phases 4-10)
+13. When all done or failed, finalize and clean up
+14. Print final summary
 
 ---
 
@@ -104,64 +109,288 @@ Mark todo #1 and #2 as completed.
 
 ---
 
-## Phase 2: Create Team and Spawn Agents
+## Phase 2: Create Team and Execute Child Issue Pipelines
 
 ### Step 2.1: Create the Team
 
 Use `TeamCreate` to create a team:
 - Team name: `swarm-epic-{{EPIC_ISSUE_NUMBER}}`
 
-### Step 2.2: Spawn Agents for Unblocked Issues
+Mark todo #3 as completed.
 
-For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
+### Step 2.2: Per-Child Phase Pipeline
 
-For each child issue, use these parameters:
-- `subagent_type`: `"iloom-swarm-worker"`
+For each unblocked child issue, execute the following phases **SEQUENTIALLY** within that child.
+**Multiple children can run in PARALLEL** -- spawn their pipelines as parallel Task calls.
+
+**IMPORTANT:** When spawning phase agents, use the `Task` tool with:
+- `subagent_type`: The swarm agent name (e.g., `"iloom-swarm-issue-enhancer"`)
 - `mode`: `"delegate"`
 - `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
-- `name`: `"issue-<child-number>"`
 
-The prompt for each child agent should be:
+The child issue body is available directly in the `CHILD_ISSUES` template data above (each entry has a `body` field). Use it to construct prompts for each phase agent.
 
+**Worktree Isolation:** Every prompt sent to a child phase agent MUST include the following instruction after the worktree path line:
 ```
-You are working on issue #<child-number>: "<child-title>"
-
-**Worktree path:** `<child-worktree-path>`
-
 IMPORTANT: You MUST work in this worktree path. cd to it first before doing anything:
 cd <child-worktree-path>
 
 All file reads, writes, searches, and git operations must happen within this directory. Do NOT work in the epic worktree or any other child's worktree.
-
-**Issue body:**
-<child-issue-body>
-
-Implement this issue following your workflow instructions. When done, report back with:
-- Issue number
-- Status (success or failed)
-- Brief summary of what was implemented or what went wrong
-- Number of files changed (if successful)
 ```
 
-Note: The child issue body is available directly in the `CHILD_ISSUES` template data above (each entry has a `body` field). Make sure to include it in the Task prompt for each child.
+#### STEP 0: Upfront Scan (run by orchestrator, NOT a sub-agent)
 
-Update each child's tracking status to `in_progress`.
+For each child issue, fetch the issue using `mcp__issue_management__get_issue` with `{ number: "<child-number>", includeComments: true }`.
 
-Mark todo #3 and #4 as completed.
+Analyze the issue body and ALL comments in a single pass to determine:
+
+**Enhancement Decision:**
+- Check if issue body meets ALL criteria:
+  * Word count > 250 words
+  * Contains problem description, context, and impact/reproduction details
+  * Has clear structure (sections, bullet points, numbered lists, or distinct paragraphs)
+- Decision: NEEDS_ENHANCEMENT or SKIP_ENHANCEMENT
+
+**Complexity Evaluation Decision:**
+- Search ALL comments for existing complexity evaluation. Consider "already evaluated" if ANY comment has:
+  * Header containing "Complexity Assessment" or "Complexity Evaluation"
+  * Section with "**Classification**: [TRIVIAL / SIMPLE / COMPLEX]"
+  * Metrics section with estimated files, LOC, breaking changes, DB migrations, and risk level
+- Decision: NEEDS_COMPLEXITY_EVAL or SKIP_COMPLEXITY_EVAL
+
+**Analysis Decision:**
+- Search ALL comments for existing analysis. Consider "already analyzed" if ANY comment has ALL:
+  * Header containing "Analysis", "Research" or similar (not "plan" or "implementation")
+  * File references with line numbers (e.g., `src/lib/Foo.ts:42`)
+  * Code excerpts or specific code references
+  * Technical depth (root cause analysis, technical findings, or affected component identification)
+- Decision: NEEDS_ANALYSIS or SKIP_ANALYSIS
+
+**Planning Decision:**
+- Search ALL comments for existing plan. Consider "already planned" if ANY comment has ALL:
+  * Header containing "Implementation Plan" (not "analysis" or "implementation results")
+  * File specifications with line ranges
+  * Change details (specific changes required)
+  * Execution order (implementation steps or numbered phases)
+  * Test planning (test cases, acceptance criteria, or automated test requirements)
+- Decision: NEEDS_PLANNING or SKIP_PLANNING
+
+**Implementation Decision:**
+- Search ALL comments for implementation results. Consider "already implemented" if ANY comment has ALL:
+  * Header containing "Implementation Complete" or "Task Completed"
+  * File references (specific files modified)
+  * Validation results (test results, typecheck output, lint status)
+- Decision: NEEDS_IMPLEMENTATION or SKIP_IMPLEMENTATION
+
+Log the result:
+```
+Child #<N> workflow plan: Enhancement=[decision], Complexity=[decision], Analysis=[decision], Planning=[decision], Implementation=[decision]
+```
+
+Set child state to `in_progress`:
+Call `mcp__recap__set_loom_state` with `{ state: "in_progress", worktreePath: "<child-worktree-path>" }`
+
+Mark todo #4 as completed after scanning all unblocked children.
+
+#### STEP 1: Enhancement (if NEEDS_ENHANCEMENT)
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-enhancer"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  **Issue body:**
+  <child-issue-body>
+
+  Enhance this issue. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables in your issue comments, fill in your own assumed answers to each question.
+  ```
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
+After enhancement completes, spawn artifact review:
+- `subagent_type`: `"iloom-swarm-artifact-reviewer"`
+- Prompt: `"Review this ENHANCEMENT artifact for issue #<child-number>: [ENHANCER_OUTPUT]"`
+- If verdict is SUGGEST_IMPROVEMENTS: re-invoke enhancer with feedback to update existing comment
+- If verdict is RECOMMEND_REGENERATION: re-run enhancer from scratch with feedback
+{{/if}}{{/if}}
+
+Mark todo #5 as completed after enhancement for all current children.
+
+#### STEP 1.5: Complexity Evaluation (if NEEDS_COMPLEXITY_EVAL)
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-complexity-evaluator"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  **Issue body:**
+  <child-issue-body>
+
+  Evaluate the complexity of this issue. Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
+  ```
+
+Extract complexity classification (TRIVIAL/SIMPLE/COMPLEX) from the evaluator's output. Look for the "Complexity Assessment" section and extract the "Classification" value.
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
+After evaluation completes, spawn artifact review:
+- `subagent_type`: `"iloom-swarm-artifact-reviewer"`
+- Prompt: `"Review this COMPLEXITY EVALUATION artifact for issue #<child-number>: [COMPLEXITY_OUTPUT]"`
+- Handle verdicts as in STEP 1 above.
+{{/if}}{{/if}}
+
+If SKIP_COMPLEXITY_EVAL: Extract classification from existing comment, default to COMPLEX if not found.
+
+Mark todo #6 as completed after complexity evaluation for all current children.
+
+#### ROUTING DECISION (based on confirmed complexity)
+
+- **TRIVIAL**: Skip analysis and planning, go directly to STEP 4 (Implementation)
+- **SIMPLE**: Use combined analyze-and-plan agent (STEP 2-SIMPLE), then STEP 4
+- **COMPLEX**: Use separate analysis (STEP 2) then planning (STEP 3), then STEP 4
+
+#### STEP 2: Analysis (if COMPLEX and NEEDS_ANALYSIS)
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-analyzer"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  **Issue body:**
+  <child-issue-body>
+
+  Analyze this issue. Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
+  ```
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
+After analysis completes, spawn artifact review (same pattern as previous steps).
+{{/if}}{{/if}}
+
+#### STEP 2-SIMPLE: Combined Analysis and Planning (if SIMPLE and needs analysis/planning)
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-analyze-and-plan"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  **Issue body:**
+  <child-issue-body>
+
+  Analyze and plan the implementation. Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
+  ```
+
+Capture the "Plan for Caller" section with Comment ID from the agent's output. Store this for use in STEP 4.
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
+After combined analysis/plan completes, spawn artifact review (same pattern as previous steps).
+{{/if}}{{/if}}
+
+#### STEP 3: Planning (if COMPLEX and NEEDS_PLANNING)
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-planner"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  **Issue body:**
+  <child-issue-body>
+
+  Create an implementation plan. Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
+  ```
+
+Capture the "Plan for Caller" and "Execution Plan" sections from the agent's output. Store for use in STEP 4.
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
+After planning completes, spawn artifact review (same pattern as previous steps).
+{{/if}}{{/if}}
+
+Mark todo #7 as completed after analysis/planning for all current children.
+
+#### STEP 4: Implementation (if NEEDS_IMPLEMENTATION)
+
+**For COMPLEX with multi-step Execution Plan:**
+
+Extract the plan comment ID from the planner output. Each step in the Execution Plan gets its own implementer agent:
+
+- **If the Execution Plan says "Run Step N" (sequential):**
+  Spawn via Task:
+  - `subagent_type`: `"iloom-swarm-issue-implementer"`
+  - Prompt: `"You are implementing Step N of the plan for issue #<child-number>: '<child-title>'. The plan is in comment [COMMENT_ID]. Worktree path: <child-worktree-path>. DO NOT create your own issue comment."`
+  - Wait for completion before starting next step.
+
+- **If the Execution Plan says "Run Steps X, Y, Z in parallel":**
+  Launch MULTIPLE Task calls in ONE message, one per step, with the same prompt pattern. Wait for ALL to complete.
+
+**For SIMPLE/TRIVIAL (single implementation run):**
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-issue-implementer"`
+- Prompt:
+  ```
+  You are working on issue #<child-number>: "<child-title>"
+
+  **Worktree path:** `<child-worktree-path>`
+
+  The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment.
+  ```
+
+{{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
+After implementation completes, spawn artifact review:
+- `subagent_type`: `"iloom-swarm-artifact-reviewer"`
+- Prompt: `"Review this IMPLEMENTATION artifact for issue #<child-number>: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"`
+- Handle verdicts as in previous steps.
+{{/if}}{{/if}}
+
+Mark todo #8 as completed after implementation for all current children.
+
+#### STEP 5: Code Review
+
+Set state to `code_review`:
+Call `mcp__recap__set_loom_state` with `{ state: "code_review", worktreePath: "<child-worktree-path>" }`
+
+Spawn via Task:
+- `subagent_type`: `"iloom-swarm-code-reviewer"`
+- Prompt: `"You are reviewing code changes for issue #<child-number> in worktree <child-worktree-path>. Run code review."`
+
+If critical or high severity issues found: spawn implementer to fix, then optionally re-review.
+
+Mark todo #9 as completed after code review for all current children.
+
+#### STEP 6: Commit
+
+Stage and commit all changes in the child worktree:
+
+```bash
+cd <child-worktree-path>
+git add -A && git commit -m "feat(issue-<child-number>): <brief summary of implementation>"
+```
+
+If the commit fails (e.g., nothing to commit), log a warning and continue.
+
+Mark todo #10 as completed after committing for all current children.
 
 ---
 
-## Phase 3: Monitor and Merge
+## Phase 3: Merge and Unblock
 
-This is the core orchestration loop. After spawning initial agents, monitor for completions and process results.
+After a child's full pipeline completes (STEP 0 through STEP 6), merge its work and check for newly unblocked issues.
 
-### When a Child Agent Completes Successfully
+### Step 3.1: Merge the Child's Branch
 
-When a child agent reports back with status `success` (or goes idle after completing its tasks):
-
-#### Step 3.1: Merge the Child's Branch
-
-Rebase the child branch onto the epic branch from the child's worktree, then fast-forward merge from the epic worktree. You must run the rebase from the child's worktree because that's where the child branch is checked out — git will refuse to rebase a branch that's checked out in another worktree.
+Rebase the child branch onto the epic branch from the child's worktree, then fast-forward merge from the epic worktree. You must run the rebase from the child's worktree because that's where the child branch is checked out -- git will refuse to rebase a branch that's checked out in another worktree.
 
 ```bash
 cd <child-worktree-path>
@@ -174,7 +403,7 @@ Where `<child-worktree-path>` and `<child-branch-name>` are from the child's ent
 
 **Important**: Use rebase + fast-forward merge, NOT merge commits. This keeps the epic branch history linear and clean.
 
-#### Step 3.2: Handle Rebase Conflicts
+### Step 3.2: Handle Rebase Conflicts
 
 If the rebase has conflicts:
 
@@ -187,20 +416,20 @@ If the rebase has conflicts:
    - Mark the child as `failed` with reason: "Rebase conflict could not be resolved"
    - Skip to Phase 4 failure handling for this child
 
-#### Step 3.3: Update State
+### Step 3.3: Update State
 
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
 3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
 
-#### Step 3.4: Check for Newly Unblocked Issues
+### Step 3.4: Check for Newly Unblocked Issues
 
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
 2. Check if any previously blocked children are now unblocked (empty `blockedBy` list)
-3. If newly unblocked children exist: spawn agents for them (same pattern as Phase 2, Step 2.2)
+3. If newly unblocked children exist: run the full Phase 2 pipeline for them (Steps 0-6, same as above)
 
-Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
+Mark todo #12 as completed after each merge-and-unblock cycle.
 
 ---
 
@@ -208,7 +437,7 @@ Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
 
 ### When a Child Agent Fails
 
-If a child agent reports back with status `failed`, or encounters an unrecoverable error:
+If a child's pipeline fails at any phase, or encounters an unrecoverable error:
 
 1. **Update tracking**: Mark the child's status as `failed`
 2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
@@ -219,7 +448,7 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
    - Update their metadata state to `failed`
    - Do NOT spawn agents for them
 
-Mark todo #7 as completed.
+Mark todo #11 as completed.
 
 ---
 
@@ -264,4 +493,4 @@ The epic branch at `{{EPIC_WORKTREE_PATH}}` contains merged work from all succes
 The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 ```
 
-Mark todo #8 and #9 as completed.
+Mark todo #13 and #14 as completed.
