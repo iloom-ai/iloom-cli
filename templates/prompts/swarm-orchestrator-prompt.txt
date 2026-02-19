@@ -32,7 +32,7 @@ If child issues are provided directly (e.g., with worktree paths assigned during
 {{CHILD_ISSUES}}
 ```
 
-This is a JSON array where each entry has: `{ number, title, worktreePath, branchName }`
+This is a JSON array where each entry has: `{ number, title, body, worktreePath, branchName }`
 
 ### Dependency Map (from template)
 
@@ -116,7 +116,7 @@ Use `TeamCreate` to create a team:
 For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
 
 For each child issue, use these parameters:
-- `subagent_type`: `"general-purpose"`
+- `subagent_type`: `"iloom-swarm-worker"`
 - `mode`: `"delegate"`
 - `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
 - `name`: `"issue-<child-number>"`
@@ -126,14 +126,19 @@ The prompt for each child agent should be:
 ```
 You are working on issue #<child-number>: "<child-title>"
 
-Invoke `/iloom-swarm-workflow <child-number> <child-worktree-path>` to implement this issue.
+**Worktree path:** `<child-worktree-path>`
 
-When you are done, report back with the result. Include:
+**Issue body:**
+<child-issue-body>
+
+Implement this issue following your workflow instructions. When done, report back with:
 - Issue number
 - Status (success or failed)
 - Brief summary of what was implemented or what went wrong
 - Number of files changed (if successful)
 ```
+
+Note: The child issue body is available directly in the `CHILD_ISSUES` template data above (each entry has a `body` field). Make sure to include it in the Task prompt for each child.
 
 Update each child's tracking status to `in_progress`.
 
@@ -180,11 +185,7 @@ If the rebase has conflicts:
 #### Step 3.3: Update State
 
 1. Update the child's tracking status to `done`
-2. Update the child's metadata state to `done`. Since the child agent has already finished and is no longer writing to this file, it is safe to update directly:
-   ```bash
-   cd <child-worktree-path>
-   cat iloom-metadata.json | jq '.state = "done"' > iloom-metadata.json.tmp && mv iloom-metadata.json.tmp iloom-metadata.json
-   ```
+2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
 
 #### Step 3.4: Check for Newly Unblocked Issues
 
@@ -204,11 +205,7 @@ Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
 If a child agent reports back with status `failed`, or encounters an unrecoverable error:
 
 1. **Update tracking**: Mark the child's status as `failed`
-2. **Update metadata state**: Update the child's metadata file state to `failed`:
-   ```bash
-   cd <child-worktree-path>
-   cat iloom-metadata.json | jq '.state = "failed"' > iloom-metadata.json.tmp && mv iloom-metadata.json.tmp iloom-metadata.json
-   ```
+2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
 3. **Log the failure**: Record the failure reason and which step failed
 4. **Do NOT block other children**: Continue processing remaining children
 5. **Handle downstream dependencies**: For any children that depend on the failed child:
