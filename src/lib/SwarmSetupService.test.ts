@@ -200,9 +200,9 @@ describe('SwarmSetupService', () => {
 		})
 	})
 
-	describe('renderSwarmSkill', () => {
+	describe('renderSwarmWorkerAgent', () => {
 		it('calls PromptTemplateManager.getPrompt with SWARM_MODE=true and ONE_SHOT_MODE=true', async () => {
-			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
@@ -213,14 +213,30 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('writes rendered content to .claude/skills/iloom-swarm-workflow/SKILL.md', async () => {
-			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+		it('writes agent file with frontmatter to .claude/agents/iloom-swarm-worker.md', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			expect(fs.writeFile).toHaveBeenCalledWith(
-				'/Users/dev/project-epic-610/.claude/skills/iloom-swarm-workflow/SKILL.md',
-				'# Rendered swarm skill content',
+				'/Users/dev/project-epic-610/.claude/agents/iloom-swarm-worker.md',
+				expect.stringContaining('---\nname: iloom-swarm-worker\n'),
 				'utf-8',
 			)
+		})
+
+		it('includes frontmatter with correct fields', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('name: iloom-swarm-worker')
+			expect(writtenContent).toContain('description: Swarm worker agent that implements a child issue following the full iloom workflow.')
+			expect(writtenContent).toContain('model: sonnet')
+		})
+
+		it('includes rendered template content in the body', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('# Rendered swarm skill content')
 		})
 
 		it('includes review configuration variables from settings', async () => {
@@ -233,7 +249,7 @@ describe('SwarmSetupService', () => {
 				},
 			})
 
-			await service.renderSwarmSkill('/Users/dev/project-epic-610')
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
@@ -247,7 +263,7 @@ describe('SwarmSetupService', () => {
 		})
 
 		it('returns true on success', async () => {
-			const result = await service.renderSwarmSkill('/Users/dev/project-epic-610')
+			const result = await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			expect(result).toBe(true)
 		})
@@ -257,14 +273,14 @@ describe('SwarmSetupService', () => {
 				new Error('Template not found'),
 			)
 
-			const result = await service.renderSwarmSkill('/Users/dev/project-epic-610')
+			const result = await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			expect(result).toBe(false)
 		})
 	})
 
 	describe('setupSwarm', () => {
-		it('runs full setup: child worktrees, agents, and skill', async () => {
+		it('runs full setup: child worktrees, agents, and worker agent', async () => {
 			const result = await service.setupSwarm(
 				'610',
 				'epic/610',
@@ -278,6 +294,7 @@ describe('SwarmSetupService', () => {
 			expect(result.epicBranch).toBe('epic/610')
 			expect(result.childWorktrees).toHaveLength(2)
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
+			expect(result.workerAgentRendered).toBe(true)
 		})
 	})
 })

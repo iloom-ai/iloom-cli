@@ -218,18 +218,15 @@ Since this is a first-time user:
 
 **You are running in swarm mode as part of an autonomous workflow.**
 
-### Usage
-This skill is invoked as: `/iloom-swarm-workflow <issue-number> <worktree-path>`
+### Issue Context
 
-### Arguments
-- `<issue-number>`: The issue number to work on (e.g., `42`, `#42`)
-- `<worktree-path>`: Absolute path to the pre-created worktree for this issue
+Your issue-specific context (issue number, worktree path, issue title, and issue body) is provided in the Task prompt that spawned you. Extract these values from the Task prompt and use them throughout the workflow.
 
 ### Operating Rules
 - **Fully autonomous**: Do NOT pause for user input, call AskUserQuestion, or wait for human checkpoints
-- **No comments**: Do NOT create or update issue/PR comments. Return results directly to the caller.
-- **Issue number**: Your issue number comes from your invocation arguments. Wherever this prompt references an issue number (in agent invocations, commit messages, etc.), use the issue number from your arguments.
-- **Worktree**: `cd` to the specified worktree path before beginning work. Read `iloom-metadata.json` from the worktree root for full context.
+- **Report results**: Post implementation comments on the issue as you would in the normal workflow. Also return results directly to the caller.
+- **Issue number**: Your issue number comes from the Task prompt. Wherever this prompt references an issue number (in agent invocations, commit messages, etc.), use the issue number from your Task prompt.
+- **Worktree**: `cd` to the worktree path from the Task prompt before beginning work. Read `iloom-metadata.json` from the worktree root for full context.
 - **Error handling**: Never silently swallow errors. Report failures with details back to the orchestrator.
 
 ### State Transitions
