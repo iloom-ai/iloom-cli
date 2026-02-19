@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs-extra'
-import { SwarmSetupService, type SwarmChildIssue } from './SwarmSetupService.js'
+import { SwarmSetupService, type SwarmChildIssue, type SwarmAgentMetadata } from './SwarmSetupService.js'
 import type { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { MetadataManager } from './MetadataManager.js'
 import type { AgentManager } from './AgentManager.js'
@@ -186,8 +186,8 @@ describe('SwarmSetupService', () => {
 		it('renders agents with swarm naming convention', async () => {
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			expect(result).toHaveLength(1)
-			expect(result[0]).toBe('iloom-swarm-issue-implementer.md')
+			expect(result.renderedFiles).toHaveLength(1)
+			expect(result.renderedFiles[0]).toBe('iloom-swarm-issue-implementer.md')
 		})
 
 		it('loads agents with SWARM_MODE=true', async () => {
@@ -197,6 +197,39 @@ describe('SwarmSetupService', () => {
 				expect.anything(),
 				expect.objectContaining({ SWARM_MODE: true }),
 			)
+		})
+
+		it('writes agent files WITHOUT frontmatter (prompt body only)', async () => {
+			await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			// Should NOT start with ---
+			expect(writtenContent).not.toMatch(/^---/)
+			// Should contain the prompt body
+			expect(writtenContent).toContain('Implement things')
+		})
+
+		it('returns metadata with model and tools for each agent', async () => {
+			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			expect(result.metadata).toHaveProperty('iloom-swarm-issue-implementer')
+			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
+			expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
+		})
+
+		it('omits tools from metadata when agent has no tools defined', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-issue-analyzer': {
+					description: 'Analyzer agent',
+					prompt: 'Analyze things',
+					model: 'sonnet',
+				},
+			})
+
+			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('sonnet')
+			expect(result.metadata['iloom-swarm-issue-analyzer']).not.toHaveProperty('tools')
 		})
 	})
 
@@ -211,6 +244,50 @@ describe('SwarmSetupService', () => {
 					ONE_SHOT_MODE: true,
 				}),
 			)
+		})
+
+		it('passes EPIC_WORKTREE_PATH as template variable', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+				}),
+			)
+		})
+
+		it('passes MCP_CONFIG_FILE_PATH and SWARM_AGENT_METADATA as template variables', async () => {
+			const agentMetadata: SwarmAgentMetadata = {
+				'iloom-swarm-issue-implementer': { model: 'opus', tools: ['Bash'] },
+			}
+			await service.renderSwarmWorkerAgent(
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+				agentMetadata,
+			)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					MCP_CONFIG_FILE_PATH: '/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
+				}),
+			)
+		})
+
+		it('omits MCP_CONFIG_FILE_PATH when not provided', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
+			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_FILE_PATH')
+		})
+
+		it('omits SWARM_AGENT_METADATA when not provided', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
+			expect(calledVariables).not.toHaveProperty('SWARM_AGENT_METADATA')
 		})
 
 		it('writes agent file with frontmatter to .claude/agents/iloom-swarm-worker.md', async () => {
@@ -247,7 +324,8 @@ describe('SwarmSetupService', () => {
 						providers: { claude: 'opus' },
 					},
 				},
-			})
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		} as any)
 
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
@@ -295,6 +373,29 @@ describe('SwarmSetupService', () => {
 			expect(result.childWorktrees).toHaveLength(2)
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
+		})
+
+		it('passes mcpConfigFilePath and agent metadata to renderSwarmWorkerAgent', async () => {
+			await service.setupSwarm(
+				'610',
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				childIssues,
+				'/Users/dev/project',
+				'github',
+				'/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+			)
+
+			// Verify that getPrompt was called with SWARM_AGENT_METADATA containing agent metadata
+			// and MCP_CONFIG_FILE_PATH from the mcpConfigFilePath parameter
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					MCP_CONFIG_FILE_PATH: '/Users/dev/project-epic-610/.claude/swarm-mcp-config.json',
+					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+				}),
+			)
 		})
 	})
 })

@@ -253,33 +253,77 @@ Return structured result:
 **Steps Completed:** <list of completed steps>
 ```
 
+### Invoking Phase Agents
+
+In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot spawn sub-agents). Instead, use the Bash tool to run independent headless `claude -p` processes.
+
+**CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE` to unset the CLAUDECODE environment variable. Without this, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session".**
+
+**Command template:**
+```bash
+env -u CLAUDECODE claude -p \
+  --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
+  --mcp-config {{MCP_CONFIG_FILE_PATH}} \
+  --model <model-from-metadata> \
+  --permission-mode bypassPermissions \
+  --output-format stream-json \
+  --verbose \
+  --max-turns 50 \
+  "<prompt for the phase>"
+```
+
+**Agent metadata (model and tools per agent):**
+
+Parse this JSON to look up the correct `--model` and `--allowedTools` for each agent:
+
+```json
+{{{SWARM_AGENT_METADATA}}}
+```
+
+For each agent, use:
+- `--model` from the `model` field in the metadata above
+- `--allowedTools` from the `tools` array in the metadata above (comma-separated, only if the `tools` field exists)
+- The agent file is at `{{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-key>.md` where `<agent-key>` matches the key in the JSON above
+
+**Output parsing:**
+The `--output-format stream-json` with `--verbose` produces JSONL (one JSON object per line) on stdout. The final line with `"type": "result"` contains the agent's text response in its `result` field. Parse the last `{"type":"result",...}` line from the Bash tool output to extract the response.
+
+**Working directory:**
+Each `claude -p` process inherits the current working directory. Ensure you are in the child worktree before invoking phase agents.
+
+**Important:**
+- Each `claude -p` invocation is an independent process with a fresh context window
+- Do NOT use the `@agent-iloom-*` syntax -- it will not work from a sub-agent
+- The agent `.md` files are pre-rendered and available at the paths above
+- Always include `env -u CLAUDECODE` prefix -- this is mandatory
+
 **Todo List:**
 1. Initialize: cd to worktree, read iloom-metadata.json, set state to `in_progress`, read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) using @agent-iloom-issue-enhancer
+3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
-3a. Run artifact review on enhancement output using @agent-iloom-artifact-reviewer
+3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-4. Run complexity evaluation using @agent-iloom-issue-complexity-evaluator
+4. Run complexity evaluation via headless claude -p process (complexity evaluator agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
-4a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
+4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
-6. Run analysis/planning based on route
+6. Run analysis/planning based on route via headless claude -p process (appropriate agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
-6a. If COMPLEX: Run artifact review on analysis output using @agent-iloom-artifact-reviewer
+6a. If COMPLEX: Run artifact review on analysis output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
-6b. If COMPLEX: Run artifact review on plan output using @agent-iloom-artifact-reviewer
+6b. If COMPLEX: Run artifact review on plan output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
-6c. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
+6c. If SIMPLE: Run artifact review on combined analysis and plan output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-7. Run implementation using @agent-iloom-issue-implementer
+7. Run implementation via headless claude -p process (implementer agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
-7a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer
+7a. Run artifact review on implementation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-8. Set state to `code_review`, run code review using @agent-iloom-code-reviewer
+8. Set state to `code_review`, run code review via headless claude -p process (code reviewer agent)
 9. If critical/high issues found, auto-fix and optionally re-review
 10. Stage and commit all changes: `git add -A && git commit -m "fixes #<issue-number>"`
 11. Set state to `done`, report structured result to orchestrator
@@ -416,9 +460,14 @@ Perform ONE comprehensive scan to determine which agents need to run:
 **STEP 1 - Enhancement Phase:**
 
 Only execute if workflow plan determined NEEDS_ENHANCEMENT:
+{{#if SWARM_MODE}}
+1. Execute enhancement phase agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
+{{/if}}
 2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to issue comment
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
@@ -441,17 +490,29 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Enhancement):
    - The enhancer output should be reviewed before posting
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke enhancer agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-enhancer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run enhancer agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+{{else}}
         - Re-run @agent-iloom-issue-enhancer from scratch with the reviewer's feedback, return to step 2
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -494,9 +555,14 @@ If workflow plan determined SKIP_ENHANCEMENT:
 **STEP 1.5 - Complexity Evaluation Phase:**
 
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
+{{#if SWARM_MODE}}
+1. Execute complexity evaluator agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
+{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
@@ -519,17 +585,29 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Complexity Evaluation):
    - The complexity evaluator output should be reviewed before posting
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke complexity evaluator agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-complexity-evaluator with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run complexity evaluator agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+{{else}}
         - Re-run @agent-iloom-issue-complexity-evaluator from scratch with the reviewer's feedback, return to step 2
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -590,9 +668,14 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 
 Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLEX:
+{{#if SWARM_MODE}}
+1. Execute analysis agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
+{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
@@ -615,17 +698,29 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Analysis):
    - The analyzer output should be reviewed before posting
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke analyzer agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run analyzer agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+{{else}}
         - Re-run @agent-iloom-issue-analyzer from scratch with the reviewer's feedback, return to step 2
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -671,7 +766,11 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 
 **IF SIMPLE complexity confirmed:**
 1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]' })`
-2. Display to user: "✓ Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
+{{#if SWARM_MODE}}
+2. Log: "Using SIMPLE workflow: Combined analysis and planning via headless claude -p process, then implementation"
+{{else}}
+2. Display to user: "Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
+{{/if}}
 3. Mark todo #8 as completed
 4. Mark todos #10, #11, #12, #13, #14, and #15 as completed (COMPLEX workflow steps that will not execute)
 5. Skip to **STEP 2-SIMPLE** (Combined Analysis and Planning Phase)
@@ -695,9 +794,14 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 
 Execute combined analyze-and-plan agent:
 1. Display: "Executing combined analyze-and-plan agent for SIMPLE task..."
+{{#if SWARM_MODE}}
+2. Execute analyze-and-plan agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
+{{/if}}
 3. Upon completion:
    a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
    b. **CRITICAL: Capture the "Execution Plan for Caller" section** from the analyze-and-plan agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
@@ -722,17 +826,29 @@ Execute combined analyze-and-plan agent:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 3.6. Artifact Review (Analysis and Plan):
    - The analyze-and-plan output should be reviewed before posting
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke analyze-and-plan agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run analyze-and-plan agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+{{else}}
         - Re-run @agent-iloom-issue-analyze-and-plan from scratch with the reviewer's feedback, return to step 2
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -764,9 +880,14 @@ Execute combined analyze-and-plan agent:
 **IMPORTANT: Only execute this step if COMPLEX workflow is being followed (not SIMPLE)**
 
 Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLEX:
+{{#if SWARM_MODE}}
+1. Execute planner agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
+{{/if}}
 2. Upon completion:
    a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
    b. **CRITICAL: Capture the "Execution Plan for Caller" section** from the planner agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
@@ -791,17 +912,29 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if ARTIFACT_REVIEW_ENABLED}}
 2.6. Artifact Review (Plan):
    - The planner output should be reviewed before posting
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke planner agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-planner with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run planner agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+{{else}}
         - Re-run @agent-iloom-issue-planner from scratch with the reviewer's feedback, return to step 2
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
@@ -861,6 +994,19 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
       **CRITICAL: Do NOT pass the entire execution plan to one implementer.**
 
+{{#if SWARM_MODE}}
+      **If line says "Run Step N" (sequential):**
+      - Execute implementer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+      - Parse the stream-json output to extract the agent's response
+      - Wait for completion
+      - Update progress comment: `- [x] Step N: [name] - [brief result]`
+
+      **If line says "Run Steps X, Y, Z in parallel":**
+      - Launch MULTIPLE `claude -p` processes in ONE Bash tool call (using `&` and `wait`) - one per step
+      - Each with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+      - Wait for ALL to complete
+      - Update progress comment for all completed steps
+{{else}}
       **If line says "Run Step N" (sequential):**
       - Launch @agent-iloom-issue-implementer with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
       - Wait for completion
@@ -871,11 +1017,18 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
       - Each with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
       - Wait for ALL to complete
       - Update progress comment for all completed steps
+{{/if}}
 
    **FOR SIMPLE/TRIVIAL workflows (single implementation run):**
 
+{{#if SWARM_MODE}}
+   - Execute ONE implementer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+   - Parse the stream-json output to extract the agent's response
+   - Wait for completion
+{{else}}
    - Launch ONE @agent-iloom-issue-implementer with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
    - Wait for completion
+{{/if}}
 
 4. **Finalize the progress comment:**
    - Update the progress comment to this format:
@@ -918,17 +1071,29 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 {{#if ARTIFACT_REVIEW_ENABLED}}
 5.5. Artifact Review (Implementation):
    - The implementer output should be reviewed for plan alignment before code review
+{{#if SWARM_MODE}}
+   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+{{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+{{/if}}
    - Wait for review results
    - If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
+{{#if SWARM_MODE}}
+        - Re-invoke implementer agent via headless `claude -p` with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+{{else}}
         - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+{{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
+{{#if SWARM_MODE}}
+        - Re-run implementer agent via headless `claude -p` from scratch with the reviewer's feedback
+{{else}}
         - Re-run @agent-iloom-issue-implementer from scratch with the reviewer's feedback
+{{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer found plan alignment issues. How would you like to proceed?"
@@ -958,7 +1123,12 @@ This section is about reviewing uncommitted code changes for quality, security, 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
+{{#if SWARM_MODE}}
+1. Execute code reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Run code review."
+   Parse the stream-json output to extract the agent's response from the last `{"type":"result",...}` line.
+{{else}}
 1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
+{{/if}}
 2. Wait for review completion
 3. If critical, high, or medium priority issues found:
 {{#if ONE_SHOT_MODE}}

@@ -111,6 +111,8 @@ export interface TemplateVariables {
 	CHILD_ISSUES?: string  // JSON stringified array of child issues with worktree paths
 	DEPENDENCY_MAP?: string  // JSON stringified dependency map
 	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
+	MCP_CONFIG_FILE_PATH?: string  // Path to MCP config JSON file for swarm mode claude -p commands
+	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
 }
 
 /**
