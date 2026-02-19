@@ -633,7 +633,7 @@ When you run `il spin` inside the epic loom, swarm mode activates:
 3. **Dependency DAG** is fetched from your issue tracker (blocking relationships between children)
 4. **Orchestrator launches** with Claude's experimental agent teams, using `bypassPermissions` mode
 5. **Parallel agents** are spawned for all unblocked child issues simultaneously
-6. As agents complete, their work is **merged back** to the epic branch with `--no-ff`
+6. As agents complete, their work is **rebased and fast-forward merged** into the epic branch
 7. **Newly unblocked issues** are spawned automatically as their dependencies finish
 8. **Failed children** are isolated — they don't block unrelated issues
 
