@@ -18,7 +18,7 @@ iloom
 
 #### Links to key sections
 
-[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
 ## Built For Modern Tools...
 
@@ -105,6 +105,8 @@ Instead of a single generic prompt, iloom uses a pipeline of specialized agents:
 *   **Planner:** Creates an execution plan with parallelization analysis—identifying which steps can run concurrently vs. sequentially. Plans reference specific files and line numbers, making them actionable and precise.
 
 *   **Implementer:** Executes the plan using the context established in the previous steps. For complex tasks, multiple implementers can run in parallel on independent steps.
+
+*   **Swarm Orchestrator:** For epics with child issues, iloom enters [swarm mode](#swarm-mode-epic-orchestration)—launching parallel agent teams that implement each child issue autonomously in its own worktree, respecting dependency order.
     
 
 ### 2. Interactive Control
@@ -142,13 +144,13 @@ Command Reference
 
 | **Command** | **Alias** |  **Description** |
 | ------ | ----- | -----|
-| `il start` | `new` | Create loom, run analysis agents, and launch IDE. |
+| `il start` | `new` | Create loom, run analysis agents, and launch IDE. Auto-detects epics with child issues for [swarm mode](#swarm-mode-epic-orchestration). |
 | `il commit` | `c` | Commit all files with issue reference (`Refs #N` or `Fixes #N`). |
 | `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
 | `il cleanup` | `remove` | Safely remove a loom and its database branch without merging. |
-| `il list` |  | Show active looms for current project. `--finished` for archived, `--all` for active + archived, `--global` for looms across all projects. |
+| `il list` |  | Show active looms for current project. `--finished` for archived, `--all` for active + archived, `--global` for looms across all projects. JSON output includes `swarmIssues` and `dependencyMap` for epic looms. |
 | `il projects` |  | List configured projects (JSON output). |
-| `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
+| `il spin` |  | Launch Claude inside the current loom with context auto-detected. In epic looms, enters [swarm mode](#swarm-mode-epic-orchestration) with parallel agent orchestration. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
 | `il vscode` |  | Install iloom VS Code extension and open workspace in VS Code. |
 | `il dev-server` | `dev` | Start dev server in foreground for a workspace. |
@@ -595,6 +597,55 @@ il plan --yolo "Add GitLab integration"
 ```
 
 See the [Complete Command Reference](docs/iloom-commands.md#il-plan) for all options including `--model`, `--planner`, and `--reviewer` flags.
+
+### Swarm Mode (Epic Orchestration)
+
+Swarm mode enables automatic, parallel execution of an entire epic by coordinating a team of AI agents. Each child issue gets its own worktree and agent, all working simultaneously while respecting dependency order.
+
+**Prerequisite:** Decompose your epic into child issues with dependencies first, using `il plan` or manually creating child issues and setting up blocking relationships.
+
+**How to trigger:**
+
+```bash
+# Auto-detect: iloom checks for child issues and prompts
+il start 100
+
+# Force epic mode (skip prompt)
+il start 100 --epic
+
+# Force normal loom even if children exist
+il start 100 --no-epic
+```
+
+When you run `il spin` inside the epic loom, swarm mode activates:
+
+1. **Child worktrees** are created for each child issue, branched off the epic branch
+2. **Swarm agents and skill files** are rendered into the epic loom's `.claude/` directory
+3. **Dependency DAG** is fetched from your issue tracker (blocking relationships between children)
+4. **Orchestrator launches** with Claude's experimental agent teams, using `bypassPermissions` mode
+5. **Parallel agents** are spawned for all unblocked child issues simultaneously
+6. As agents complete, their work is **merged back** to the epic branch with `--no-ff`
+7. **Newly unblocked issues** are spawned automatically as their dependencies finish
+8. **Failed children** are isolated — they don't block unrelated issues
+
+**Example workflow:**
+
+```bash
+# 1. Plan and decompose your epic
+il plan 100
+
+# 2. Start the epic loom (auto-detects children)
+il start 100 --epic
+
+# 3. Launch swarm mode
+il spin
+# The orchestrator takes over — parallel agents implement each child issue,
+# merge completed work, and handle failures autonomously.
+```
+
+Each child issue tracks its lifecycle state: `pending` -> `in_progress` -> `done` / `failed`. Use `il list --json` to see `swarmIssues` with per-child states and the `dependencyMap` for epic looms.
+
+For detailed reference on swarm mode behavior, see the [Complete Command Reference](docs/iloom-commands.md#swarm-mode-epic-orchestration).
 
 System Requirements & Limitations
 ---------------------------------
