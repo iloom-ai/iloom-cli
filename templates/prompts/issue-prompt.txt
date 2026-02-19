@@ -228,7 +228,7 @@ Since this is a first-time user:
 
 **Your ONLY responsibilities are:**
 1. Navigate to your child worktree
-2. Read `.claude/swarm-mcp-config-path` to get the MCP config file path
+2. Read `.claude/iloom-swarm-mcp-config-path` to get the MCP config file path
 3. Read the issue details via MCP tools
 4. Perform the workflow scan (STEP 0) to determine which phases are needed -- but ONLY by checking if comments/artifacts already exist, NOT by analyzing complexity or code yourself
 5. For each needed phase, invoke the appropriate agent via `claude -p` using the Bash tool
@@ -284,13 +284,13 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 
 **CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE` to unset the CLAUDECODE environment variable. Without this, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session".**
 
-**MCP Config:** Read the file `.claude/swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
+**MCP Config:** Read the file `.claude/iloom-swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
 
 **Command template:**
 ```bash
 env -u CLAUDECODE claude -p \
   --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
-  --mcp-config <path-from-.claude/swarm-mcp-config-path> \
+  --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
   --output-format text \
@@ -322,10 +322,10 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - Do NOT use the `@agent-iloom-*` syntax -- it will not work from a sub-agent
 - The agent `.md` files are pre-rendered and available at the paths above
 - Always include `env -u CLAUDECODE` prefix -- this is mandatory
-- The `.claude/swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
+- The `.claude/iloom-swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
 
 **Todo List:**
-1. Initialize: cd to worktree, read `.claude/swarm-mcp-config-path` for MCP config path, set state to `in_progress`, read issue
+1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress`, read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
 3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}

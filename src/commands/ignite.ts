@@ -847,11 +847,11 @@ export class IgniteCommand {
 			)
 			await metadataManager.updateMetadata(epicWorktreePath, { mcpConfigPath: epicMcpConfigPath })
 
-			// Write MCP config path to .claude/swarm-mcp-config-path for worker discovery
+			// Write MCP config path to .claude/iloom-swarm-mcp-config-path for worker discovery
 			const epicClaudeDir = path.join(epicWorktreePath, '.claude')
 			await fs.ensureDir(epicClaudeDir)
 			await fs.writeFile(
-				path.join(epicClaudeDir, 'swarm-mcp-config-path'),
+				path.join(epicClaudeDir, 'iloom-swarm-mcp-config-path'),
 				epicMcpConfigPath,
 				'utf-8',
 			)

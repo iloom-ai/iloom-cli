@@ -217,7 +217,7 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('writes swarm-mcp-config-path file to .claude/ in each child worktree', async () => {
+		it('writes iloom-swarm-mcp-config-path file to .claude/ in each child worktree', async () => {
 			await service.createChildWorktrees(
 				childIssues,
 				'epic/610',
@@ -227,10 +227,10 @@ describe('SwarmSetupService', () => {
 				'github',
 			)
 
-			// Should write swarm-mcp-config-path for each child
+			// Should write iloom-swarm-mcp-config-path for each child
 			const writeFileCalls = vi.mocked(fs.writeFile).mock.calls
 			const configPathWrites = writeFileCalls.filter(
-				(call) => typeof call[0] === 'string' && (call[0] as string).endsWith('swarm-mcp-config-path'),
+				(call) => typeof call[0] === 'string' && (call[0] as string).endsWith('iloom-swarm-mcp-config-path'),
 			)
 			expect(configPathWrites).toHaveLength(2)
 			// Each file should contain just the MCP config path string
