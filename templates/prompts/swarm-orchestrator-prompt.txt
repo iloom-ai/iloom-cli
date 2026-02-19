@@ -186,6 +186,7 @@ If the rebase has conflicts:
 
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
+3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
 
 #### Step 3.4: Check for Newly Unblocked Issues
 

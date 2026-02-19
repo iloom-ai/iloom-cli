@@ -388,6 +388,46 @@ export async function updateLinearIssueState(
 }
 
 /**
+ * Edit a Linear issue's properties (title, description)
+ * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param updates - Fields to update
+ * @throws LinearServiceError on update failure
+ */
+export async function editLinearIssue(
+  identifier: string,
+  updates: { title?: string; description?: string },
+): Promise<void> {
+  try {
+    logger.debug(`Editing Linear issue ${identifier}`, { updates })
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Build update payload
+    const updatePayload: { title?: string; description?: string } = {}
+    if (updates.title !== undefined) {
+      updatePayload.title = updates.title
+    }
+    if (updates.description !== undefined) {
+      updatePayload.description = updates.description
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      await client.updateIssue(issue.id, updatePayload)
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'editLinearIssue')
+  }
+}
+
+/**
  * Get a specific comment by ID
  * @param commentId - Linear comment UUID
  * @returns Comment details

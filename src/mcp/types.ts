@@ -134,6 +134,34 @@ export interface RemoveDependencyInput {
 }
 
 /**
+ * Input schema for closing an issue
+ */
+export interface CloseIssueInput {
+	number: string // Issue identifier
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Input schema for reopening an issue
+ */
+export interface ReopenIssueInput {
+	number: string // Issue identifier
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Input schema for editing an issue
+ */
+export interface EditIssueInput {
+	number: string // Issue identifier
+	title?: string | undefined // New issue title
+	body?: string | undefined // New issue body/description
+	state?: 'open' | 'closed' | undefined // New issue state
+	labels?: string[] | undefined // Labels to set on the issue
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
  * Single dependency result item
  */
 export interface DependencyResult {
@@ -341,4 +369,22 @@ export interface IssueManagementProvider {
 	 * @returns Array of child issues
 	 */
 	getChildIssues(input: GetChildIssuesInput): Promise<ChildIssueResult[]>
+
+	/**
+	 * Close an issue
+	 * @param input - The issue identifier and optional repo
+	 */
+	closeIssue(input: CloseIssueInput): Promise<void>
+
+	/**
+	 * Reopen a closed issue
+	 * @param input - The issue identifier and optional repo
+	 */
+	reopenIssue(input: ReopenIssueInput): Promise<void>
+
+	/**
+	 * Edit an issue's properties (title, body, state, labels)
+	 * @param input - The issue identifier and fields to update
+	 */
+	editIssue(input: EditIssueInput): Promise<void>
 }

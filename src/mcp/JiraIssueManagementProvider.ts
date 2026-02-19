@@ -19,6 +19,9 @@ import type {
 	DependenciesResult,
 	RemoveDependencyInput,
 	GetChildIssuesInput,
+	CloseIssueInput,
+	ReopenIssueInput,
+	EditIssueInput,
 	ChildIssueResult,
 	CreateIssueResult,
 	IssueResult,
@@ -415,5 +418,45 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 			url: `${host}/browse/${issue.key}`,
 			state: issue.fields.status.name.toLowerCase(),
 		}))
+	}
+
+	/**
+	 * Close an issue by transitioning to "Done" state
+	 */
+	async closeIssue(input: CloseIssueInput): Promise<void> {
+		const issueKey = this.tracker.normalizeIdentifier(input.number)
+		await this.tracker.closeIssue(issueKey)
+	}
+
+	/**
+	 * Reopen a closed issue
+	 */
+	async reopenIssue(input: ReopenIssueInput): Promise<void> {
+		const issueKey = this.tracker.normalizeIdentifier(input.number)
+		await this.tracker.reopenIssue(issueKey)
+	}
+
+	/**
+	 * Edit an issue's properties
+	 * State changes are delegated to closeIssue/reopenIssue
+	 */
+	async editIssue(input: EditIssueInput): Promise<void> {
+		const { number, title, body, state } = input
+
+		// Handle state changes via close/reopen
+		if (state === 'closed') {
+			await this.closeIssue({ number })
+		} else if (state === 'open') {
+			await this.reopenIssue({ number })
+		}
+
+		// Handle title/body updates via Jira API
+		if (title !== undefined || body !== undefined) {
+			const issueKey = this.tracker.normalizeIdentifier(number)
+			await this.tracker.getApiClient().updateIssue(issueKey, {
+				...(title !== undefined && { summary: title }),
+				...(body !== undefined && { description: body }),
+			})
+		}
 	}
 }

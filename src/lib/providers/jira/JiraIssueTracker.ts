@@ -228,6 +228,72 @@ export class JiraIssueTracker implements IssueTracker {
 	}
 
 	/**
+	 * Close an issue by transitioning to "Done" state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async closeIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Closing Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Done']
+			?? this.findTransitionByName(transitions, ['Done', 'Close', 'Closed', 'Resolve', 'Resolved'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Done" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue closed successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
+	 * Reopen an issue by transitioning back to an open state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async reopenIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Reopening Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Reopen']
+			?? this.findTransitionByName(transitions, ['Reopen', 'To Do', 'Open', 'Backlog'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Reopen" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue reopened successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
 	 * Extract context from issue for AI prompts
 	 */
 	extractContext(entity: Issue): string {

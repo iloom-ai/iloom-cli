@@ -25,6 +25,9 @@ import type {
 	GetDependenciesInput,
 	GetChildIssuesInput,
 	RemoveDependencyInput,
+	CloseIssueInput,
+	ReopenIssueInput,
+	EditIssueInput,
 } from './types.js'
 
 // Module-level settings loaded at startup
@@ -777,6 +780,170 @@ server.registerTool(
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to get child issues: ${errorMessage}`)
 			throw new Error(`Failed to get child issues: ${errorMessage}`)
+		}
+	}
+)
+
+// Register close_issue tool
+server.registerTool(
+	'close_issue',
+	{
+		title: 'Close Issue',
+		description:
+			'Close an issue in the configured issue tracker. ' +
+			'For GitHub: uses `gh issue close`. ' +
+			'For Linear: transitions issue to "Done" state. ' +
+			'For Jira: transitions issue to "Done" state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was closed successfully'),
+		},
+	},
+	async ({ number, repo }: CloseIssueInput) => {
+		console.error(`Closing issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.closeIssue({ number, repo })
+
+			console.error(`Issue closed successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to close issue: ${errorMessage}`)
+			throw new Error(`Failed to close issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Register reopen_issue tool
+server.registerTool(
+	'reopen_issue',
+	{
+		title: 'Reopen Issue',
+		description:
+			'Reopen a closed issue in the configured issue tracker. ' +
+			'For GitHub: uses `gh issue reopen`. ' +
+			'For Linear: transitions issue to "Todo" state. ' +
+			'For Jira: transitions issue to "Reopen" or "To Do" state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was reopened successfully'),
+		},
+	},
+	async ({ number, repo }: ReopenIssueInput) => {
+		console.error(`Reopening issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.reopenIssue({ number, repo })
+
+			console.error(`Issue reopened successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to reopen issue: ${errorMessage}`)
+			throw new Error(`Failed to reopen issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Register edit_issue tool
+server.registerTool(
+	'edit_issue',
+	{
+		title: 'Edit Issue',
+		description:
+			'Edit an issue\'s properties (title, body, state, labels) in the configured issue tracker. ' +
+			'State changes use close/reopen internally. ' +
+			'For GitHub: uses `gh issue edit` for field updates and `gh issue close/reopen` for state. ' +
+			'For Linear: uses Linear SDK to update fields and state transitions. ' +
+			'For Jira: uses REST API to update fields and transitions for state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			title: z.string().optional().describe('New issue title'),
+			body: z.string().optional().describe('New issue body/description'),
+			state: z.enum(['open', 'closed']).optional().describe('New issue state'),
+			labels: z.array(z.string()).optional().describe('Labels to add to the issue'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was edited successfully'),
+		},
+	},
+	async ({ number, title, body, state, labels, repo }: EditIssueInput) => {
+		console.error(`Editing issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.editIssue({ number, title, body, state, labels, repo })
+
+			console.error(`Issue edited successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to edit issue: ${errorMessage}`)
+			throw new Error(`Failed to edit issue: ${errorMessage}`)
 		}
 	}
 )
