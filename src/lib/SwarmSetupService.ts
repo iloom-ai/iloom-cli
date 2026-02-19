@@ -24,6 +24,7 @@ export interface SwarmSetupResult {
 	}>
 	agentsRendered: string[]
 	workerAgentRendered: boolean
+	skillsRendered: string[]
 }
 
 /**
@@ -34,6 +35,23 @@ export interface SwarmChildIssue {
 	title: string
 	body: string
 	url: string
+}
+
+/**
+ * Maps agent names to skill invocation names.
+ * Only agents in this allowlist get rendered as skills.
+ * New agents must be consciously added here after verifying
+ * they should run as inline skills in the worker context.
+ */
+const AGENT_TO_SKILL_MAP: Record<string, string> = {
+	'iloom-issue-enhancer': 'iloom-enhance',
+	'iloom-issue-complexity-evaluator': 'iloom-evaluate-complexity',
+	'iloom-issue-analyzer': 'iloom-analyze',
+	'iloom-issue-planner': 'iloom-plan',
+	'iloom-issue-analyze-and-plan': 'iloom-analyze-and-plan',
+	'iloom-issue-implementer': 'iloom-implement',
+	'iloom-code-reviewer': 'iloom-review',
+	'iloom-artifact-reviewer': 'iloom-artifact-review',
 }
 
 /**
@@ -222,6 +240,56 @@ export class SwarmSetupService {
 	}
 
 	/**
+	 * Render swarm skill files to the epic worktree's .claude/skills/ directory.
+	 *
+	 * Each mapped agent template is loaded with SWARM_MODE=true, stripped of agent
+	 * frontmatter, and wrapped in skill SKILL.md format with appropriate frontmatter
+	 * (name, description, disable-model-invocation: true).
+	 *
+	 * Only agents in AGENT_TO_SKILL_MAP are rendered. Unmapped agents (e.g.,
+	 * framework-detector) are silently skipped.
+	 *
+	 * Fail-fast: errors propagate to the caller (no try/catch wrapping).
+	 * Skills are mandatory for the worker to function - partial rendering
+	 * is worse than no setup at all.
+	 */
+	async renderSwarmSkills(epicWorktreePath: string): Promise<string[]> {
+		const settings = await this.settingsManager.loadSettings()
+
+		const templateVariables: TemplateVariables = {
+			SWARM_MODE: true,
+			...buildReviewTemplateVariables(settings?.agents),
+		}
+
+		const agents = await this.agentManager.loadAgents(settings, templateVariables)
+		const renderedSkills: string[] = []
+
+		for (const [agentName, agentConfig] of Object.entries(agents)) {
+			const skillName = AGENT_TO_SKILL_MAP[agentName]
+			if (!skillName) continue // skip agents not in the allowlist (e.g., framework-detector)
+
+			const skillDir = path.join(epicWorktreePath, '.claude', 'skills', skillName)
+			await fs.ensureDir(skillDir)
+
+			const frontmatter = [
+				'---',
+				`name: ${skillName}`,
+				`description: ${agentConfig.description}`,
+				'disable-model-invocation: true',
+				'---',
+			].join('\n')
+
+			const content = `${frontmatter}\n\n${agentConfig.prompt}\n`
+			await fs.writeFile(path.join(skillDir, 'SKILL.md'), content, 'utf-8')
+			renderedSkills.push(skillName)
+			getLogger().debug(`Rendered swarm skill: ${skillName}`)
+		}
+
+		getLogger().success(`Rendered ${renderedSkills.length} swarm skills`)
+		return renderedSkills
+	}
+
+	/**
 	 * Render the swarm worker agent file to the epic worktree's .claude/agents/ directory.
 	 *
 	 * This creates an agent file at `.claude/agents/iloom-swarm-worker.md` containing
@@ -258,7 +326,7 @@ export class SwarmSetupService {
 				'---',
 				'name: iloom-swarm-worker',
 				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
-				'model: sonnet',
+				'model: opus',
 				'---',
 			].join('\n')
 
@@ -306,6 +374,10 @@ export class SwarmSetupService {
 		// 3. Render the swarm worker agent file (used as subagent_type by the orchestrator)
 		const workerAgentRendered = await this.renderSwarmWorkerAgent(epicWorktreePath)
 
+		// 4. Render swarm skills to epic worktree's .claude/skills/ directory
+		// Fail-fast: errors propagate and abort the entire setup
+		const skillsRendered = await this.renderSwarmSkills(epicWorktreePath)
+
 		const successCount = childWorktrees.filter((c) => c.success).length
 		const failCount = childWorktrees.filter((c) => !c.success).length
 
@@ -320,6 +392,7 @@ export class SwarmSetupService {
 			childWorktrees,
 			agentsRendered,
 			workerAgentRendered,
+			skillsRendered,
 		}
 	}
 }
