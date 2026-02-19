@@ -258,7 +258,7 @@ export class SwarmSetupService {
 				'---',
 				'name: iloom-swarm-worker',
 				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
-				'model: sonnet',
+				'model: opus',
 				'---',
 			].join('\n')
 
