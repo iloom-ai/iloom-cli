@@ -67,8 +67,8 @@ il start "<issue-description>"
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
-| `--epic` | - | Force create as epic loom with child issues (skip prompt) |
-| `--no-epic` | - | Skip epic loom creation even if issue has children |
+| `--epic` | - | Force create as epic loom with child issues (skip prompt; ignored if no children) |
+| `--no-epic` | - | Skip epic loom creation even if issue has children (ignored if no children) |
 | `--claude` / `--no-claude` | - | Enable/disable Claude integration (default: enabled) |
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
@@ -134,7 +134,7 @@ il start 100 --no-epic
 - Creates isolated environment: Git worktree, database branch, unique port
 - All AI analysis is posted as issue comments for team visibility
 - Color codes the VS Code window for visual context switching
-- When an issue has child issues, prompts whether to create an epic loom (use `--epic`/`--no-epic` to skip the prompt)
+- When an issue has child issues, prompts whether to create an epic loom (use `--epic`/`--no-epic` to skip the prompt). These flags are silently ignored if the issue has no children.
 - Epic looms store child issue details and the dependency map in metadata for use by swarm mode during `il spin`
 
 ---
@@ -552,13 +552,13 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
 3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
-4. **Renders swarm skill** - Writes the iloom workflow skill to `.claude/skills/iloom-swarm-workflow/SKILL.md`
-5. **Launches orchestrator** - Starts Claude with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and `bypassPermissions` mode
+4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
+5. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
 - Spawns parallel agents for all unblocked child issues simultaneously
-- Each agent invokes the swarm workflow skill to implement its assigned issue
+- Each agent uses the `iloom-swarm-worker` custom agent type, receiving the full iloom workflow as its system prompt
 - Completed work is rebased and fast-forward merged into the epic branch for clean linear history
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
@@ -1560,12 +1560,12 @@ Only sibling dependencies (between child issues of the same epic) are included. 
 
 Each child agent runs in complete isolation:
 
-1. The orchestrator spawns the agent with a reference to the child's worktree path
-2. The agent invokes the `iloom-swarm-workflow` skill, which is the standard iloom issue workflow adapted for swarm mode
+1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm-worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
+2. The agent's system prompt contains the full iloom issue workflow adapted for swarm mode (high-authority instructions)
 3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
 4. On completion, the agent reports back to the orchestrator with status and summary
 
-The orchestrator uses `bypassPermissions` mode and Claude's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), both set automatically.
+The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature, both set automatically.
 
 ### Merge Strategy
 
@@ -1596,12 +1596,10 @@ During swarm mode, the following files are created:
 ~/project-looms/
 ├── epic-issue-100/                    # Epic worktree
 │   └── .claude/
-│       ├── agents/
-│       │   ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
-│       │   └── ...
-│       └── skills/
-│           └── iloom-swarm-workflow/
-│               └── SKILL.md           # Issue workflow adapted for swarm
+│       └── agents/
+│           ├── iloom-swarm-worker.md              # Worker agent with full iloom workflow
+│           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
+│           └── ...
 ├── issue-101/                         # Child worktree (branched off epic)
 │   └── iloom-metadata.json            # state: pending -> in_progress -> done
 ├── issue-102/                         # Another child worktree
@@ -1609,7 +1607,7 @@ During swarm mode, the following files are created:
 └── ...
 ```
 
-Swarm agent and skill files are automatically added to `.gitignore` by iloom migrations.
+Swarm agent files are automatically added to `.gitignore` by iloom migrations.
 
 ---
 

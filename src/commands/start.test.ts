@@ -2002,7 +2002,7 @@ describe('StartCommand', () => {
 			)
 		})
 
-		it('should warn and proceed normally when --epic flag used but no children exist', async () => {
+		it('should silently ignore --epic flag and proceed normally when no children exist', async () => {
 			vi.mocked(fetchChildIssues).mockResolvedValue([])
 
 			await epicCommand.execute({
