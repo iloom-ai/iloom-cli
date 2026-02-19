@@ -14,6 +14,9 @@ vi.mock('../utils/github.js', () => ({
 	getIssueDependencies: vi.fn(),
 	createIssueDependency: vi.fn(),
 	removeIssueDependency: vi.fn(),
+	closeGhIssue: vi.fn(),
+	reopenGhIssue: vi.fn(),
+	editGhIssue: vi.fn(),
 }))
 
 import {
@@ -25,6 +28,9 @@ import {
 	getIssueDependencies,
 	createIssueDependency,
 	removeIssueDependency,
+	closeGhIssue,
+	reopenGhIssue,
+	editGhIssue,
 } from '../utils/github.js'
 
 describe('extractNumericIdFromUrl', () => {
@@ -860,6 +866,120 @@ describe('GitHubIssueManagementProvider', () => {
 			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
 
 			expect(getIssueDatabaseId).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('closeIssue', () => {
+		it('calls closeGhIssue with correct args', async () => {
+			vi.mocked(closeGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.closeIssue({ number: '123' })
+
+			expect(closeGhIssue).toHaveBeenCalledWith(123, undefined)
+		})
+
+		it('passes --repo when repo is provided', async () => {
+			vi.mocked(closeGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.closeIssue({ number: '456', repo: 'other-owner/other-repo' })
+
+			expect(closeGhIssue).toHaveBeenCalledWith(456, 'other-owner/other-repo')
+		})
+
+		it('throws on invalid issue number', async () => {
+			await expect(
+				provider.closeIssue({ number: 'invalid' })
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(closeGhIssue).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('reopenIssue', () => {
+		it('calls reopenGhIssue with correct args', async () => {
+			vi.mocked(reopenGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.reopenIssue({ number: '123' })
+
+			expect(reopenGhIssue).toHaveBeenCalledWith(123, undefined)
+		})
+
+		it('passes --repo when repo is provided', async () => {
+			vi.mocked(reopenGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.reopenIssue({ number: '456', repo: 'other-owner/other-repo' })
+
+			expect(reopenGhIssue).toHaveBeenCalledWith(456, 'other-owner/other-repo')
+		})
+
+		it('throws on invalid issue number', async () => {
+			await expect(
+				provider.reopenIssue({ number: 'invalid' })
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(reopenGhIssue).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('editIssue', () => {
+		it('calls editGhIssue with title', async () => {
+			vi.mocked(editGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', title: 'New Title' })
+
+			expect(editGhIssue).toHaveBeenCalledWith(123, { title: 'New Title' }, undefined)
+		})
+
+		it('calls editGhIssue with body', async () => {
+			vi.mocked(editGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', body: 'New Body' })
+
+			expect(editGhIssue).toHaveBeenCalledWith(123, { body: 'New Body' }, undefined)
+		})
+
+		it('calls editGhIssue with labels', async () => {
+			vi.mocked(editGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', labels: ['bug', 'enhancement'] })
+
+			expect(editGhIssue).toHaveBeenCalledWith(123, { labels: ['bug', 'enhancement'] }, undefined)
+		})
+
+		it('handles state change to closed via closeIssue', async () => {
+			vi.mocked(closeGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', state: 'closed' })
+
+			expect(closeGhIssue).toHaveBeenCalledWith(123, undefined)
+			expect(editGhIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change to open via reopenIssue', async () => {
+			vi.mocked(reopenGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', state: 'open' })
+
+			expect(reopenGhIssue).toHaveBeenCalledWith(123, undefined)
+			expect(editGhIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change with field updates', async () => {
+			vi.mocked(closeGhIssue).mockResolvedValueOnce(undefined)
+			vi.mocked(editGhIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: '123', state: 'closed', title: 'Updated Title' })
+
+			expect(closeGhIssue).toHaveBeenCalledWith(123, undefined)
+			expect(editGhIssue).toHaveBeenCalledWith(123, { title: 'Updated Title' }, undefined)
+		})
+
+		it('throws on invalid issue number', async () => {
+			await expect(
+				provider.editIssue({ number: 'invalid', title: 'New Title' })
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(editGhIssue).not.toHaveBeenCalled()
 		})
 	})
 })

@@ -331,6 +331,23 @@ export class JiraApiClient {
 	}
 
 	/**
+	 * Update an issue's fields (summary, description)
+	 * @param issueKey - Jira issue key (e.g., "PROJ-123")
+	 * @param fields - Fields to update
+	 */
+	async updateIssue(issueKey: string, fields: { summary?: string; description?: string }): Promise<void> {
+		const updateFields: Record<string, unknown> = {}
+		if (fields.summary !== undefined) {
+			updateFields.summary = fields.summary
+		}
+		if (fields.description !== undefined) {
+			updateFields.description = markdownToAdf(fields.description)
+		}
+
+		await this.put(`/issue/${issueKey}`, { fields: updateFields })
+	}
+
+	/**
 	 * Create an issue with a parent (subtask or child issue)
 	 * Accepts Markdown description which is converted to ADF for Jira
 	 */
