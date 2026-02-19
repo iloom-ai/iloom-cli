@@ -23,7 +23,7 @@ export interface SwarmSetupResult {
 		error?: string
 	}>
 	agentsRendered: string[]
-	skillRendered: boolean
+	workerAgentRendered: boolean
 }
 
 /**
@@ -222,19 +222,28 @@ export class SwarmSetupService {
 	}
 
 	/**
-	 * Render the swarm workflow skill to the epic worktree's .claude/skills/ directory.
+	 * Render the swarm worker agent file to the epic worktree's .claude/agents/ directory.
+	 *
+	 * This creates an agent file at `.claude/agents/iloom-swarm-worker.md` containing
+	 * the full iloom workflow instructions (rendered from issue-prompt.txt with SWARM_MODE=true).
+	 * The orchestrator spawns children with `subagent_type: "iloom-swarm-worker"` so these
+	 * instructions become the agent's system prompt (high authority), rather than arriving
+	 * as a skill invocation (low authority user message).
+	 *
+	 * The agent file is shared across all children. Issue-specific context (number, title,
+	 * worktree path, body) is provided per-child via the Task prompt from the orchestrator.
 	 */
-	async renderSwarmSkill(epicWorktreePath: string): Promise<boolean> {
-		const skillDir = path.join(epicWorktreePath, '.claude', 'skills', 'iloom-swarm-workflow')
-		const skillOutputPath = path.join(skillDir, 'SKILL.md')
+	async renderSwarmWorkerAgent(epicWorktreePath: string): Promise<boolean> {
+		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-worker.md')
 
-		await fs.ensureDir(skillDir)
+		await fs.ensureDir(agentsDir)
 
 		try {
 			// Load settings for review configuration
 			const settings = await this.settingsManager.loadSettings()
 
-			// Build template variables for swarm skill rendering
+			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
@@ -242,23 +251,34 @@ export class SwarmSetupService {
 			}
 
 			// Render issue prompt template with swarm variables
-			const skillContent = await this.templateManager.getPrompt('issue', variables)
-			await fs.writeFile(skillOutputPath, skillContent, 'utf-8')
-			getLogger().success(`Rendered swarm skill to ${skillOutputPath}`)
+			const agentBody = await this.templateManager.getPrompt('issue', variables)
+
+			// Build the agent file with frontmatter
+			const frontmatter = [
+				'---',
+				'name: iloom-swarm-worker',
+				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
+				'model: sonnet',
+				'---',
+			].join('\n')
+
+			const content = `${frontmatter}\n\n${agentBody}\n`
+
+			await fs.writeFile(agentOutputPath, content, 'utf-8')
+			getLogger().success(`Rendered swarm worker agent to ${agentOutputPath}`)
 			return true
 		} catch (error) {
-			// Intentional graceful degradation: setupSwarm reports skillRendered=false
-			// in its result rather than aborting the entire swarm setup. The caller
-			// (ignite.ts) can decide whether a missing skill is fatal.
+			// Intentional graceful degradation: setupSwarm reports workerAgentRendered=false
+			// in its result rather than aborting the entire swarm setup.
 			getLogger().warn(
-				`Failed to render swarm skill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				`Failed to render swarm worker agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			)
 			return false
 		}
 	}
 
 	/**
-	 * Run the full swarm setup: child worktrees, agents, and skill.
+	 * Run the full swarm setup: child worktrees, agents, and worker agent.
 	 *
 	 * The epic worktree already exists (created by `il start`).
 	 */
@@ -283,8 +303,8 @@ export class SwarmSetupService {
 		// 2. Render swarm agents to epic worktree's .claude/ directory
 		const agentsRendered = await this.renderSwarmAgents(epicWorktreePath)
 
-		// 3. Render swarm skill to epic worktree's .claude/ directory
-		const skillRendered = await this.renderSwarmSkill(epicWorktreePath)
+		// 3. Render the swarm worker agent file (used as subagent_type by the orchestrator)
+		const workerAgentRendered = await this.renderSwarmWorkerAgent(epicWorktreePath)
 
 		const successCount = childWorktrees.filter((c) => c.success).length
 		const failCount = childWorktrees.filter((c) => !c.success).length
@@ -299,7 +319,7 @@ export class SwarmSetupService {
 			epicBranch,
 			childWorktrees,
 			agentsRendered,
-			skillRendered,
+			workerAgentRendered,
 		}
 	}
 }
