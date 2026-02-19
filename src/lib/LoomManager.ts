@@ -106,7 +106,7 @@ export class LoomManager {
 
     // 3. Create git worktree (WITHOUT dependency installation)
     getLogger().info('Creating git worktree...')
-    const worktreePath = await this.createWorktreeOnly(input, branchName)
+    const worktreePath = await this.createWorktreeOnly(input, branchName, issueData)
 
     // 4. Load main .env variables into process.env (like bash script lines 336-339)
     this.loadMainEnvFile()
@@ -291,11 +291,14 @@ export class LoomManager {
         }
 
         // Create draft PR
+        // For child looms, target the parent branch; otherwise use the configured main branch
+        const draftBaseBranch = input.parentLoom?.branchName ?? settingsData.mainBranch ?? 'main'
         getLogger().info('Creating draft PR...')
         const prResult = await prManager.createDraftPR(
           branchName,
           prTitle,
           prBody,
+          draftBaseBranch,
           worktreePath
         )
 
@@ -436,6 +439,7 @@ export class LoomManager {
       branchName,
       worktreePath,
       issueType: input.type,
+      ...(input.type === 'issue' && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
       issue_numbers,
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
@@ -656,7 +660,8 @@ export class LoomManager {
    */
   private async createWorktreeOnly(
     input: CreateLoomInput,
-    branchName: string
+    branchName: string,
+    issueData?: Issue | PullRequest | null
   ): Promise<string> {
     // Ensure repository has at least one commit (needed for worktree creation)
     // This handles the case where the repo is completely empty (post git init, pre-first commit)
@@ -693,18 +698,38 @@ export class LoomManager {
       pathOptions
     )
 
+    // Detect if this is a fork PR
+    const isForkPR = input.type === 'pr' && issueData && 'isFork' in issueData && (issueData as PullRequest).isFork === true
+
     // Fetch all remote branches to ensure we have latest refs (especially for PRs)
     // Ports: bash script lines 667-674
     if (input.type === 'pr') {
-      getLogger().info('Fetching all remote branches...')
-      try {
-        await executeGitCommand(['fetch', 'origin'], { cwd: this.gitWorktree.workingDirectory })
-        getLogger().success('Successfully fetched from remote')
-      } catch (error) {
-        throw new Error(
-          `Failed to fetch from remote: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
-          `Make sure you have access to the repository.`
-        )
+      if (isForkPR) {
+        // Fork PR: fetch the specific PR ref since the branch doesn't exist on origin
+        getLogger().info(`Fetching PR #${input.identifier} ref from origin...`)
+        try {
+          await executeGitCommand(
+            ['fetch', 'origin', `refs/pull/${input.identifier}/head`],
+            { cwd: this.gitWorktree.workingDirectory }
+          )
+          getLogger().success('Successfully fetched PR ref from remote')
+        } catch (error) {
+          throw new Error(
+            `Failed to fetch PR ref: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+            `Make sure you have access to the repository.`
+          )
+        }
+      } else {
+        getLogger().info('Fetching all remote branches...')
+        try {
+          await executeGitCommand(['fetch', 'origin'], { cwd: this.gitWorktree.workingDirectory })
+          getLogger().success('Successfully fetched from remote')
+        } catch (error) {
+          throw new Error(
+            `Failed to fetch from remote: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+            `Make sure you have access to the repository.`
+          )
+        }
       }
     }
 
@@ -748,23 +773,39 @@ export class LoomManager {
       baseBranch = input.baseBranch
     }
 
-    await this.gitWorktree.createWorktree({
-      path: worktreePath,
-      branch: branchName,
-      createBranch: input.type !== 'pr', // PRs use existing branches
-      ...(baseBranch && { baseBranch }),
-    })
+    if (isForkPR) {
+      // Fork PR: create a new local branch from FETCH_HEAD (the PR ref we just fetched)
+      // If the branch already exists locally (e.g. re-running il start on the same fork PR),
+      // delete it first since createBranch (-b) would fail
+      if (branchExistedLocally) {
+        await executeGitCommand(['branch', '-D', branchName], { cwd: this.gitWorktree.workingDirectory })
+      }
+      await this.gitWorktree.createWorktree({
+        path: worktreePath,
+        branch: branchName,
+        createBranch: true,
+        baseBranch: 'FETCH_HEAD',
+      })
+      // No reset or upstream tracking needed for fork PRs - there's no remote branch on origin
+    } else {
+      await this.gitWorktree.createWorktree({
+        path: worktreePath,
+        branch: branchName,
+        createBranch: input.type !== 'pr', // PRs use existing branches
+        ...(baseBranch && { baseBranch }),
+      })
 
-    // Reset PR branch to match remote exactly (if we created a new local branch)
-    // Ports: bash script lines 689-713
-    if (input.type === 'pr' && !branchExistedLocally) {
-      getLogger().info('Resetting new PR branch to match remote exactly...')
-      try {
-        await executeGitCommand(['reset', '--hard', `origin/${branchName}`], { cwd: worktreePath })
-        await executeGitCommand(['branch', '--set-upstream-to', `origin/${branchName}`], { cwd: worktreePath })
-        getLogger().success('Successfully reset to match remote')
-      } catch (error) {
-        getLogger().warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Reset PR branch to match remote exactly (if we created a new local branch)
+      // Ports: bash script lines 689-713
+      if (input.type === 'pr' && !branchExistedLocally) {
+        getLogger().info('Resetting new PR branch to match remote exactly...')
+        try {
+          await executeGitCommand(['reset', '--hard', `origin/${branchName}`], { cwd: worktreePath })
+          await executeGitCommand(['branch', '--set-upstream-to', `origin/${branchName}`], { cwd: worktreePath })
+          getLogger().success('Successfully reset to match remote')
+        } catch (error) {
+          getLogger().warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
       }
     }
 
@@ -1128,8 +1169,9 @@ export class LoomManager {
         type = loomMetadata.issueType
 
         // Extract identifier from metadata based on type
-        if (type === 'issue' && loomMetadata.issue_numbers?.[0]) {
-          const issueId = loomMetadata.issue_numbers[0]
+        // Prefer issueKey (canonical case) over issue_numbers (may be lowercase from branch extraction)
+        if (type === 'issue' && (loomMetadata.issueKey || loomMetadata.issue_numbers?.[0])) {
+          const issueId = loomMetadata.issueKey ?? loomMetadata.issue_numbers[0] ?? ''
           // Try to parse as number, otherwise keep as string (for alphanumeric IDs)
           const numericId = parseInt(issueId, 10)
           identifier = isNaN(numericId) ? issueId : numericId
@@ -1553,6 +1595,7 @@ export class LoomManager {
         branchName,
         worktreePath,
         issueType: input.type,
+        ...(input.type === 'issue' && { issueKey: this.issueTracker.normalizeIdentifier(input.identifier) }),
         issue_numbers,
         pr_numbers,
         issueTracker: this.issueTracker.providerName,

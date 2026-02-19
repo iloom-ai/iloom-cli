@@ -337,7 +337,7 @@ describe('github utils', () => {
 					'view',
 					'456',
 					'--json',
-					'number,title,body,state,headRefName,baseRefName,url,isDraft,mergeable,createdAt,updatedAt',
+					'number,title,body,state,headRefName,baseRefName,url,isDraft,isCrossRepository,mergeable,createdAt,updatedAt',
 				],
 				expect.any(Object)
 			)

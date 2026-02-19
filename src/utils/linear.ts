@@ -74,10 +74,12 @@ function getLinearApiToken(): string {
 
 /**
  * Create a Linear SDK client instance
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Configured LinearClient
  */
-function createLinearClient(): LinearClient {
-  return new LinearClient({ apiKey: getLinearApiToken() })
+function createLinearClient(apiToken?: string): LinearClient {
+  const token = apiToken ?? getLinearApiToken()
+  return new LinearClient({ apiKey: token })
 }
 
 /**
@@ -491,15 +493,18 @@ export async function fetchLinearIssueComments(identifier: string): Promise<Line
 /**
  * Get child issues of a parent Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param options - Optional settings
+ * @param options.apiToken - Optional API token (takes precedence over env var)
  * @returns Array of child issues
  * @throws LinearServiceError on fetch failure
  */
 export async function getLinearChildIssues(
   identifier: string,
+  options?: { apiToken?: string },
 ): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
   try {
     logger.debug(`Fetching child issues for Linear issue: ${identifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(options?.apiToken)
 
     // Get issue by identifier
     const issue = await client.issue(identifier)
@@ -691,6 +696,82 @@ export async function deleteLinearIssueRelation(relationId: string): Promise<voi
       throw error
     }
     handleLinearError(error, 'deleteLinearIssueRelation')
+  }
+}
+
+// Issue List Operations (for il issues command)
+
+export interface LinearIssueListItem {
+  id: string
+  title: string
+  updatedAt: string
+  url: string
+  state: string
+}
+
+/**
+ * Fetch a list of active Linear issues for a team, sorted by recently updated
+ * @param teamKey - Team key (e.g., "ENG", "PLAT")
+ * @param options - Fetch options
+ * @param options.limit - Maximum number of issues to return (default: 100)
+ * @param options.apiToken - Optional API token (takes precedence over env var)
+ * @returns Array of issues
+ * @throws LinearServiceError on fetch failure
+ */
+export async function fetchLinearIssueList(
+  teamKey: string,
+  options?: { limit?: number; apiToken?: string },
+): Promise<LinearIssueListItem[]> {
+  try {
+    const limit = options?.limit ?? 100
+
+    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit })
+    const client = createLinearClient(options?.apiToken)
+
+    // Get team by key
+    const teams = await client.teams()
+    const team = teams.nodes.find((t) => t.key === teamKey)
+
+    if (!team) {
+      throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
+    }
+
+    // Fetch issues: filter out completed and canceled states, order by updatedAt
+    const issues = await team.issues({
+      first: limit,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PaginationOrderBy is a const enum incompatible with isolatedModules
+      orderBy: 'updatedAt' as any,
+      filter: {
+        state: {
+          type: {
+            nin: ['completed', 'canceled'],
+          },
+        },
+      },
+    })
+
+    // Build results, resolving state names in parallel
+    const results = await Promise.all(
+      issues.nodes.map(async (issue) => {
+        const stateObj = await issue.state
+        const state = stateObj?.name ?? 'unknown'
+
+        return {
+          id: issue.identifier,
+          title: issue.title,
+          updatedAt: issue.updatedAt.toISOString(),
+          url: issue.url,
+          state,
+        }
+      }),
+    )
+
+    return results
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'fetchLinearIssueList')
   }
 }
 

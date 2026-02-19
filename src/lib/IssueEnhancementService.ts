@@ -1,6 +1,7 @@
 import type { IssueTracker } from './IssueTracker.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
+import type { TemplateVariables } from './PromptTemplateManager.js'
 import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
@@ -77,28 +78,38 @@ export class IssueEnhancementService {
 		try {
 			getLogger().info('Enhancing description with Claude Code. This may take a moment...')
 
-			// Load agent configurations
+			// Load only the enhancer agent with template variables so Handlebars expressions resolve
 			const settings = await this.settingsManager.loadSettings()
-			const loadedAgents = await this.agentManager.loadAgents(settings)
+			const templateVariables: TemplateVariables = {
+				STANDARD_ISSUE_MODE: true,
+				DIRECT_PROMPT_MODE: true,
+			}
+			const loadedAgents = await this.agentManager.loadAgents(
+				settings,
+				templateVariables,
+				['iloom-issue-enhancer.md']
+			)
 			const agents = this.agentManager.formatForCli(loadedAgents)
 
 			// Call Claude in headless mode with issue enhancer agent
 			const prompt = `@agent-iloom-issue-enhancer
 
-TASK: Enhance the following issue description for GitHub.
+TASK: Enhance the following issue description for the issue tracker.
 
 INPUT:
 ${description}
 
 OUTPUT REQUIREMENTS:
 - Return ONLY the enhanced description markdown text
+- Use GitHub-Flavored Markdown syntax ONLY
+- NEVER use Jira Wiki format (e.g., {code}, h1., *bold*, {quote}, [link|url])
 - NO meta-commentary (no "Here is...", "The enhanced...", "I have...", etc)
 - NO code block markers (\`\`\`)
 - NO conversational framing or acknowledgments
 - NO explanations of your work
 - Start your response immediately with the enhanced content
 
-Your response should be the raw markdown that will become the GitHub issue body.`
+Your response should be the raw markdown that will become the issue body.`
 
 			const enhanced = await launchClaude(prompt, {
 				headless: true,
@@ -197,9 +208,17 @@ Press any key to open issue for editing...`
 	): Promise<EnhanceExistingIssueResult> {
 		const { author, repo } = options ?? {}
 
-		// Load agent configurations
+		// Load only the enhancer agent with template variables so Handlebars expressions resolve
 		const settings = await this.settingsManager.loadSettings()
-		const loadedAgents = await this.agentManager.loadAgents(settings)
+		const templateVariables: TemplateVariables = {
+			ISSUE_NUMBER: issueNumber,
+			STANDARD_ISSUE_MODE: true,
+		}
+		const loadedAgents = await this.agentManager.loadAgents(
+			settings,
+			templateVariables,
+			['iloom-issue-enhancer.md']
+		)
 		const agents = this.agentManager.formatForCli(loadedAgents)
 
 		// Generate MCP config and tool filtering for issue management

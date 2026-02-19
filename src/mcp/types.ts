@@ -5,7 +5,7 @@
 /**
  * Supported issue management providers
  */
-export type IssueProvider = 'github' | 'linear'
+export type IssueProvider = 'github' | 'linear' | 'jira'
 
 /**
  * Environment variables required by MCP server

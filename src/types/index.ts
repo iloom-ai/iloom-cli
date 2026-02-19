@@ -68,6 +68,7 @@ export interface PullRequest {
   baseBranch: string
   url: string
   isDraft: boolean
+  isFork?: boolean
 }
 
 // Issue Tracker types
@@ -184,6 +185,7 @@ export interface FinishOptions {
   noBrowser?: boolean // --no-browser - Skip opening PR in browser (github-pr mode only)
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
+  skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
 }
 
 /**
@@ -336,6 +338,7 @@ export interface CommitOptions {
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)
 	skipVerifySilent?: boolean  // Skip without warning (for --wip-commit)
 	trailerType?: 'Refs' | 'Fixes'  // Trailer type: "Refs" references issue, "Fixes" closes it (default: 'Fixes' for backward compat)
+	timeout?: number      // Timeout in milliseconds for commit operation
 }
 
 /**

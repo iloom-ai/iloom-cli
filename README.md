@@ -128,6 +128,15 @@ Each loom is a fully isolated container for your work:
 
 *   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`. See [Secret Storage Limitations](#multi-language-project-support) for frameworks with encrypted credentials.
 
+    When inside a loom shell (`il shell`), the following environment variables are automatically set:
+
+    | Variable | Description | Example |
+    |----------|-------------|---------|
+    | `ILOOM_LOOM` | Loom identifier for PS1 customization | `issue-87` |
+    | `ILOOM_COLOR_HEX` | Hex color assigned to this loom (if available) | `#dcebff` |
+
+    `ILOOM_COLOR_HEX` is useful for downstream tools that want to visually distinguish looms. For example, a Vite app can read it via `import.meta.env.VITE_ILOOM_COLOR_HEX` to tint the UI. See [Vite Integration Guide](docs/vite-iloom-color.md) for details.
+
 *   **Unique Runtime:**
     
     *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
@@ -439,12 +448,61 @@ Integrations
 
 ### Issue Trackers
 
-iloom supports the tools you already use. Unless you use JIRA.
+iloom supports multiple issue tracking providers to fit your team's workflow.
 
 | **Provider** | **Setup** | **Notes** |
 |--------------|-----------|-----------|
 | **GitHub**   | `gh auth login` | Default. Supports Issues and Pull Requests automatically. |
 | **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
+| **Jira**     | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [Jira Setup](#jira-setup) below. |
+
+### Jira Setup
+
+To use Jira as your issue tracker, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ",
+      "boardId": "123",
+      "doneStatuses": ["Done", "Closed"],
+      "transitionMappings": {
+        "In Review": "Start Review"
+      }
+    }
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token-here"
+    }
+  }
+}
+```
+
+**Generate a Jira API Token:**
+1. Visit https://id.atlassian.com/manage-profile/security/api-tokens
+2. Click "Create API token"
+3. Copy the token to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `host`: Your Jira Cloud instance URL
+- `username`: Your Jira email address
+- `apiToken`: API token (store in settings.local.json only!)
+- `projectKey`: Jira project key (e.g., "PROJ", "ENG")
+- `boardId`: (Optional) Board ID for sprint/workflow operations
+- `doneStatuses`: (Optional) Status names to exclude from `il issues` lists (default: `["Done"]`). Set to match your Jira workflow, e.g., `["Done", "Closed", "Verified"]`
+- `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
 
 
 ### IDE Support
@@ -453,7 +511,26 @@ iloom creates isolated workspace settings for your editor. Color synchronization
 *   **Supported:** VS Code, Cursor, Windsurf, Antigravity, WebStorm, IntelliJ, Sublime Text.
     
 *   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
-    
+
+### Git Operation Settings
+
+Configure git operation timeouts for projects with long-running pre-commit hooks.
+
+**.iloom/settings.json**
+```json
+{
+  "git": {
+    "commitTimeout": 120000
+  }
+}
+```
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| `git.commitTimeout` | 60000 (60s) | 1000-600000 | Timeout in milliseconds for git commit operations. Increase if pre-commit hooks (linting, tests, type checking) exceed the default timeout. |
+
+**When to increase:** If you see timeout errors during `il commit` or `il finish`, your pre-commit hooks are taking longer than the default 60 seconds. Set a higher value based on your typical hook duration.
+
 
 Advanced Features
 -----------------
@@ -628,7 +705,7 @@ License & Name
     
 *   ❌ You cannot resell iloom itself as a product or SaaS.
     
-*   Converts to Apache 2.0 on 2030-02-06.
+*   Converts to Apache 2.0 on 2030-02-16.
     
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.

@@ -17,6 +17,7 @@ export interface MetadataFile {
   branchName?: string
   worktreePath?: string
   issueType?: 'branch' | 'issue' | 'pr'
+  issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers?: string[]
   pr_numbers?: string[]
   issueTracker?: string
@@ -50,6 +51,7 @@ export interface WriteMetadataInput {
   branchName: string
   worktreePath: string
   issueType: 'branch' | 'issue' | 'pr'
+  issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string
@@ -84,6 +86,7 @@ export interface LoomMetadata {
   branchName: string | null
   worktreePath: string | null
   issueType: 'branch' | 'issue' | 'pr' | null
+  issueKey: string | null // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string | null
@@ -137,6 +140,7 @@ export class MetadataManager {
       branchName: data.branchName ?? null,
       worktreePath: data.worktreePath ?? null,
       issueType: data.issueType ?? null,
+      issueKey: data.issueKey ?? null,
       issue_numbers: data.issue_numbers ?? [],
       pr_numbers: data.pr_numbers ?? [],
       issueTracker: data.issueTracker ?? null,
@@ -218,6 +222,7 @@ export class MetadataManager {
         branchName: input.branchName,
         worktreePath: input.worktreePath,
         issueType: input.issueType,
+        ...(input.issueKey && { issueKey: input.issueKey }),
         issue_numbers: input.issue_numbers,
         pr_numbers: input.pr_numbers,
         issueTracker: input.issueTracker,

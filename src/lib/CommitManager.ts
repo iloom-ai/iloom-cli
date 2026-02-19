@@ -95,7 +95,7 @@ export class CommitManager {
         if (options.skipVerify) {
           commitArgs.push('--no-verify')
         }
-        await executeGitCommand(commitArgs, { cwd: worktreePath })
+        await executeGitCommand(commitArgs, { cwd: worktreePath, ...(options.timeout !== undefined && { timeout: options.timeout }) })
       } else {
         // Prompt user for action instead of going straight to editor
         const action = await promptCommitAction(message)
@@ -110,7 +110,7 @@ export class CommitManager {
           if (options.skipVerify) {
             commitArgs.push('--no-verify')
           }
-          await executeGitCommand(commitArgs, { cwd: worktreePath })
+          await executeGitCommand(commitArgs, { cwd: worktreePath, ...(options.timeout !== undefined && { timeout: options.timeout }) })
         } else {
           // action === 'edit': Use git editor for user review
           getLogger().info('Opening editor for commit message review...')
@@ -135,7 +135,7 @@ export class CommitManager {
             await executeGitCommand(commitArgs, {
               cwd: worktreePath,
               stdio: 'inherit',
-              timeout: 300000 // 5 minutes for interactive editing
+              timeout: Math.max(options.timeout ?? 0, 300000) // Use the larger of configured timeout or 5 minutes for interactive editing
             })
           }
         }
@@ -215,7 +215,7 @@ export class CommitManager {
 
       // Rewrite the file without comments for git commit -F
       await writeFile(commitMsgPath, finalMessage, 'utf-8')
-      await executeGitCommand(commitArgs, { cwd: worktreePath })
+      await executeGitCommand(commitArgs, { cwd: worktreePath, ...(options.timeout !== undefined && { timeout: options.timeout }) })
 
     } finally {
       // Clean up - git normally handles this but we should be safe

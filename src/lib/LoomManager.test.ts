@@ -10,7 +10,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin } from '../utils/git.js'
+import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand } from '../utils/git.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
@@ -288,6 +288,97 @@ describe('LoomManager', () => {
       expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
     })
 
+    it('should fetch PR ref and create worktree from FETCH_HEAD for fork PRs', async () => {
+      const prInput: CreateLoomInput = {
+        type: 'pr',
+        identifier: 586,
+        originalInput: 'pr/586',
+      }
+
+      // Mock GitHub PR fetch returning a fork PR
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 586,
+        title: 'Add git commit timeout',
+        body: 'PR from fork',
+        state: 'open',
+        branch: 'feature/git-commit-timeout',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/586',
+        isDraft: false,
+        isFork: true,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-fork-pr'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3586)
+
+      const result = await manager.createIloom(prInput)
+
+      expect(result.type).toBe('pr')
+      expect(result.identifier).toBe(586)
+      expect(result.branch).toBe('feature/git-commit-timeout')
+
+      // Verify git fetch was called with refs/pull/586/head (fork PR ref)
+      expect(executeGitCommand).toHaveBeenCalledWith(
+        ['fetch', 'origin', 'refs/pull/586/head'],
+        expect.any(Object)
+      )
+
+      // Verify worktree was created with createBranch: true and baseBranch: 'FETCH_HEAD'
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branch: 'feature/git-commit-timeout',
+          createBranch: true,
+          baseBranch: 'FETCH_HEAD',
+        })
+      )
+    })
+
+    it('should use existing branch for same-repo PRs (existing behavior)', async () => {
+      const prInput: CreateLoomInput = {
+        type: 'pr',
+        identifier: 456,
+        originalInput: 'pr/456',
+      }
+
+      // Mock GitHub PR fetch returning a same-repo PR (no isFork or isFork: false)
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 456,
+        title: 'Test PR',
+        body: 'Test PR description',
+        state: 'open',
+        branch: 'feature-branch',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/456',
+        isDraft: false,
+        isFork: false,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-feature-branch'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      await manager.createIloom(prInput)
+
+      // Verify git fetch was called with just 'origin' (not a specific PR ref)
+      expect(executeGitCommand).toHaveBeenCalledWith(
+        ['fetch', 'origin'],
+        expect.any(Object)
+      )
+
+      // Verify worktree was created with createBranch: false (existing branch)
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branch: 'feature-branch',
+          createBranch: false,
+        })
+      )
+    })
+
     it('should populate both issueUrls and prUrls for PR with issue branch', async () => {
       const prInput: CreateLoomInput = {
         type: 'pr',
@@ -536,6 +627,7 @@ describe('LoomManager', () => {
         expect.any(String), // branch name
         'Test Linear Issue', // PR title from issue
         expect.stringContaining('Fixes 123'), // PR body with Fixes keyword (no prefix for Linear)
+        'main', // base branch
         expectedPath // worktree path
       )
 
@@ -589,6 +681,7 @@ describe('LoomManager', () => {
         'my-feature', // branch name
         'Work on my-feature', // PR title from branch name (no issue data)
         expect.stringContaining('Branch: my-feature'), // PR body for branch mode
+        'main', // base branch
         expectedPath // worktree path
       )
 
@@ -600,6 +693,63 @@ describe('LoomManager', () => {
           pr_numbers: ['99'],
           prUrls: { '99': 'https://github.com/owner/repo/pull/99' },
         })
+      )
+    })
+
+    it('should create draft PR targeting parent branch for child looms', async () => {
+      mockCreateDraftPR.mockResolvedValue({ number: 101, url: 'https://github.com/owner/repo/pull/101' })
+      mockCheckForExistingPR.mockResolvedValue(null)
+
+      // Mock settings with github-draft-pr mode
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      // Mock issue fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 456,
+        title: 'Child Issue',
+        body: 'Child description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/456',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-456'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      // Child loom input with parent loom
+      const childInput: CreateLoomInput = {
+        type: 'issue',
+        identifier: 456,
+        originalInput: '456',
+        parentLoom: {
+          type: 'issue',
+          identifier: 123,
+          branchName: 'feature/parent-branch',
+          worktreePath: '/test/worktree-issue-123',
+        },
+      }
+
+      const result = await manager.createIloom(childInput)
+
+      expect(result.path).toBe(expectedPath)
+
+      // Verify draft PR targets the parent branch, NOT main
+      expect(mockCreateDraftPR).toHaveBeenCalledWith(
+        expect.any(String), // branch name
+        'Child Issue', // PR title
+        expect.stringContaining('Fixes #456'), // PR body with Fixes keyword
+        'feature/parent-branch', // base branch should be parent's branch
+        expectedPath // worktree path
       )
     })
 

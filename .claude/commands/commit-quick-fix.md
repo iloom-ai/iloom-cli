@@ -48,7 +48,16 @@ cd ../<repo-name>_quick-fix_<branch-name>
 git stash pop
 ```
 
-### 5. Stage and Commit Changes
+### 5. Install Dependencies
+
+Worktrees don't have `node_modules`, so install dependencies to enable Husky pre-commit hooks:
+
+```bash
+cd ../<repo-name>_quick-fix_<branch-name>
+pnpm install
+```
+
+### 6. Stage and Commit Changes
 
 Check recent commit messages for style:
 ```bash
@@ -57,19 +66,19 @@ git log --oneline -5
 
 Stage all changes and commit with a conventional commit message following the repo's style (e.g., `feat(scope): description` or `fix(scope): description`).
 
-### 6. Push to Remote
+### 7. Push to Remote
 
 ```bash
 git push -u origin <branch-name>
 ```
 
-### 7. Create Pull Request
+### 8. Create Pull Request
 
 Use `gh pr create` with a clear title and summary body. Include:
 - Summary of changes (bullet points)
 - Test plan if applicable
 
-### 8. Return to Original Directory and Remove Worktree
+### 9. Return to Original Directory and Remove Worktree
 
 Return to original directory and remove the worktree before merging (to avoid branch conflicts):
 ```bash
@@ -77,14 +86,14 @@ cd <original-directory>
 git worktree remove ../<repo-name>_quick-fix_<branch-name>
 ```
 
-### 9. Merge Pull Request
+### 10. Merge Pull Request
 
 ```bash
 gh pr merge <pr-number> --squash --delete-branch
 git pull --prune
 ```
 
-### 10. Rebuild
+### 11. Rebuild
 
 ```bash
 pnpm build
@@ -92,7 +101,8 @@ pnpm build
 
 ## Notes
 
-- This command assumes all changes are ready to ship (tests pass, linting clean)
+- Worktrees don't have `node_modules`, so step 5 installs deps to enable Husky pre-commit hooks
+- Do NOT skip step 5 — without it, pre-commit hooks won't run and broken code can be merged
 - Uses a worktree to isolate changes from the main working directory
 - The PR is merged with squash to keep history clean
 - Remote branch is automatically deleted after merge

@@ -45,6 +45,7 @@ describe('GitHubService', () => {
 				baseRefName: 'main',
 				url: 'https://github.com/owner/repo/pull/123',
 				isDraft: false,
+				isCrossRepository: false,
 				mergeable: 'MERGEABLE',
 				createdAt: '2024-01-01',
 				updatedAt: '2024-01-02',
@@ -181,6 +182,7 @@ describe('GitHubService', () => {
 				baseRefName: 'main',
 				url: 'https://github.com/owner/repo/pull/20',
 				isDraft: false,
+				isCrossRepository: false,
 				mergeable: 'MERGEABLE',
 				createdAt: '2024-01-01',
 				updatedAt: '2024-01-02',
@@ -279,6 +281,7 @@ describe('GitHubService', () => {
 				baseRefName: 'main',
 				url: 'https://github.com/acreeger/repo/pull/30',
 				isDraft: false,
+				isCrossRepository: false,
 				mergeable: 'MERGEABLE',
 				createdAt: '2024-01-01',
 				updatedAt: '2024-01-02',
@@ -304,6 +307,7 @@ describe('GitHubService', () => {
 				baseRefName: 'main',
 				url: 'https://github.com/owner/repo/pull/31',
 				isDraft: false,
+				isCrossRepository: false,
 				mergeable: 'MERGEABLE',
 				createdAt: '2024-01-01',
 				updatedAt: '2024-01-02',
@@ -329,6 +333,50 @@ describe('GitHubService', () => {
 
 			// Should throw the original error, not wrap it as NOT_FOUND
 			await expect(service.fetchPR(5)).rejects.toThrow('Unknown JSON field: "repository"')
+		})
+	})
+
+	describe('isFork mapping', () => {
+		it('should map isCrossRepository true to isFork true for fork PRs', async () => {
+			vi.mocked(githubUtils.fetchGhPR).mockResolvedValueOnce({
+				number: 586,
+				title: 'Add git commit timeout',
+				body: 'Description',
+				state: 'OPEN',
+				headRefName: 'feature/git-commit-timeout',
+				baseRefName: 'main',
+				url: 'https://github.com/owner/repo/pull/586',
+				isDraft: false,
+				isCrossRepository: true,
+				mergeable: 'MERGEABLE',
+				createdAt: '2024-01-01',
+				updatedAt: '2024-01-02',
+			})
+
+			const pr = await service.fetchPR(586)
+
+			expect(pr.isFork).toBe(true)
+		})
+
+		it('should map isCrossRepository false to isFork false for same-repo PRs', async () => {
+			vi.mocked(githubUtils.fetchGhPR).mockResolvedValueOnce({
+				number: 587,
+				title: 'Fix bug',
+				body: 'Description',
+				state: 'OPEN',
+				headRefName: 'fix/bug',
+				baseRefName: 'main',
+				url: 'https://github.com/owner/repo/pull/587',
+				isDraft: false,
+				isCrossRepository: false,
+				mergeable: 'MERGEABLE',
+				createdAt: '2024-01-01',
+				updatedAt: '2024-01-02',
+			})
+
+			const pr = await service.fetchPR(587)
+
+			expect(pr.isFork).toBe(false)
 		})
 	})
 

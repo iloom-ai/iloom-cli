@@ -1,5 +1,6 @@
 import path from 'path'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
@@ -42,7 +43,8 @@ export class DevServerCommand {
 		private capabilityDetector = new ProjectCapabilityDetector(),
 		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
 		private devServerManager = new DevServerManager(),
-		private settingsManager = new SettingsManager()
+		private settingsManager = new SettingsManager(),
+		private metadataManager = new MetadataManager()
 	) {}
 
 	/**
@@ -80,6 +82,15 @@ export class DevServerCommand {
 			if (envResult.error && !isNoEnvFilesFoundError(envResult.error)) {
 				logger.warn(`Failed to load env files: ${envResult.error.message}`)
 			}
+		}
+
+		// 3b. Set ILOOM_LOOM for loom identification
+		envOverrides.ILOOM_LOOM = this.formatLoomIdentifier(parsed)
+
+		// 3c. Set ILOOM_COLOR_HEX from loom metadata if available
+		const metadata = await this.metadataManager.readMetadata(worktree.path)
+		if (metadata?.colorHex) {
+			envOverrides.ILOOM_COLOR_HEX = metadata.colorHex
 		}
 
 		// 4. Detect project capabilities
@@ -311,5 +322,12 @@ export class DevServerCommand {
 			return `PR #${parsed.number}${autoLabel}`
 		}
 		return `branch "${parsed.branchName}"${autoLabel}`
+	}
+
+	/**
+	 * Format loom identifier for ILOOM_LOOM env var
+	 */
+	private formatLoomIdentifier(parsed: ParsedDevServerInput): string {
+		return parsed.originalInput
 	}
 }

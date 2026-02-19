@@ -1,5 +1,8 @@
 {
   "mainBranch": "main",
+  "git": {
+    "commitTimeout": 60000
+  },
   "workflows": {
     "issue": {
       "permissionMode": "default",

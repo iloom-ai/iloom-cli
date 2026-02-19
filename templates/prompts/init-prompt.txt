@@ -193,7 +193,6 @@ Parse both settings.json and settings.local.json. Merge them with local taking p
 
 Extract these current values if they exist:
 - `currentMainBranch` from `mainBranch` field (default: "main")
-- `currentWorktreePrefix` from `worktreePrefix` field (default: null which means use default - NOTE: "" does not mean default)
 - `currentPermissionMode` from `workflows.issue.permissionMode` field (default: "acceptEdits")
 - `currentBasePort` from `capabilities.web.basePort` field (default: 3000)
 - `currentMergeMode` from `mergeBehavior.mode` field (default: "local")
@@ -208,7 +207,6 @@ Extract these current values if they exist:
 Current Configuration:
 ━━━━━━━━━━━━━━━━━━━━━
 Main Branch: [currentMainBranch or "main (default)"]
-Worktree Prefix: [currentWorktreePrefix or "default (repo-name-looms)"]
 Permission Mode (Issues): [currentPermissionMode or "acceptEdits (default)"]
 Base Port: [currentBasePort or "3000 (default)"]
 IDE: [currentIdeType or "vscode (default)"]
@@ -253,18 +251,7 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
    - Validation: Non-empty string
    - Store answer as: `mainBranch`
 
-2. **Worktree Prefix**
-   - Question format: "What prefix should iloom use for worktree directories?{{#if currentWorktreePrefix}} (Currently: [currentWorktreePrefix]){{/if}} Leave empty to use default (<repo-name>-looms)."
-   - Options (as examples):
-     - Use default prefix (recommened)
-     - "looms" - Simple 'looms-' prefix
-     - Empty - each loom will be a sibling of this directory
-   - Default: currentWorktreePrefix or default (NOTE: empty does NOT mean use default)
-   - Validation: If not empty, only alphanumeric characters, hyphens, underscores, and forward slashes allowed
-   - Store answer as: `worktreePrefix`
-   - Note: If user specifies default, omit this field from settings, it they say empty, add an empty string to the settings
-
-3. **Permission Mode for Issue Workflows**
+2. **Permission Mode for Issue Workflows**
    - Question format: "What permission mode should Claude use when working on issues?{{#if currentPermissionMode}} (Currently: [currentPermissionMode]){{/if}}"
    - Options:
      - "default" - Use Claude Code's default behavior
@@ -275,7 +262,7 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
    - Validation: Must be one of: default, plan, acceptEdits, bypassPermissions
    - Store answer as: `workflows.issue.permissionMode` - NOTE: this is a personal preference - recommend it be stored in the gitignored local settings file.
 
-4. **Base Port**
+3. **Base Port**
    - Question format: "What base port should web development servers use?{{#if currentBasePort}} (Currently: [currentBasePort]){{/if}}"
    - Options (as examples):
      - "3000" - Common Node.js default
@@ -525,7 +512,6 @@ Configuration Summary:
 
 Local Development Settings (Phase 1):
   Main Branch: [value]
-  Worktree Prefix: [value or "default (repo-name-looms)"]
   Permission Mode (Issues): [value]
   Base Port: [value]
 
@@ -893,15 +879,25 @@ Here's how to get started:
   • Run `iloom finish` when you're done working to merge changes and clean up
 
 Need more advanced configuration? I can help you set up:
+  • Merge Behavior - Choose between local merge, GitHub PR, or draft PR workflows
+  • Copy Gitignored Files - Automatically copy local databases, test fixtures, or other gitignored files to new looms
+  • Multi-Provider Code Review - Get code reviews from Gemini or Codex alongside Claude
+  • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
   • Database Settings - Configure database branching for isolated development
+  • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
   • Protected Branches - Prevent iloom from creating worktrees for certain branches
   • Custom Scripts - Override package.json scripts with custom commands
 
 You can ask me questions like:
+  "How do I set up GitHub PR mode instead of local merge?"
+  "How do I copy my local SQLite database to new looms?"
+  "Can I get code reviews from Gemini as well as Claude?"
+  "How do I use Codex for planning?"
   "Is it possible to have the analysis agent use a different model?"
   "How do I configure database branching?"
+  "How do I skip pre-commit hooks?"
   "Can I disable the IDE from launching automatically?"
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
@@ -957,19 +953,26 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-4. **Protected Branches:**
+4. **Copy Gitignored Files:**
+   ```json
+   "copyGitIgnoredPatterns": ["*.db", "data/*.sqlite", "tmp/fixtures/**"]
+   ```
+
+   Glob patterns for gitignored files that should be copied to new looms. Useful for local databases, large test fixtures, or generated files that are too big to commit. Note: `.env` files and iloom/claude local settings are automatically copied and don't need to be listed here.
+
+5. **Protected Branches:**
    ```json
    "protectedBranches": ["main", "production", "release/*"]
    ```
 
-5. **IDE Configuration:**
+6. **IDE Configuration:**
    ```json
    "ide": {
      "type": "cursor"
    }
    ```
 
-6. **Code Review with Multiple Providers:**
+7. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -983,7 +986,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-7. **Custom Script Configuration (package.iloom.json):**
+8. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json
@@ -1049,7 +1052,7 @@ When configuring agents, use these model identifiers:
 - **For existing users** - Ask what they want to do (modify, add advanced config, start fresh, or exit) instead of forcing them through the entire flow
 - **For new users** - Skip directly to Phase 1 (Local Development Settings) and proceed through Phase 2 (Tooling Configuration)
 - **ALWAYS use the question formats** specified in Phase 1 and Phase 2 that include "(Currently: [value])" when current values exist
-- **Phase 1 = Local dev settings** (main branch, worktree prefix, permission mode, base port)
+- **Phase 1 = Local dev settings** (main branch, permission mode, base port)
 - **Phase 2 = Tooling integrations** (issue tracker provider, provider-specific config, IDE, merge mode)
 - **Keep configuration minimal** - only include non-default values
 - **Honor recommendations/requirements of where to save certain settings - this may mean you have to create/update multiple settings files. (e.g when adding API keys for permissions mode settings)

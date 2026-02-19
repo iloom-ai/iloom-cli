@@ -10,6 +10,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
 import type {
 	IssueProvider,
 	GetIssueInput,
@@ -25,6 +27,9 @@ import type {
 	RemoveDependencyInput,
 } from './types.js'
 
+// Module-level settings loaded at startup
+let settings: IloomSettings | undefined
+
 // Validate required environment variables
 function validateEnvironment(): IssueProvider {
 	const provider = process.env.ISSUE_PROVIDER as IssueProvider | undefined
@@ -33,8 +38,8 @@ function validateEnvironment(): IssueProvider {
 		process.exit(1)
 	}
 
-	if (provider !== 'github' && provider !== 'linear') {
-		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github' or 'linear'`)
+	if (provider !== 'github' && provider !== 'linear' && provider !== 'jira') {
+		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github', 'linear', or 'jira'`)
 		process.exit(1)
 	}
 
@@ -55,6 +60,19 @@ function validateEnvironment(): IssueProvider {
 	if (provider === 'linear') {
 		if (!process.env.LINEAR_API_TOKEN) {
 			console.error('Missing required environment variable for Linear provider: LINEAR_API_TOKEN')
+			process.exit(1)
+		}
+	}
+
+	// Jira requires host, username, API token, and project key
+	if (provider === 'jira') {
+		const required = ['JIRA_HOST', 'JIRA_USERNAME', 'JIRA_API_TOKEN', 'JIRA_PROJECT_KEY']
+		const missing = required.filter((key) => !process.env[key])
+
+		if (missing.length > 0) {
+			console.error(
+				`Missing required environment variables for Jira provider: ${missing.join(', ')}`
+			)
 			process.exit(1)
 		}
 	}
@@ -104,7 +122,7 @@ server.registerTool(
 			body: z.string().describe('Issue body/description'),
 			state: z.string().describe('Issue state (open, closed, etc.)'),
 			url: z.string().describe('Issue URL'),
-			provider: z.enum(['github', 'linear']).describe('Issue management provider'),
+			provider: z.enum(['github', 'linear', 'jira']).describe('Issue management provider'),
 
 			// Flexible author - core fields + passthrough
 			author: flexibleAuthorSchema.nullable().describe(
@@ -135,7 +153,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getIssue({ number, includeComments, repo })
 
@@ -291,7 +310,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getComment({ commentId, number, repo })
 
@@ -341,7 +361,7 @@ server.registerTool(
 		try {
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
-			const provider = IssueManagementProviderFactory.create(providerType)
+			const provider = IssueManagementProviderFactory.create(providerType, settings)
 			const result = await provider.createComment({ number, body, type })
 
 			console.error(
@@ -391,7 +411,7 @@ server.registerTool(
 		try {
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
-			const provider = IssueManagementProviderFactory.create(providerType)
+			const provider = IssueManagementProviderFactory.create(providerType, settings)
 			const result = await provider.updateComment({ commentId, number, body })
 
 			console.error(
@@ -449,7 +469,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.createIssue({ title, body, labels, teamKey, repo })
 
@@ -758,6 +779,11 @@ server.registerTool(
 // Main server startup
 async function main(): Promise<void> {
 	console.error('Starting Issue Management MCP Server...')
+
+	// Load settings for providers that need them
+	const settingsManager = new SettingsManager()
+	settings = await settingsManager.loadSettings()
+	console.error('Settings loaded')
 
 	// Validate environment and get provider
 	const provider = validateEnvironment()

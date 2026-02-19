@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DevServerCommand } from './dev-server.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
@@ -12,6 +13,7 @@ import fs from 'fs-extra'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
+vi.mock('../lib/MetadataManager.js')
 vi.mock('../lib/ProjectCapabilityDetector.js')
 vi.mock('../lib/DevServerManager.js')
 vi.mock('../utils/IdentifierParser.js')
@@ -40,6 +42,7 @@ vi.mock('../utils/logger.js', () => ({
 describe('DevServerCommand', () => {
 	let command: DevServerCommand
 	let mockGitWorktreeManager: GitWorktreeManager
+	let mockMetadataManager: MetadataManager
 	let mockCapabilityDetector: ProjectCapabilityDetector
 	let mockDevServerManager: DevServerManager
 	let mockIdentifierParser: IdentifierParser
@@ -54,10 +57,16 @@ describe('DevServerCommand', () => {
 
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
+		mockMetadataManager = new MetadataManager()
 		mockCapabilityDetector = new ProjectCapabilityDetector()
 		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 		mockSettingsManager = new SettingsManager()
+
+		// Mock MetadataManager - default to returning metadata with color
+		vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+			colorHex: '#dcebff',
+		})
 
 		// Mock DevServerManager methods
 		vi.mocked(mockDevServerManager.isServerRunning).mockResolvedValue(false)
@@ -83,7 +92,8 @@ describe('DevServerCommand', () => {
 			mockCapabilityDetector,
 			mockIdentifierParser,
 			mockDevServerManager,
-			mockSettingsManager
+			mockSettingsManager,
+			mockMetadataManager
 		)
 	})
 
@@ -458,7 +468,7 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				{ DATABASE_URL: 'postgres://test', API_KEY: 'secret' }
+				expect.objectContaining({ DATABASE_URL: 'postgres://test', API_KEY: 'secret', ILOOM_LOOM: '87' })
 			)
 		})
 
@@ -475,7 +485,7 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				{}
+				expect.objectContaining({ ILOOM_LOOM: '87' })
 			)
 		})
 
@@ -490,7 +500,7 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				{}
+				expect.objectContaining({ ILOOM_LOOM: '87' })
 			)
 		})
 
@@ -513,7 +523,7 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				{}
+				expect.objectContaining({ ILOOM_LOOM: '87' })
 			)
 		})
 
@@ -531,6 +541,79 @@ describe('DevServerCommand', () => {
 
 			// Should proceed without warning since "no env files" is harmless
 			expect(mockDevServerManager.runServerForeground).toHaveBeenCalled()
+		})
+	})
+
+	describe('loom environment variables', () => {
+		beforeEach(() => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 87,
+				originalInput: '87',
+			})
+
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+		})
+
+		it('should set ILOOM_LOOM env var to original input', async () => {
+			await command.execute({ identifier: '87' })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).toHaveProperty('ILOOM_LOOM', '87')
+		})
+
+		it('should set ILOOM_LOOM for PR identifier', async () => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'pr',
+				number: 42,
+				originalInput: '42',
+			})
+			vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+			await command.execute({ identifier: '42' })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).toHaveProperty('ILOOM_LOOM', '42')
+		})
+
+		it('should set ILOOM_COLOR_HEX from metadata', async () => {
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				colorHex: '#dcebff',
+			})
+
+			await command.execute({ identifier: '87' })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).toHaveProperty('ILOOM_COLOR_HEX', '#dcebff')
+		})
+
+		it('should not set ILOOM_COLOR_HEX when metadata has no colorHex', async () => {
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				colorHex: null,
+			})
+
+			await command.execute({ identifier: '87' })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).not.toHaveProperty('ILOOM_COLOR_HEX')
+		})
+
+		it('should not set ILOOM_COLOR_HEX when metadata is null', async () => {
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue(null)
+
+			await command.execute({ identifier: '87' })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).not.toHaveProperty('ILOOM_COLOR_HEX')
 		})
 	})
 })

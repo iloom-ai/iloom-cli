@@ -25,6 +25,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 - [Planning Commands](#planning-commands)
   - [il plan](#il-plan)
 - [Issue Management Commands](#issue-management-commands)
+  - [il issues](#il-issues)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
 - [Configuration & Maintenance](#configuration--maintenance)
@@ -1254,6 +1255,108 @@ il plan --print --output-format=json 42
 ---
 
 ## Issue Management Commands
+
+### il issues
+
+List open issues and open (non-draft) pull requests from the configured issue tracker as JSON. PRs are always fetched from GitHub regardless of the configured issue tracker.
+
+**Usage:**
+```bash
+il issues [options] [project-path]
+```
+
+**Arguments:**
+- `[project-path]` - Path to project root. Auto-detected from current directory or worktree if omitted.
+
+**Options:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--json` | Output as JSON (default behavior) | `true` |
+| `--limit <n>` | Maximum number of items to return (combined issues + PRs) | `100` |
+| `--sprint <name>` | **Jira only:** filter by sprint name (e.g., `"Sprint 17"`) or `"current"` for the active sprint | - |
+| `--mine` | **Jira only:** show only issues assigned to the authenticated user | `false` |
+
+**Output Format:**
+```json
+[
+  {
+    "id": "123",
+    "title": "Issue title",
+    "updatedAt": "2026-02-08T00:00:00Z",
+    "url": "https://github.com/org/repo/issues/123",
+    "state": "open",
+    "type": "issue"
+  },
+  {
+    "id": "456",
+    "title": "[PR] PR title",
+    "updatedAt": "2026-02-09T00:00:00Z",
+    "url": "https://github.com/org/repo/pull/456",
+    "state": "open",
+    "type": "pr"
+  }
+]
+```
+
+**Fields:**
+- `type` - Either `"issue"` or `"pr"`. PRs also have a `[PR]` prefix in their title for human-readable output.
+
+**Behavior:**
+- Returns open/active issues and open, non-draft pull requests
+- Issues and PRs are merged, sorted by most recently updated, and truncated to the `--limit`
+- Draft PRs are excluded (filtered client-side after over-fetching from GitHub)
+- PRs are always fetched from GitHub, even when the issue tracker is Linear
+- If PR fetching fails due to expected errors (auth, rate limit, network), issues are returned without PRs
+- Results are cached on disk with a 2-minute TTL for fast repeated calls
+- Cache is stored in `~/.config/iloom-ai/cache/` and keyed per project + provider
+- Works from worktrees (resolves settings from the correct project root)
+- For issues on GitHub: uses `gh issue list` with `--search sort:updated-desc`
+- For issues on Linear: uses `@linear/sdk` with team key filter from settings
+- For issues on Jira: uses Jira REST API with JQL, excluding statuses listed in `doneStatuses` (default: `["Done"]`)
+- `--sprint` and `--mine` flags are Jira-only. When used with other providers, a warning is logged and the flags are ignored.
+- `--sprint current` uses Jira's `openSprints()` JQL function to match the active sprint
+- `--sprint "Sprint 17"` filters to a specific named sprint
+- `--mine` uses Jira's `currentUser()` JQL function to filter by the authenticated user
+- For PRs: uses `gh pr list --state open` with draft filtering
+
+**Examples:**
+
+```bash
+# List issues and PRs from current project
+il issues
+
+# List issues and PRs with a limit
+il issues --limit 50
+
+# List issues and PRs from a specific project path
+il issues /path/to/project
+
+# Filter to only PRs using jq
+il issues | jq '.[] | select(.type == "pr")'
+
+# Filter to only issues using jq
+il issues | jq '.[] | select(.type == "issue")'
+
+# Jira: show issues in the current sprint
+il issues --sprint current
+
+# Jira: show issues in a specific sprint
+il issues --sprint "Sprint 17"
+
+# Jira: show only my issues
+il issues --mine
+
+# Jira: my issues in the current sprint
+il issues --sprint current --mine
+```
+
+**Notes:**
+- Designed for programmatic use by the VS Code extension
+- Uses the CLI's existing settings merging logic (env vars, settings.json, settings.local.json)
+- Follows the same pattern as `il list --json` and `il projects --json`
+
+---
 
 ### il add-issue
 

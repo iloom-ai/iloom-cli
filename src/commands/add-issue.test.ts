@@ -440,7 +440,7 @@ describe('AddIssueCommand', () => {
 				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
 			})
 
-			it('should skip enhancement when body is provided', async () => {
+			it('should still enhance when body is provided', async () => {
 				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
 
 				await command.execute({
@@ -448,10 +448,14 @@ describe('AddIssueCommand', () => {
 					options: { body: preFormattedBody }
 				})
 
-				expect(mockEnhancementService.enhanceDescription).not.toHaveBeenCalled()
+				expect(mockEnhancementService.enhanceDescription).toHaveBeenCalledWith(
+					`${validDescription}\n\n${preFormattedBody}`
+				)
 			})
 
-			it('should use provided body as issue body directly', async () => {
+			it('should use enhanced result as issue body when body is provided', async () => {
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced body')
+
 				await command.execute({
 					description: validDescription,
 					options: { body: preFormattedBody }
@@ -459,7 +463,7 @@ describe('AddIssueCommand', () => {
 
 				expect(mockEnhancementService.createEnhancedIssue).toHaveBeenCalledWith(
 					validDescription,
-					preFormattedBody,
+					'Enhanced body',
 					undefined
 				)
 			})
@@ -473,16 +477,16 @@ describe('AddIssueCommand', () => {
 				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(validDescription, true)
 			})
 
-			it('should call createEnhancedIssue with description as title and body as body', async () => {
+			it('should pass combined title and body to enhancer', async () => {
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced body')
+
 				await command.execute({
 					description: validDescription,
 					options: { body: preFormattedBody }
 				})
 
-				expect(mockEnhancementService.createEnhancedIssue).toHaveBeenCalledWith(
-					validDescription,
-					preFormattedBody,
-					undefined
+				expect(mockEnhancementService.enhanceDescription).toHaveBeenCalledWith(
+					`${validDescription}\n\n${preFormattedBody}`
 				)
 			})
 
@@ -495,7 +499,7 @@ describe('AddIssueCommand', () => {
 				expect(mockEnhancementService.waitForReviewAndOpen).toHaveBeenCalledWith(123)
 			})
 
-			it('should execute workflow without enhance step when body is provided', async () => {
+			it('should execute workflow with enhance step when body is provided', async () => {
 				const calls: string[] = []
 
 				vi.mocked(mockEnhancementService.validateDescription).mockImplementation(() => {
@@ -522,8 +526,7 @@ describe('AddIssueCommand', () => {
 					options: { body: preFormattedBody }
 				})
 
-				// Note: 'enhance' should NOT be in the calls
-				expect(calls).toEqual(['validate', 'create', 'review'])
+				expect(calls).toEqual(['validate', 'enhance', 'create', 'review'])
 			})
 
 			it('should accept short descriptions when body is provided', async () => {

@@ -106,7 +106,9 @@ export async function fetchChildIssues(
         return getSubIssues(issueNum, repo)
       } else if (providerName === 'linear') {
         // Linear uses identifiers like "ENG-123"
-        return getLinearChildIssues(parentIssueNumber)
+        // Pass API token from settings since LinearService may not have been instantiated
+        const apiToken = settings.issueManagement?.linear?.apiToken
+        return getLinearChildIssues(parentIssueNumber, apiToken ? { apiToken } : undefined)
       } else {
         logger.warn(`Unsupported issue tracker provider: ${providerName}`)
         return []

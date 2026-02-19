@@ -21,6 +21,7 @@ export interface GitHubPullRequest {
 	baseRefName: string // target branch
 	url: string
 	isDraft: boolean
+	isCrossRepository: boolean
 	mergeable: 'CONFLICTING' | 'MERGEABLE' | 'UNKNOWN'
 	createdAt: string
 	updatedAt: string

@@ -54,3 +54,6 @@ export { PlanCommand } from './plan.js'
 
 export { VSCodeCommand } from './vscode.js'
 export type { VSCodeCommandInput } from './vscode.js'
+
+export { IssuesCommand } from './issues.js'
+export type { IssuesCommandOptions, IssueListItem } from './issues.js'

@@ -12,6 +12,10 @@ vi.mock('../utils/logger.js', () => ({
 	},
 }))
 
+const defaultSettings = {
+	git: { commitTimeout: 60000 },
+}
+
 describe('SettingsManager', () => {
 	let settingsManager: SettingsManager
 
@@ -50,7 +54,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should return empty object when settings file does not exist', async () => {
@@ -66,7 +70,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should return empty object when .iloom directory does not exist', async () => {
@@ -82,7 +86,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should throw error for malformed JSON in settings file', async () => {
@@ -136,7 +140,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...emptyAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ ...emptyAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should handle settings file with null agents value', async () => {
@@ -156,7 +160,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...nullAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ ...nullAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should use process.cwd() when projectRoot not provided', async () => {
@@ -179,7 +183,7 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings()
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should load settings with mainBranch field', async () => {
@@ -1722,7 +1726,7 @@ describe('SettingsManager', () => {
 			const result = await settingsManager.loadSettings(projectRoot)
 
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
 		})
 
 		it('should deep merge workflows with partial overrides', async () => {
@@ -3084,6 +3088,173 @@ const error: { code?: string; message: string } = {
 			expect(result.agents?.['iloom-issue-planner']?.enabled).toBe(true)
 			expect(result.agents?.['iloom-issue-planner']?.providers?.claude).toBe('sonnet')
 			expect(result.agents?.['iloom-issue-planner']?.review).toBe(true)
+		})
+	})
+
+	describe('git.commitTimeout configuration', () => {
+		it('should return undefined git section when not specified in settings', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			// git section is optional, so it should be undefined when not provided
+			expect(result.git).toEqual(defaultSettings.git)
+		})
+
+		it('should apply default commitTimeout value (60000) when git section exists but commitTimeout not specified', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				...defaultSettings
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			// Default should be applied by Zod schema when git object exists
+			expect(result.git?.commitTimeout).toBe(60000)
+		})
+
+		it('should accept custom commitTimeout value', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				git: {
+					commitTimeout: 120000,
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			expect(result.git?.commitTimeout).toBe(120000)
+		})
+
+		it('should reject commitTimeout below minimum (1000ms)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				git: {
+					commitTimeout: 500, // Below minimum
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Commit timeout must be at least 1000ms/
+			)
+		})
+
+		it('should reject commitTimeout above maximum (600000ms)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				git: {
+					commitTimeout: 700000, // Above maximum
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Commit timeout cannot exceed 600000ms/
+			)
+		})
+
+		it('should accept minimum valid commitTimeout (1000ms)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				git: {
+					commitTimeout: 1000, // Exact minimum
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			expect(result.git?.commitTimeout).toBe(1000)
+		})
+
+		it('should accept maximum valid commitTimeout (600000ms)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				git: {
+					commitTimeout: 600000, // Exact maximum
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			expect(result.git?.commitTimeout).toBe(600000)
 		})
 	})
 })
