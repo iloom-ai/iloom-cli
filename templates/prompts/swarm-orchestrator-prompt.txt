@@ -128,6 +128,11 @@ You are working on issue #<child-number>: "<child-title>"
 
 **Worktree path:** `<child-worktree-path>`
 
+IMPORTANT: You MUST work in this worktree path. cd to it first before doing anything:
+cd <child-worktree-path>
+
+All file reads, writes, searches, and git operations must happen within this directory. Do NOT work in the epic worktree or any other child's worktree.
+
 **Issue body:**
 <child-issue-body>
 
