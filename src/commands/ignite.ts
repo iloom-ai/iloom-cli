@@ -955,6 +955,7 @@ export class IgniteCommand {
 				env: {
 					CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
 					ILOOM_SWARM: '1',
+					ENABLE_TOOL_SEARCH: 'auto:30',
 				},
 			},
 		)
