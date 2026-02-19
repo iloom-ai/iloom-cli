@@ -954,6 +954,7 @@ export class IgniteCommand {
 				...(agents && { agents }),
 				env: {
 					CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+					ILOOM_SWARM: '1',
 				},
 			},
 		)
