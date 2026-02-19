@@ -148,7 +148,7 @@ describe('migrations', () => {
   describe('v0.9.3 global gitignore migration for swarm mode', () => {
     const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
     const agentPattern = '**/.claude/agents/iloom-*'
-    const skillPattern = '**/.claude/skills/iloom-swarm-*'
+    const skillPattern = '**/.claude/skills/iloom-*'
     const migration = migrations.find(m => m.version === '0.9.3')
 
     it('should exist with correct description', () => {
@@ -167,7 +167,7 @@ describe('migrations', () => {
       const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
       expect(writtenContent).toContain(agentPattern)
       expect(writtenContent).toContain(skillPattern)
-      expect(writtenContent).toContain('# Added by iloom CLI (swarm mode)')
+      expect(writtenContent).toContain('# Added by iloom CLI')
     })
 
     it('should append both patterns when not already present', async () => {
@@ -185,7 +185,7 @@ describe('migrations', () => {
     })
 
     it('should not duplicate if agent pattern already exists', async () => {
-      const existingContent = '# Added by iloom CLI (swarm mode)\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-swarm-*\n'
+      const existingContent = '# Added by iloom CLI\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-*\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
       vi.mocked(fs.readFile).mockResolvedValue(existingContent)
 
