@@ -290,10 +290,8 @@ export class StartCommand {
 						// Not creating as epic, clear child issue numbers
 						childIssueNumbers = []
 					}
-				} else if (input.options.epic === true) {
-					// --epic flag but no children found
-					getLogger().warn('--epic flag provided but issue has no child issues, proceeding as normal loom')
 				}
+				// --epic or --no-epic flags are silently ignored when there are no child issues
 			}
 
 			// Step 2.7: Confirm bypassPermissions mode if applicable
