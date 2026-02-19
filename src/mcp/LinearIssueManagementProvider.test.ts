@@ -17,6 +17,8 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 		getLinearIssueDependencies: vi.fn(),
 		findLinearIssueRelation: vi.fn(),
 		deleteLinearIssueRelation: vi.fn(),
+		updateLinearIssueState: vi.fn(),
+		editLinearIssue: vi.fn(),
 	}
 })
 
@@ -33,6 +35,8 @@ import {
 	getLinearIssueDependencies,
 	findLinearIssueRelation,
 	deleteLinearIssueRelation,
+	updateLinearIssueState,
+	editLinearIssue,
 } from '../utils/linear.js'
 
 describe('LinearIssueManagementProvider', () => {
@@ -690,6 +694,72 @@ New content here
 			).rejects.toThrow('No blocking dependency found from ENG-100 to ENG-200')
 
 			expect(deleteLinearIssueRelation).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('closeIssue', () => {
+		it('calls updateLinearIssueState with Done', async () => {
+			vi.mocked(updateLinearIssueState).mockResolvedValueOnce(undefined)
+
+			await provider.closeIssue({ number: 'ENG-123' })
+
+			expect(updateLinearIssueState).toHaveBeenCalledWith('ENG-123', 'Done')
+		})
+	})
+
+	describe('reopenIssue', () => {
+		it('calls updateLinearIssueState with Todo', async () => {
+			vi.mocked(updateLinearIssueState).mockResolvedValueOnce(undefined)
+
+			await provider.reopenIssue({ number: 'ENG-123' })
+
+			expect(updateLinearIssueState).toHaveBeenCalledWith('ENG-123', 'Todo')
+		})
+	})
+
+	describe('editIssue', () => {
+		it('updates title via editLinearIssue', async () => {
+			vi.mocked(editLinearIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: 'ENG-123', title: 'New Title' })
+
+			expect(editLinearIssue).toHaveBeenCalledWith('ENG-123', { title: 'New Title' })
+		})
+
+		it('updates description via editLinearIssue', async () => {
+			vi.mocked(editLinearIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: 'ENG-123', body: 'New Body' })
+
+			expect(editLinearIssue).toHaveBeenCalledWith('ENG-123', { description: 'New Body' })
+		})
+
+		it('handles state change to closed via closeIssue', async () => {
+			vi.mocked(updateLinearIssueState).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: 'ENG-123', state: 'closed' })
+
+			expect(updateLinearIssueState).toHaveBeenCalledWith('ENG-123', 'Done')
+			expect(editLinearIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change to open via reopenIssue', async () => {
+			vi.mocked(updateLinearIssueState).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: 'ENG-123', state: 'open' })
+
+			expect(updateLinearIssueState).toHaveBeenCalledWith('ENG-123', 'Todo')
+			expect(editLinearIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change with field updates', async () => {
+			vi.mocked(updateLinearIssueState).mockResolvedValueOnce(undefined)
+			vi.mocked(editLinearIssue).mockResolvedValueOnce(undefined)
+
+			await provider.editIssue({ number: 'ENG-123', state: 'closed', title: 'Updated Title' })
+
+			expect(updateLinearIssueState).toHaveBeenCalledWith('ENG-123', 'Done')
+			expect(editLinearIssue).toHaveBeenCalledWith('ENG-123', { title: 'Updated Title' })
 		})
 	})
 })

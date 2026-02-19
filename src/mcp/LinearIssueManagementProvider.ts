@@ -16,6 +16,9 @@ import type {
 	GetDependenciesInput,
 	RemoveDependencyInput,
 	GetChildIssuesInput,
+	CloseIssueInput,
+	ReopenIssueInput,
+	EditIssueInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
@@ -37,6 +40,8 @@ import {
 	findLinearIssueRelation,
 	deleteLinearIssueRelation,
 	getLinearChildIssues,
+	updateLinearIssueState,
+	editLinearIssue,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
@@ -301,5 +306,47 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 		const { number } = input
 		// repo is ignored for Linear
 		return await getLinearChildIssues(number)
+	}
+
+	/**
+	 * Close an issue by transitioning to "Done" state
+	 */
+	async closeIssue(input: CloseIssueInput): Promise<void> {
+		const { number } = input
+		// repo is ignored for Linear
+		await updateLinearIssueState(number, 'Done')
+	}
+
+	/**
+	 * Reopen a closed issue by transitioning to "Todo" state
+	 */
+	async reopenIssue(input: ReopenIssueInput): Promise<void> {
+		const { number } = input
+		// repo is ignored for Linear
+		await updateLinearIssueState(number, 'Todo')
+	}
+
+	/**
+	 * Edit an issue's properties
+	 * State changes are delegated to closeIssue/reopenIssue
+	 */
+	async editIssue(input: EditIssueInput): Promise<void> {
+		const { number, title, body, state } = input
+		// repo and labels are ignored for Linear
+
+		// Handle state changes via close/reopen
+		if (state === 'closed') {
+			await this.closeIssue({ number })
+		} else if (state === 'open') {
+			await this.reopenIssue({ number })
+		}
+
+		// Handle title/body updates
+		if (title !== undefined || body !== undefined) {
+			await editLinearIssue(number, {
+				...(title !== undefined && { title }),
+				...(body !== undefined && { description: body }),
+			})
+		}
 	}
 }

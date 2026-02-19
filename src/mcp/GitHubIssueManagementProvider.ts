@@ -17,6 +17,9 @@ import type {
 	GetDependenciesInput,
 	RemoveDependencyInput,
 	GetChildIssuesInput,
+	CloseIssueInput,
+	ReopenIssueInput,
+	EditIssueInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
@@ -39,6 +42,9 @@ import {
 	createIssueDependency,
 	removeIssueDependency,
 	getSubIssues,
+	closeGhIssue,
+	reopenGhIssue,
+	editGhIssue,
 } from '../utils/github.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
 
@@ -570,5 +576,66 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		return await getSubIssues(issueNumber, repo)
+	}
+
+	/**
+	 * Close an issue
+	 */
+	async closeIssue(input: CloseIssueInput): Promise<void> {
+		const { number, repo } = input
+
+		const issueNumber = parseInt(number, 10)
+		if (isNaN(issueNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${number}. GitHub issue IDs must be numeric.`)
+		}
+
+		await closeGhIssue(issueNumber, repo)
+	}
+
+	/**
+	 * Reopen a closed issue
+	 */
+	async reopenIssue(input: ReopenIssueInput): Promise<void> {
+		const { number, repo } = input
+
+		const issueNumber = parseInt(number, 10)
+		if (isNaN(issueNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${number}. GitHub issue IDs must be numeric.`)
+		}
+
+		await reopenGhIssue(issueNumber, repo)
+	}
+
+	/**
+	 * Edit an issue's properties
+	 * State changes are delegated to closeIssue/reopenIssue
+	 */
+	async editIssue(input: EditIssueInput): Promise<void> {
+		const { number, title, body, state, labels, repo } = input
+
+		const issueNumber = parseInt(number, 10)
+		if (isNaN(issueNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${number}. GitHub issue IDs must be numeric.`)
+		}
+
+		// Handle state changes via close/reopen
+		if (state === 'closed') {
+			await this.closeIssue({ number, repo })
+		} else if (state === 'open') {
+			await this.reopenIssue({ number, repo })
+		}
+
+		// Handle other field updates
+		if (title !== undefined || body !== undefined || labels !== undefined) {
+			await editGhIssue(
+				issueNumber,
+				{
+					...(title !== undefined && { title }),
+					...(body !== undefined && { body }),
+					...(labels !== undefined && { labels }),
+				},
+				repo
+			)
+		}
 	}
 }

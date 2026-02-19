@@ -56,22 +56,31 @@ describe('JiraIssueManagementProvider - dependencies', () => {
 	let mockCreateIssueLink: ReturnType<typeof vi.fn>
 	let mockGetIssue: ReturnType<typeof vi.fn>
 	let mockDeleteIssueLink: ReturnType<typeof vi.fn>
+	let mockCloseIssue: ReturnType<typeof vi.fn>
+	let mockReopenIssue: ReturnType<typeof vi.fn>
+	let mockUpdateIssue: ReturnType<typeof vi.fn>
 
 	beforeEach(() => {
 		mockCreateIssueLink = vi.fn().mockResolvedValue(undefined)
 		mockGetIssue = vi.fn()
 		mockDeleteIssueLink = vi.fn().mockResolvedValue(undefined)
+		mockCloseIssue = vi.fn().mockResolvedValue(undefined)
+		mockReopenIssue = vi.fn().mockResolvedValue(undefined)
+		mockUpdateIssue = vi.fn().mockResolvedValue(undefined)
 
 		const mockApiClient = {
 			createIssueLink: mockCreateIssueLink,
 			getIssue: mockGetIssue,
 			deleteIssueLink: mockDeleteIssueLink,
+			updateIssue: mockUpdateIssue,
 		}
 
 		const mockTracker = {
 			normalizeIdentifier: (id: string) => id.toUpperCase(),
 			getApiClient: () => mockApiClient,
 			getConfig: () => ({ host: 'https://jira.example.com' }),
+			closeIssue: mockCloseIssue,
+			reopenIssue: mockReopenIssue,
 		}
 
 		// Create provider and inject mock tracker via private field
@@ -211,6 +220,69 @@ describe('JiraIssueManagementProvider - dependencies', () => {
 			await expect(
 				provider.removeDependency({ blockingIssue: 'PROJ-1', blockedIssue: 'PROJ-2' })
 			).rejects.toThrow('No "Blocks" dependency found from PROJ-1 to PROJ-2')
+		})
+	})
+
+	describe('closeIssue', () => {
+		it('transitions issue to Done state via tracker', async () => {
+			await provider.closeIssue({ number: 'PROJ-123' })
+
+			expect(mockCloseIssue).toHaveBeenCalledWith('PROJ-123')
+		})
+
+		it('normalizes identifier to uppercase', async () => {
+			await provider.closeIssue({ number: 'proj-123' })
+
+			expect(mockCloseIssue).toHaveBeenCalledWith('PROJ-123')
+		})
+	})
+
+	describe('reopenIssue', () => {
+		it('transitions issue to Reopen state via tracker', async () => {
+			await provider.reopenIssue({ number: 'PROJ-123' })
+
+			expect(mockReopenIssue).toHaveBeenCalledWith('PROJ-123')
+		})
+
+		it('normalizes identifier to uppercase', async () => {
+			await provider.reopenIssue({ number: 'proj-123' })
+
+			expect(mockReopenIssue).toHaveBeenCalledWith('PROJ-123')
+		})
+	})
+
+	describe('editIssue', () => {
+		it('updates issue summary via Jira API', async () => {
+			await provider.editIssue({ number: 'PROJ-123', title: 'New Title' })
+
+			expect(mockUpdateIssue).toHaveBeenCalledWith('PROJ-123', { summary: 'New Title' })
+		})
+
+		it('updates issue description via Jira API', async () => {
+			await provider.editIssue({ number: 'PROJ-123', body: 'New Body' })
+
+			expect(mockUpdateIssue).toHaveBeenCalledWith('PROJ-123', { description: 'New Body' })
+		})
+
+		it('handles state change to closed via closeIssue', async () => {
+			await provider.editIssue({ number: 'PROJ-123', state: 'closed' })
+
+			expect(mockCloseIssue).toHaveBeenCalledWith('PROJ-123')
+			expect(mockUpdateIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change to open via reopenIssue', async () => {
+			await provider.editIssue({ number: 'PROJ-123', state: 'open' })
+
+			expect(mockReopenIssue).toHaveBeenCalledWith('PROJ-123')
+			expect(mockUpdateIssue).not.toHaveBeenCalled()
+		})
+
+		it('handles state change with field updates', async () => {
+			await provider.editIssue({ number: 'PROJ-123', state: 'closed', title: 'Updated Title' })
+
+			expect(mockCloseIssue).toHaveBeenCalledWith('PROJ-123')
+			expect(mockUpdateIssue).toHaveBeenCalledWith('PROJ-123', { summary: 'Updated Title' })
 		})
 	})
 })

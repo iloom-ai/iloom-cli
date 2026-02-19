@@ -752,6 +752,83 @@ export async function removeIssueDependency(
 	])
 }
 
+// Issue State Operations
+
+/**
+ * Close a GitHub issue
+ * @param issueNumber - The issue number
+ * @param repo - Optional repo in "owner/repo" format
+ */
+export async function closeGhIssue(
+	issueNumber: number,
+	repo?: string
+): Promise<void> {
+	logger.debug('Closing GitHub issue', { issueNumber, repo })
+
+	const args = ['issue', 'close', String(issueNumber)]
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	await executeGhCommand(args)
+}
+
+/**
+ * Reopen a GitHub issue
+ * @param issueNumber - The issue number
+ * @param repo - Optional repo in "owner/repo" format
+ */
+export async function reopenGhIssue(
+	issueNumber: number,
+	repo?: string
+): Promise<void> {
+	logger.debug('Reopening GitHub issue', { issueNumber, repo })
+
+	const args = ['issue', 'reopen', String(issueNumber)]
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	await executeGhCommand(args)
+}
+
+/**
+ * Edit a GitHub issue's properties
+ * @param issueNumber - The issue number
+ * @param options - Fields to update
+ * @param options.title - New issue title
+ * @param options.body - New issue body
+ * @param options.labels - Labels to add to the issue
+ * @param repo - Optional repo in "owner/repo" format
+ */
+export async function editGhIssue(
+	issueNumber: number,
+	options: { title?: string; body?: string; labels?: string[] },
+	repo?: string
+): Promise<void> {
+	logger.debug('Editing GitHub issue', { issueNumber, options, repo })
+
+	const args = ['issue', 'edit', String(issueNumber)]
+
+	if (options.title !== undefined) {
+		args.push('--title', options.title)
+	}
+	if (options.body !== undefined) {
+		args.push('--body', options.body)
+	}
+	if (options.labels) {
+		// Use --add-label for each label. gh issue edit replaces with comma-separated --add-label
+		if (options.labels.length > 0) {
+			args.push('--add-label', options.labels.join(','))
+		}
+	}
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	await executeGhCommand(args)
+}
+
 // Issue List Operations (for il issues command)
 
 export interface GitHubIssueListItem {
