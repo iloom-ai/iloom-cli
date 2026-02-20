@@ -207,33 +207,38 @@ copySettingsFile() {
 
 ### Parallelization Planning
 
-When creating the Execution Plan, analyze which steps can run in parallel vs. sequentially:
+**Goal: Maximize parallel execution.** The orchestrator spawns separate agents for parallel steps — every unnecessary sequential dependency slows execution. Design for a **wide, shallow execution graph**, not a deep sequential chain.
 
-**Steps that CAN run in parallel:**
-- Steps touching completely different files/modules
-- Independent feature implementations that don't share state
-- Adding tests for different, unrelated components
-- Documentation updates alongside code changes (different files)
+**Use contract-based parallelism.** When Step B needs a type, function, or module that Step A creates, do NOT automatically make them sequential. Instead:
+1. Define the shared contract (interface, function signature, module export) explicitly in both steps
+2. Let both steps execute in parallel — each implements against the agreed contract
+3. A later integration step (if needed) catches any mismatches
 
-**Steps that MUST be sequential:**
-- Steps modifying the same file (one step must complete before another can safely edit)
-- Steps where one creates types/interfaces that another imports
-- Steps where one creates a function/class that another calls
-- Integration layers that depend on multiple components being complete
+**Example:** If Step 1 creates a `UserService` class and Step 2 needs to call `UserService.getById()`, don't block Step 2 on Step 1. Instead, specify in both steps: "The `UserService` class will expose `getById(id: string): Promise<User>`". Both agents implement against this contract simultaneously.
 
-**Decision process for each step:**
-1. List ALL files the step will touch (create, modify, or delete)
-2. Compare against other steps' file lists
-3. If no overlap AND no import/export dependencies → can parallelize
-4. If overlap OR dependencies → must be sequential
+**Only force sequential execution when truly necessary:**
+- Steps modifying the same file (concurrent edits cause conflicts)
+- Step B literally cannot define any meaningful contract without Step A's output (rare)
+- Step B modifies files that Step A creates from scratch (not just imports them)
 
-**Example analysis:**
+**A sign your plan needs more parallelism:** If your execution plan is mostly linear (Step 1 → Step 2 → Step 3 → Step 4), rethink the decomposition. Ask: "Can I define contracts so these run concurrently?" Usually the answer is yes.
+
+**Example — sequential (avoid):**
 ```
-Step 1: Create types.ts (NEW) → Sequential first (others import from it)
-Step 2: Modify moduleA.ts → Parallel with Step 3 (different file)
-Step 3: Modify moduleB.ts → Parallel with Step 2 (different file)
-Step 4: Modify index.ts (imports from moduleA & moduleB) → Sequential after 2,3
-Step 5: Add tests → Sequential last
+Step 1: Create types.ts with UserInput interface
+Step 2: Create validation.ts (imports UserInput) → sequential after Step 1
+Step 3: Create handler.ts (imports UserInput) → sequential after Step 1
+Step 4: Wire up in index.ts → sequential after Steps 2, 3
+Step 5: Add tests → sequential last
+```
+
+**Example — contract-based parallel (prefer):**
+```
+Step 1: Create types.ts, validation.ts, and handler.ts in parallel
+  - Each step's description includes the shared contract: "UserInput = { name: string, email: string }"
+  - types.ts defines it, validation.ts and handler.ts implement against it
+Step 2: Wire up in index.ts (depends on Step 1 completing)
+Step 3: Add tests (depends on Step 2)
 ```
 
 ### General Best Practices
@@ -404,64 +409,65 @@ If structure is >5 lines:
 
 ## Detailed Execution Order
 
-Provide execution steps concisely:
+Provide execution steps concisely. Group steps by parallel execution phase — steps within the same phase run concurrently, phases run sequentially:
 
-### Step 1: [Step Name]
+### Phase 1 (parallel): [Foundation]
+#### Step 1a: [Step Name]
 **Files:** [List all files this step touches]
-1. [Action with file:line reference] → Verify: [Expected outcome]
-2. [Next action] → Verify: [Expected outcome]
-
-### Step 2: [Step Name]
-**Files:** [List all files this step touches]
+**Contract:** [If this step produces or consumes a shared interface/type, specify it here]
 1. [Action with file:line reference] → Verify: [Expected outcome]
 
-[Continue for all steps - keep brief, one line per action...]
+#### Step 1b: [Step Name]
+**Files:** [List all files this step touches]
+**Contract:** [Shared contract this step implements against]
+1. [Action with file:line reference] → Verify: [Expected outcome]
+
+### Phase 2 (sequential): [Integration]
+#### Step 2: [Step Name]
+**Files:** [List all files this step touches]
+1. [Action with file:line reference] → Verify: [Expected outcome]
+
+[Continue for all phases — maximize steps per parallel phase, minimize the number of phases...]
 
 **NOTE:** Follow the project's development workflow as specified in CLAUDE.md (e.g., TDD, test-after, or other approaches).
 
 ## Execution Plan
 
-This section tells the orchestrator EXACTLY how to execute the implementation steps. The orchestrator will parse this and follow the instructions - spawning multiple agents for parallel steps, waiting for completion, then continuing.
+This section tells the orchestrator EXACTLY how to execute the implementation steps. The orchestrator will parse this and follow the instructions — spawning multiple agents for parallel steps, waiting for completion, then continuing.
 
-### Step Consolidation Guidelines
+### Maximize Parallelism
 
-**Goal:** Minimize the number of steps to reduce agent invocation overhead while keeping steps manageable.
+**The entire value of parallel execution is running many steps concurrently.** Every sequential dependency you add forces the orchestrator to wait. Design your execution plan for maximum width — the ideal plan has 2-3 phases with many parallel steps each, not 5-6 phases with 1 step each.
 
-**Consolidation Rules:**
-1. **Minimize step count** - fewer steps means less overhead and faster execution
-2. **Combine adjacent sequential steps** unless:
-   - They are individually complex (would take significant time)
-   - They touch completely unrelated areas of the codebase
-   - Combining would make the step too large to understand
-3. **Prefer parallel execution** - only use sequential when there are real dependencies
+**Rules:**
+1. **Default to parallel.** Only mark steps as sequential when they modify the same files or literally cannot proceed without another step's output files existing.
+2. **Use contract-based parallelism.** If Step B needs a type/function that Step A creates, define the contract in both step descriptions and run them in parallel. Do NOT make B wait for A.
+3. **Consolidate tiny sequential steps.** If two sequential steps are small and related, combine them into one step to reduce overhead.
+4. **Tests can often run in parallel with integration.** If tests only depend on the modules they test (not on the integration wiring), they can run alongside integration steps.
 
-**Example of over-fragmented steps (avoid this):**
-```
-1. Run Step 1 (sequential) - add utility function
-2. Run Step 2 (sequential) - use utility in client
-```
-
-**Example of properly consolidated steps (prefer this):**
-```
-1. Run Step 1 (sequential) - add utility function and use it in client
-```
-
-**Format:** A numbered list specifying execution order and parallelization:
+**Format:** A numbered list specifying execution phases. Steps within a phase run in parallel:
 
 ```
-1. Run Step 1 (sequential - foundation/setup that others depend on)
-2. Run Steps 2, 3, 4 in parallel (independent file changes)
-3. Run Step 5 (depends on Steps 2-4 completing)
-4. Run Step 6 (validation/tests - must run last)
+1. Run Steps 1, 2, 3 in parallel (contract: SharedType = { ... })
+2. Run Steps 4, 5 in parallel (integration + tests, different files)
 ```
 
-**Example for a feature implementation:**
+**Example — over-sequential (avoid):**
 ```
-1. Run Step 1 (sequential - create shared types/interfaces)
-2. Run Steps 2, 3 in parallel (independent module implementations)
-3. Run Step 4 (sequential - integration layer depends on Steps 2-3)
-4. Run Step 5 (sequential - tests and validation)
+1. Run Step 1 (sequential - create types)
+2. Run Step 2 (sequential - create service using types)
+3. Run Step 3 (sequential - create handler using types)
+4. Run Step 4 (sequential - wire up index)
+5. Run Step 5 (sequential - add tests)
 ```
+
+**Example — parallel-first (prefer):**
+```
+1. Run Steps 1, 2, 3 in parallel (types, service, handler — shared contract: "UserInput = { name: string, email: string }")
+2. Run Steps 4, 5 in parallel (index wiring + tests — different files)
+```
+
+**A sign your plan needs rework:** If most phases have only 1 step, you're effectively running sequentially. Rethink the step boundaries and apply contract-based parallelism.
 
 ## Dependencies and Configuration
 
