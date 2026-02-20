@@ -71,7 +71,8 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 6. Spawn agents for newly unblocked child issues (repeat as needed)
 7. Handle any failures (mark failed, continue with others)
 8. When all children are done or failed, finalize and clean up
-9. Print final summary
+9. Create final commit with Fixes trailer for epic issue
+10. Print final summary
 
 ---
 
@@ -250,7 +251,19 @@ Send `shutdown_request` to all teammates that are still active:
 
 Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
 
-### Step 5.3: Print Summary
+### Step 5.3: Final Commit on Epic Branch
+
+If at least one child succeeded, create a final commit on the epic branch that fixes the epic issue. This ensures the epic issue is automatically closed when the PR is merged.
+
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git add -A
+git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
+```
+
+Note: `--allow-empty` is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message trailer to trigger issue closure.
+
+### Step 5.4: Print Summary
 
 Print a comprehensive summary:
 
@@ -278,4 +291,4 @@ The epic branch at `{{EPIC_WORKTREE_PATH}}` contains merged work from all succes
 The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 ```
 
-Mark todo #8 and #9 as completed.
+Mark todo #8, #9, and #10 as completed.

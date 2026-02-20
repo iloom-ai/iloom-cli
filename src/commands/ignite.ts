@@ -917,12 +917,16 @@ export class IgniteCommand {
 		// Get metadata file path for the orchestrator prompt template
 		const epicMetadataPath = metadataManager.getMetadataFilePath(epicWorktreePath)
 
+		// Determine issue prefix for commit message trailers
+		const issuePrefix = providerName === 'github' ? '#' : ''
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
 			EPIC_METADATA_PATH: epicMetadataPath,
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
+			ISSUE_PREFIX: issuePrefix,
 		}
 
 		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)

@@ -6,6 +6,7 @@ import { AgentManager } from './AgentManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueTrackerFactory } from './IssueTrackerFactory.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
@@ -295,14 +296,17 @@ export class SwarmSetupService {
 		await fs.ensureDir(agentsDir)
 
 		try {
-			// Load settings for review configuration
+			// Load settings for review configuration and issue prefix
 			const settings = await this.settingsManager.loadSettings()
+			const providerType = settings?.issueManagement?.provider ?? 'github'
+			const issuePrefix = IssueManagementProviderFactory.create(providerType, settings ?? undefined).issuePrefix
 
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
+				ISSUE_PREFIX: issuePrefix,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
