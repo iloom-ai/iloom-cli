@@ -950,7 +950,25 @@ server.registerTool(
 
 // Main server startup
 async function main(): Promise<void> {
-	console.error('Starting Issue Management MCP Server...')
+	console.error('=== Issue Management MCP Server Starting ===')
+	console.error(`PID: ${process.pid}`)
+	console.error(`Node version: ${process.version}`)
+	console.error(`CWD: ${process.cwd()}`)
+	console.error(`Script: ${new URL(import.meta.url).pathname}`)
+
+	// Log all ISSUE_PROVIDER-related env vars (redact sensitive values)
+	const relevantEnvKeys = [
+		'ISSUE_PROVIDER', 'REPO_OWNER', 'REPO_NAME', 'GITHUB_API_URL', 'GITHUB_EVENT_NAME',
+		'DRAFT_PR_NUMBER', 'LINEAR_API_TOKEN', 'LINEAR_TEAM_KEY',
+		'JIRA_HOST', 'JIRA_USERNAME', 'JIRA_API_TOKEN', 'JIRA_PROJECT_KEY',
+	]
+	console.error('Environment variables:')
+	for (const key of relevantEnvKeys) {
+		const val = process.env[key]
+		if (val !== undefined) {
+			console.error(`  ${key}=${val}`)
+		}
+	}
 
 	// Load settings for providers that need them
 	const settingsManager = new SettingsManager()
@@ -971,7 +989,7 @@ async function main(): Promise<void> {
 	const transport = new StdioServerTransport()
 	await server.connect(transport)
 
-	console.error('Issue Management MCP Server running on stdio transport')
+	console.error('=== Issue Management MCP Server READY (stdio transport) ===')
 }
 
 // Run the server

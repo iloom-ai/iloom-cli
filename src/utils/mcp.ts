@@ -130,13 +130,17 @@ export async function generateIssueManagementMcpConfig(
 		})
 	}
 
+	// Compute absolute path to the MCP server JS file
+	const serverJsPath = path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')
+	const resolvedServerJsPath = path.resolve(serverJsPath)
+
 	// Generate single MCP server config
 	const mcpServerConfig = {
 		mcpServers: {
 			issue_management: {
 				transport: 'stdio',
 				command: 'node',
-				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')],
+				args: [resolvedServerJsPath],
 				env: envVars,
 			},
 		},
@@ -198,18 +202,21 @@ export function generateRecapMcpConfig(
 		loomMetadataDescription: loomMetadata.description,
 	})
 
+	// Compute absolute path to the recap MCP server JS file
+	const recapServerJsPath = path.resolve(
+		path.join(
+			path.dirname(new globalThis.URL(import.meta.url).pathname),
+			'../dist/mcp/recap-server.js'
+		)
+	)
+
 	return [
 		{
 			mcpServers: {
 				recap: {
 					transport: 'stdio',
 					command: 'node',
-					args: [
-						path.join(
-							path.dirname(new globalThis.URL(import.meta.url).pathname),
-							'../dist/mcp/recap-server.js'
-						),
-					],
+					args: [recapServerJsPath],
 					env: envVars,
 				},
 			},
@@ -282,14 +289,24 @@ export async function generateAndWriteMcpConfigFile(
 
 	const mergedConfig = { mcpServers: mergedServers }
 
+	// Verify MCP server JS files exist before writing config
+	for (const [serverName, serverConfig] of Object.entries(mergedServers)) {
+		const config = serverConfig as { args?: string[] }
+		const jsPath = config.args?.[0]
+		if (jsPath) {
+			const exists = await fs.pathExists(jsPath)
+			if (!exists) {
+				logger.warn(`MCP server JS file not found: ${serverName} -> ${jsPath}`)
+			}
+		}
+	}
+
 	// Write to file
 	const configDir = getMcpConfigsDir()
 	await fs.ensureDir(configDir, { mode: 0o755 })
 
 	const configFilePath = getMcpConfigFilePath(loomPath)
 	await fs.writeFile(configFilePath, JSON.stringify(mergedConfig, null, 2), { mode: 0o644 })
-
-	logger.debug('Wrote per-loom MCP config file', { loomPath, configFilePath })
 
 	return configFilePath
 }

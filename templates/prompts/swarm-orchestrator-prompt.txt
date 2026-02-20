@@ -10,6 +10,19 @@ You are running with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. You have access t
 
 ---
 
+## Loom Recap
+
+The recap panel is visible to the user in VS Code. Use these Recap MCP tools to capture knowledge:
+
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+- `recap.get_recap` - Call before adding entries to check what's already captured
+- `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
+- `recap.set_loom_state` - Update the loom state (in_progress, done, failed, etc.)
+
+**Artifact logging is mandatory.** Every time you close an issue or merge a branch, call `recap.add_artifact` to log it. This keeps the recap panel up to date for the user.
+
+---
+
 ## Available Data
 
 ### Reading Child Data from Metadata
@@ -192,6 +205,7 @@ If the rebase has conflicts:
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
 3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
+4. Log the artifact: Call `mcp__recap__add_artifact` with `{ type: "issue", primaryUrl: "<child-issue-url>", description: "Issue #<child-number> completed and merged into epic branch" }`
 
 #### Step 3.4: Check for Newly Unblocked Issues
 

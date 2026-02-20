@@ -56,6 +56,8 @@ Use these Recap MCP tools:
 
 {{#if SWARM_MODE}}
 **Swarm Mode Recap**: When calling recap tools, the recap server is configured for this worktree. No additional worktreePath parameter is needed.
+
+**Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>" }`. This keeps the recap panel up to date for the user.
 {{/if}}
 
 ---
@@ -255,7 +257,7 @@ Your issue-specific context (issue number, worktree path, issue title, and issue
 - **Error handling**: Never silently swallow errors. Report failures with details back to the orchestrator.
 
 ### State Transitions
-Call `recap.set_loom_state` at these workflow boundaries:
+Call `recap.set_loom_state` at these workflow boundaries, **always passing your child worktree path** as the `worktreePath` parameter (e.g., `{ state: "in_progress", worktreePath: "<your-worktree-path>" }`). Without `worktreePath`, the call defaults to the epic's metadata — which is wrong for child workers.
 - `in_progress` - At workflow start (Step 0)
 - `code_review` - Before running code review (Step 5)
 - `done` - On successful completion (after commit)
@@ -325,18 +327,18 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - The `.claude/iloom-swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
 
 **Todo List:**
-1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress`, read issue
+1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent)
+3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent). After completion, call `mcp__recap__add_artifact` with the enhancement comment URL.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
 3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-4. Run complexity evaluation via headless claude -p process (complexity evaluator agent)
+4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
-6. Run analysis/planning based on route via headless claude -p process (appropriate agent)
+6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
 6a. If COMPLEX: Run artifact review on analysis output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
@@ -346,7 +348,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
 6c. If SIMPLE: Run artifact review on combined analysis and plan output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-7. Run implementation via headless claude -p process (implementer agent)
+7. Run implementation via headless claude -p process (implementer agent). After completion, call `mcp__recap__add_artifact` with the implementation comment URL.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
 7a. Run artifact review on implementation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
