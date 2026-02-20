@@ -348,7 +348,7 @@ export async function fetchChildIssueDetails(
  * @param providerName - Provider type
  * @returns Prefixed number: "#123" for GitHub, "ENG-123" for Linear (already prefixed)
  */
-function formatIssueNumber(issueId: string, providerName: string): string {
+export function formatIssueNumber(issueId: string, providerName: string): string {
   if (providerName === 'github') {
     return `#${issueId}`
   }

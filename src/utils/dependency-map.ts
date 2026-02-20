@@ -11,6 +11,7 @@ import { getLinearIssueDependencies } from './linear.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import { getLogger } from './logger-context.js'
+import { formatIssueNumber } from './list-children.js'
 
 /**
  * Build a dependency map for a set of child issues
@@ -22,8 +23,9 @@ import { getLogger } from './logger-context.js'
  * @param childIssueIds - Array of child issue IDs (e.g., ["101", "102", "103"])
  * @param settings - IloomSettings to determine which provider to use
  * @param repo - Optional repo in "owner/repo" format for GitHub
- * @returns Dependency map: Record<string, string[]> where key is issue ID
- *          and value is array of issue IDs that block it
+ * @returns Dependency map: Record<string, string[]> where key is formatted issue number
+ *          (e.g., "#101" for GitHub, "ENG-101" for Linear) and value is array of
+ *          formatted issue numbers that block it, matching SwarmIssue.number format
  */
 export async function buildDependencyMap(
   childIssueIds: string[],
@@ -63,7 +65,13 @@ export async function buildDependencyMap(
     }
   }
 
-  return dependencyMap
+  // Format keys and values to match SwarmIssue.number format (e.g., "#101" for GitHub)
+  const formattedMap: Record<string, string[]> = {}
+  for (const [key, values] of Object.entries(dependencyMap)) {
+    const formattedKey = formatIssueNumber(key, providerName)
+    formattedMap[formattedKey] = values.map((v) => formatIssueNumber(v, providerName))
+  }
+  return formattedMap
 }
 
 /**

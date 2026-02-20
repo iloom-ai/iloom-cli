@@ -38,9 +38,9 @@ describe('buildDependencyMap', () => {
     const result = await buildDependencyMap(['101', '102', '103'], githubSettings)
 
     expect(result).toEqual({
-      '101': [],
-      '102': [],
-      '103': [],
+      '#101': [],
+      '#102': [],
+      '#103': [],
     })
   })
 
@@ -61,10 +61,10 @@ describe('buildDependencyMap', () => {
 
     const result = await buildDependencyMap(['101', '102', '103'], githubSettings)
 
-    expect(result['102']).toEqual(['101'])
+    expect(result['#102']).toEqual(['#101'])
     // External dependency (999) should be filtered out
-    expect(result['101']).toEqual([])
-    expect(result['103']).toEqual([])
+    expect(result['#101']).toEqual([])
+    expect(result['#103']).toEqual([])
   })
 
   it('should handle Linear provider dependencies', async () => {
@@ -105,9 +105,9 @@ describe('buildDependencyMap', () => {
     const result = await buildDependencyMap(['101', '102', '103'], githubSettings)
 
     // Should still have entries for all children (failed ones get empty array)
-    expect(result['101']).toEqual([])
-    expect(result['102']).toEqual([])
-    expect(result['103']).toEqual([])
+    expect(result['#101']).toEqual([])
+    expect(result['#102']).toEqual([])
+    expect(result['#103']).toEqual([])
   })
 
   it('should return empty arrays for unsupported providers', async () => {

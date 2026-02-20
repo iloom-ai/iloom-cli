@@ -2047,8 +2047,8 @@ describe('StartCommand', () => {
 			])
 
 			vi.mocked(buildDependencyMap).mockResolvedValue({
-				'101': [],
-				'102': ['101'],
+				'#101': [],
+				'#102': ['#101'],
 			})
 
 			await epicCommand.execute({
@@ -2068,8 +2068,8 @@ describe('StartCommand', () => {
 							{ number: '#102', title: 'Child 2', body: 'Body 2', url: 'https://github.com/test/repo/issues/102' },
 						],
 						dependencyMap: {
-							'101': [],
-							'102': ['101'],
+							'#101': [],
+							'#102': ['#101'],
 						},
 					}),
 				})
