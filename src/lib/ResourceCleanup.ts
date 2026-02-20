@@ -98,19 +98,32 @@ export class ResourceCleanup {
 		// Step 2: Find worktree using specific methods based on type
 		let worktree: GitWorktree | null = null
 		try {
-			// Use specific finding methods based on parsed type for precision
-			if (parsed.type === 'pr' && parsed.number !== undefined) {
-				// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
-				const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
-				if (isNaN(prNumber) || !isFinite(prNumber)) {
-					throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+			// Use pre-resolved worktree if provided (skips the search step)
+			if (options.worktree) {
+				worktree = {
+					path: options.worktree.path,
+					branch: options.worktree.branch,
+					commit: '',
+					bare: false,
+					detached: false,
+					locked: false,
 				}
-				// For PRs, pass empty string for branchName since we're detecting from path pattern
-				worktree = await this.gitWorktree.findWorktreeForPR(prNumber, '')
-			} else if (parsed.type === 'issue' && parsed.number !== undefined) {
-				worktree = await this.gitWorktree.findWorktreeForIssue(parsed.number)
-			} else if (parsed.type === 'branch' && parsed.branchName) {
-				worktree = await this.gitWorktree.findWorktreeForBranch(parsed.branchName)
+				getLogger().debug(`Using pre-resolved worktree: path="${worktree.path}", branch="${worktree.branch}"`)
+			} else {
+				// Use specific finding methods based on parsed type for precision
+				if (parsed.type === 'pr' && parsed.number !== undefined) {
+					// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
+					const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+					if (isNaN(prNumber) || !isFinite(prNumber)) {
+						throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+					}
+					// For PRs, pass empty string for branchName since we're detecting from path pattern
+					worktree = await this.gitWorktree.findWorktreeForPR(prNumber, '')
+				} else if (parsed.type === 'issue' && parsed.number !== undefined) {
+					worktree = await this.gitWorktree.findWorktreeForIssue(parsed.number)
+				} else if (parsed.type === 'branch' && parsed.branchName) {
+					worktree = await this.gitWorktree.findWorktreeForBranch(parsed.branchName)
+				}
 			}
 
 			if (!worktree) {

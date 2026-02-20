@@ -1189,6 +1189,7 @@ export class FinishCommand {
 			deleteBranch: false, // Don't delete branch - PR still needs it
 			keepDatabase: false, // Clean up database
 			force: options.force ?? false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {
@@ -1294,6 +1295,7 @@ export class FinishCommand {
 			// rather than checkRemoteBranch, since the remote branch may still exist
 			// but local may have additional commits
 			checkRemoteBranch: false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {
@@ -1463,6 +1465,7 @@ export class FinishCommand {
 			deleteBranch: true, // Delete branch after successful merge
 			keepDatabase: false, // Clean up database after merge
 			force: options.force ?? false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {
