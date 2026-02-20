@@ -978,6 +978,7 @@ export class IgniteCommand {
 				permissionMode: 'bypassPermissions',
 				addDir: epicWorktreePath,
 				headless: false,
+				...(metadata.sessionId && { sessionId: metadata.sessionId }),
 				appendSystemPrompt: orchestratorPrompt,
 				mcpConfig: mcpConfigs,
 				allowedTools,
