@@ -241,15 +241,32 @@ A sign that issues should be consolidated: several small issues share the same d
 - The dependency chain is long and linear with no parallelism (A → B → C → D → E), where each step is tiny
 - You're creating issues that an engineer would naturally do as part of a larger change (e.g., "update imports" as its own issue)
 
-**The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-150 LOC of meaningful changes.
+**The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-120 LOC of meaningful changes. When you're on the fence about whether to split, lean toward splitting — smaller issues enable more parallelism and are easier for agents to get right on the first attempt.
+
+**Maximize Parallel Execution.** The entire value of swarm mode is running many issues concurrently. Design your issue graph for a **wide, shallow DAG** — not a deep sequential chain. Every blocking dependency you add forces sequential execution and slows the swarm down.
+
+**Use contract-based parallelism instead of blocking dependencies.** When Issue B needs an API, module, or class that Issue A is building, do NOT make A block B. Instead:
+1. Define the shared contract (interface, function signature, module API) explicitly in both issue descriptions
+2. Let both issues execute in parallel — each implements against the agreed contract
+3. A later integration step (or the PR review) catches any mismatches
+
+**Example:** If Issue A creates a `UserService` class and Issue B needs to call `UserService.getById()`, don't block B on A. Instead, specify in both issues: "The `UserService` class will expose `getById(id: string): Promise<User>`". Both agents implement against this contract simultaneously.
+
+**Only create hard blocking dependencies when truly necessary:**
+- Issue B literally modifies files that Issue A creates from scratch (not just imports them)
+- Issue B requires a database migration or schema change from Issue A
+- Issue B cannot define any meaningful contract without Issue A's output (rare)
+
+**A sign your plan needs more parallelism:** If your dependency graph is mostly linear (A → B → C → D), rethink the decomposition. Ask: "Can I define contracts so these run concurrently?" Usually the answer is yes.
 
 **Issue Structure:**
 Each child issue should include:
 1. **Summary**: One-sentence description of what this issue accomplishes
 2. **Context**: Why this issue exists (relationship to parent feature)
 3. **Acceptance Criteria**: Clear, testable conditions for "done"
-4. **Dependencies**: Which issues must be completed first (if any)
-5. **Scope Boundaries**: What is explicitly NOT included
+4. **Dependencies**: Which issues must be completed first (if any) — keep these minimal
+5. **Shared Contracts**: If this issue produces or consumes an interface/API that other parallel issues depend on, specify the exact contract (function signatures, types, module exports)
+6. **Scope Boundaries**: What is explicitly NOT included
 
 ---
 
@@ -326,7 +343,7 @@ Wait for the subagent to complete, then present its summary to the user for plan
    - Do NOT create a new parent epic - use the existing issue #{{PARENT_ISSUE_NUMBER}}
 2. **Set up blocking dependencies between children**
    - Use `create_dependency` to define execution order
-   - If Issue B depends on work from Issue A, create a dependency where A blocks B
+   - Only create a blocking dependency (A blocks B) when B truly cannot start without A's output — prefer contract-based parallelism over blocking dependencies (see "Maximize Parallel Execution" above)
 3. **Post Architectural Decision Record (ADR) as comment on parent issue**
    - Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"`
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
@@ -347,7 +364,7 @@ Wait for the subagent to complete, then present its summary to the user for plan
    - Each child represents one focused unit of work (1 loom = 1 PR)
 3. **Set up blocking dependencies between children**
    - Use `create_dependency` to define execution order
-   - If Issue B depends on work from Issue A, create a dependency where A blocks B
+   - Only create a blocking dependency (A blocks B) when B truly cannot start without A's output — prefer contract-based parallelism over blocking dependencies (see "Maximize Parallel Execution" above)
 4. **Post Architectural Decision Record (ADR) as first comment on parent epic**
    - Use `create_comment` with `number: <parent epic number>`, `type: "issue"`
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
