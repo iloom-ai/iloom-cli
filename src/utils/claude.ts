@@ -67,8 +67,8 @@ function externalizeIfNeeded(
 	// 1. Externalise --append-system-prompt → CLAUDE.md in temp --add-dir
 	if (appendSystemPrompt) {
 		const tempDir = join(tmpdir(), `iloom-sp-${randomUUID()}`)
-		mkdirSync(tempDir, { recursive: true })
-		writeFileSync(join(tempDir, 'CLAUDE.md'), appendSystemPrompt, 'utf-8')
+		mkdirSync(tempDir, { recursive: true, mode: 0o700 })
+		writeFileSync(join(tempDir, 'CLAUDE.md'), appendSystemPrompt, { encoding: 'utf-8', mode: 0o600 })
 		cleanupDirs.push(tempDir)
 
 		// Remove the --append-system-prompt arg pair and add --add-dir instead
@@ -93,7 +93,7 @@ function externalizeIfNeeded(
 			const value = newArgs[idx + 1]
 			if (value) {
 				const tmpFile = join(tmpdir(), `iloom-mcp-${randomUUID()}.json`)
-				writeFileSync(tmpFile, value, 'utf-8')
+				writeFileSync(tmpFile, value, { encoding: 'utf-8', mode: 0o600 })
 				cleanupFiles.push(tmpFile)
 				newArgs[idx + 1] = tmpFile
 				getLogger().debug('Externalised --mcp-config to temp file', { tmpFile })
@@ -106,7 +106,7 @@ function externalizeIfNeeded(
 	if (agentsIdx !== -1 && newArgs[agentsIdx + 1]) {
 		const tmpFile = join(tmpdir(), `iloom-agents-${randomUUID()}.json`)
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		writeFileSync(tmpFile, newArgs[agentsIdx + 1]!, 'utf-8')
+		writeFileSync(tmpFile, newArgs[agentsIdx + 1]!, { encoding: 'utf-8', mode: 0o600 })
 		cleanupFiles.push(tmpFile)
 		newArgs[agentsIdx + 1] = tmpFile
 		getLogger().debug('Externalised --agents to temp file', { tmpFile })

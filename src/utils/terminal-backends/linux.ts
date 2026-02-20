@@ -52,9 +52,9 @@ export class LinuxBackend implements TerminalBackend {
 			)
 		}
 
-		const shellCommand = await buildCommandSequence(options)
+		const shellCommand = (await buildCommandSequence(options)).trim()
 		// Append `; exec bash` so the tab stays open after the command completes
-		const keepAliveCommand = `${shellCommand}; exec bash`
+		const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
 
 		await this.execTerminal(terminal, keepAliveCommand, options.title)
 	}
@@ -138,14 +138,14 @@ export class LinuxBackend implements TerminalBackend {
 				)
 			}
 
-			const shellCommand = await buildCommandSequence(options)
-			const keepAliveCommand = `${shellCommand}; exec bash`
+			const shellCommand = (await buildCommandSequence(options)).trim()
+			const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
 
 			args.push('--tab')
 			if (options.title) {
 				args.push('--title', options.title)
 			}
-			args.push('--', 'bash', '-c', keepAliveCommand)
+			args.push('--', 'bash', '-lic', keepAliveCommand)
 		}
 
 		try {
