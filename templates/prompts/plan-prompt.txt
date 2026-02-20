@@ -79,6 +79,7 @@ After the subagent completes, include its context summary when sending the plan 
 
 {{#if USE_GEMINI_REVIEWER}}
 **Reviewer: Gemini** - Use available Gemini MCP tools (look for tools with "gemini" in the name) to review your plan. Ask for feedback on:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -92,6 +93,7 @@ After the subagent completes, include its context summary when sending the plan 
 {{/if}}
 {{#if USE_CODEX_REVIEWER}}
 **Reviewer: Codex** - Use available Codex MCP tools (look for tools with "codex" in the name) to review your plan. Ask for feedback on:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -105,6 +107,7 @@ After the subagent completes, include its context summary when sending the plan 
 {{/if}}
 {{#unless USE_GEMINI_REVIEWER}}{{#unless USE_CODEX_REVIEWER}}
 **Reviewer: Claude** - Review the plan yourself, considering:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -211,6 +214,35 @@ Break the work into actionable issues. Each issue should be:
 
 A sign that issues should be consolidated: several small issues share the same dependencies, touch overlapping files, or have similar scope. For example, "add field X to the schema," "add field X to the API," and "add field X to the UI" are likely one issue if they all depend on the same prior work and would naturally be done together. When the boundaries feel artificial, combine them.
 
+**Target SIMPLE complexity for each child issue.** Every child issue should be scoped so that an implementing agent can classify it as SIMPLE (or TRIVIAL). This means each child issue should meet ALL of these criteria:
+
+| Metric | Target |
+|--------|--------|
+| Files affected | < 5 (excluding test files) |
+| Lines of code | < 200 (new + modified, excluding tests) |
+| Breaking changes | None |
+| Database migrations | None |
+| Cross-cutting changes | None — avoid issues that pass parameters/config through 3+ architectural layers |
+| Architectural complexity signals | None — the "how" should be obvious from the "what" |
+| Risk level | Low or Medium |
+| File quality | All modified files < 500 LOC, or well-architected if larger |
+
+**When an issue would naturally be COMPLEX, decompose further.** If a piece of work would touch 5+ files, require 200+ LOC, or involve cross-cutting parameter threading, split it into smaller issues that each stay within SIMPLE bounds. Common decomposition strategies:
+
+- **Layer by layer**: Instead of one issue that threads a new option from CLI → Manager → Service → Utility, create separate issues for each layer boundary (e.g., "Add option to CLI interface" then "Wire option through to Service layer")
+- **Vertical slices**: Instead of one issue that adds a full feature, split into "Add core logic" then "Add UI/CLI surface" then "Add tests and validation"
+- **New pattern then apply**: If a new pattern is needed, create one issue to establish the pattern in a single location, then a follow-up to apply it elsewhere
+
+**Resist the urge to create COMPLEX child issues.** A common mistake is creating child issues that are individually large and complex. The goal is many small, focused issues — not a few big ones. If you find yourself writing a child issue that requires architectural decisions, coordinating multiple systems, or modifying large poorly-structured files, it's a signal to split further.
+
+**But don't over-split into TRIVIAL busywork either.** Each child issue should represent a meaningful, coherent unit of work — not a single function rename or a one-line config change. Signs you've split too far:
+- Multiple child issues touch the same file for closely related changes
+- A child issue has no meaningful acceptance criteria beyond "change X to Y"
+- The dependency chain is long and linear with no parallelism (A → B → C → D → E), where each step is tiny
+- You're creating issues that an engineer would naturally do as part of a larger change (e.g., "update imports" as its own issue)
+
+**The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-150 LOC of meaningful changes.
+
 **Issue Structure:**
 Each child issue should include:
 1. **Summary**: One-sentence description of what this issue accomplishes
@@ -301,9 +333,9 @@ Wait for the subagent to complete, then present its summary to the user for plan
 4. **Output next steps to the user**
    - Tell them what was created: "Created N child issues for #{{PARENT_ISSUE_NUMBER}}."
 {{#if IS_VSCODE_MODE}}
-   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+   - Recommend: "In the iloom explorer panel, add a loom for issue #{{PARENT_ISSUE_NUMBER}} — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
-   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+   - Recommend: "Run `il start {{PARENT_ISSUE_NUMBER}}` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 {{else}}
 **Fresh Planning Mode - Issue Creation Order:**
@@ -322,9 +354,9 @@ Wait for the subagent to complete, then present its summary to the user for plan
 5. **Output next steps to the user**
    - Tell them what was created: "Created Epic #X with Y child issues."
 {{#if IS_VSCODE_MODE}}
-   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+   - Recommend: "In the iloom explorer panel, add a loom for Epic #X — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
-   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+   - Recommend: "Run `il start X` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 {{/if}}
 
@@ -456,10 +488,10 @@ Direct the user to **open the epic issue** - this is the parent issue that conta
 
 {{#if IS_VSCODE_MODE}}
 **Next Steps Message (VS Code Mode):**
-End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Review the epic and child issues at [EPIC_URL]. When ready to begin implementation, add a loom for issue #[EPIC_NUMBER] in the iloom explorer panel — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
 **Next Steps Message (CLI Mode):**
-End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Review the epic and child issues at [EPIC_URL]. When ready to begin implementation, run `il start [EPIC_NUMBER]` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 
-Replace `[EPIC_URL]` with the actual URL of the epic issue you created.
+Replace `[EPIC_URL]` and `[EPIC_NUMBER]` with actual values from the epic issue you created.

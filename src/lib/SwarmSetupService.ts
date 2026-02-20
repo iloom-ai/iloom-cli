@@ -3,11 +3,14 @@ import fs from 'fs-extra'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { MetadataManager, type WriteMetadataInput, type SwarmState } from './MetadataManager.js'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager } from './SettingsManager.js'
+import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
+import { IssueTrackerFactory } from './IssueTrackerFactory.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
+import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 
 /**
  * Result of the swarm setup process
@@ -24,6 +27,17 @@ export interface SwarmSetupResult {
 	}>
 	agentsRendered: string[]
 	workerAgentRendered: boolean
+}
+
+/**
+ * Metadata extracted from agent YAML frontmatter for use in claude -p commands.
+ * Maps agent file name (without .md) to model and tools info.
+ */
+export interface SwarmAgentMetadata {
+	[agentFileName: string]: {
+		model: string
+		tools?: string[]
+	}
 }
 
 /**
@@ -55,6 +69,7 @@ export class SwarmSetupService {
 	/**
 	 * Create child worktrees for each child issue, branched off the epic branch.
 	 * Writes iloom-metadata.json for each child with state: 'pending' and parentLoom.
+	 * Generates and writes per-loom MCP config file for each child.
 	 *
 	 * Uses standard iloom naming conventions via generateWorktreePath().
 	 *
@@ -64,6 +79,7 @@ export class SwarmSetupService {
 	 * @param mainWorktreePath - Path to the main worktree (project root)
 	 * @param epicIssueNumber - The parent epic issue number
 	 * @param issueTrackerName - The issue tracker provider name (e.g., 'github')
+	 * @param settings - Optional settings for MCP config generation
 	 * @returns Array of results for each child worktree creation
 	 */
 	async createChildWorktrees(
@@ -73,6 +89,7 @@ export class SwarmSetupService {
 		mainWorktreePath: string,
 		epicIssueNumber: string | number,
 		issueTrackerName: string,
+		settings?: IloomSettings,
 	): Promise<SwarmSetupResult['childWorktrees']> {
 		const results: SwarmSetupResult['childWorktrees'] = []
 
@@ -139,6 +156,39 @@ export class SwarmSetupService {
 					throw metaError
 				}
 
+				// Generate and write per-loom MCP config file
+				try {
+					const childMetadata = await this.metadataManager.readMetadata(childWorktreePath)
+					if (childMetadata) {
+						const providerName = IssueTrackerFactory.getProviderName(
+							settings ?? await this.settingsManager.loadSettings(),
+						) as 'github' | 'linear' | 'jira'
+						const mcpConfigPath = await generateAndWriteMcpConfigFile(
+							childWorktreePath,
+							childMetadata,
+							providerName,
+							settings,
+						)
+						await this.metadataManager.updateMetadata(childWorktreePath, { mcpConfigPath })
+
+						// Write MCP config path to .claude/iloom-swarm-mcp-config-path for worker discovery
+						const claudeDir = path.join(childWorktreePath, '.claude')
+						await fs.ensureDir(claudeDir)
+						await fs.writeFile(
+							path.join(claudeDir, 'iloom-swarm-mcp-config-path'),
+							mcpConfigPath,
+							'utf-8',
+						)
+
+						getLogger().debug(`Wrote MCP config for ${child.number}: ${mcpConfigPath}`)
+					}
+				} catch (error) {
+					// Non-fatal: child can still work without MCP config
+					getLogger().warn(
+						`Failed to write MCP config for child ${child.number}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+					)
+				}
+
 				// Install dependencies in the child worktree
 				try {
 					await installDependencies(childWorktreePath, true, true)
@@ -175,8 +225,16 @@ export class SwarmSetupService {
 
 	/**
 	 * Render swarm-mode agent templates to the epic worktree's .claude/agents/ directory.
+	 *
+	 * Phase agent files are written WITHOUT frontmatter (prompt body only) because they are
+	 * loaded via `--append-system-prompt-file` which does not parse YAML frontmatter.
+	 * Model and tools metadata is extracted from the agent config and returned separately
+	 * for use as CLI flags in `claude -p` commands.
 	 */
-	async renderSwarmAgents(epicWorktreePath: string): Promise<string[]> {
+	async renderSwarmAgents(epicWorktreePath: string): Promise<{
+		renderedFiles: string[]
+		metadata: SwarmAgentMetadata
+	}> {
 		const claudeAgentsDir = path.join(epicWorktreePath, '.claude', 'agents')
 		await fs.ensureDir(claudeAgentsDir)
 
@@ -189,36 +247,31 @@ export class SwarmSetupService {
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
 
 		const renderedFiles: string[] = []
+		const metadata: SwarmAgentMetadata = {}
 
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
 			const swarmFileName = agentName.startsWith('iloom-')
 				? `iloom-swarm-${agentName.slice('iloom-'.length)}.md`
 				: `iloom-swarm-${agentName}.md`
 
+			const agentKey = swarmFileName.replace('.md', '')
+
+			// Extract metadata from agent config for use in claude -p CLI flags
+			metadata[agentKey] = {
+				model: agentConfig.model,
+				...(agentConfig.tools && { tools: agentConfig.tools }),
+			}
+
+			// Write file WITHOUT frontmatter - prompt body only
+			// Phase agents are loaded via --append-system-prompt-file which does not parse YAML frontmatter
 			const outputPath = path.join(claudeAgentsDir, swarmFileName)
-
-			const toolsLine = agentConfig.tools ? `tools: ${agentConfig.tools.join(', ')}` : ''
-			const colorLine = agentConfig.color ? `color: ${agentConfig.color}` : ''
-
-			const frontmatterLines = [
-				'---',
-				`name: ${swarmFileName.replace('.md', '')}`,
-				`description: ${agentConfig.description}`,
-				...(toolsLine ? [toolsLine] : []),
-				...(colorLine ? [colorLine] : []),
-				`model: ${agentConfig.model}`,
-				'---',
-			]
-
-			const content = `${frontmatterLines.join('\n')}\n\n${agentConfig.prompt}\n`
-
-			await fs.writeFile(outputPath, content, 'utf-8')
+			await fs.writeFile(outputPath, agentConfig.prompt + '\n', 'utf-8')
 			renderedFiles.push(swarmFileName)
 			getLogger().debug(`Rendered swarm agent: ${swarmFileName}`)
 		}
 
 		getLogger().success(`Rendered ${renderedFiles.length} swarm agents to ${claudeAgentsDir}`)
-		return renderedFiles
+		return { renderedFiles, metadata }
 	}
 
 	/**
@@ -233,20 +286,28 @@ export class SwarmSetupService {
 	 * The agent file is shared across all children. Issue-specific context (number, title,
 	 * worktree path, body) is provided per-child via the Task prompt from the orchestrator.
 	 */
-	async renderSwarmWorkerAgent(epicWorktreePath: string): Promise<boolean> {
+	async renderSwarmWorkerAgent(
+		epicWorktreePath: string,
+		agentMetadata?: SwarmAgentMetadata,
+	): Promise<boolean> {
 		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
 		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-worker.md')
 
 		await fs.ensureDir(agentsDir)
 
 		try {
-			// Load settings for review configuration
+			// Load settings for review configuration and issue prefix
 			const settings = await this.settingsManager.loadSettings()
+			const providerType = settings?.issueManagement?.provider ?? 'github'
+			const issuePrefix = IssueManagementProviderFactory.create(providerType, settings ?? undefined).issuePrefix
 
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
+				EPIC_WORKTREE_PATH: epicWorktreePath,
+				ISSUE_PREFIX: issuePrefix,
+				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
 
@@ -289,8 +350,9 @@ export class SwarmSetupService {
 		childIssues: SwarmChildIssue[],
 		mainWorktreePath: string,
 		issueTrackerName: string,
+		settings?: IloomSettings,
 	): Promise<SwarmSetupResult> {
-		// 1. Create child worktrees
+		// 1. Create child worktrees (with per-loom MCP config generation)
 		const childWorktrees = await this.createChildWorktrees(
 			childIssues,
 			epicBranch,
@@ -298,13 +360,18 @@ export class SwarmSetupService {
 			mainWorktreePath,
 			epicIssueNumber,
 			issueTrackerName,
+			settings,
 		)
 
-		// 2. Render swarm agents to epic worktree's .claude/ directory
-		const agentsRendered = await this.renderSwarmAgents(epicWorktreePath)
+		// 2. Render swarm agents to epic worktree's .claude/ directory (returns metadata)
+		const { renderedFiles: agentsRendered, metadata: agentMetadata } =
+			await this.renderSwarmAgents(epicWorktreePath)
 
-		// 3. Render the swarm worker agent file (used as subagent_type by the orchestrator)
-		const workerAgentRendered = await this.renderSwarmWorkerAgent(epicWorktreePath)
+		// 3. Render the swarm worker agent file with agent metadata
+		const workerAgentRendered = await this.renderSwarmWorkerAgent(
+			epicWorktreePath,
+			agentMetadata,
+		)
 
 		const successCount = childWorktrees.filter((c) => c.success).length
 		const failCount = childWorktrees.filter((c) => !c.success).length

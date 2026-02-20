@@ -1,11 +1,12 @@
 import path from 'path'
+import fs from 'fs-extra'
 import { logger, createStderrLogger } from '../utils/logger.js'
 import { withLogger } from '../utils/logger-context.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -836,7 +837,55 @@ export class IgniteCommand {
 			this.templateManager,
 		)
 
-		// Run swarm setup: child worktrees, agents, skill
+		// Generate and write per-loom MCP config file for the epic worktree
+		try {
+			const epicMcpConfigPath = await generateAndWriteMcpConfigFile(
+				epicWorktreePath,
+				metadata,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			await metadataManager.updateMetadata(epicWorktreePath, { mcpConfigPath: epicMcpConfigPath })
+
+			// Write MCP config path to .claude/iloom-swarm-mcp-config-path for worker discovery
+			const epicClaudeDir = path.join(epicWorktreePath, '.claude')
+			await fs.ensureDir(epicClaudeDir)
+			await fs.writeFile(
+				path.join(epicClaudeDir, 'iloom-swarm-mcp-config-path'),
+				epicMcpConfigPath,
+				'utf-8',
+			)
+
+			logger.debug('Wrote MCP config for epic loom', { epicMcpConfigPath })
+		} catch (error) {
+			logger.warn(`Failed to write MCP config for epic loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Build MCP configs for the orchestrator's own launchClaude call
+		const mcpConfigs: Record<string, unknown>[] = []
+
+		// Issue management MCP
+		try {
+			const issueMcpConfigs = await generateIssueManagementMcpConfig(
+				'issue',
+				undefined,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			mcpConfigs.push(...issueMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate issue management MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Recap MCP for the epic loom
+		try {
+			const recapMcpConfigs = generateRecapMcpConfig(epicWorktreePath, metadata)
+			mcpConfigs.push(...recapMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Run swarm setup: child worktrees, agents, worker agent
 		const swarmResult = await swarmSetup.setupSwarm(
 			epicIssueNumber,
 			epicBranch,
@@ -844,6 +893,7 @@ export class IgniteCommand {
 			metadata.childIssues,
 			mainWorktreePath,
 			providerName,
+			settings,
 		)
 
 		// Build template variables for orchestrator prompt
@@ -867,39 +917,19 @@ export class IgniteCommand {
 		// Get metadata file path for the orchestrator prompt template
 		const epicMetadataPath = metadataManager.getMetadataFilePath(epicWorktreePath)
 
+		// Determine issue prefix for commit message trailers
+		const issuePrefix = providerName === 'github' ? '#' : ''
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
 			EPIC_METADATA_PATH: epicMetadataPath,
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
+			ISSUE_PREFIX: issuePrefix,
 		}
 
 		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)
-
-		// Build MCP configs
-		const mcpConfigs: Record<string, unknown>[] = []
-
-		// Issue management MCP
-		try {
-			const issueMcpConfigs = await generateIssueManagementMcpConfig(
-				'issue',
-				undefined,
-				providerName as 'github' | 'linear' | 'jira',
-				settings,
-			)
-			mcpConfigs.push(...issueMcpConfigs)
-		} catch (error) {
-			logger.warn(`Failed to generate issue management MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
-		}
-
-		// Recap MCP for the epic loom
-		try {
-			const recapMcpConfigs = generateRecapMcpConfig(epicWorktreePath, metadata)
-			mcpConfigs.push(...recapMcpConfigs)
-		} catch (error) {
-			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
-		}
 
 		// Build allowed tools
 		const allowedTools = [

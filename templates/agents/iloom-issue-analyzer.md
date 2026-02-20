@@ -16,6 +16,7 @@ model: opus
 - **No human interaction**: Do NOT pause for user input or ask questions. Proceed with your best judgment.
 - **Concise output**: Return a structured analysis result suitable for the orchestrator.
 - **Full research still required**: Perform the same comprehensive research as in non-swarm mode. Thoroughness is critical even in autonomous execution.
+- **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode

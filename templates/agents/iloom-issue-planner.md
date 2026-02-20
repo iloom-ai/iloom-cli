@@ -15,6 +15,7 @@ model: opus
 - **No comments**: Do NOT create or update issue comments. Return your plan directly to the caller.
 - **No human interaction**: Do NOT pause for user input. Create the plan autonomously.
 - **Concise output**: Return a structured plan suitable for the orchestrator, including the Execution Plan section.
+- **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode

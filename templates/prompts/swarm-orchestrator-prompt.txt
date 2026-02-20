@@ -10,6 +10,19 @@ You are running with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. You have access t
 
 ---
 
+## Loom Recap
+
+The recap panel is visible to the user in VS Code. Use these Recap MCP tools to capture knowledge:
+
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+- `recap.get_recap` - Call before adding entries to check what's already captured
+- `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
+- `recap.set_loom_state` - Update the loom state (in_progress, done, failed, etc.)
+
+**Artifact logging is mandatory.** Every time you close an issue or merge a branch, call `recap.add_artifact` to log it. This keeps the recap panel up to date for the user.
+
+---
+
 ## Available Data
 
 ### Reading Child Data from Metadata
@@ -58,7 +71,8 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 6. Spawn agents for newly unblocked child issues (repeat as needed)
 7. Handle any failures (mark failed, continue with others)
 8. When all children are done or failed, finalize and clean up
-9. Print final summary
+9. Create final commit with Fixes trailer for epic issue
+10. Print final summary
 
 ---
 
@@ -192,6 +206,7 @@ If the rebase has conflicts:
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
 3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
+4. Log the artifact: Call `mcp__recap__add_artifact` with `{ type: "issue", primaryUrl: "<child-issue-url>", description: "Issue #<child-number> completed and merged into epic branch" }`
 
 #### Step 3.4: Check for Newly Unblocked Issues
 
@@ -236,7 +251,19 @@ Send `shutdown_request` to all teammates that are still active:
 
 Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
 
-### Step 5.3: Print Summary
+### Step 5.3: Final Commit on Epic Branch
+
+If at least one child succeeded, create a final commit on the epic branch that fixes the epic issue. This ensures the epic issue is automatically closed when the PR is merged.
+
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git add -A
+git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
+```
+
+Note: `--allow-empty` is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message trailer to trigger issue closure.
+
+### Step 5.4: Print Summary
 
 Print a comprehensive summary:
 
@@ -264,4 +291,4 @@ The epic branch at `{{EPIC_WORKTREE_PATH}}` contains merged work from all succes
 The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 ```
 
-Mark todo #8 and #9 as completed.
+Mark todo #8, #9, and #10 as completed.

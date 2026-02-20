@@ -485,13 +485,30 @@ server.registerTool(
 
 // Main server startup
 async function main(): Promise<void> {
-	console.error('Starting Loom Recap MCP Server...')
-	const { recapFilePath, loomMetadata } = validateEnvironment()
+	console.error('=== Loom Recap MCP Server Starting ===')
+	console.error(`PID: ${process.pid}`)
+	console.error(`Node version: ${process.version}`)
+	console.error(`CWD: ${process.cwd()}`)
+	console.error(`Script: ${new URL(import.meta.url).pathname}`)
+
+	// Log relevant env vars (LOOM_METADATA_JSON is large, just log presence and length)
+	console.error('Environment variables:')
+	console.error(`  RECAP_FILE_PATH=${process.env.RECAP_FILE_PATH ?? '<not set>'}`)
+	console.error(`  METADATA_FILE_PATH=${process.env.METADATA_FILE_PATH ?? '<not set>'}`)
+	console.error(`  LOOM_METADATA_JSON=${process.env.LOOM_METADATA_JSON ? `<set, ${process.env.LOOM_METADATA_JSON.length} chars>` : '<not set>'}`)
+
+	const { recapFilePath, loomMetadata, metadataFilePath } = validateEnvironment()
 	console.error(`Recap file path: ${recapFilePath}`)
+	console.error(`Metadata file path: ${metadataFilePath ?? '<not configured>'}`)
 	console.error(`Loom: ${loomMetadata.description} (branch: ${loomMetadata.branchName})`)
+
+	// Check if recap file already exists
+	const recapExists = await fs.pathExists(recapFilePath)
+	console.error(`Recap file exists: ${recapExists}`)
+
 	const transport = new StdioServerTransport()
 	await server.connect(transport)
-	console.error('Loom Recap MCP Server running on stdio transport')
+	console.error('=== Loom Recap MCP Server READY (stdio transport) ===')
 }
 
 main().catch((error) => {

@@ -14,7 +14,7 @@ color: green
 - **Issue context**: Read the issue number from `iloom-metadata.json` in the worktree root, or accept it as an invocation argument. Do NOT rely on a baked-in issue number.
 - **No comments**: Do NOT create or update issue comments. Return your results directly to the caller.
 - **No human interaction**: Do NOT pause for user input or present options for decision. Make your best judgment and proceed.
-- **State transition**: Call `recap.set_loom_state` with state `in_progress` when you begin implementation.
+- **State transition**: Call `recap.set_loom_state` with state `in_progress` when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
 - **Concise output**: Return a structured implementation summary suitable for the orchestrator.
 - **Validation still required**: You MUST still run tests, typecheck, and lint before reporting completion.
 {{else}}

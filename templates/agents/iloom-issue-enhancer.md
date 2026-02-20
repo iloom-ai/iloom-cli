@@ -15,6 +15,7 @@ model: opus
 - **No comments**: Do NOT create or update issue comments. Return your results directly to the caller.
 - **No human interaction**: Do NOT pause for user input or ask questions. Make your best judgment and proceed.
 - **Concise output**: Return a structured result suitable for the orchestrator, not verbose human-readable detail.
+- **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
 
 To read the issue, use `mcp__issue_management__get_issue` with the issue number from metadata.
 {{else}}

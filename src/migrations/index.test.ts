@@ -37,7 +37,8 @@ describe('migrations', () => {
     it('should append pattern if not already present', async () => {
       const existingContent = '# Existing ignores\n*.log\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -52,7 +53,8 @@ describe('migrations', () => {
     it('should not duplicate if pattern exists', async () => {
       const existingContent = '# Existing\n**/.iloom/settings.local.json\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
 
       await migration?.migrate()
 
@@ -72,7 +74,8 @@ describe('migrations', () => {
     it('should handle file without trailing newline', async () => {
       const existingContent = '*.log'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -113,7 +116,8 @@ describe('migrations', () => {
     it('should append pattern if not already present', async () => {
       const existingContent = '# Existing ignores\n*.log\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -128,7 +132,8 @@ describe('migrations', () => {
     it('should not duplicate if pattern exists', async () => {
       const existingContent = '# Existing\n**/.iloom/package.iloom.local.json\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
 
       await migration?.migrate()
 
@@ -137,7 +142,8 @@ describe('migrations', () => {
 
     it('should be idempotent when run multiple times', async () => {
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue('**/.iloom/package.iloom.local.json\n')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue('**/.iloom/package.iloom.local.json\n' as any)
 
       await migration?.migrate()
 
@@ -173,7 +179,8 @@ describe('migrations', () => {
     it('should append both patterns when not already present', async () => {
       const existingContent = '# Existing ignores\n*.log\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -187,7 +194,8 @@ describe('migrations', () => {
     it('should not duplicate if agent pattern already exists', async () => {
       const existingContent = '# Added by iloom CLI\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-*\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
 
       await migration?.migrate()
 
@@ -197,7 +205,8 @@ describe('migrations', () => {
     it('should handle file without trailing newline', async () => {
       const existingContent = '*.log'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -206,4 +215,5 @@ describe('migrations', () => {
       expect(writtenContent).toMatch(/^\*\.log\n/)
     })
   })
+
 })

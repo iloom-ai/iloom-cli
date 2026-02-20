@@ -1,5 +1,6 @@
 import path from 'path'
 import os from 'os'
+import fs from 'fs-extra'
 import { getRepoInfo } from './github.js'
 import { logger } from './logger.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
@@ -129,13 +130,17 @@ export async function generateIssueManagementMcpConfig(
 		})
 	}
 
+	// Compute absolute path to the MCP server JS file
+	const serverJsPath = path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')
+	const resolvedServerJsPath = path.resolve(serverJsPath)
+
 	// Generate single MCP server config
 	const mcpServerConfig = {
 		mcpServers: {
 			issue_management: {
 				transport: 'stdio',
 				command: 'node',
-				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/issue-management-server.js')],
+				args: [resolvedServerJsPath],
 				env: envVars,
 			},
 		},
@@ -153,7 +158,7 @@ export async function generateIssueManagementMcpConfig(
  * 3. Replace any other non-alphanumeric characters (except _ and -) with -
  * 4. Append .json
  */
-function slugifyPath(loomPath: string): string {
+export function slugifyPath(loomPath: string): string {
 	let slug = loomPath.replace(/[/\\]+$/, '')
 	slug = slug.replace(/[/\\]/g, '___')
 	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
@@ -197,21 +202,111 @@ export function generateRecapMcpConfig(
 		loomMetadataDescription: loomMetadata.description,
 	})
 
+	// Compute absolute path to the recap MCP server JS file
+	const recapServerJsPath = path.resolve(
+		path.join(
+			path.dirname(new globalThis.URL(import.meta.url).pathname),
+			'../dist/mcp/recap-server.js'
+		)
+	)
+
 	return [
 		{
 			mcpServers: {
 				recap: {
 					transport: 'stdio',
 					command: 'node',
-					args: [
-						path.join(
-							path.dirname(new globalThis.URL(import.meta.url).pathname),
-							'../dist/mcp/recap-server.js'
-						),
-					],
+					args: [recapServerJsPath],
 					env: envVars,
 				},
 			},
 		},
 	]
+}
+
+/**
+ * Get the MCP configs directory path
+ */
+export function getMcpConfigsDir(): string {
+	return path.join(os.homedir(), '.config', 'iloom-ai', 'mcp-configs')
+}
+
+/**
+ * Get the MCP config file path for a given loom path
+ */
+export function getMcpConfigFilePath(loomPath: string): string {
+	return path.join(getMcpConfigsDir(), slugifyPath(loomPath))
+}
+
+/**
+ * Generate and write a per-loom MCP config file to ~/.config/iloom-ai/mcp-configs/<loom-slug>.json
+ *
+ * Merges issue management and recap MCP server configs into a single file.
+ * Used by swarm workers to pass --mcp-config <path> to claude -p commands.
+ *
+ * @param loomPath - Absolute path to the loom workspace
+ * @param loomMetadata - The loom metadata object
+ * @param provider - Issue tracker provider name
+ * @param settings - Optional settings for provider configuration
+ * @returns The absolute path to the written MCP config file
+ */
+export async function generateAndWriteMcpConfigFile(
+	loomPath: string,
+	loomMetadata: LoomMetadata,
+	provider: 'github' | 'linear' | 'jira' = 'github',
+	settings?: IloomSettings,
+): Promise<string> {
+	const mcpConfigs: Record<string, unknown>[] = []
+
+	// Generate issue management MCP config
+	try {
+		const issueMcpConfigs = await generateIssueManagementMcpConfig(
+			'issue',
+			undefined,
+			provider,
+			settings,
+		)
+		mcpConfigs.push(...issueMcpConfigs)
+	} catch (error) {
+		logger.warn(`Failed to generate issue management MCP config for loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+	}
+
+	// Generate recap MCP config
+	try {
+		const recapMcpConfigs = generateRecapMcpConfig(loomPath, loomMetadata)
+		mcpConfigs.push(...recapMcpConfigs)
+	} catch (error) {
+		logger.warn(`Failed to generate recap MCP config for loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+	}
+
+	// Merge all mcpServers into a single config object
+	const mergedServers: Record<string, unknown> = {}
+	for (const config of mcpConfigs) {
+		if ('mcpServers' in config && typeof config.mcpServers === 'object') {
+			Object.assign(mergedServers, config.mcpServers)
+		}
+	}
+
+	const mergedConfig = { mcpServers: mergedServers }
+
+	// Verify MCP server JS files exist before writing config
+	for (const [serverName, serverConfig] of Object.entries(mergedServers)) {
+		const config = serverConfig as { args?: string[] }
+		const jsPath = config.args?.[0]
+		if (jsPath) {
+			const exists = await fs.pathExists(jsPath)
+			if (!exists) {
+				logger.warn(`MCP server JS file not found: ${serverName} -> ${jsPath}`)
+			}
+		}
+	}
+
+	// Write to file
+	const configDir = getMcpConfigsDir()
+	await fs.ensureDir(configDir, { mode: 0o755 })
+
+	const configFilePath = getMcpConfigFilePath(loomPath)
+	await fs.writeFile(configFilePath, JSON.stringify(mergedConfig, null, 2), { mode: 0o644 })
+
+	return configFilePath
 }

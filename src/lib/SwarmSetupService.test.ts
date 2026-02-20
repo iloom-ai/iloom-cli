@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs-extra'
-import { SwarmSetupService, type SwarmChildIssue } from './SwarmSetupService.js'
+import { SwarmSetupService, type SwarmChildIssue, type SwarmAgentMetadata } from './SwarmSetupService.js'
 import type { GitWorktreeManager } from './GitWorktreeManager.js'
-import type { MetadataManager } from './MetadataManager.js'
+import type { MetadataManager, LoomMetadata } from './MetadataManager.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
@@ -29,6 +29,20 @@ vi.mock('fs-extra', () => ({
 	},
 }))
 
+const { mockGenerateAndWriteMcpConfigFile } = vi.hoisted(() => ({
+	mockGenerateAndWriteMcpConfigFile: vi.fn().mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json'),
+}))
+
+vi.mock('../utils/mcp.js', () => ({
+	generateAndWriteMcpConfigFile: mockGenerateAndWriteMcpConfigFile,
+}))
+
+vi.mock('./IssueTrackerFactory.js', () => ({
+	IssueTrackerFactory: {
+		getProviderName: vi.fn().mockReturnValue('github'),
+	},
+}))
+
 describe('SwarmSetupService', () => {
 	let service: SwarmSetupService
 	let mockGitWorktree: GitWorktreeManager
@@ -42,6 +56,37 @@ describe('SwarmSetupService', () => {
 		{ number: '#102', title: 'Child issue 2', body: 'Body 2', url: 'https://github.com/org/repo/issues/102' },
 	]
 
+	const mockLoomMetadata: LoomMetadata = {
+		description: 'Child issue 1',
+		created_at: '2024-01-01T00:00:00Z',
+		branchName: 'issue/101',
+		worktreePath: '/Users/dev/project__issue-101',
+		issueType: 'issue',
+		issueKey: null,
+		issue_numbers: ['101'],
+		pr_numbers: [],
+		issueTracker: 'github',
+		colorHex: '#808080',
+		sessionId: '',
+		projectPath: '/Users/dev/project',
+		issueUrls: { '101': 'https://github.com/org/repo/issues/101' },
+		prUrls: {},
+		draftPrNumber: null,
+		oneShot: null,
+		capabilities: [],
+		state: 'pending',
+		childIssueNumbers: [],
+		parentLoom: {
+			type: 'epic',
+			identifier: '610',
+			branchName: 'epic/610',
+			worktreePath: '/Users/dev/project-epic-610',
+		},
+		childIssues: [],
+		dependencyMap: {},
+		mcpConfigPath: null,
+	}
+
 	beforeEach(() => {
 		mockGitWorktree = {
 			createWorktree: vi.fn().mockResolvedValue(undefined),
@@ -50,6 +95,8 @@ describe('SwarmSetupService', () => {
 
 		mockMetadataManager = {
 			writeMetadata: vi.fn().mockResolvedValue(undefined),
+			readMetadata: vi.fn().mockResolvedValue(mockLoomMetadata),
+			updateMetadata: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MetadataManager
 
 		mockAgentManager = {
@@ -71,6 +118,9 @@ describe('SwarmSetupService', () => {
 		mockTemplateManager = {
 			getPrompt: vi.fn().mockResolvedValue('# Rendered swarm skill content'),
 		} as unknown as PromptTemplateManager
+
+		// Re-configure mock after vitest's automatic mockReset
+		mockGenerateAndWriteMcpConfigFile.mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json')
 
 		service = new SwarmSetupService(
 			mockGitWorktree,
@@ -145,6 +195,49 @@ describe('SwarmSetupService', () => {
 			})
 		})
 
+		it('generates MCP config file for each child worktree', async () => {
+			await service.createChildWorktrees(
+				childIssues,
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project',
+				'610',
+				'github',
+			)
+
+			// Should be called once per child
+			expect(mockGenerateAndWriteMcpConfigFile).toHaveBeenCalledTimes(2)
+			// Should update metadata with mcpConfigPath
+			expect(mockMetadataManager.updateMetadata).toHaveBeenCalledTimes(2)
+			expect(mockMetadataManager.updateMetadata).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					mcpConfigPath: '/Users/test/.config/iloom-ai/mcp-configs/test.json',
+				}),
+			)
+		})
+
+		it('writes iloom-swarm-mcp-config-path file to .claude/ in each child worktree', async () => {
+			await service.createChildWorktrees(
+				childIssues,
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project',
+				'610',
+				'github',
+			)
+
+			// Should write iloom-swarm-mcp-config-path for each child
+			const writeFileCalls = vi.mocked(fs.writeFile).mock.calls
+			const configPathWrites = writeFileCalls.filter(
+				(call) => typeof call[0] === 'string' && (call[0] as string).endsWith('iloom-swarm-mcp-config-path'),
+			)
+			expect(configPathWrites).toHaveLength(2)
+			// Each file should contain just the MCP config path string
+			expect(configPathWrites[0]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+			expect(configPathWrites[1]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+		})
+
 		it('handles individual worktree creation failures gracefully', async () => {
 			vi.mocked(mockGitWorktree.createWorktree)
 				.mockResolvedValueOnce(undefined)
@@ -180,14 +273,30 @@ describe('SwarmSetupService', () => {
 			expect(results[0]!.success).toBe(false)
 			expect(mockGitWorktree.removeWorktree).toHaveBeenCalled()
 		})
+
+		it('continues if MCP config generation fails', async () => {
+			mockGenerateAndWriteMcpConfigFile.mockRejectedValueOnce(new Error('MCP config failed'))
+
+			const results = await service.createChildWorktrees(
+				[childIssues[0]!],
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project',
+				'610',
+				'github',
+			)
+
+			// Should still succeed despite MCP config failure
+			expect(results[0]!.success).toBe(true)
+		})
 	})
 
 	describe('renderSwarmAgents', () => {
 		it('renders agents with swarm naming convention', async () => {
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			expect(result).toHaveLength(1)
-			expect(result[0]).toBe('iloom-swarm-issue-implementer.md')
+			expect(result.renderedFiles).toHaveLength(1)
+			expect(result.renderedFiles[0]).toBe('iloom-swarm-issue-implementer.md')
 		})
 
 		it('loads agents with SWARM_MODE=true', async () => {
@@ -197,6 +306,39 @@ describe('SwarmSetupService', () => {
 				expect.anything(),
 				expect.objectContaining({ SWARM_MODE: true }),
 			)
+		})
+
+		it('writes agent files WITHOUT frontmatter (prompt body only)', async () => {
+			await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			// Should NOT start with ---
+			expect(writtenContent).not.toMatch(/^---/)
+			// Should contain the prompt body
+			expect(writtenContent).toContain('Implement things')
+		})
+
+		it('returns metadata with model and tools for each agent', async () => {
+			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			expect(result.metadata).toHaveProperty('iloom-swarm-issue-implementer')
+			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
+			expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
+		})
+
+		it('omits tools from metadata when agent has no tools defined', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-issue-analyzer': {
+					description: 'Analyzer agent',
+					prompt: 'Analyze things',
+					model: 'sonnet',
+				},
+			})
+
+			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('sonnet')
+			expect(result.metadata['iloom-swarm-issue-analyzer']).not.toHaveProperty('tools')
 		})
 	})
 
@@ -211,6 +353,48 @@ describe('SwarmSetupService', () => {
 					ONE_SHOT_MODE: true,
 				}),
 			)
+		})
+
+		it('passes EPIC_WORKTREE_PATH as template variable', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+				}),
+			)
+		})
+
+		it('passes SWARM_AGENT_METADATA as template variable when provided', async () => {
+			const agentMetadata: SwarmAgentMetadata = {
+				'iloom-swarm-issue-implementer': { model: 'opus', tools: ['Bash'] },
+			}
+			await service.renderSwarmWorkerAgent(
+				'/Users/dev/project-epic-610',
+				agentMetadata,
+			)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
+				}),
+			)
+		})
+
+		it('does not pass MCP_CONFIG_JSON as template variable', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
+			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
+		})
+
+		it('omits SWARM_AGENT_METADATA when not provided', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
+			expect(calledVariables).not.toHaveProperty('SWARM_AGENT_METADATA')
 		})
 
 		it('writes agent file with frontmatter to .claude/agents/iloom-swarm-worker.md', async () => {
@@ -247,7 +431,8 @@ describe('SwarmSetupService', () => {
 						providers: { claude: 'opus' },
 					},
 				},
-			})
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		} as any)
 
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
@@ -295,6 +480,29 @@ describe('SwarmSetupService', () => {
 			expect(result.childWorktrees).toHaveLength(2)
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
+		})
+
+		it('passes agent metadata to renderSwarmWorkerAgent (no mcpConfigJson)', async () => {
+			await service.setupSwarm(
+				'610',
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				childIssues,
+				'/Users/dev/project',
+				'github',
+			)
+
+			// Verify that getPrompt was called with SWARM_AGENT_METADATA containing agent metadata
+			// but NOT with MCP_CONFIG_JSON (removed in favor of per-loom config files)
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+				}),
+			)
+			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
+			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
 		})
 	})
 })

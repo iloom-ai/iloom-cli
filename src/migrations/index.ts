@@ -72,6 +72,7 @@ export const migrations: Migration[] = [
       const globalIgnorePath = path.join(os.homedir(), '.config', 'git', 'ignore')
       const agentPattern = '**/.claude/agents/iloom-*'
       const skillPattern = '**/.claude/skills/iloom-*'
+      const mcpConfigPathPattern = '**/.claude/iloom-swarm-mcp-config-path'
 
       // Ensure directory exists
       await fs.ensureDir(path.dirname(globalIgnorePath))
@@ -91,8 +92,8 @@ export const migrations: Migration[] = [
 
       // Append both patterns with comment
       const separator = content.endsWith('\n') || content === '' ? '' : '\n'
-      const newContent = content + separator + '\n# Added by iloom CLI\n' + agentPattern + '\n' + skillPattern + '\n'
+      const newContent = content + separator + '\n# Added by iloom CLI\n' + agentPattern + '\n' + skillPattern + '\n' + mcpConfigPathPattern + '\n'
       await fs.writeFile(globalIgnorePath, newContent, 'utf-8')
     }
-  }
+  },
 ]

@@ -16,6 +16,7 @@ model: haiku
 - **No human interaction**: Do NOT pause for user input. Complete the assessment and return results.
 - **Concise output**: Return the classification result in the standard deterministic format.
 - **Still call `recap.set_complexity`**: This is required even in swarm mode for state tracking.
+- **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode

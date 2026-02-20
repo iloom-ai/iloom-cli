@@ -48,6 +48,7 @@ export interface MetadataFile {
     url: string
   }>
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
+  mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
 }
 
 /**
@@ -89,6 +90,7 @@ export interface WriteMetadataInput {
     url: string
   }>
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
+  mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
 }
 
 /**
@@ -131,6 +133,7 @@ export interface LoomMetadata {
     url: string
   }>
   dependencyMap: Record<string, string[]>
+  mcpConfigPath: string | null // Path to per-loom MCP config file (null for non-swarm looms)
 }
 
 /**
@@ -180,6 +183,7 @@ export class MetadataManager {
       parentLoom: data.parentLoom ?? null,
       childIssues: data.childIssues ?? [],
       dependencyMap: data.dependencyMap ?? {},
+      mcpConfigPath: data.mcpConfigPath ?? null,
     }
   }
 
@@ -263,6 +267,7 @@ export class MetadataManager {
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
         ...(input.childIssues && input.childIssues.length > 0 && { childIssues: input.childIssues }),
         ...(input.dependencyMap && Object.keys(input.dependencyMap).length > 0 && { dependencyMap: input.dependencyMap }),
+        ...(input.mcpConfigPath && { mcpConfigPath: input.mcpConfigPath }),
       }
 
       // 3. Write to slugified filename
