@@ -202,6 +202,10 @@ export interface CleanupOptions {
   json?: boolean
   /** Wait specified milliseconds before cleanup execution */
   defer?: number
+  /** Archive metadata before cleanup (moves to finished/ with status+timestamp) */
+  archive?: boolean
+  /** Generate and post session summary to issue/PR before cleanup */
+  summary?: boolean
 }
 
 export interface ListOptions {
@@ -372,3 +376,6 @@ export interface UpdateCheckResult {
 }
 
 export type InstallationMethod = 'global' | 'local' | 'linked' | 'unknown'
+
+// Remote daemon types
+export * from './remote.js'

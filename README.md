@@ -157,8 +157,56 @@ Command Reference
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |
 | `il update` |  | Update iloom CLI to the latest version. |
+| `il remote` |  | Manage remote daemon for automatic PR cleanup. |
 
 For detailed documentation including all command options, flags, and examples, see the [Complete Command Reference](docs/iloom-commands.md).
+
+### Remote Daemon (`il remote`)
+
+The remote daemon automatically cleans up local looms when their associated PRs are closed or merged on GitHub.
+
+**Actions:**
+
+| Action | Description |
+|--------|-------------|
+| `il remote start` | Start the daemon (runs in background) |
+| `il remote stop` | Stop the running daemon |
+| `il remote status` | Show daemon status (running, PID, last poll) |
+| `il remote restart` | Restart the daemon with new settings |
+| `il remote logs` | View recent daemon log entries |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--interval <seconds>` | Polling interval (60-3600s, default: 300) |
+| `--lines <n>` | Number of log lines to show (default: 50) |
+| `--json` | Output as JSON |
+
+**Examples:**
+
+```bash
+# Start daemon with default 5-minute polling interval
+il remote start
+
+# Start with custom 2-minute interval
+il remote start --interval 120
+
+# Check daemon status
+il remote status
+
+# View last 100 log entries
+il remote logs --lines 100
+
+# Stop the daemon
+il remote stop
+```
+
+**Security Notes:**
+- The daemon runs as a background process under your user account
+- State files are stored in `~/.config/iloom-ai/remote-daemon/` with restricted permissions (0o700)
+- Only your user can read daemon logs and status files
+- The daemon validates its own heartbeat before stopping to prevent accidentally killing recycled PIDs
 
 Configuration
 -------------
@@ -237,6 +285,12 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
   },
   "summary": {
     "model": "sonnet" // Claude model for session summaries: sonnet (default), opus, or haiku
+  },
+  "remote": {
+    "mode": "polling", // Enable remote daemon: "polling" or "off"
+    "polling": {
+      "interval": 300 // Polling interval in seconds (60-3600, default: 300)
+    }
   }
 }
 ```

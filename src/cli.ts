@@ -815,6 +815,8 @@ program
   .option('--dry-run', 'Show what would be done without doing it')
   .option('--json', 'Output result as JSON')
   .option('--defer <ms>', 'Wait specified milliseconds before cleanup', parseInt)
+  .option('--archive', 'Archive metadata before cleanup')
+  .option('--summary', 'Generate session summary before cleanup')
   .action(async (identifier?: string, options?: CleanupOptions) => {
     const executeAction = async (): Promise<void> => {
       try {
@@ -1613,6 +1615,50 @@ program
           if (error instanceof Error && error.stack) {
             logger.debug(error.stack)
           }
+        }
+        process.exit(1)
+      }
+    }
+
+    // Wrap execution in logger context for JSON mode
+    if (options.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
+    }
+  })
+
+program
+  .command('remote')
+  .description('Manage remote daemon for automatic PR cleanup')
+  .argument('<action>', 'Action: start, stop, status, restart, or logs')
+  .option('--interval <seconds>', 'Polling interval in seconds (default: 300)', parseInt)
+  .option('--lines <n>', 'Number of log lines to show (default: 50)', parseInt)
+  .option('-f, --follow', 'Continuously stream new log entries (logs action only)')
+  .option('--json', 'Output as JSON')
+  .action(async (action: string, options: { interval?: number; lines?: number; follow?: boolean; json?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RemoteCommand } = await import('./commands/remote.js')
+        const command = new RemoteCommand()
+        const result = await command.execute({ action, options })
+
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2))
+        }
+
+        // Success - result is either DaemonStatus or string[] (logs)
+        process.exit(0)
+      } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({
+            success: false,
+            action,
+            message: error instanceof Error ? error.message : 'Unknown error'
+          }, null, 2))
+        } else {
+          logger.error(`Remote command failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
         process.exit(1)
       }

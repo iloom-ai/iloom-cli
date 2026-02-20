@@ -6,12 +6,15 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
+import { SessionSummaryService, type SessionSummaryInput } from '../lib/SessionSummaryService.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import type { CleanupOptions } from '../types/index.js'
+import { CleanupSafetyError } from '../types/cleanup.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
 
@@ -48,6 +51,8 @@ export class CleanupCommand {
   private resourceCleanup?: ResourceCleanup
   private loomManager?: import('../lib/LoomManager.js').LoomManager
   private readonly identifierParser: IdentifierParser
+  private readonly metadataManager: MetadataManager
+  private sessionSummaryService?: SessionSummaryService
 
   constructor(
     gitWorktreeManager?: GitWorktreeManager,
@@ -72,6 +77,9 @@ export class CleanupCommand {
 
     // Initialize IdentifierParser for pattern-based detection
     this.identifierParser = new IdentifierParser(this.gitWorktreeManager)
+
+    // Initialize MetadataManager for archive functionality
+    this.metadataManager = new MetadataManager()
   }
 
   /**
@@ -151,7 +159,67 @@ export class CleanupCommand {
     // Check if the TARGET loom has any child looms
     const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
     if (hasChildLooms) {
-      throw new Error('Cannot cleanup loom while child looms exist. Please \'finish\' or \'cleanup\' child looms first.')
+      throw new CleanupSafetyError(
+        'Cannot cleanup loom while child looms exist. Please \'finish\' or \'cleanup\' child looms first.',
+        'child-loom'
+      )
+    }
+  }
+
+  /**
+   * Execute pre-cleanup actions based on options
+   *
+   * Handles:
+   * - --summary: Generate and post session summary to issue/PR (must run BEFORE archive)
+   * - --archive: Archive metadata to finished/ directory
+   *
+   * Order is important: summary needs metadata, so it must run before archiving
+   *
+   * @param worktreePath - Path to the worktree being cleaned up
+   * @param options - Cleanup options
+   * @param issueNumber - Optional issue number for summary posting
+   */
+  private async preCleanupActions(
+    worktreePath: string,
+    options: CleanupOptions,
+    issueNumber?: string | number
+  ): Promise<void> {
+    // Read metadata before any actions (needed for both summary and archive)
+    const metadata = await this.metadataManager.readMetadata(worktreePath)
+
+    // Generate session summary if --summary flag is set
+    // Must run BEFORE archive since it needs the metadata
+    if (options.summary && metadata && metadata.issueType !== 'branch') {
+      try {
+        // Initialize SessionSummaryService lazily
+        this.sessionSummaryService ??= new SessionSummaryService()
+
+        const summaryInput: SessionSummaryInput = {
+          worktreePath,
+          issueNumber: issueNumber ?? metadata.issue_numbers?.[0] ?? 'unknown',
+          branchName: metadata.branchName ?? 'unknown',
+          loomType: metadata.issueType ?? 'branch',
+        }
+        // Add prNumber if available (separate assignment to satisfy exactOptionalPropertyTypes)
+        const prNumberStr = metadata.pr_numbers?.[0]
+        if (prNumberStr) {
+          summaryInput.prNumber = parseInt(prNumberStr, 10)
+        }
+
+        getLogger().info('Generating session summary...')
+        await this.sessionSummaryService.generateAndPostSummary(summaryInput)
+      } catch (error) {
+        // Non-blocking: Log warning but don't throw
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        getLogger().warn(`Failed to generate session summary: ${errorMessage}`)
+      }
+    }
+
+    // Archive metadata if --archive flag is set
+    if (options.archive) {
+      getLogger().debug(`Archiving metadata for worktree: ${worktreePath}`)
+      await this.metadataManager.archiveMetadata(worktreePath)
+      getLogger().info('Metadata archived')
     }
   }
 
@@ -396,7 +464,17 @@ export class CleanupCommand {
       }
     }
 
-    // Step 4: Execute worktree cleanup (includes safety validation)
+    // Step 4: Find worktree path for pre-cleanup actions
+    const worktree = await this.gitWorktreeManager.findWorktreeForBranch(parsedInput.branchName ?? identifier)
+    const worktreePath = worktree?.path
+
+    // Step 5: Execute pre-cleanup actions (summary, archive) before actual cleanup
+    // Only run if we have a worktree path and archive or summary flags are set
+    if (worktreePath && (parsed.options.archive || parsed.options.summary)) {
+      await this.preCleanupActions(worktreePath, parsed.options, parsedInput.number)
+    }
+
+    // Step 6: Execute worktree cleanup (includes safety validation)
     // Issue #275 fix: Run 5-point safety check BEFORE any deletion
     // This prevents the scenario where worktree is deleted but branch deletion fails
     await this.ensureResourceCleanup()
@@ -414,7 +492,7 @@ export class CleanupCommand {
     // Add dryRun flag to result
     cleanupResult.dryRun = dryRun ?? false
 
-    // Step 5: Report cleanup results
+    // Step 7: Report cleanup results
     this.reportCleanupResults(cleanupResult)
 
     // Final success message
@@ -545,6 +623,12 @@ export class CleanupCommand {
           number: issueNumber,  // Use the known issue number, not parsed from branch
           branchName: target.branchName,
           originalInput: String(issueNumber)
+        }
+
+        // Execute pre-cleanup actions (summary, archive) before actual cleanup
+        // Only run if we have a worktree path and archive or summary flags are set
+        if (target.worktreePath && (parsed.options.archive || parsed.options.summary)) {
+          await this.preCleanupActions(target.worktreePath, parsed.options, issueNumber)
         }
 
         await this.ensureResourceCleanup()

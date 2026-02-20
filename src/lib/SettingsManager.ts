@@ -256,6 +256,60 @@ export const DatabaseProvidersSettingsSchema = z
 	.optional()
 
 /**
+ * Zod schema for remote daemon polling settings
+ */
+export const RemotePollingSettingsSchema = z.object({
+	interval: z
+		.number()
+		.min(60, 'Polling interval must be at least 60 seconds')
+		.max(3600, 'Polling interval must be at most 3600 seconds (1 hour)')
+		.default(300)
+		.describe('Polling interval in seconds (default: 300 = 5 minutes)'),
+})
+
+/**
+ * Zod schema for remote daemon settings
+ */
+export const RemoteSettingsSchema = z
+	.object({
+		mode: z
+			.enum(['polling', 'off'])
+			.default('off')
+			.describe('Remote daemon mode: polling (periodically check PR states) or off (disabled)'),
+		polling: RemotePollingSettingsSchema.optional().describe(
+			'Polling configuration for the remote daemon',
+		),
+	})
+	.optional()
+
+/**
+ * Non-defaulting variant for remote polling settings
+ */
+export const RemotePollingSettingsSchemaNoDefaults = z.object({
+	interval: z
+		.number()
+		.min(60, 'Polling interval must be at least 60 seconds')
+		.max(3600, 'Polling interval must be at most 3600 seconds (1 hour)')
+		.optional()
+		.describe('Polling interval in seconds (default: 300 = 5 minutes)'),
+})
+
+/**
+ * Non-defaulting variant for remote daemon settings
+ */
+export const RemoteSettingsSchemaNoDefaults = z
+	.object({
+		mode: z
+			.enum(['polling', 'off'])
+			.optional()
+			.describe('Remote daemon mode: polling (periodically check PR states) or off (disabled)'),
+		polling: RemotePollingSettingsSchemaNoDefaults.optional().describe(
+			'Polling configuration for the remote daemon',
+		),
+	})
+	.optional()
+
+/**
  * Zod schema for iloom settings
  */
 export const IloomSettingsSchema = z.object({
@@ -344,6 +398,10 @@ export const IloomSettingsSchema = z.object({
 	),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
+	remote: RemoteSettingsSchema.describe(
+		'Remote daemon configuration for automatic PR cleanup. ' +
+			'When enabled, the daemon monitors GitHub PRs and automatically runs cleanup when PRs are closed or merged.',
+	),
 	issueManagement: z
 		.object({
 			provider: z.enum(['github', 'linear']).optional().default('github').describe('Issue tracker provider (github, linear)'),
@@ -527,6 +585,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Session summary generation configuration'),
 	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
+	remote: RemoteSettingsSchemaNoDefaults.describe(
+		'Remote daemon configuration for automatic PR cleanup. ' +
+			'When enabled, the daemon monitors GitHub PRs and automatically runs cleanup when PRs are closed or merged.',
+	),
 	issueManagement: z
 		.object({
 			provider: z.enum(['github', 'linear']).optional().describe('Issue tracker provider (github, linear)'),
@@ -617,6 +679,16 @@ export type NeonSettings = z.infer<typeof NeonSettingsSchema>
  * TypeScript type for database providers settings derived from Zod schema
  */
 export type DatabaseProvidersSettings = z.infer<typeof DatabaseProvidersSettingsSchema>
+
+/**
+ * TypeScript type for remote polling settings derived from Zod schema
+ */
+export type RemotePollingSettings = z.infer<typeof RemotePollingSettingsSchema>
+
+/**
+ * TypeScript type for remote daemon settings derived from Zod schema
+ */
+export type RemoteSettings = z.infer<typeof RemoteSettingsSchema>
 
 /**
  * TypeScript type for agent settings derived from Zod schema

@@ -14,7 +14,7 @@
     "iloom-issue-planner": { "model": "opus" },
     "iloom-issue-analyze-and-plan": { "model": "opus" },
     "iloom-issue-implementer": { "model": "opus" },
-    "iloom-issue-reviewer": { "providers": { "gemini": "gemini-3-pro-preview" } }
+    "iloom-code-reviewer": { "providers": { "gemini": "gemini-3-pro-preview" } }
   },
   "colors": {
     "terminal": true,

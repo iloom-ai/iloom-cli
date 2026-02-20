@@ -9,6 +9,9 @@ import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
 import { calculatePortFromIdentifier } from '../utils/port.js'
 
+import {
+	CleanupSafetyError,
+} from '../types/cleanup.js'
 import type {
 	ResourceCleanupOptions,
 	CleanupResult,
@@ -141,6 +144,11 @@ export class ResourceCleanup {
 			if (!safety.isSafe) {
 				// Format blocker messages for error output
 				const blockerMessage = safety.blockers.join('\n\n')
+				// Throw CleanupSafetyError for safety-related blocks to allow callers
+				// to distinguish from actual errors (network failures, etc.)
+				if (safety.safetyReason) {
+					throw new CleanupSafetyError(`Cannot cleanup:\n\n${blockerMessage}`, safety.safetyReason)
+				}
 				throw new Error(`Cannot cleanup:\n\n${blockerMessage}`)
 			}
 
@@ -713,6 +721,8 @@ export class ResourceCleanup {
 	): Promise<SafetyCheck> {
 		const warnings: string[] = []
 		const blockers: string[] = []
+		// Track the primary safety reason for CleanupSafetyError
+		let safetyReason: 'uncommitted' | 'unmerged' | undefined
 
 		// Check if main worktree
 		const isMain = await this.gitWorktree.isMainWorktree(worktree, this.settingsManager)
@@ -732,6 +742,7 @@ export class ResourceCleanup {
 				`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will discard changes)`
 
 			blockers.push(blockerMessage)
+			safetyReason = 'uncommitted'
 		}
 
 		// 5-point safety check for branch deletion
@@ -774,6 +785,8 @@ export class ResourceCleanup {
 					`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will lose commits)`
 
 				blockers.push(blockerMessage)
+				// Only set safetyReason if not already set (uncommitted takes precedence)
+				safetyReason ??= 'unmerged'
 			}
 			// Scenario 2: Remote ahead of local OR same commits -> Safe (work is on remote)
 			else if (remoteStatus.exists && !remoteStatus.localAhead) {
@@ -798,15 +811,22 @@ export class ResourceCleanup {
 						`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will lose commits)`
 
 					blockers.push(blockerMessage)
+					// Only set safetyReason if not already set (uncommitted takes precedence)
+					safetyReason ??= 'unmerged'
 				}
 			}
 		}
 
-		return {
+		const result: SafetyCheck = {
 			isSafe: blockers.length === 0,
 			warnings,
 			blockers,
 		}
+		// Only include safetyReason when it's defined (exactOptionalPropertyTypes compliance)
+		if (safetyReason) {
+			result.safetyReason = safetyReason
+		}
+		return result
 	}
 
 	/**

@@ -1,4 +1,27 @@
 /**
+ * Error thrown when cleanup is blocked by a safety check.
+ * This allows callers to distinguish between actual errors (network failures, etc.)
+ * and intentional blocks due to safety concerns (uncommitted changes, unmerged files, child looms).
+ *
+ * Use instanceof checks to identify this error type rather than string matching.
+ */
+export class CleanupSafetyError extends Error {
+	/**
+	 * The specific safety reason that blocked cleanup.
+	 * One of: 'uncommitted', 'unmerged', 'child-loom'
+	 */
+	public readonly reason: 'uncommitted' | 'unmerged' | 'child-loom'
+
+	constructor(message: string, reason: 'uncommitted' | 'unmerged' | 'child-loom') {
+		super(message)
+		this.name = 'CleanupSafetyError'
+		this.reason = reason
+		// Restore prototype chain (required for extending built-in classes in TypeScript)
+		Object.setPrototypeOf(this, CleanupSafetyError.prototype)
+	}
+}
+
+/**
  * Options for ResourceCleanup operations
  */
 export interface ResourceCleanupOptions {
@@ -64,6 +87,8 @@ export interface SafetyCheck {
 	warnings: string[]
 	/** Blocking issues that prevent cleanup */
 	blockers: string[]
+	/** If not safe, the primary reason for the block (for CleanupSafetyError) */
+	safetyReason?: 'uncommitted' | 'unmerged'
 }
 
 /**
