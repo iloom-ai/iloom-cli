@@ -558,7 +558,8 @@ export class CleanupCommand {
           force: force ?? false,
           deleteBranch: true,  // Include branch deletion (with safety checks)
           keepDatabase: false,
-          checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+          checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+          ...(target.worktreePath && { worktree: { path: target.worktreePath, branch: target.branchName } }),
         })
 
         if (result.success) {
@@ -582,6 +583,9 @@ export class CleanupCommand {
         } else {
           failed++
           getLogger().error(`  Failed to remove worktree: ${target.branchName}`)
+          for (const err of result.errors) {
+            getLogger().error(`    ${err.message}`)
+          }
         }
       } catch (error) {
         failed++

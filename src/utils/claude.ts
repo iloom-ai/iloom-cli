@@ -342,6 +342,9 @@ export async function launchClaude(
 	const effectiveArgs = ext.args
 	const effectivePrompt = ext.prompt
 
+	// Set CLAUDECODE=0 to prevent Claude from detecting it's running inside Claude Code
+	const claudeEnv = { ...process.env, CLAUDECODE: '0' }
+
 	try {
 		if (headless) {
 			// Headless mode: capture and return output
@@ -353,6 +356,7 @@ export async function launchClaude(
 				timeout: 0, // Disable timeout for long responses
 				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 				verbose: isDebugMode,
+				env: claudeEnv,
 				...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }), // Enable streaming in debug mode
 			}
 
@@ -432,6 +436,7 @@ export async function launchClaude(
 					stdio: ['inherit', 'inherit', 'pipe'], // Capture stderr to detect session conflicts
 					timeout: 0, // Disable timeout
 					verbose: logger.isDebugEnabled(),
+					env: claudeEnv,
 				})
 				return
 			} catch (interactiveError) {
@@ -459,6 +464,7 @@ export async function launchClaude(
 						stdio: 'inherit',
 						timeout: 0,
 						verbose: logger.isDebugEnabled(),
+						env: claudeEnv,
 					})
 					return
 				}
@@ -504,6 +510,7 @@ export async function launchClaude(
 						timeout: 0,
 						...(addDir && { cwd: addDir }),
 						verbose: isDebugMode,
+						env: claudeEnv,
 						...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }),
 					}
 
@@ -563,6 +570,7 @@ export async function launchClaude(
 						stdio: 'inherit',
 						timeout: 0,
 						verbose: logger.isDebugEnabled(),
+						env: claudeEnv,
 					})
 					return
 				}

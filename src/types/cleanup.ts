@@ -16,6 +16,8 @@ export interface ResourceCleanupOptions {
 	checkMergeSafety?: boolean
 	/** Check if branch exists on remote before allowing cleanup (useful for GitHub-PR mode) */
 	checkRemoteBranch?: boolean
+	/** Pre-resolved worktree to clean up (skips the search step) */
+	worktree?: { path: string; branch: string }
 }
 
 /**
