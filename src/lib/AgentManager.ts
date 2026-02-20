@@ -128,9 +128,9 @@ export class AgentManager {
 						model: agentSettings.model,
 					}
 				} else if (!agents[agentName]) {
-					// Skip warning for dynamically generated agents (e.g., swarm worker)
-					const DYNAMIC_AGENTS = ['iloom-swarm-worker']
-					if (!DYNAMIC_AGENTS.includes(agentName)) {
+					// Skip warning for runtime-generated agents (e.g., swarm worker)
+					const RUNTIME_GENERATED_AGENTS = ['iloom-swarm-worker']
+					if (!RUNTIME_GENERATED_AGENTS.includes(agentName)) {
 						// Only warn if the agent file doesn't exist at all (typo in settings)
 						// Skip warning if the agent exists but wasn't loaded due to pattern filtering
 						const agentFile = path.join(this.agentDir, `${agentName}.md`)
