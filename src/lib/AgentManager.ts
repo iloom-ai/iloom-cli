@@ -128,13 +128,17 @@ export class AgentManager {
 						model: agentSettings.model,
 					}
 				} else if (!agents[agentName]) {
-					// Only warn if the agent file doesn't exist at all (typo in settings)
-					// Skip warning if the agent exists but wasn't loaded due to pattern filtering
-					const agentFile = path.join(this.agentDir, `${agentName}.md`)
-					try {
-						accessSync(agentFile)
-					} catch {
-						logger.warn(`Settings reference unknown agent: ${agentName}`)
+					// Skip warning for dynamically generated agents (e.g., swarm worker)
+					const DYNAMIC_AGENTS = ['iloom-swarm-worker']
+					if (!DYNAMIC_AGENTS.includes(agentName)) {
+						// Only warn if the agent file doesn't exist at all (typo in settings)
+						// Skip warning if the agent exists but wasn't loaded due to pattern filtering
+						const agentFile = path.join(this.agentDir, `${agentName}.md`)
+						try {
+							accessSync(agentFile)
+						} catch {
+							logger.warn(`Settings reference unknown agent: ${agentName}`)
+						}
 					}
 				}
 			}

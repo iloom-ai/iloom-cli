@@ -315,11 +315,13 @@ export class SwarmSetupService {
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
 			// Build the agent file with frontmatter
+			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'opus'
+
 			const frontmatter = [
 				'---',
 				'name: iloom-swarm-worker',
 				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
-				'model: opus',
+				`model: ${workerModel}`,
 				'---',
 			].join('\n')
 

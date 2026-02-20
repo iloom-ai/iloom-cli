@@ -336,7 +336,8 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated)',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -574,7 +575,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated)',
 		),
 	spin: z
 		.object({

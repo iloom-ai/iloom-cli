@@ -1567,6 +1567,22 @@ Each child agent runs in complete isolation:
 
 The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature, both set automatically.
 
+**Worker Model Configuration:**
+
+The swarm worker agent defaults to `opus`. To override, configure it via `.iloom/settings.json`:
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "sonnet"
+    }
+  }
+}
+```
+
+This follows the same per-agent override pattern used for phase agents (e.g., `iloom-issue-implementer`, `iloom-issue-planner`).
+
 ### Merge Strategy
 
 When a child agent completes successfully:
