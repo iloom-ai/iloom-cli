@@ -93,6 +93,14 @@ vi.mock('../utils/dependency-map.js', () => ({
 	buildDependencyMap: vi.fn().mockResolvedValue({}),
 }))
 
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: () => ({ track: mockTrack }),
+	},
+}))
+
 // Mock IssueTrackerFactory for epic child data fetching
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	IssueTrackerFactory: {
@@ -1526,6 +1534,78 @@ describe('StartCommand', () => {
 					).rejects.toThrow('Failed to load settings')
 				})
 			})
+		})
+	})
+
+	describe('telemetry', () => {
+		it('should track loom.created on successful start', async () => {
+			vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+				type: 'issue',
+				number: 123,
+				rawInput: '123',
+			})
+
+			await command.execute({
+				identifier: '123',
+				options: {},
+			})
+
+			expect(mockTrack).toHaveBeenCalledWith('loom.created', {
+				source_type: 'issue',
+				tracker: 'github',
+				is_child_loom: false,
+				one_shot_mode: 'default',
+			})
+		})
+
+		it('should map oneShot noReview to skip-reviews', async () => {
+			vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+				type: 'issue',
+				number: 123,
+				rawInput: '123',
+			})
+
+			await command.execute({
+				identifier: '123',
+				options: { oneShot: 'noReview' },
+			})
+
+			expect(mockTrack).toHaveBeenCalledWith('loom.created', expect.objectContaining({
+				one_shot_mode: 'skip-reviews',
+			}))
+		})
+
+		it('should map oneShot bypassPermissions to yolo', async () => {
+			vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+				type: 'issue',
+				number: 123,
+				rawInput: '123',
+			})
+
+			// Mock the bypassPermissions confirmation prompt to approve
+			const { promptConfirmation } = await import('../utils/prompt.js')
+			vi.mocked(promptConfirmation).mockResolvedValue(true)
+
+			await command.execute({
+				identifier: '123',
+				options: { oneShot: 'bypassPermissions' },
+			})
+
+			expect(mockTrack).toHaveBeenCalledWith('loom.created', expect.objectContaining({
+				one_shot_mode: 'yolo',
+			}))
+		})
+
+		it('should not track on failure', async () => {
+			vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
+				new Error('API error')
+			)
+
+			await expect(
+				command.execute({ identifier: '123', options: {} })
+			).rejects.toThrow('API error')
+
+			expect(mockTrack).not.toHaveBeenCalled()
 		})
 	})
 

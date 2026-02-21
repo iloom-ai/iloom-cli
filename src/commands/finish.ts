@@ -28,6 +28,8 @@ import { UserAbortedCommitError, type FinishResult } from '../types/index.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -249,6 +251,17 @@ export class FinishCommand {
 		if (!worktree) {
 			throw new Error('No worktree found')
 		}
+
+		// Read metadata BEFORE workflow execution (cleanup may delete the worktree)
+		let preFinishCreatedAt: string | undefined
+		try {
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(worktree.path)
+			preFinishCreatedAt = metadata?.created_at ?? undefined
+		} catch (error: unknown) {
+			getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
 		// Step 4: Branch based on input type
 		if (parsed.type === 'pr') {
 			// Fetch PR to get current state
@@ -268,6 +281,20 @@ export class FinishCommand {
 
 		// Mark overall success if we got here without throwing
 		result.success = true
+
+		// Track loom.finished telemetry event
+		try {
+			const durationMinutes = preFinishCreatedAt
+				? Math.round((Date.now() - new Date(preFinishCreatedAt).getTime()) / 60000)
+				: 0
+			TelemetryService.getInstance().track('loom.finished', {
+				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr') ?? 'local',
+				duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+				had_conflicts: false,
+			})
+		} catch (error: unknown) {
+			getLogger().debug(`Failed to track loom.finished telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
 
 		// Return result in JSON mode
 		if (isJsonMode) {

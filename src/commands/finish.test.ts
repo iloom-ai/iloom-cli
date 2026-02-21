@@ -22,6 +22,26 @@ import { installDependencies } from '../utils/package-manager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { PRManager } from '../lib/PRManager.js'
 
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: () => ({ track: mockTrack }),
+	},
+}))
+
+// Mock MetadataManager for telemetry duration calculation
+const mockReadMetadata = vi.fn().mockResolvedValue({
+	created_at: new Date(Date.now() - 60 * 60000).toISOString(), // 60 minutes ago
+	status: 'active',
+})
+vi.mock('../lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(() => ({
+		readMetadata: mockReadMetadata,
+		archiveMetadata: vi.fn().mockResolvedValue(undefined),
+	})),
+}))
+
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
 vi.mock('../lib/GitWorktreeManager.js')
@@ -3365,6 +3385,48 @@ describe('FinishCommand', () => {
 			it('should skip build when --skip-build flag is provided', async () => {
 				// This test will be enabled after BuildRunner integration
 				expect(true).toBe(true)
+			})
+		})
+
+		describe('telemetry', () => {
+			it('should track loom.finished on successful finish', async () => {
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree',
+					branch: 'feat/issue-123',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				expect(mockTrack).toHaveBeenCalledWith('loom.finished', {
+					merge_behavior: 'local',
+					duration_minutes: expect.any(Number),
+					had_conflicts: false,
+				})
 			})
 		})
 

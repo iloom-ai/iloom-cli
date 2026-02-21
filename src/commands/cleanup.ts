@@ -11,6 +11,9 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { LoomManager } from '../lib/LoomManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -396,6 +399,23 @@ export class CleanupCommand {
       }
     }
 
+    // Step 3.5: Read metadata BEFORE cleanup (cleanup deletes the worktree)
+    let preCleanupMetadata: LoomMetadata | null = null
+    try {
+      // Find worktree path for metadata lookup
+      const worktree = parsedInput.type === 'branch' && parsedInput.branchName
+        ? await this.gitWorktreeManager.findWorktreeForBranch(parsedInput.branchName)
+        : parsedInput.number !== undefined
+        ? await this.gitWorktreeManager.findWorktreeForIssue(parsedInput.number)
+        : null
+      if (worktree) {
+        const metadataManager = new MetadataManager()
+        preCleanupMetadata = await metadataManager.readMetadata(worktree.path)
+      }
+    } catch (error: unknown) {
+      getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
     // Step 4: Execute worktree cleanup (includes safety validation)
     // Issue #275 fix: Run 5-point safety check BEFORE any deletion
     // This prevents the scenario where worktree is deleted but branch deletion fails
@@ -416,6 +436,21 @@ export class CleanupCommand {
 
     // Step 5: Report cleanup results
     this.reportCleanupResults(cleanupResult)
+
+    // Track loom.abandoned telemetry event (only for unfinished looms)
+    if (cleanupResult.success && preCleanupMetadata && preCleanupMetadata.status !== 'finished') {
+      try {
+        const durationMinutes = preCleanupMetadata.created_at
+          ? Math.round((Date.now() - new Date(preCleanupMetadata.created_at).getTime()) / 60000)
+          : 0
+        TelemetryService.getInstance().track('loom.abandoned', {
+          duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+          phase_reached: preCleanupMetadata.state ?? 'unknown',
+        })
+      } catch (error: unknown) {
+        getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
 
     // Final success message
     if (cleanupResult.success) {
@@ -538,6 +573,17 @@ export class CleanupCommand {
       // Cleanup worktree using ResourceCleanup with ParsedInput
       // Now includes branch deletion with 5-point safety check BEFORE any deletion
       try {
+        // Read metadata BEFORE cleanup for telemetry
+        let targetMetadata: LoomMetadata | null = null
+        if (target.worktreePath) {
+          try {
+            const metadataManager = new MetadataManager()
+            targetMetadata = await metadataManager.readMetadata(target.worktreePath)
+          } catch (error: unknown) {
+            getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }
+
         // Use the known issue number directly instead of parsing from branch name
         // This ensures CLI symlinks (created with issue number) are properly cleaned up
         const parsedInput: ParsedInput = {
@@ -579,6 +625,21 @@ export class CleanupCommand {
             // Get branch name from result or use the target branch name
             const deletedBranchName = target.branchName
             databaseBranchesDeletedList.push(deletedBranchName)
+          }
+
+          // Track loom.abandoned telemetry (only for unfinished looms)
+          if (targetMetadata && targetMetadata.status !== 'finished') {
+            try {
+              const durationMinutes = targetMetadata.created_at
+                ? Math.round((Date.now() - new Date(targetMetadata.created_at).getTime()) / 60000)
+                : 0
+              TelemetryService.getInstance().track('loom.abandoned', {
+                duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+                phase_reached: targetMetadata.state ?? 'unknown',
+              })
+            } catch (error: unknown) {
+              getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
+            }
           }
         } else {
           failed++

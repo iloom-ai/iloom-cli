@@ -6,6 +6,22 @@ import { logger } from '../../src/utils/logger.js'
 import { promptConfirmation } from '../../src/utils/prompt.js'
 import type { CleanupResult, SafetyCheck } from '../../src/types/cleanup.js'
 
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../../src/lib/TelemetryService.js', () => ({
+  TelemetryService: {
+    getInstance: () => ({ track: mockTrack }),
+  },
+}))
+
+// Mock MetadataManager for telemetry duration calculation
+const mockReadMetadata = vi.fn().mockResolvedValue(null)
+vi.mock('../../src/lib/MetadataManager.js', () => ({
+  MetadataManager: vi.fn(() => ({
+    readMetadata: mockReadMetadata,
+  })),
+}))
+
 // Mock dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/ResourceCleanup.js')
@@ -1274,6 +1290,110 @@ describe('CleanupCommand', () => {
 
       // Should NOT have logged the waiting message since validation failed first
       expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Waiting'))
+    })
+  })
+
+  describe('telemetry', () => {
+    let mockResourceCleanup: vi.Mocked<ResourceCleanup>
+
+    beforeEach(() => {
+      mockGitWorktreeManager = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
+      const mockProcessManager = {} as vi.Mocked<import('../../src/lib/process/ProcessManager.js').ProcessManager>
+      mockResourceCleanup = new ResourceCleanup(mockGitWorktreeManager, mockProcessManager) as vi.Mocked<ResourceCleanup>
+      command = new CleanupCommand(mockGitWorktreeManager, mockResourceCleanup)
+
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn()
+      mockGitWorktreeManager.findWorktreeForIssue = vi.fn()
+      mockGitWorktreeManager.findWorktreeForPR = vi.fn()
+    })
+
+    it('should track loom.abandoned for unfinished loom', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      // Mock metadata for an unfinished loom
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 30 * 60000).toISOString(), // 30 minutes ago
+        status: 'active',
+        state: 'in_progress',
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).toHaveBeenCalledWith('loom.abandoned', {
+        duration_minutes: expect.any(Number),
+        phase_reached: 'in_progress',
+      })
+    })
+
+    it('should not track loom.abandoned for already-finished loom', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      // Mock metadata for a finished loom
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 30 * 60000).toISOString(),
+        status: 'finished',
+        state: 'done',
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).not.toHaveBeenCalled()
+    })
+
+    it('should use unknown phase when state is null', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 10 * 60000).toISOString(),
+        status: 'active',
+        state: null,
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).toHaveBeenCalledWith('loom.abandoned', {
+        duration_minutes: expect.any(Number),
+        phase_reached: 'unknown',
+      })
     })
   })
 })

@@ -9,6 +9,14 @@ import type { InitCommand } from './init.js'
 import path from 'path'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: () => ({ track: mockTrack }),
+	},
+}))
+
 // Mock dependencies
 vi.mock('../utils/github.js')
 vi.mock('../utils/git.js')
@@ -425,6 +433,35 @@ describe('ContributeCommand', () => {
 				'Where should the repository be cloned?',
 				'./my-project'
 			)
+		})
+	})
+
+	describe('telemetry', () => {
+		it('should track contribute.started on invocation', async () => {
+			// Mock existing fork
+			vi.mocked(githubUtils.executeGhCommand).mockResolvedValueOnce({
+				name: 'iloom-cli',
+				owner: { login: 'testuser' },
+			})
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./iloom-cli')
+
+			await command.execute()
+
+			expect(mockTrack).toHaveBeenCalledWith('contribute.started', { tracker: 'github' })
+		})
+
+		it('should track contribute.started with custom repository', async () => {
+			// Mock repo validation
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce('') // validateRepoExists
+				.mockResolvedValueOnce({ name: 'other-repo', owner: { login: 'testuser' } }) // fork check
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./other-repo')
+
+			await command.execute('owner/other-repo')
+
+			expect(mockTrack).toHaveBeenCalledWith('contribute.started', { tracker: 'github' })
 		})
 	})
 })

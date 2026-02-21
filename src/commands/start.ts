@@ -25,6 +25,8 @@ import { buildDependencyMap } from '../utils/dependency-map.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { isInteractiveEnvironment, promptConfirmation } from '../utils/prompt.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import type { LoomCreatedProperties } from '../types/telemetry.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -363,6 +365,23 @@ export class StartCommand {
 			})
 
 			getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
+
+			// Track loom.created telemetry event
+			try {
+				const oneShotMap: Record<string, LoomCreatedProperties['one_shot_mode']> = {
+					noReview: 'skip-reviews',
+					bypassPermissions: 'yolo',
+				}
+				TelemetryService.getInstance().track('loom.created', {
+					source_type: parsed.type === 'epic' ? 'issue' : parsed.type as LoomCreatedProperties['source_type'],
+					tracker: this.issueTracker.providerName,
+					is_child_loom: !!parentLoom,
+					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
+				})
+			} catch (error: unknown) {
+				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)
+			}
+
 			getLogger().info(`   Branch: ${loom.branch}`)
 			// Only show port for web projects
 			if (loom.capabilities?.includes('web')) {

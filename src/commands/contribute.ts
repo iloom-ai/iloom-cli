@@ -8,6 +8,7 @@ import path from 'path'
 import { InitCommand } from './init.js'
 import chalk from 'chalk'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 const DEFAULT_REPO = 'iloom-ai/iloom-cli'
 
@@ -184,6 +185,13 @@ export class ContributeCommand {
 	 * @param repository - Optional repository in various formats (owner/repo, github.com/owner/repo, or full URL)
 	 */
 	public async execute(repository?: string): Promise<void> {
+		// Track contribute.started telemetry event
+		try {
+			TelemetryService.getInstance().track('contribute.started', { tracker: 'github' })
+		} catch (error: unknown) {
+			logger.debug(`Failed to track contribute.started telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
 		// Parse and validate repository if provided, otherwise use default
 		let repoPath: string
 		if (repository) {
