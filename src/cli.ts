@@ -738,6 +738,7 @@ program
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .option('--set <key=value>', 'Override settings (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
+  .option('--skip-cleanup', 'Skip automatic cleanup of child worktrees after they complete in swarm mode')
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -746,6 +747,7 @@ program
     verbose?: boolean
     json?: boolean
     jsonStream?: boolean
+    skipCleanup?: boolean
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -780,7 +782,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

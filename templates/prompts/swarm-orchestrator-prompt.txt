@@ -71,25 +71,28 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 6. Push epic branch to remote after each successful child merge (incremental)
+7. Clean up completed child worktrees (if not --skip-cleanup)
+8. Spawn agents for newly unblocked child issues (repeat as needed)
+9. Handle any failures (mark failed, continue with others)
+10. When all children are done or failed, finalize and clean up
+11. Create final commit with Fixes trailer for epic issue
+12. Push epic branch to remote (final commit)
+13. Print final summary
+{{else}}
+6. Clean up completed child worktrees (if not --skip-cleanup)
 7. Spawn agents for newly unblocked child issues (repeat as needed)
 8. Handle any failures (mark failed, continue with others)
 9. When all children are done or failed, finalize and clean up
 10. Create final commit with Fixes trailer for epic issue
-11. Push epic branch to remote (final commit)
-12. Print final summary
-{{else}}
-6. Spawn agents for newly unblocked child issues (repeat as needed)
-7. Handle any failures (mark failed, continue with others)
-8. When all children are done or failed, finalize and clean up
-9. Create final commit with Fixes trailer for epic issue
-10. Print final summary
+11. Print final summary
 {{/if}}
 {{else}}
-6. Spawn agents for newly unblocked child issues (repeat as needed)
-7. Handle any failures (mark failed, continue with others)
-8. When all children are done or failed, finalize and clean up
-9. Create final commit with Fixes trailer for epic issue
-10. Print final summary
+6. Clean up completed child worktrees (if not --skip-cleanup)
+7. Spawn agents for newly unblocked child issues (repeat as needed)
+8. Handle any failures (mark failed, continue with others)
+9. When all children are done or failed, finalize and clean up
+10. Create final commit with Fixes trailer for epic issue
+11. Print final summary
 {{/if}}
 
 ---
@@ -267,6 +270,24 @@ git push --force-with-lease {{GIT_REMOTE}} HEAD
 
 {{/if}}
 {{/if}}
+#### Step 3.4.6: Clean Up Child Worktree
+
+{{#unless NO_CLEANUP}}
+After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il finish`. Since the child's branch is already rebased and merged into the epic branch, the merge step will be a no-op ("Already up to date").
+
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+il finish <child-issue-number> --json --force --cleanup
+```
+
+This archives the child's metadata to the `finished/` directory (accessible via `il list --finished`) and removes the worktree from disk.
+
+If the `il finish` command fails, log the error but continue with the orchestration -- do not let a cleanup failure block other children.
+{{/unless}}
+{{#if NO_CLEANUP}}
+**Note:** Child loom cleanup is disabled (`--skip-cleanup` flag). Child worktrees will be preserved after the swarm completes.
+{{/if}}
+
 #### Step 3.5: Check for Newly Unblocked Issues
 
 After a child completes:
@@ -276,12 +297,12 @@ After a child completes:
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
+Mark todo #5, #6, #7, and #8 as completed after each merge-and-spawn cycle.
 {{else}}
-Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
+Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
 {{/if}}
 {{else}}
-Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
+Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
 {{/if}}
 
 ---
@@ -304,12 +325,12 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #8 as completed.
+Mark todo #9 as completed.
 {{else}}
-Mark todo #7 as completed.
+Mark todo #8 as completed.
 {{/if}}
 {{else}}
-Mark todo #7 as completed.
+Mark todo #8 as completed.
 {{/if}}
 
 ---
@@ -400,10 +421,10 @@ The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #9, #10, #11, and #12 as completed.
+Mark todo #10, #11, #12, and #13 as completed.
 {{else}}
-Mark todo #8, #9, and #10 as completed.
+Mark todo #9, #10, and #11 as completed.
 {{/if}}
 {{else}}
-Mark todo #8, #9, and #10 as completed.
+Mark todo #9, #10, and #11 as completed.
 {{/if}}

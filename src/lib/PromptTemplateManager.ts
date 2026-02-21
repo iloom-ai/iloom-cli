@@ -112,6 +112,7 @@ export interface TemplateVariables {
 	DEPENDENCY_MAP?: string  // JSON stringified dependency map
 	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
 	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
+	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
 }
 

@@ -137,23 +137,23 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}): Promise<void> {
+	}, skipCleanup?: boolean): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup))
 		}
 
-		return this.executeInternal(oneShot)
+		return this.executeInternal(oneShot, skipCleanup)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -258,6 +258,7 @@ export class IgniteCommand {
 						context.workspacePath,
 						context.branchName ?? '',
 						metadataManager,
+						skipCleanup,
 					)
 					return
 				}
@@ -826,6 +827,7 @@ export class IgniteCommand {
 		epicWorktreePath: string,
 		epicBranch: string,
 		metadataManager: MetadataManager,
+		skipCleanup?: boolean,
 	): Promise<void> {
 		if (!this.settings) {
 			throw new Error('Settings not loaded. Cannot enter swarm mode.')
@@ -941,6 +943,7 @@ export class IgniteCommand {
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 			ISSUE_PREFIX: issuePrefix,
+			...(skipCleanup && { NO_CLEANUP: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
