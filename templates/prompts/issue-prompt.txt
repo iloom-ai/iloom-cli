@@ -284,13 +284,13 @@ Return structured result:
 
 In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot spawn sub-agents). Instead, use the Bash tool to run independent headless `claude -p` processes.
 
-**CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE` to unset the CLAUDECODE environment variable. Without this, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session".**
+**CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30` to unset the CLAUDECODE environment variable and enable deferred tool loading. Without unsetting CLAUDECODE, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session". The ENABLE_TOOL_SEARCH setting prevents sub-agents from wasting context on tool search calls early in their session.**
 
 **MCP Config:** Read the file `.claude/iloom-swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
 
 **Command template:**
 ```bash
-env -u CLAUDECODE claude -p \
+env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
   --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
