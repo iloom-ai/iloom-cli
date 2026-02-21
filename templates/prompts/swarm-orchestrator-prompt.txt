@@ -147,14 +147,27 @@ cd <child-worktree-path>
 
 All file reads, writes, searches, and git operations must happen within this directory. Do NOT work in the epic worktree or any other child's worktree.
 
+## Strict Boundaries
+
+- You are ONLY responsible for issue #<child-number>. Do not implement, fix, commit, or merge work for any other issue.
+- NEVER cd into, read from, or modify files in any other worktree path. Your entire scope is `<child-worktree-path>`.
+- Do NOT merge branches, close issues, or perform any orchestration tasks. The orchestrator handles all merging and issue management.
+- Do NOT pick up tasks from the team task list. You have exactly one job.
+
 **Issue body:**
 <child-issue-body>
 
-Implement this issue following your workflow instructions. When done, report back with:
+Implement this issue following your workflow instructions.
+
+## After Completion
+
+When your implementation is done, report back with:
 - Issue number
 - Status (success or failed)
 - Brief summary of what was implemented or what went wrong
 - Number of files changed (if successful)
+
+After sending your report, STOP. Do not look for more work. Do not check on other issues. Do not attempt to help with other worktrees. Wait for a shutdown request and approve it.
 ```
 
 Note: The child issue body is available directly in the `CHILD_ISSUES` template data above (each entry has a `body` field). Make sure to include it in the Task prompt for each child.
