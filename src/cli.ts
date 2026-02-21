@@ -26,10 +26,49 @@ import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } fro
 import chalk from 'chalk'
 import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
+import { TelemetryManager } from './lib/TelemetryManager.js'
+import { TelemetryService } from './lib/TelemetryService.js'
 
 // Get package.json for version
 const __filename = fileURLToPath(import.meta.url)
 const packageJson = getPackageInfo(__filename)
+
+/**
+ * Handle telemetry lifecycle: first-run disclosure and upgrade detection.
+ * Extracted for testability.
+ */
+export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boolean): void {
+  const telemetryManager = new TelemetryManager()
+
+  // First-run disclosure
+  if (!telemetryManager.hasBeenDisclosed()) {
+    if (!jsonMode) {
+      logger.info('')
+      logger.info('iloom collects anonymous usage data to improve the product.')
+      logger.info('No personal information, repo names, or code is collected.')
+      logger.info('Run "il telemetry off" to disable CLI telemetry at any time.')
+      logger.info('If you also use the iloom VS Code extension, its telemetry is managed separately in VS Code settings.')
+      logger.info('')
+    }
+    telemetryManager.markDisclosed()
+    TelemetryService.getInstance().track('cli.installed', {
+      version: currentVersion,
+      os: process.platform,
+      node_version: process.version,
+    })
+  }
+
+  // Upgrade detection
+  const lastVersion = telemetryManager.getLastVersion()
+  if (lastVersion && lastVersion !== currentVersion) {
+    TelemetryService.getInstance().track('cli.upgraded', {
+      version: currentVersion,
+      previous_version: lastVersion,
+      os: process.platform,
+    })
+  }
+  telemetryManager.setLastVersion(currentVersion)
+}
 
 // Helper function to parse issue identifiers (numeric or alphanumeric)
 function parseIssueIdentifier(value: string): string | number {
@@ -97,6 +136,14 @@ program
       logger.warn(`Version migration failed: ${error instanceof Error ? error.message : 'Unknown'}`)
     }
 
+    // --- Telemetry: first-run disclosure and lifecycle events ---
+    try {
+      const jsonMode = actionCommand.opts().json === true
+      handleTelemetryLifecycle(packageJson.version, jsonMode)
+    } catch (error) {
+      logger.debug(`Telemetry: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
     // Validate settings for all commands
     await validateSettingsForCommand(actionCommand)
 
@@ -123,7 +170,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   const commandName = command.name()
 
   // Tier 1: Commands that bypass ALL validation
-  const bypassCommands = ['help', 'init', 'update', 'contribute']
+  const bypassCommands = ['help', 'init', 'update', 'contribute', 'telemetry']
 
   if (bypassCommands.includes(commandName)) {
     return
@@ -2111,6 +2158,42 @@ program
     }
   })
 
+// Telemetry management commands
+const telemetryCmd = program
+  .command('telemetry')
+  .description('Manage anonymous usage telemetry')
+
+telemetryCmd
+  .command('off')
+  .description('Disable anonymous usage telemetry')
+  .action(async () => {
+    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
+    const manager = new TelemetryManager()
+    manager.disable()
+    logger.info('Telemetry disabled. No usage data will be collected.')
+  })
+
+telemetryCmd
+  .command('on')
+  .description('Enable anonymous usage telemetry')
+  .action(async () => {
+    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
+    const manager = new TelemetryManager()
+    manager.enable()
+    logger.info('Telemetry enabled. Anonymous usage data will be collected to improve iloom.')
+  })
+
+telemetryCmd
+  .command('status')
+  .description('Show current telemetry status')
+  .action(async () => {
+    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
+    const manager = new TelemetryManager()
+    const status = manager.getStatus()
+    logger.info(`Telemetry: ${status.enabled ? 'enabled' : 'disabled'}`)
+    logger.info(`Anonymous ID: ${status.distinctId}`)
+  })
+
 // Add custom help command in order to get preAction to run (update check handled by preAction hook)
 program
   .command('help')
@@ -2150,9 +2233,30 @@ const isRunDirectly = process.argv[1] && ((): boolean => {
 if (isRunDirectly) {
   try {
     await program.parseAsync()
+    // Flush telemetry on successful exit
+    try {
+      await TelemetryService.getInstance().shutdown()
+    } catch (shutdownError) {
+      logger.debug(`Telemetry shutdown: ${shutdownError instanceof Error ? shutdownError.message : String(shutdownError)}`)
+    }
   } catch (error) {
+    // Track error event
+    try {
+      const commandName = program.args?.[0] ?? 'unknown'
+      TelemetryService.getInstance().track('error.occurred', {
+        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+        command: commandName,
+        phase: 'execution',
+      })
+      await TelemetryService.getInstance().shutdown()
+    } catch (telemetryError) {
+      logger.debug(`Telemetry error tracking: ${telemetryError instanceof Error ? telemetryError.message : String(telemetryError)}`)
+    }
     if (error instanceof Error) {
       logger.error(`Error: ${error.message}`)
+      process.exit(1)
+    } else {
+      logger.error(`Error: ${String(error)}`)
       process.exit(1)
     }
   }

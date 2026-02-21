@@ -1152,6 +1152,15 @@ When configuring agents, use these model identifiers:
    - Your local environment needs different commands than the team standard
    - You want to add debug flags or local-only tooling without affecting others
 
+## Telemetry
+
+iloom collects anonymous usage data to improve the product. If the user asks about telemetry or data collection during setup:
+
+- **CLI telemetry**: Managed via `il telemetry off` (disable) and `il telemetry on` (re-enable). Run `il telemetry status` to check current state.
+- **VS Code extension telemetry**: If the user also uses the iloom VS Code extension, its telemetry is managed separately via VS Code settings (`iloom.telemetry.enabled`). Disabling CLI telemetry does NOT affect the extension, and vice versa.
+- **What's collected**: Only anonymous usage events (commands run, errors). No personal information, repo names, or code.
+- **Distinct ID**: A random UUID stored in `~/.config/iloom-ai/telemetry.json`, shared between CLI and VS Code extension.
+
 ## Important Notes
 
 - **Validate ALL inputs** against the schema before writing files
