@@ -1,0 +1,3 @@
+#!/bin/sh
+# Rebuild after merge so `il` CLI is up to date
+pnpm build
