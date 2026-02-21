@@ -10,7 +10,6 @@ export interface ClaudeContext {
 	port?: number
 	branchName?: string
 	oneShot?: import('../types/index.js').OneShotMode
-	setArguments?: string[] // Raw --set arguments to forward
 	executablePath?: string // Executable path to use for spin command
 }
 
@@ -69,11 +68,6 @@ export class ClaudeContextManager {
 		// Add optional branch name if present
 		if (context.branchName !== undefined) {
 			workflowOptions.branchName = context.branchName
-		}
-
-		// Add optional setArguments if present
-		if (context.setArguments !== undefined) {
-			workflowOptions.setArguments = context.setArguments
 		}
 
 		// Add optional executablePath if present

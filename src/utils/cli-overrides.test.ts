@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { parseDotNotation, parseCliValue, extractSettingsOverrides, extractRawSetArguments, getExecutablePath } from './cli-overrides.js'
+import { parseDotNotation, parseCliValue, extractSettingsOverrides, getExecutablePath } from './cli-overrides.js'
 
 describe('parseCliValue', () => {
 	it('should parse "true" as boolean true', () => {
@@ -315,84 +315,6 @@ describe('extractSettingsOverrides', () => {
 		expect(result).toEqual({
 			protectedBranches: 'main,develop',
 		})
-	})
-})
-
-describe('extractRawSetArguments', () => {
-	it('should extract single --set argument as raw string', () => {
-		const argv = ['node', 'il', 'start', '123', '--set', 'workflows.issue.startIde=false']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['workflows.issue.startIde=false'])
-	})
-
-	it('should extract multiple --set arguments as raw strings', () => {
-		const argv = [
-			'node',
-			'il',
-			'start',
-			'123',
-			'--set',
-			'workflows.issue.startIde=false',
-			'--set',
-			'capabilities.web.basePort=4000',
-		]
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['workflows.issue.startIde=false', 'capabilities.web.basePort=4000'])
-	})
-
-	it('should handle --set=key=value format', () => {
-		const argv = ['node', 'il', 'start', '123', '--set=workflows.issue.startIde=false']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['workflows.issue.startIde=false'])
-	})
-
-	it('should handle mixed --set formats', () => {
-		const argv = [
-			'node',
-			'il',
-			'start',
-			'--set',
-			'workflows.issue.startIde=false',
-			'--set=capabilities.web.basePort=4000',
-		]
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['workflows.issue.startIde=false', 'capabilities.web.basePort=4000'])
-	})
-
-	it('should return empty array when no --set arguments', () => {
-		const argv = ['node', 'il', 'start', '123', '--debug']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual([])
-	})
-
-	it('should ignore non-set arguments', () => {
-		const argv = ['node', 'il', 'start', '123', '--debug', '--set', 'mainBranch=develop', '--no-claude']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['mainBranch=develop'])
-	})
-
-	it('should preserve values with equals signs', () => {
-		const argv = ['node', 'il', 'start', '--set', 'database.connectionString=postgres://user:pass=word@host']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['database.connectionString=postgres://user:pass=word@host'])
-	})
-
-	it('should handle empty value', () => {
-		const argv = ['node', 'il', 'start', '--set', 'worktreePrefix=']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual(['worktreePrefix='])
-	})
-
-	it('should skip --set without following argument', () => {
-		const argv = ['node', 'il', 'start', '--set']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual([])
-	})
-
-	it('should skip --set= without value', () => {
-		const argv = ['node', 'il', 'start', '--set=']
-		const result = extractRawSetArguments(argv)
-		expect(result).toEqual([])
 	})
 })
 

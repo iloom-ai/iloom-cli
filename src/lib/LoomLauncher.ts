@@ -24,7 +24,6 @@ export interface LaunchLoomOptions {
 	identifier: string | number
 	title?: string
 	oneShot?: import('../types/index.js').OneShotMode
-	setArguments?: string[] // Raw --set arguments to forward
 	executablePath?: string // Executable path to use for spin command
 	sourceEnvOnStart?: boolean // defaults to false if undefined
 	colorTerminal?: boolean // defaults to true if undefined
@@ -138,7 +137,6 @@ export class LoomLauncher {
 			...(options.title && { title: options.title }),
 			...(options.port !== undefined && { port: options.port }),
 			oneShot: options.oneShot ?? 'default',
-			...(options.setArguments && { setArguments: options.setArguments }),
 			...(options.executablePath && { executablePath: options.executablePath }),
 		})
 		getLogger().info('Claude terminal opened')
@@ -215,12 +213,6 @@ export class LoomLauncher {
 		if (options.oneShot !== undefined && options.oneShot !== 'default') {
 			claudeCommand += ` --one-shot=${options.oneShot}`
 		}
-		if (options.setArguments && options.setArguments.length > 0) {
-			for (const setArg of options.setArguments) {
-				claudeCommand += ` --set ${setArg}`
-			}
-		}
-
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
 			? options.colorHex

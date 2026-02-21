@@ -685,6 +685,8 @@ program
   .option('--verbose', 'Enable verbose output (requires --print)')
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .option('--set <key=value>', 'Override any setting using dot notation (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
+  .allowUnknownOption()
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean

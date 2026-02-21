@@ -351,7 +351,6 @@ export class LoomManager {
     const enableDevServer = input.options?.enableDevServer !== false
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
-    const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
     // Only launch if at least one component is enabled
@@ -376,7 +375,6 @@ export class LoomManager {
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
-        ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
@@ -1332,7 +1330,6 @@ export class LoomManager {
     const enableDevServer = input.options?.enableDevServer !== false
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
-    const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
     if (enableClaude || enableCode || enableDevServer || enableTerminal) {
@@ -1357,7 +1354,6 @@ export class LoomManager {
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
-        ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,

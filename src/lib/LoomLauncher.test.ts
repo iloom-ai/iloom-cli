@@ -441,23 +441,6 @@ describe('LoomLauncher', () => {
 				expect(claudeTab).toBeDefined()
 				expect(claudeTab?.command).toContain('/custom/path/to/cli.js spin')
 			})
-
-			it('should include setArguments in multi-terminal Claude command', async () => {
-				await launcher.launchLoom({
-					...baseOptions,
-					enableClaude: true,
-					enableCode: false,
-					enableDevServer: true,
-					enableTerminal: false,
-					setArguments: ['foo=bar', 'baz=qux'],
-				})
-
-				const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
-				const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
-				expect(claudeTab).toBeDefined()
-				expect(claudeTab?.command).toContain('--set foo=bar')
-				expect(claudeTab?.command).toContain('--set baz=qux')
-			})
 		})
 	})
 

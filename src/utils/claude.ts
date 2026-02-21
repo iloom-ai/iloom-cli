@@ -66,7 +66,6 @@ export interface ClaudeCliOptions {
 	disallowedTools?: string[] // Tools to disallow via --disallowed-tools flag
 	agents?: Record<string, unknown> // Agent configurations for --agents flag
 	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
-	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
 	sessionId?: string // Session ID for Claude Code resume support (must be valid UUID)
 	noSessionPersistence?: boolean // Prevent session data from being saved to disk (for utility operations)
@@ -470,7 +469,7 @@ export async function launchClaudeInNewTerminalWindow(
 		workspacePath: string // Required for terminal window launch
 	}
 ): Promise<void> {
-	const { workspacePath, branchName, oneShot = 'default', port, setArguments, executablePath } = options
+	const { workspacePath, branchName, oneShot = 'default', port, executablePath } = options
 
 	// Verify required parameter
 	if (!workspacePath) {
@@ -483,13 +482,6 @@ export async function launchClaudeInNewTerminalWindow(
 	let launchCommand = `${executable} spin`
 	if (oneShot !== 'default') {
 		launchCommand += ` --one-shot=${oneShot}`
-	}
-
-	// Append --set arguments if provided
-	if (setArguments && setArguments.length > 0) {
-		for (const setArg of setArguments) {
-			launchCommand += ` --set ${setArg}`
-		}
 	}
 
 	// Apply terminal background color if branch name available

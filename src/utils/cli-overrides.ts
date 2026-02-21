@@ -178,42 +178,6 @@ export function extractSettingsOverrides(argv: string[] = process.argv): CliOver
 }
 
 /**
- * Extract raw --set arguments from process.argv for forwarding to other commands
- * Returns array of strings in format ["key=value", "key2=value2"]
- * This is useful when you need to forward --set arguments to another command
- *
- * Example:
- * - Input: ['node', 'il', 'start', '123', '--set', 'workflows.issue.startIde=false', '--set', 'port=4000']
- * - Output: ['workflows.issue.startIde=false', 'port=4000']
- */
-export function extractRawSetArguments(argv: string[] = process.argv): string[] {
-	const rawSetArgs: string[] = []
-
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i]
-		if (!arg) continue
-
-		// Handle --set key=value format
-		if (arg === '--set') {
-			const nextArg = argv[i + 1]
-			if (nextArg) {
-				rawSetArgs.push(nextArg)
-				i++ // Skip the next argument since we consumed it
-			}
-		}
-		// Handle --set=key=value format
-		else if (arg.startsWith('--set=')) {
-			const keyValue = arg.substring(6) // Remove "--set="
-			if (keyValue) {
-				rawSetArgs.push(keyValue)
-			}
-		}
-	}
-
-	return rawSetArgs
-}
-
-/**
  * Get the executable path used to invoke this CLI
  *
  * Rules:

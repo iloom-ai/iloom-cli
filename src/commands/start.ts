@@ -15,7 +15,7 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
-import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { extractSettingsOverrides, getExecutablePath } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
@@ -316,9 +316,7 @@ export class StartCommand {
 			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type === 'epic' ? 'issue' : parsed.type
 			const workflowConfig = settings.workflows?.[workflowType]
 
-			// Step 2.9: Extract raw --set arguments and executable path for forwarding to spin
-			const { extractRawSetArguments, getExecutablePath } = await import('../utils/cli-overrides.js')
-			const setArguments = extractRawSetArguments()
+			// Step 2.9: Extract executable path for forwarding to spin
 			const executablePath = getExecutablePath()
 
 			// Step 3: Log success and create loom
@@ -354,7 +352,6 @@ export class StartCommand {
 					enableDevServer,
 					enableTerminal,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
-					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
 					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
 					...(childIssues.length > 0 && { childIssues }),
