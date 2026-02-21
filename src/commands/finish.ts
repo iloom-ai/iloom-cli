@@ -832,6 +832,15 @@ export class FinishCommand {
 				result.prUrl = prUrl
 			}
 
+			// Open PR in browser if configured and not suppressed
+			const shouldOpenBrowser = !options.dryRun
+				&& !options.noBrowser
+				&& !options.json
+				&& settings.mergeBehavior?.openBrowserOnFinish !== false
+			if (shouldOpenBrowser && prUrl) {
+				await prManager.openPRInBrowser(prUrl)
+			}
+
 			result.operations.push({
 				type: 'pr-ready',
 				message: `PR #${metadata.draftPrNumber} marked as ready for review`,
@@ -1066,7 +1075,9 @@ export class FinishCommand {
 				success: true,
 			})
 		} else {
-			const openInBrowser = options.noBrowser !== true
+			const openInBrowser = !options.noBrowser
+				&& !options.json
+				&& settings.mergeBehavior?.openBrowserOnFinish !== false
 
 			const prResult = await prManager.createOrOpenPR(
 				worktree.branch,

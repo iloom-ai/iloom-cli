@@ -563,11 +563,15 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
-  .option('--no-browser', 'Skip opening PR in browser (github-pr mode only)')
+  .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--json', 'Output result as JSON')
-  .action(async (identifier: string | undefined, options: FinishOptions) => {
+  .action(async (identifier: string | undefined, options: FinishOptions & { browser?: boolean }) => {
+    // Commander.js --no-browser creates browser:false, map to noBrowser for FinishOptions
+    if (options.browser === false) {
+      options.noBrowser = true
+    }
     const executeAction = async (): Promise<void> => {
       try {
         const settingsManager = new SettingsManager()

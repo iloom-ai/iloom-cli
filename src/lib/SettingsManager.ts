@@ -437,6 +437,12 @@ export const IloomSettingsSchema = z.object({
 				.describe(
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
 				),
+			openBrowserOnFinish: z
+				.boolean()
+				.default(true)
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
+				),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
@@ -682,6 +688,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				.optional()
 				.describe(
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+				),
+			openBrowserOnFinish: z
+				.boolean()
+				.optional()
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
 		})
 		.optional()

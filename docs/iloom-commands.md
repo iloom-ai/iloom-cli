@@ -266,7 +266,7 @@ il finish [options]
 | `-n`, `--dry-run` | Preview actions without executing |
 | `--pr` | Treat input as PR number |
 | `--skip-build` | Skip post-merge build verification |
-| `--no-browser` | Skip opening PR in browser (github-pr mode only) |
+| `--no-browser` | Skip opening PR in browser (github-pr and github-draft-pr modes) |
 | `--cleanup` | Clean up worktree after finishing (default in local mode) |
 | `--no-cleanup` | Keep worktree after finishing (default in github-pr and github-draft-pr modes)|
 
@@ -289,7 +289,14 @@ Behavior depends on the `mergeBehavior.mode` setting in your iloom configuration
 1. Same validation pipeline as local mode
 2. Pushes branch to remote
 3. Creates GitHub pull request
-4. Opens PR in browser (unless `--no-browser`)
+4. Opens PR in browser (unless `--no-browser` or `openBrowserOnFinish: false`)
+5. Prompts for cleanup (or use `--cleanup`/`--no-cleanup` flags)
+
+**`github-draft-pr`:**
+1. Same validation pipeline as local mode
+2. Removes placeholder commit and pushes final commits
+3. Marks draft PR as ready for review
+4. Opens PR in browser (unless `--no-browser` or `openBrowserOnFinish: false`)
 5. Prompts for cleanup (or use `--cleanup`/`--no-cleanup` flags)
 
 **Examples:**
@@ -317,6 +324,21 @@ For Payload CMS projects, iloom automatically detects and handles migration conf
 - Identifies migration file conflicts
 - Launches Claude to help resolve discrepancies
 - Validates schema consistency
+
+**Browser Opening Configuration:**
+
+By default, `il finish` opens the PR in your browser after creation (github-pr mode) or marking ready (github-draft-pr mode). To disable this permanently, set `openBrowserOnFinish` to `false` in your settings:
+
+```json
+{
+  "mergeBehavior": {
+    "mode": "github-pr",
+    "openBrowserOnFinish": false
+  }
+}
+```
+
+Browser opening is also suppressed in `--json` mode and `--dry-run` mode.
 
 **Notes:**
 - Claude assists with fixing any test, typecheck, or lint failures
