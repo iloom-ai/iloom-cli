@@ -6,6 +6,26 @@ import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import * as languageDetector from '../utils/language-detector.js'
+
+// Mock TelemetryService
+vi.mock('../lib/TelemetryService.js', () => {
+	const mockTrack = vi.fn()
+	return {
+		TelemetryService: {
+			getInstance: vi.fn(() => ({
+				track: mockTrack,
+			})),
+			resetInstance: vi.fn(),
+		},
+	}
+})
+
+// Mock detectProjectLanguage
+vi.mock('../utils/language-detector.js', () => ({
+	detectProjectLanguage: vi.fn().mockResolvedValue('typescript'),
+}))
 
 // Mock MetadataManager to return proper metadata for recap MCP tests
 vi.mock('../lib/MetadataManager.js', () => ({
@@ -31,6 +51,9 @@ describe('IgniteCommand', () => {
 	let mockGitWorktreeManager: GitWorktreeManager
 
 	beforeEach(() => {
+		// Re-set language detector mock (mockReset clears return values between tests)
+		vi.mocked(languageDetector.detectProjectLanguage).mockResolvedValue('typescript')
+
 		// Mock dependencies
 		mockTemplateManager = {
 			getPrompt: vi.fn().mockResolvedValue('mocked prompt content'),
@@ -2850,6 +2873,328 @@ describe('IgniteCommand', () => {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 			}
+		})
+	})
+
+	describe('session.started telemetry', () => {
+		it('tracks session.started with has_neon and language on spin', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__telemetry-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_neon is true when neon settings are configured', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {
+						neon: { projectId: 'test-project' },
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-51__neon-test')
+
+			const commandWithNeon = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithNeon.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: true,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_neon is false when neon settings are absent', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-52__no-neon')
+
+			const commandWithoutNeon = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithoutNeon.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('does not throw if telemetry tracking fails', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Make detectProjectLanguage throw
+			vi.mocked(languageDetector.detectProjectLanguage).mockRejectedValueOnce(new Error('detection failed'))
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-53__fail-test')
+
+			const commandFailTelemetry = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				// Should not throw despite telemetry failure
+				await expect(commandFailTelemetry.execute()).resolves.not.toThrow()
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('swarm telemetry', () => {
+		// Helper to create an IgniteCommand that enters swarm mode
+		function createSwarmCommand(
+			templateMgr: PromptTemplateManager,
+			childMetadataStates: Array<{ state: string; created_at: string }>,
+		) {
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read in executeInternal (Step 2)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues: [
+					{ number: '#201', title: 'Child 1', body: 'Body 1' },
+					{ number: '#202', title: 'Child 2', body: 'Body 2' },
+				],
+				sessionId: 'epic-session-id',
+			})
+			// Second call: fresh metadata re-read in executeInternal (Step 2.1.1)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues: [
+					{ number: '#201', title: 'Child 1', body: 'Body 1' },
+					{ number: '#202', title: 'Child 2', body: 'Body 2' },
+				],
+				dependencyMap: {},
+				sessionId: 'epic-session-id',
+			})
+			// Subsequent calls: child metadata reads for telemetry
+			for (const childMeta of childMetadataStates) {
+				readMetadataMock.mockResolvedValueOnce({
+					state: childMeta.state,
+					created_at: childMeta.created_at,
+				})
+			}
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const mockGitWorktreeManagerSwarm = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'feat/issue-100__epic',
+				}),
+			} as unknown as GitWorktreeManager
+
+			const mockSettingsManagerSwarm = {
+				loadSettings: vi.fn().mockResolvedValue({
+					issueTracker: { provider: 'github' },
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue([]),
+				formatForCli: vi.fn().mockReturnValue({}),
+			}
+
+			return new IgniteCommand(
+				templateMgr,
+				mockGitWorktreeManagerSwarm,
+				mockAgentManager as never,
+				mockSettingsManagerSwarm as never,
+			)
+		}
+
+		let launchClaudeSpy: ReturnType<typeof vi.spyOn>
+		let findMainWorktreePathSpy: ReturnType<typeof vi.spyOn>
+		let originalCwd: typeof process.cwd
+
+		beforeEach(async () => {
+			launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			findMainWorktreePathSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			// Mock SwarmSetupService.setupSwarm
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [
+					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				],
+				agentsRendered: 0,
+				workerAgentRendered: true,
+			})
+		})
+
+		afterEach(() => {
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+			findMainWorktreePathSpy.mockRestore()
+		})
+
+		it('tracks swarm.started with child_count and tracker before launching orchestrator', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			expect(mockTrack).toHaveBeenCalledWith('swarm.started', {
+				child_count: 2,
+				tracker: 'github',
+			})
+		})
+
+		it('tracks swarm.completed with total_children, succeeded, failed, duration_minutes', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'failed', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			expect(mockTrack).toHaveBeenCalledWith('swarm.completed', expect.objectContaining({
+				total_children: 2,
+				succeeded: 1,
+				failed: 1,
+			}))
+			// duration_minutes should be a number
+			const completedCall = vi.mocked(mockTrack).mock.calls.find(
+				(call) => call[0] === 'swarm.completed'
+			)
+			expect(completedCall).toBeDefined()
+			expect(typeof completedCall![1].duration_minutes).toBe('number')
+		})
+
+		it('tracks swarm.child_completed for each child with success and duration_minutes', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'failed', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			const childCompletedCalls = vi.mocked(mockTrack).mock.calls.filter(
+				(call) => call[0] === 'swarm.child_completed'
+			)
+			expect(childCompletedCalls).toHaveLength(2)
+
+			// First child: done
+			expect(childCompletedCalls[0][1]).toEqual(expect.objectContaining({
+				success: true,
+			}))
+			expect(typeof childCompletedCalls[0][1].duration_minutes).toBe('number')
+
+			// Second child: failed
+			expect(childCompletedCalls[1][1]).toEqual(expect.objectContaining({
+				success: false,
+			}))
+			expect(typeof childCompletedCalls[1][1].duration_minutes).toBe('number')
+		})
+
+		it('handles telemetry failures gracefully', async () => {
+			// Make track throw for swarm events
+			const mockTrack = TelemetryService.getInstance().track as ReturnType<typeof vi.fn>
+			mockTrack.mockImplementation((event: string) => {
+				if (event === 'swarm.started') throw new Error('telemetry failed')
+			})
+
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			// Should not throw despite telemetry failure
+			await expect(swarmCommand.execute()).resolves.not.toThrow()
+			expect(launchClaudeSpy).toHaveBeenCalled()
 		})
 	})
 

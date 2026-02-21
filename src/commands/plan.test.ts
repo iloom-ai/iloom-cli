@@ -4,11 +4,23 @@ import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as mcpUtils from '../utils/mcp.js'
 import * as firstRunSetup from '../utils/first-run-setup.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import * as identifierParser from '../utils/IdentifierParser.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/mcp.js')
 vi.mock('../utils/first-run-setup.js')
+vi.mock('../utils/IdentifierParser.js')
+vi.mock('../mcp/IssueManagementProviderFactory.js')
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: vi.fn(),
+		resetInstance: vi.fn(),
+	},
+}))
 vi.mock('../lib/SettingsManager.js', () => ({
 	SettingsManager: vi.fn(() => ({
 		loadSettings: vi.fn().mockResolvedValue(null),
@@ -20,6 +32,7 @@ vi.mock('../lib/SettingsManager.js', () => ({
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	IssueTrackerFactory: {
 		getProviderName: vi.fn().mockReturnValue('github'),
+		create: vi.fn(),
 	},
 }))
 vi.mock('../utils/logger.js', () => ({
@@ -54,6 +67,11 @@ describe('PlanCommand', () => {
 		// Default: project is already configured (no first-run setup needed)
 		vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
 		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
+		// Default: input is not an issue identifier (non-decomposition mode)
+		vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({ isIssueIdentifier: false })
+		// Default: TelemetryService mock
+		const mockTrack = vi.fn()
+		vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
 	})
 
 	describe('VS Code mode detection', () => {
@@ -456,6 +474,67 @@ describe('PlanCommand', () => {
 			expect(logger.warn).toHaveBeenCalledWith(
 				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
+		})
+	})
+
+	describe('epic.planned telemetry', () => {
+		const mockTrack = vi.fn()
+		const mockGetChildIssues = vi.fn()
+
+		beforeEach(() => {
+			// Setup TelemetryService mock
+			vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
+
+			// Setup IssueManagementProviderFactory mock
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: mockGetChildIssues,
+			} as never)
+
+			// Setup decomposition mode: matchIssueIdentifier returns true for "42"
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+
+			// Setup IssueTrackerFactory.create to return a mock issue tracker
+			const mockIssueTracker = {
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test epic', body: 'Epic body' }),
+			}
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue(mockIssueTracker as never)
+		})
+
+		it('tracks epic.planned with child_count after decomposition session', async () => {
+			mockGetChildIssues.mockResolvedValue([
+				{ id: '100', title: 'Child 1', state: 'open' },
+				{ id: '101', title: 'Child 2', state: 'open' },
+				{ id: '102', title: 'Child 3', state: 'open' },
+			])
+
+			await command.execute('42')
+
+			expect(mockTrack).toHaveBeenCalledWith('epic.planned', {
+				child_count: 3,
+				tracker: 'github',
+			})
+		})
+
+		it('does not track epic.planned for non-decomposition sessions', async () => {
+			// Override: not an issue identifier
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({ isIssueIdentifier: false })
+
+			await command.execute('help me plan something')
+
+			expect(mockTrack).not.toHaveBeenCalledWith('epic.planned', expect.anything())
+		})
+
+		it('does not throw if telemetry tracking fails', async () => {
+			// Make getChildIssues throw to trigger the catch block
+			mockGetChildIssues.mockRejectedValue(new Error('MCP provider error'))
+
+			// Should not throw — telemetry failure is non-blocking
+			await expect(command.execute('42')).resolves.toBeUndefined()
 		})
 	})
 })

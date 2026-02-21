@@ -11,6 +11,7 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 // Define provider arrays for validation and dynamic flag generation
 const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
@@ -506,6 +507,20 @@ ${initialMessage}`
 			...claudeOptions,
 			...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
 		})
+
+		// Track epic.planned telemetry for decomposition sessions
+		if (decompositionContext) {
+			try {
+				const mcpProv = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
+				const children = await mcpProv.getChildIssues({ number: decompositionContext.identifier })
+				TelemetryService.getInstance().track('epic.planned', {
+					child_count: children.length,
+					tracker: provider,
+				})
+			} catch (error) {
+				logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)
+			}
+		}
 
 		// Output final JSON for --json mode (--json-stream already streamed to stdout)
 		if (printOptions?.json) {

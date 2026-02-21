@@ -22,6 +22,8 @@ import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { detectProjectLanguage } from '../utils/language-detector.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -212,6 +214,18 @@ export class IgniteCommand {
 			if (!this.settings) {
 				const cliOverrides = extractSettingsOverrides()
 				this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+			}
+
+			// Step 2.0.5.1: Track session.started telemetry
+			try {
+				const hasNeon = !!this.settings?.databaseProviders?.neon
+				const language = await detectProjectLanguage(context.workspacePath)
+				TelemetryService.getInstance().track('session.started', {
+					has_neon: hasNeon,
+					language,
+				})
+			} catch (error) {
+				logger.debug(`Telemetry session.started tracking failed: ${error instanceof Error ? error.message : error}`)
 			}
 
 			// Step 2.0.6: Calculate port for web-capable looms
@@ -989,6 +1003,17 @@ export class IgniteCommand {
 			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
+		// Track swarm.started before launching orchestrator
+		const swarmStartTime = Date.now()
+		try {
+			TelemetryService.getInstance().track('swarm.started', {
+				child_count: successfulWorktrees.length,
+				tracker: providerName,
+			})
+		} catch (error) {
+			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
+		}
+
 		await launchClaude(
 			`You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`,
 			{
@@ -1008,6 +1033,41 @@ export class IgniteCommand {
 				},
 			},
 		)
+
+		// Track swarm child completions and overall completion
+		try {
+			const swarmEndTime = Date.now()
+			let succeeded = 0
+			let failed = 0
+
+			for (const child of successfulWorktrees) {
+				const childMeta = await metadataManager.readMetadata(child.worktreePath)
+				const isSuccess = childMeta?.state === 'done'
+				if (isSuccess) {
+					succeeded++
+				} else {
+					failed++
+				}
+
+				const parsed = childMeta?.created_at ? Date.parse(childMeta.created_at) : NaN
+				const childCreatedAt = Number.isNaN(parsed) ? swarmStartTime : parsed
+				const childDuration = Math.max(0, Math.round((swarmEndTime - childCreatedAt) / 60000))
+
+				TelemetryService.getInstance().track('swarm.child_completed', {
+					success: isSuccess,
+					duration_minutes: childDuration,
+				})
+			}
+
+			TelemetryService.getInstance().track('swarm.completed', {
+				total_children: successfulWorktrees.length,
+				succeeded,
+				failed,
+				duration_minutes: Math.round((swarmEndTime - swarmStartTime) / 60000),
+			})
+		} catch (error) {
+			logger.debug(`Telemetry swarm completion tracking failed: ${error instanceof Error ? error.message : error}`)
+		}
 	}
 
 	/**
