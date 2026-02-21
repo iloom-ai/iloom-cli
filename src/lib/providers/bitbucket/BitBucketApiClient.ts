@@ -78,6 +78,7 @@ export interface BitBucketRepository {
 }
 
 interface BitBucketWorkspaceMembersResponse { values: BitBucketWorkspaceMember[]; next?: string }
+interface BitBucketPullRequestsResponse { values: BitBucketPullRequest[]; next?: string }
 
 /**
  * BitBucket current user response from /user endpoint
@@ -85,6 +86,7 @@ interface BitBucketWorkspaceMembersResponse { values: BitBucketWorkspaceMember[]
 export interface BitBucketCurrentUser {
 	account_id: string
 	display_name: string
+	uuid: string
 	nickname?: string
 }
 
@@ -232,14 +234,23 @@ export class BitBucketApiClient {
 			// Include state="OPEN" in the query to exclude DECLINED/MERGED/SUPERSEDED PRs
 			const safeBranch = sourceBranch.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 			const query = `state="OPEN" AND source.branch.name="${safeBranch}"`
-			endpoint += `?q=${encodeURIComponent(query)}`
+			endpoint += `?q=${encodeURIComponent(query)}&pagelen=50`
 		} else {
 			// No branch filter, just filter by state
-			endpoint += `?state=OPEN`
+			endpoint += `?state=OPEN&pagelen=50`
 		}
 
-		const response = await this.get<{ values: BitBucketPullRequest[] }>(endpoint)
-		return response.values
+		const allPRs: BitBucketPullRequest[] = []
+		let nextUrl: string | null = endpoint
+
+		while (nextUrl) {
+			const response: BitBucketPullRequestsResponse = await this.get(nextUrl)
+			allPRs.push(...response.values)
+			// BitBucket pagination uses 'next' field with full URL
+			nextUrl = response.next ?? null
+		}
+
+		return allPRs
 	}
 
 	/**
