@@ -378,3 +378,6 @@ export interface UpdateCheckResult {
 }
 
 export type InstallationMethod = 'global' | 'local' | 'linked' | 'unknown'
+
+// Telemetry types
+export * from './telemetry.js'
