@@ -198,9 +198,16 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 	 * List open pull requests for the repository
 	 * Uses getWorkspaceAndRepo for auto-detection from git remotes
 	 */
-	async listPullRequests(cwd?: string): Promise<BitBucketPullRequest[]> {
+	async listPullRequests(cwd?: string, options?: { mine?: boolean }): Promise<BitBucketPullRequest[]> {
 		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
-		return this.client.listPullRequests(workspace, repoSlug)
+		const prs = await this.client.listPullRequests(workspace, repoSlug)
+
+		if (options?.mine) {
+			const currentUser = await this.client.getCurrentUser()
+			return prs.filter(pr => pr.author.uuid === currentUser.uuid)
+		}
+
+		return prs
 	}
 
 	/**

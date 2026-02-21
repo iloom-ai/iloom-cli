@@ -196,7 +196,7 @@ export class IssuesCommand {
         } else {
           const { BitBucketVCSProvider } = await import('../lib/providers/bitbucket/BitBucketVCSProvider.js')
           const bbProvider = BitBucketVCSProvider.fromSettings(settings)
-          const bbPRs = await bbProvider.listPullRequests(resolvedProjectPath)
+          const bbPRs = await bbProvider.listPullRequests(resolvedProjectPath, ...(mine ? [{ mine }] : []))
           const prItems: IssueListItem[] = bbPRs.map(pr => ({
             id: String(pr.id),
             title: `[PR] ${pr.title}`,

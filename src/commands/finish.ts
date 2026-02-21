@@ -207,9 +207,9 @@ export class FinishCommand {
 		// JSON mode validation - require explicit flags for interactive prompts
 		if (isJsonMode) {
 			const settings = await this.settingsManager.loadSettings()
-			// In github-pr mode, require explicit --cleanup or --no-cleanup
-			if ((settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr') && input.options.cleanup === undefined) {
-				throw new Error('JSON mode with "github-pr"/"github-draft-pr" workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
+			// In PR modes, require explicit --cleanup or --no-cleanup
+			if ((settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr' || settings.mergeBehavior?.mode === 'bitbucket-pr') && input.options.cleanup === undefined) {
+				throw new Error('JSON mode with PR workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
 			}
 		}
 
@@ -1115,7 +1115,11 @@ export class FinishCommand {
 			// Try to fetch issue title for better PR title
 			try {
 				const issue = await this.issueTracker.fetchIssue(parsed.number)
-				prTitle = issue.title
+				if (settings.mergeBehavior?.prTitlePrefix) {
+					prTitle = `${parsed.number}: ${issue.title}`
+				} else {
+					prTitle = issue.title
+				}
 			} catch (error) {
 				getLogger().debug('Could not fetch issue title, using branch name', { error })
 			}
