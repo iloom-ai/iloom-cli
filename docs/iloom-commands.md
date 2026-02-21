@@ -552,6 +552,7 @@ il spin [options]
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
+| `--set` | `key=value` | Override settings using dot notation (repeatable). Same as global `--set` flag. |
 
 **Behavior:**
 
