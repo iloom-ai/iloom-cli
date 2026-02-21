@@ -6,6 +6,12 @@ import * as git from '../utils/git.js'
 import { GitCommandError } from '../utils/git.js'
 import * as claude from '../utils/claude.js'
 
+// Mock for node:fs/promises used by isRebaseInProgress
+const mockFsAccess = vi.fn()
+vi.mock('node:fs/promises', () => ({
+	access: (...args: unknown[]) => mockFsAccess(...args),
+}))
+
 // Mock dependencies
 vi.mock('../utils/git.js', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../utils/git.js')>()
@@ -37,6 +43,9 @@ describe('MergeManager', () => {
 	let mockMetadataManager: MetadataManager
 
 	beforeEach(() => {
+		// Default: no rebase in progress (fs.access rejects = directory doesn't exist)
+		mockFsAccess.mockRejectedValue(new Error('ENOENT'))
+
 		// Create a mock SettingsManager - default to github-pr mode (uses origin/)
 		mockSettingsManager = {
 			loadSettings: vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'github-pr' } }),
@@ -63,9 +72,11 @@ describe('MergeManager', () => {
 	describe('Rebase Workflow', () => {
 		it('should verify remote branch exists before rebasing', async () => {
 			// Mock: remote branch doesn't exist
-			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(
-				new Error('fatal: Couldn\'t find remote ref refs/remotes/origin/main')
-			)
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockRejectedValueOnce(
+					new Error('fatal: Couldn\'t find remote ref refs/remotes/origin/main')
+				)
 
 			// Expect: should throw clear error
 			await expect(
@@ -85,6 +96,7 @@ describe('MergeManager', () => {
 		it('should successfully rebase branch on origin/main with no conflicts', async () => {
 			// Mock: remote branch exists, no uncommitted changes, commits exist, rebase succeeds
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -108,6 +120,7 @@ describe('MergeManager', () => {
 		it('should show commits to be rebased before confirmation', async () => {
 			// Mock: successful path
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -127,6 +140,7 @@ describe('MergeManager', () => {
 		it('should skip confirmation when force flag is true', async () => {
 			// Mock: successful rebase
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -137,14 +151,15 @@ describe('MergeManager', () => {
 			// Should not prompt - just proceed
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Success - should complete without interaction (6 git commands + 1 fetchOrigin)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(6)
+			// Success - should complete without interaction (7 git commands: 1 rev-parse for isRebaseInProgress + 6 rebase flow + 1 fetchOrigin)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(7)
 			expect(git.fetchOrigin).toHaveBeenCalledTimes(1)
 		})
 
 		it('should fail immediately on rebase conflicts with clear error message', async () => {
 			// Mock: rebase fails with conflict
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -162,22 +177,24 @@ describe('MergeManager', () => {
 		it('should handle case where branch is already up to date', async () => {
 			// Mock: no commits to rebase
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
-      			.mockResolvedValueOnce('abc123') // rev-parse origin/main (SAME = no rebase needed)
+				.mockResolvedValueOnce('abc123') // rev-parse origin/main (SAME = no rebase needed)
 
 			// Should succeed without attempting rebase
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Verify: rebase was NOT called (only 4 git commands + 1 fetchOrigin)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(4)
+			// Verify: rebase was NOT called (only 5 git commands: 1 rev-parse for isRebaseInProgress + 4 rebase flow + 1 fetchOrigin)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(5)
 			expect(git.fetchOrigin).toHaveBeenCalledTimes(1)
 		})
 
 		it('should detect and list all conflicted files on rebase failure', async () => {
 			// Mock: multiple files in conflict
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -200,6 +217,7 @@ describe('MergeManager', () => {
 		it('should provide clear manual resolution instructions on conflict', async () => {
 			// Mock: rebase conflict
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -223,6 +241,7 @@ describe('MergeManager', () => {
 		it('should create WIP commit when uncommitted changes exist before rebase', async () => {
 			// Mock: uncommitted changes detected, WIP commit created, rebase succeeds
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('M src/file1.ts\nA src/file2.ts') // status: changes exist
 				.mockResolvedValueOnce('') // git add -A
@@ -257,11 +276,132 @@ describe('MergeManager', () => {
 		})
 	})
 
+	describe('Abort In-Progress Rebase', () => {
+		it('should abort a stale rebase before starting a new one (rebase-merge)', async () => {
+			// Mock: rebase-merge directory exists (rebase in progress)
+			mockFsAccess.mockImplementation((path: string) => {
+				if (path.endsWith('rebase-merge')) return Promise.resolve()
+				return Promise.reject(new Error('ENOENT'))
+			})
+
+			// Mock: rev-parse for isRebaseInProgress, abort succeeds, then normal rebase flow
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // git rebase --abort
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: rebase --abort was called after rev-parse (calls[1])
+			expect(vi.mocked(git.executeGitCommand).mock.calls[1]).toEqual([
+				['rebase', '--abort'],
+				expect.objectContaining({ cwd: '/test/worktree' }),
+			])
+		})
+
+		it('should abort a stale rebase before starting a new one (rebase-apply)', async () => {
+			// Mock: rebase-apply directory exists (rebase in progress via git am)
+			mockFsAccess.mockImplementation((path: string) => {
+				if (path.endsWith('rebase-apply')) return Promise.resolve()
+				return Promise.reject(new Error('ENOENT'))
+			})
+
+			// Mock: rev-parse for isRebaseInProgress, abort succeeds, then normal rebase flow
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // git rebase --abort
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: rebase --abort was called
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['rebase', '--abort'],
+				expect.objectContaining({ cwd: '/test/worktree' }),
+			)
+		})
+
+		it('should not call rebase --abort when no rebase is in progress', async () => {
+			// mockFsAccess defaults to rejecting (no rebase in progress)
+
+			// Mock: rev-parse for isRebaseInProgress, then normal rebase flow
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: rebase --abort was NOT called
+			expect(git.executeGitCommand).not.toHaveBeenCalledWith(
+				['rebase', '--abort'],
+				expect.any(Object),
+			)
+		})
+
+		it('should throw when git rebase --abort fails', async () => {
+			// Mock: rebase-merge directory exists
+			mockFsAccess.mockImplementation((path: string) => {
+				if (path.endsWith('rebase-merge')) return Promise.resolve()
+				return Promise.reject(new Error('ENOENT'))
+			})
+
+			// Mock: rev-parse for isRebaseInProgress, then abort fails with GitCommandError
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockRejectedValueOnce(new GitCommandError('rebase --abort failed', 128, 'rebase --abort failed'))
+
+			await expect(
+				manager.rebaseOnMain('/test/worktree', { force: true })
+			).rejects.toThrow(/Failed to abort in-progress rebase/)
+		})
+
+		it('should proceed with full rebase after aborting stale rebase', async () => {
+			// Mock: rebase-merge directory exists
+			mockFsAccess.mockImplementation((path: string) => {
+				if (path.endsWith('rebase-merge')) return Promise.resolve()
+				return Promise.reject(new Error('ENOENT'))
+			})
+
+			// Mock: rev-parse for isRebaseInProgress, abort succeeds, then full rebase flow with commits
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // git rebase --abort
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse origin/main (needs rebase)
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase origin/main: success
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: both abort and rebase were called
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['rebase', '--abort'],
+				expect.objectContaining({ cwd: '/test/worktree' }),
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+				expect.objectContaining({ cwd: '/test/worktree' }),
+			)
+		})
+	})
+
 	describe('Conditional Origin/Local Branch Target', () => {
 		it('should use origin/{mainBranch} in github-pr mode (non-child)', async () => {
 			// Setup: github-pr mode (already default), non-child loom
 			// Mock: successful rebase on origin/main
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -293,6 +433,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on origin/main
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -318,6 +459,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on local main
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: local main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -353,6 +495,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on local parent branch
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: local parent branch exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -384,6 +527,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on local main
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: local main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -408,6 +552,7 @@ describe('MergeManager', () => {
 		it('should rebase without WIP commit when no uncommitted changes', async () => {
 			// Mock: no uncommitted changes, rebase succeeds
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -424,6 +569,7 @@ describe('MergeManager', () => {
 		it('should include untracked files in WIP commit using git add -A', async () => {
 			// Mock: untracked files exist
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('?? newfile.ts') // status: untracked file
 				.mockResolvedValueOnce('') // git add -A (stages all including untracked)
@@ -443,6 +589,7 @@ describe('MergeManager', () => {
 		it('should restore WIP commit when branch is already up to date (no-op rebase)', async () => {
 			// Mock: uncommitted changes exist, branch already up-to-date with origin/main
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/main exists
 				.mockResolvedValueOnce('M src/file.ts') // status: uncommitted changes exist
 				.mockResolvedValueOnce('') // git add -A
@@ -476,6 +623,7 @@ describe('MergeManager', () => {
 		it('should handle conflicts with Claude assistance when WIP commit present', async () => {
 			// Mock: WIP commit created, rebase fails with conflict, Claude resolves
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('M src/file.ts') // status: changes exist
 				.mockResolvedValueOnce('') // git add -A
@@ -487,7 +635,7 @@ describe('MergeManager', () => {
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - resolved)
-				.mockResolvedValueOnce('') // rebase not in progress
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (second isRebaseInProgress check)
 				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
 				.mockResolvedValueOnce('') // reset HEAD (unstage)
 
@@ -510,6 +658,7 @@ describe('MergeManager', () => {
 		it('should log warning but succeed when soft reset fails', async () => {
 			// Mock: WIP commit created, rebase succeeds, soft reset fails
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('M src/file.ts') // status: changes exist
 				.mockResolvedValueOnce('') // git add -A
@@ -534,6 +683,7 @@ describe('MergeManager', () => {
 		it('should restore changes correctly after successful rebase', async () => {
 			// Mock: full WIP workflow with restoration
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('M src/file.ts\n?? newfile.ts') // status: mixed changes
 				.mockResolvedValueOnce('') // git add -A
@@ -775,6 +925,7 @@ describe('MergeManager', () => {
 		it('should preview rebase without executing when dryRun=true', async () => {
 			// Mock: dry-run checks only
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -811,6 +962,7 @@ describe('MergeManager', () => {
 		it('should show commits that would be rebased in dry-run', async () => {
 			// Mock: commits exist
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -847,6 +999,7 @@ describe('MergeManager', () => {
 		it('should not execute any git state-changing commands in dry-run', async () => {
 			// Mock: read-only commands only
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -863,6 +1016,10 @@ describe('MergeManager', () => {
 
 	describe('Error Handling', () => {
 		it('should fail with clear error when fetch fails', async () => {
+			// Mock: rev-parse for isRebaseInProgress
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+
 			// Mock: fetchOrigin fails with network error
 			vi.mocked(git.fetchOrigin).mockRejectedValueOnce(
 				new Error('Failed to fetch from origin: Network error')
@@ -872,10 +1029,12 @@ describe('MergeManager', () => {
 		})
 
 		it('should handle main branch does not exist', async () => {
-			// Mock: main branch not found
-			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(
-				new Error('fatal: Couldn\'t find remote ref')
-			)
+			// Mock: rev-parse for isRebaseInProgress, then main branch not found
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockRejectedValueOnce(
+					new Error('fatal: Couldn\'t find remote ref')
+				)
 
 			await expect(
 				manager.rebaseOnMain('/test/worktree')
@@ -894,13 +1053,15 @@ describe('MergeManager', () => {
 		})
 
 		it('should handle git command failures with clear messages', async () => {
-			// Mock: git command fails with stderr (remote branch check fails)
+			// Mock: rev-parse for isRebaseInProgress, then git command fails with stderr (remote branch check fails)
 			const gitError = new GitCommandError(
 				'Git command failed: fatal: not a git repository',
 				128,
 				'fatal: not a git repository'
 			)
-			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(gitError)
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockRejectedValueOnce(gitError)
 
 			// Should throw an error (remote branch check fails with git error)
 			await expect(
@@ -912,6 +1073,7 @@ describe('MergeManager', () => {
 			// This test verifies that rebase and merge are separate operations
 			// If rebase fails, merge should never be called
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -928,8 +1090,8 @@ describe('MergeManager', () => {
 				// This test documents the intended workflow separation
 			}
 
-			// Verify: only rebase-related commands were called
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(7)
+			// Verify: only rebase-related commands were called (8 = 1 rev-parse for isRebaseInProgress + 7 rebase flow)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(8)
 		})
 	})
 
@@ -970,6 +1132,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on origin/develop
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/develop exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1069,6 +1232,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/main exists
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1090,10 +1254,12 @@ describe('MergeManager', () => {
 			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('production')
 			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
 
-			// Mock: origin/production branch doesn't exist
-			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(
-				new Error('fatal: Couldn\'t find remote ref refs/remotes/origin/production')
-			)
+			// Mock: rev-parse for isRebaseInProgress, then origin/production branch doesn't exist
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockRejectedValueOnce(
+					new Error('fatal: Couldn\'t find remote ref refs/remotes/origin/production')
+				)
 
 			// Expect: error message includes 'origin/production'
 			await expect(
@@ -1110,6 +1276,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase on origin/parent branch
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/child-worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref: origin/parent branch exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1137,6 +1304,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1160,6 +1328,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful rebase
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1245,6 +1414,7 @@ describe('MergeManager', () => {
 
 			// Mock: rebase fails with conflict, Claude available and resolves
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1253,7 +1423,7 @@ describe('MergeManager', () => {
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
-				.mockResolvedValueOnce('') // check if rebase in progress (no)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (second isRebaseInProgress check)
 
 			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
 			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
@@ -1276,6 +1446,7 @@ describe('MergeManager', () => {
 
 			// Mock: rebase fails with conflict, Claude not available
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1299,6 +1470,7 @@ describe('MergeManager', () => {
 
 			// Mock: rebase fails, Claude available but conflicts remain
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1326,6 +1498,7 @@ describe('MergeManager', () => {
 
 			// Mock: rebase fails, Claude runs but rebase still in progress
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1348,6 +1521,7 @@ describe('MergeManager', () => {
 
 			// Mock: rebase fails, Claude available but throws error
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1369,6 +1543,7 @@ describe('MergeManager', () => {
 
 			// Mock: successful Claude resolution
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1377,7 +1552,7 @@ describe('MergeManager', () => {
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first)
 				.mockResolvedValueOnce('') // conflicted files (after Claude)
-				.mockResolvedValueOnce('') // rebase not in progress
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (second isRebaseInProgress check)
 
 			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
 			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
@@ -1394,6 +1569,7 @@ describe('MergeManager', () => {
 		it('should pass allowedTools with git command patterns for conflict resolution', async () => {
 			// Mock: successful Claude resolution
 			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -1402,7 +1578,7 @@ describe('MergeManager', () => {
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first)
 				.mockResolvedValueOnce('') // conflicted files (after Claude)
-				.mockResolvedValueOnce('') // rebase not in progress
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (second isRebaseInProgress check)
 
 			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
 			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
