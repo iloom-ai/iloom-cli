@@ -34,6 +34,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il update](#il-update)
   - [il feedback](#il-feedback)
   - [il contribute](#il-contribute)
+  - [il telemetry](#il-telemetry)
 
 ---
 
@@ -1852,6 +1853,46 @@ il contribute "facebook/react"
 - Sets up `github-draft-pr` mode so PRs are created immediately when you start work
 - Draft PRs receive iloom's AI analysis and planning comments, giving maintainers full context
 - For iloom contributions, see [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines
+
+---
+
+### il telemetry
+
+Manage anonymous usage telemetry settings.
+
+**Usage:**
+```bash
+il telemetry <subcommand>
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `off` | Disable anonymous usage telemetry. No data will be collected or sent. |
+| `on` | Re-enable anonymous usage telemetry. |
+| `status` | Show current telemetry state (enabled/disabled) and the anonymous identifier. |
+
+**Examples:**
+
+```bash
+# Disable telemetry
+il telemetry off
+
+# Re-enable telemetry
+il telemetry on
+
+# Check current telemetry status
+il telemetry status
+```
+
+**First-Run Disclosure:**
+
+On first run, iloom displays a disclosure message informing you that anonymous telemetry is enabled by default and how to opt out. This message is shown once and not repeated.
+
+**Privacy:**
+
+For details on what data is and is not collected, see the [Telemetry section in the README](../README.md#telemetry).
 
 ---
 

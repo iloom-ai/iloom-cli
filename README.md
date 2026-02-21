@@ -18,7 +18,7 @@ iloom
 
 #### Links to key sections
 
-[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Telemetry](#telemetry) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
 ## Built For Modern Tools...
 
@@ -173,6 +173,7 @@ Command Reference
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |
 | `il update` |  | Update iloom CLI to the latest version. |
+| `il telemetry` |  | Manage anonymous usage telemetry (`on`, `off`, `status`). |
 
 For detailed documentation including all command options, flags, and examples, see the [Complete Command Reference](docs/iloom-commands.md).
 
@@ -655,6 +656,39 @@ il spin
 Each child issue tracks its lifecycle state: `pending` -> `in_progress` -> `done` / `failed`. Use `il list --json` to see `swarmIssues` with per-child states and the `dependencyMap` for epic looms.
 
 For detailed reference on swarm mode behavior, see the [Complete Command Reference](docs/iloom-commands.md#swarm-mode-epic-orchestration).
+
+Telemetry
+---------
+
+iloom collects anonymous usage data to help improve the product. This data helps us understand which features are used, identify common errors, and prioritize development efforts.
+
+**What IS collected:**
+- Anonymous event data: command usage, feature adoption, and error types
+- An anonymous identifier (not linked to your identity)
+
+**What is NOT collected:**
+- GitHub/Linear/Jira usernames or emails
+- Repository names or URLs
+- Issue titles, descriptions, or content
+- File paths or code content
+- Branch names
+- AI analysis or plan content
+- Anything that could identify a specific project or person
+
+**Opt out at any time:**
+
+```bash
+# Disable telemetry
+il telemetry off
+
+# Check current status
+il telemetry status
+
+# Re-enable telemetry
+il telemetry on
+```
+
+On first run, iloom displays a disclosure message informing you that telemetry is enabled and how to opt out.
 
 System Requirements & Limitations
 ---------------------------------
