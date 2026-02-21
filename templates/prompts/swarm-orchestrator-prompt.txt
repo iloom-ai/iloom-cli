@@ -201,14 +201,25 @@ If the rebase has conflicts:
    - Mark the child as `failed` with reason: "Rebase conflict could not be resolved"
    - Skip to Phase 4 failure handling for this child
 
-#### Step 3.3: Update State
+#### Step 3.3: Ensure Completion Comment Exists
+
+Child agents are expected to post a summary comment on their issue when they finish. However, if a child agent completes without posting a comment, the orchestrator must post one on its behalf.
+
+1. Call `mcp__issue_management__get_comments` with `{ number: "<child-issue-number>", type: "issue" }` to check for existing completion comments
+2. If no completion comment was posted by the child agent, call `mcp__issue_management__create_comment` with:
+   - `number`: `"<child-issue-number>"`
+   - `type`: `"issue"`
+   - `body`: A summary including: what was implemented, the branch name, and that it was merged into the epic branch
+3. Log any new comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Completion comment for #<child-number>" }`
+
+#### Step 3.4: Update State
 
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
 3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
 4. Log the artifact: Call `mcp__recap__add_artifact` with `{ type: "issue", primaryUrl: "<child-issue-url>", description: "Issue #<child-number> completed and merged into epic branch" }`
 
-#### Step 3.4: Check for Newly Unblocked Issues
+#### Step 3.5: Check for Newly Unblocked Issues
 
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
@@ -227,9 +238,10 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
 
 1. **Update tracking**: Mark the child's status as `failed`
 2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
-3. **Log the failure**: Record the failure reason and which step failed
-4. **Do NOT block other children**: Continue processing remaining children
-5. **Handle downstream dependencies**: For any children that depend on the failed child:
+3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. Log the comment as an artifact.
+4. **Log the failure**: Record the failure reason and which step failed
+5. **Do NOT block other children**: Continue processing remaining children
+6. **Handle downstream dependencies**: For any children that depend on the failed child:
    - Mark them as `failed` with reason: "Blocked by failed dependency #<failed-child-number>"
    - Update their metadata state to `failed`
    - Do NOT spawn agents for them
