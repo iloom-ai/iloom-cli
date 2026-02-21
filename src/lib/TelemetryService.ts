@@ -3,7 +3,7 @@ import { TelemetryManager } from './TelemetryManager.js'
 import { logger } from '../utils/logger.js'
 import type { TelemetryEventMap, TelemetryEventName } from '../types/telemetry.js'
 
-const POSTHOG_API_KEY = 'phc_placeholder_key'
+const POSTHOG_API_KEY = 'phc_H9IRi41nQuIXs6fthwCZJ4wi6jIs2LWQkUanMSdqmj'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 const SHUTDOWN_TIMEOUT_MS = 1000
 
