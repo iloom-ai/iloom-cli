@@ -775,8 +775,8 @@ export class FinishCommand {
 		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
 
 		if (mergeBehavior.mode === 'github-pr') {
-			// Execute github-pr workflow instead of local merge
-			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+			// Execute unified VCS PR workflow (null = GitHub via PRManager)
+			await this.executeVCSPRWorkflow(parsed, options, worktree, settings, null, result)
 			return
 		}
 
@@ -791,7 +791,7 @@ export class FinishCommand {
 			if (!metadata?.draftPrNumber) {
 				// Fallback: no draft PR exists, treat like github-pr mode
 				getLogger().warn('No draft PR found in metadata, creating new PR...')
-				await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+				await this.executeVCSPRWorkflow(parsed, options, worktree, settings, null, result)
 				return
 			}
 
@@ -900,6 +900,12 @@ export class FinishCommand {
 		if (mergeBehavior.mode === 'bitbucket-pr') {
 			// For BitBucket, we use the VCS provider layer - NOT the issue tracker
 			// This allows Jira/Linear issues to create PRs in BitBucket
+			// Read vcsProvider from metadata to confirm expected provider, then create from settings
+			const { MetadataManager: MetadataManagerForBB } = await import('../lib/MetadataManager.js')
+			const bbMetadataManager = new MetadataManagerForBB()
+			const bbMetadata = await bbMetadataManager.readMetadata(worktree.path)
+			const metadataVcsProvider = bbMetadata?.vcsProvider
+
 			const { VCSProviderFactory } = await import('../lib/VCSProviderFactory.js')
 			const vcsProvider = VCSProviderFactory.create(settings)
 
@@ -910,7 +916,8 @@ export class FinishCommand {
 				)
 			}
 
-			await this.executeBitBucketPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
+			getLogger().debug(`BitBucket PR mode: vcsProvider=${metadataVcsProvider ?? 'not set in metadata (legacy loom)'}`)
+			await this.executeVCSPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
 			return
 		}
 
@@ -1087,16 +1094,24 @@ export class FinishCommand {
 	}
 
 	/**
-	 * Execute workflow for GitHub PR creation (github-pr merge mode)
-	 * Validates → Commits → Pushes → Creates PR → Prompts for cleanup
+	 * Unified VCS PR workflow for github-pr and bitbucket-pr merge modes.
+	 * Pushes branch, generates PR title, creates or finds existing PR via the appropriate
+	 * provider, transitions issue state, generates session summary, archives metadata,
+	 * and handles cleanup prompt.
+	 *
+	 * @param vcsProvider - When null, uses GitHub via PRManager (legacy path).
+	 *                      When non-null, delegates PR operations to the VCS provider.
 	 */
-	private async executeGitHubPRWorkflow(
+	private async executeVCSPRWorkflow(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
 		settings: import('../lib/SettingsManager.js').IloomSettings,
+		vcsProvider: import('../lib/VersionControlProvider.js').VersionControlProvider | null,
 		finishResult: FinishResult
 	): Promise<void> {
+		const providerLabel = vcsProvider ? vcsProvider.providerName : 'GitHub'
+
 		// Step 1: Push branch to origin
 		if (options.dryRun) {
 			getLogger().info('[DRY RUN] Would push branch to origin')
@@ -1106,13 +1121,10 @@ export class FinishCommand {
 			getLogger().success('Branch pushed successfully')
 		}
 
-		// Step 2: Initialize PRManager with settings
-		const prManager = new PRManager(settings)
-
-		// Step 3: Generate PR title from issue if available
+		// Step 2: Generate PR title from issue if available
+		// Note: parsed.number already has correct case from parseInput() metadata lookup
 		let prTitle = `Work from ${worktree.branch}`
 		if (parsed.type === 'issue' && parsed.number) {
-			// Try to fetch issue title for better PR title
 			try {
 				const issue = await this.issueTracker.fetchIssue(parsed.number)
 				if (settings.mergeBehavior?.prTitlePrefix) {
@@ -1125,49 +1137,86 @@ export class FinishCommand {
 			}
 		}
 
-		// Step 4: Get base branch (respects parent loom metadata for child looms)
+		// Step 3: Get base branch (respects parent loom metadata for child looms)
 		const baseBranch = await getMergeTargetBranch(worktree.path)
 
-		// Step 5: Create or open PR
+		// Step 4: Create or open PR
 		if (options.dryRun) {
-			getLogger().info('[DRY RUN] Would create GitHub PR')
+			getLogger().info(`[DRY RUN] Would create ${providerLabel} PR`)
 			getLogger().info(`  Title: ${prTitle}`)
 			getLogger().info(`  Base: ${baseBranch}`)
 			finishResult.operations.push({
 				type: 'pr-creation',
-				message: 'Would create GitHub PR (dry-run)',
+				message: `Would create ${providerLabel} PR (dry-run)`,
 				success: true,
 			})
 		} else {
-			const openInBrowser = !options.noBrowser
-				&& !options.json
-				&& settings.mergeBehavior?.openBrowserOnFinish !== false
+			// Shared PR body generation (used by non-GitHub providers)
+			const prManager = new PRManager(settings)
 
-			const prResult = await prManager.createOrOpenPR(
-				worktree.branch,
-				prTitle,
-				parsed.type === 'issue' ? parsed.number : undefined,
-				baseBranch,
-				worktree.path,
-				openInBrowser
-			)
+			let prUrl: string
+			let prNumber: number | undefined
+			let wasExisting: boolean
 
-			if (prResult.wasExisting) {
-				getLogger().success(`Existing pull request: ${prResult.url}`)
+			if (!vcsProvider) {
+				// GitHub path: PRManager handles existing check, creation, and browser open
+				const openInBrowser = !options.noBrowser
+					&& !options.json
+					&& settings.mergeBehavior?.openBrowserOnFinish !== false
+
+				const prResult = await prManager.createOrOpenPR(
+					worktree.branch,
+					prTitle,
+					parsed.type === 'issue' ? parsed.number : undefined,
+					baseBranch,
+					worktree.path,
+					openInBrowser
+				)
+
+				prUrl = prResult.url
+				prNumber = prResult.number
+				wasExisting = prResult.wasExisting
+			} else {
+				// VCS provider path (BitBucket, etc.): explicit existing check then create
+				const existingPR = await vcsProvider.checkForExistingPR(worktree.branch, worktree.path)
+
+				if (existingPR) {
+					prUrl = existingPR.url
+					prNumber = existingPR.number
+					wasExisting = true
+				} else {
+					const prBody = await prManager.generatePRBody(
+						parsed.type === 'issue' ? parsed.number : undefined,
+						worktree.path
+					)
+					prUrl = await vcsProvider.createPR(
+						worktree.branch,
+						prTitle,
+						prBody,
+						baseBranch,
+						worktree.path
+					)
+					prNumber = undefined // VCS providers return URL only; no number extracted
+					wasExisting = false
+				}
+			}
+
+			if (wasExisting) {
+				getLogger().success(`Existing pull request: ${prUrl}`)
 				finishResult.operations.push({
 					type: 'pr-creation',
-					message: `Found existing pull request`,
+					message: 'Found existing pull request',
 					success: true,
 				})
 			} else {
-				getLogger().success(`Pull request created: ${prResult.url}`)
+				getLogger().success(`Pull request created: ${prUrl}`)
 				finishResult.operations.push({
 					type: 'pr-creation',
-					message: `Pull request created`,
+					message: 'Pull request created',
 					success: true,
 				})
 
-				// Move issue to Ready for Review state
+				// Move issue to Ready for Review state only on new PR creation
 				if (parsed.type === 'issue' && parsed.number) {
 					try {
 						if (this.issueTracker.moveIssueToReadyForReview) {
@@ -1184,141 +1233,25 @@ export class FinishCommand {
 			}
 
 			// Set PR URL in result
-			finishResult.prUrl = prResult.url
+			finishResult.prUrl = prUrl
 
-			// Step 4.5: Generate session summary (non-blocking, preview-only in dry-run)
-			// Post to the PR instead of the original issue
-			await this.generateSessionSummaryIfConfigured(parsed, worktree, options, prResult.number)
+			// Generate session summary:
+			// - GitHub: post to the PR (prNumber is available)
+			// - Other providers (BitBucket): post to the issue, since the issue tracker
+			//   (Jira/Linear) doesn't support PR comments
+			await this.generateSessionSummaryIfConfigured(
+				parsed,
+				worktree,
+				options,
+				!vcsProvider ? prNumber : undefined
+			)
 
-			// Step 4.6: Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
+			// Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
 			const { MetadataManager } = await import('../lib/MetadataManager.js')
 			const metadataManager = new MetadataManager()
 			if (!options.dryRun) {
 				await metadataManager.archiveMetadata(worktree.path)
 			}
-
-			// Step 5: Interactive cleanup prompt (unless flags override)
-			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
-		}
-	}
-
-	/**
-	 * Execute workflow for BitBucket PR creation (bitbucket-pr merge mode)
-	 * Validates -> Commits -> Pushes -> Creates PR -> Prompts for cleanup
-	 *
-	 * Unlike GitHub PR workflow, this uses the VersionControlProvider abstraction
-	 * instead of PRManager, allowing it to work with any issue tracker (Jira, Linear, etc.)
-	 */
-	private async executeBitBucketPRWorkflow(
-		parsed: ParsedFinishInput,
-		options: FinishOptions,
-		worktree: GitWorktree,
-		settings: import('../lib/SettingsManager.js').IloomSettings,
-		vcsProvider: import('../lib/VersionControlProvider.js').VersionControlProvider,
-		finishResult: FinishResult
-	): Promise<void> {
-		// Step 1: Push branch to origin
-		if (options.dryRun) {
-			getLogger().info('[DRY RUN] Would push branch to origin')
-		} else {
-			getLogger().info('Pushing branch to origin...')
-			await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
-			getLogger().success('Branch pushed successfully')
-		}
-
-		// Step 2: Generate PR title from issue if available
-		// Note: parsed.number already has correct case from parseInput() metadata lookup
-		let prTitle = `Work from ${worktree.branch}`
-		if (parsed.type === 'issue' && parsed.number) {
-			try {
-				const issue = await this.issueTracker.fetchIssue(parsed.number)
-
-				// Apply ticket prefix if enabled (default: false)
-				if (settings.mergeBehavior?.prTitlePrefix) {
-					prTitle = `${parsed.number}: ${issue.title}`
-				} else {
-					prTitle = issue.title
-				}
-			} catch (error) {
-				getLogger().debug('Could not fetch issue title, using branch name', { error })
-			}
-		}
-
-		// Step 3: Get base branch (respects parent loom metadata for child looms)
-		const baseBranch = await getMergeTargetBranch(worktree.path)
-
-		// Step 4: Check for existing PR or create new one
-		if (options.dryRun) {
-			getLogger().info('[DRY RUN] Would create BitBucket PR')
-			getLogger().info(`  Title: ${prTitle}`)
-			getLogger().info(`  Base: ${baseBranch}`)
-			finishResult.operations.push({
-				type: 'pr-creation',
-				message: 'Would create BitBucket PR (dry-run)',
-				success: true,
-			})
-		} else {
-			// Check for existing PR first
-			const existingPR = await vcsProvider.checkForExistingPR(worktree.branch, worktree.path)
-
-			if (existingPR) {
-				getLogger().success(`Existing pull request: ${existingPR.url}`)
-				finishResult.prUrl = existingPR.url
-				finishResult.operations.push({
-					type: 'pr-creation',
-					message: 'Found existing pull request',
-					success: true,
-				})
-			} else {
-				// Generate PR body using Claude (same as GitHub workflow)
-				const { PRManager } = await import('../lib/PRManager.js')
-				const prManager = new PRManager(settings)
-				const prBody = await prManager.generatePRBody(
-					parsed.type === 'issue' ? parsed.number : undefined,
-					worktree.path
-				)
-
-				// Create new PR
-				const prUrl = await vcsProvider.createPR(
-					worktree.branch,
-					prTitle,
-					prBody,
-					baseBranch,
-					worktree.path
-				)
-				getLogger().success(`Pull request created: ${prUrl}`)
-				finishResult.prUrl = prUrl
-				finishResult.operations.push({
-					type: 'pr-creation',
-					message: 'Pull request created',
-					success: true,
-				})
-
-				// Move issue to Ready for Review state
-				if (parsed.type === 'issue' && parsed.number) {
-					try {
-						if (this.issueTracker.moveIssueToReadyForReview) {
-							await this.issueTracker.moveIssueToReadyForReview(parsed.number)
-							getLogger().info('Issue moved to Ready for Review')
-						}
-					} catch (error) {
-						getLogger().warn(
-							`Failed to move issue to Ready for Review: ${error instanceof Error ? error.message : 'Unknown error'}`,
-							error
-						)
-					}
-				}
-			}
-
-			// Generate session summary - posts to the ISSUE (Jira/Linear), not the PR
-			// For BitBucket workflows, the issue tracker (Jira/Linear) doesn't support PR comments,
-			// so we post to the issue where the knowledge capture belongs
-			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
-
-			// Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
-			const metadataManager = new MetadataManager()
-			await metadataManager.archiveMetadata(worktree.path)
 
 			// Interactive cleanup prompt (unless flags override)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)

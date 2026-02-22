@@ -3529,10 +3529,10 @@ describe('FinishCommand', () => {
 					},
 				})
 
-				// Mock the executeGitHubPRWorkflow method to verify it's called
+				// Mock the executeVCSPRWorkflow method to verify it's called
 				// (Issue #464: Linear + github-pr should work since PRs go through GitHub CLI)
-				const executeGitHubPRWorkflowSpy = vi
-					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+				const executeVCSPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeVCSPRWorkflow: () => Promise<void> }, 'executeVCSPRWorkflow')
 					.mockResolvedValue()
 
 				await command.execute({
@@ -3542,8 +3542,8 @@ describe('FinishCommand', () => {
 
 				// Rebase runs before PR workflow
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
-				// The github-pr workflow should be executed (not the local merge)
-				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// The unified VCS PR workflow should be executed (not the local merge)
+				expect(executeVCSPRWorkflowSpy).toHaveBeenCalled()
 				// Local merge should NOT be performed (PR workflow handles merging)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
@@ -3558,11 +3558,11 @@ describe('FinishCommand', () => {
 					},
 				})
 
-				// Mock the executeGitHubPRWorkflow as fallback handler
-				// When no draftPrNumber in metadata, github-draft-pr falls back to github-pr workflow
+				// Mock the executeVCSPRWorkflow as fallback handler
+				// When no draftPrNumber in metadata, github-draft-pr falls back to the unified VCS PR workflow
 				// (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
-				const executeGitHubPRWorkflowSpy = vi
-					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+				const executeVCSPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeVCSPRWorkflow: () => Promise<void> }, 'executeVCSPRWorkflow')
 					.mockResolvedValue()
 
 				await command.execute({
@@ -3572,8 +3572,8 @@ describe('FinishCommand', () => {
 
 				// Rebase runs before PR workflow
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
-				// For github-draft-pr without existing draft PR, it falls back to executeGitHubPRWorkflow
-				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// For github-draft-pr without existing draft PR, it falls back to executeVCSPRWorkflow
+				expect(executeVCSPRWorkflowSpy).toHaveBeenCalled()
 				// Local merge should NOT be performed (PR workflow handles merging)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
