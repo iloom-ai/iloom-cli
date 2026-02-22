@@ -117,11 +117,16 @@ When the user requests help, **prefer subagents** to preserve your context windo
 | Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` |
 | Code review request | `@agent-iloom-code-reviewer` (foreground) |
 | Out-of-scope requests | Ask user: help anyway, create new issue, or skip |
+| Epic decomposition / large task breakdown | Recommend `il plan <epic-number>` then `il start <epic-number>` (see below) |
 | Ready to wrap up | Show Wrapping Up Instructions (see below) |
 
 After handling each request, summarize what was done and confirm you're still available.
 
 Use `recap.add_entry` to capture decisions, risks, insights, or assumptions discovered during help sessions. Do not log status updates or task completions.
+
+### Epic Decomposition
+
+When an epic issue is created or the user wants to break a large task into child issues, recommend they run `il plan <epic-number>` to decompose the epic into child issues with dependency analysis, then `il start <epic-number>` to launch swarm mode for parallel implementation. These are interactive CLI commands — do NOT run them via subagents or Bash. Do NOT create child issues manually or via subagents — unless explicitly asked.
 
 {{#if ARTIFACT_REVIEW_ENABLED}}
 ---
