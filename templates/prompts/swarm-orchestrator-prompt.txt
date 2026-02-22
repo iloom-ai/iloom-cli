@@ -68,18 +68,27 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 3. Create the agent team
 4. Spawn agents for all initially unblocked child issues
 5. Monitor agent completions and merge completed work
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+6. Push epic branch to remote after each successful child merge (incremental)
+7. Spawn agents for newly unblocked child issues (repeat as needed)
+8. Handle any failures (mark failed, continue with others)
+9. When all children are done or failed, finalize and clean up
+10. Create final commit with Fixes trailer for epic issue
+11. Push epic branch to remote (final commit)
+12. Print final summary
+{{else}}
 6. Spawn agents for newly unblocked child issues (repeat as needed)
 7. Handle any failures (mark failed, continue with others)
 8. When all children are done or failed, finalize and clean up
 9. Create final commit with Fixes trailer for epic issue
-{{#if DRAFT_PR_MODE}}
-{{#if AUTO_COMMIT_PUSH}}
-10. Push epic branch to remote (draft PR mode)
-11. Print final summary
-{{else}}
 10. Print final summary
 {{/if}}
 {{else}}
+6. Spawn agents for newly unblocked child issues (repeat as needed)
+7. Handle any failures (mark failed, continue with others)
+8. When all children are done or failed, finalize and clean up
+9. Create final commit with Fixes trailer for epic issue
 10. Print final summary
 {{/if}}
 
@@ -241,6 +250,23 @@ Child agents are expected to post a summary comment on their issue when they fin
 3. Close the child issue: Call `mcp__issue_management__close_issue` with `{ number: "<child-issue-number>" }`
 4. Log the artifact: Call `mcp__recap__add_artifact` with `{ type: "issue", primaryUrl: "<child-issue-url>", description: "Issue #<child-number> completed and merged into epic branch" }`
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+#### Step 3.4.5: Push Epic Branch to Remote (Incremental)
+
+After each successful child merge, push the epic branch to remote so the draft PR reflects incremental progress.
+
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git push --force-with-lease {{GIT_REMOTE}} HEAD
+```
+
+**NOTE**: `--force-with-lease` is required because the remote branch may still have the placeholder commit (on first push) or because the history was rewritten by a previous force push.
+
+**Error handling**: If the push fails, log the error and continue. Do NOT fail the swarm or skip remaining children. The work is committed locally and will be pushed either by a later successful push or by `il finish`.
+
+{{/if}}
+{{/if}}
 #### Step 3.5: Check for Newly Unblocked Issues
 
 After a child completes:
@@ -248,7 +274,15 @@ After a child completes:
 2. Check if any previously blocked children are now unblocked (empty `blockedBy` list)
 3. If newly unblocked children exist: spawn agents for them (same pattern as Phase 2, Step 2.2)
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
+{{else}}
 Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
+{{/if}}
+{{else}}
+Mark todo #5 and #6 as completed after each merge-and-spawn cycle.
+{{/if}}
 
 ---
 
@@ -268,7 +302,15 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
    - Update their metadata state to `failed`
    - Do NOT spawn agents for them
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+Mark todo #8 as completed.
+{{else}}
 Mark todo #7 as completed.
+{{/if}}
+{{else}}
+Mark todo #7 as completed.
+{{/if}}
 
 ---
 
@@ -299,38 +341,32 @@ Note: `--allow-empty` is used because the child branches have already been merge
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-### Step 5.3.5: Push Epic Branch to Remote (Draft PR Mode)
+### Step 5.3.5: Push Epic Branch to Remote (Final Commit)
 
-After the final commit, push the epic branch to remote so the draft PR reflects the swarm's work.
+After the final "Fixes" commit, push the epic branch to remote so the draft PR includes the issue-closing trailer.
 
-1. **Check for placeholder commit on the branch:**
+**Note**: Incremental pushes in Step 3.4.5 should have already pushed merged child work. This final push adds the "Fixes" commit.
+
+1. **Check if push is needed:**
    ```bash
    cd {{EPIC_WORKTREE_PATH}}
    git log -1 --format=%s
    ```
-   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]` OR `[iloom] Temporary`.
+   - If the latest commit message starts with `[iloom-placeholder]` or `[iloom] Temporary`, no children succeeded. Skip the push.
 
-2. **If PLACEHOLDER COMMIT detected (first push replacing placeholder):**
-
-   a. **Note**: The placeholder commit should already have been superseded by the child merges and final "Fixes" commit. If it's still the latest commit, something went wrong. In most cases, the placeholder will be in the history, not at HEAD. Check if the placeholder is at HEAD:
-   ```bash
-   git log --oneline | head -5
-   ```
-   If the placeholder is NOT at HEAD (normal case), proceed to step 3. If it IS at HEAD (no children succeeded), skip the push.
-
-3. **Push to remote:**
+2. **Push to remote:**
    ```bash
    cd {{EPIC_WORKTREE_PATH}}
    git push --force-with-lease {{GIT_REMOTE}} HEAD
    ```
-   **NOTE**: `--force-with-lease` is used because the remote branch may still have the placeholder commit that we need to replace. This is safe because we are replacing our own placeholder.
+   **NOTE**: `--force-with-lease` is required because the branch history includes rebased child commits.
 
-4. **Handle errors gracefully:**
+3. **Handle errors gracefully:**
    - If push fails: Log the error but do NOT fail the swarm. The work is committed locally and `il finish` will handle the push.
    - Do NOT retry automatically.
 
-5. **Notify completion:**
-   - Log: "Epic branch pushed to remote. Draft PR #{{DRAFT_PR_NUMBER}} updated with swarm results."
+4. **Notify completion:**
+   - Log: "Epic branch pushed to remote. Draft PR #{{DRAFT_PR_NUMBER}} updated with final commit."
 
 {{/if}}
 {{/if}}
@@ -364,7 +400,7 @@ The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #8, #9, #10, and #11 as completed.
+Mark todo #9, #10, #11, and #12 as completed.
 {{else}}
 Mark todo #8, #9, and #10 as completed.
 {{/if}}
