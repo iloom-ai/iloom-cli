@@ -489,6 +489,7 @@ export class MergeManager {
 			'Bash(git log:*)',
 			'Bash(git add:*)',
 			'Bash(git rebase:*)',
+			'Bash(GIT_EDITOR=true git rebase:*)',
 		]
 
 		try {
