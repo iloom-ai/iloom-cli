@@ -10,7 +10,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand } from '../utils/git.js'
+import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand, pushBranchToRemote } from '../utils/git.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
@@ -639,6 +639,51 @@ describe('LoomManager', () => {
           pr_numbers: ['99'],
           prUrls: { '99': 'https://github.com/owner/repo/pull/99' },
         })
+      )
+    })
+
+    it('should remove placeholder commit from local branch after pushing in draft PR mode', async () => {
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 42,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/42',
+      })
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
+
+      // Make rev-parse fail for remote branch check so we enter the placeholder creation path
+      const { GitCommandError: MockGitCommandError } = await import('../utils/git.js')
+      vi.mocked(executeGitCommand).mockImplementation(async (args) => {
+        if (args[0] === 'rev-parse' && args[1] === '--verify' && String(args[2]).startsWith('origin/')) {
+          throw new MockGitCommandError('fatal: unknown revision', 'git rev-parse', 128, 'unknown revision')
+        }
+        return ''
+      })
+
+      await manager.createIloom(baseInput)
+
+      // Verify placeholder was pushed to remote
+      expect(pushBranchToRemote).toHaveBeenCalled()
+
+      // Verify placeholder was then removed from local branch via soft reset
+      expect(executeGitCommand).toHaveBeenCalledWith(
+        ['reset', '--soft', 'HEAD~1'],
+        { cwd: expectedPath }
       )
     })
 

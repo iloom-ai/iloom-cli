@@ -1206,61 +1206,24 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
    - If no changes exist, skip to Post-Workflow Help
    - If changes exist, proceed with commit
 
-2. **Check for placeholder commit on the branch:**
+2. **Stage all changes:**
    ```bash
-   git log -1 --format=%s
+   git add -A
    ```
-   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]` OR `[iloom] Temporary`. This is the specific marker that iloom uses when creating placeholder commits to keep draft PRs open.
-   - Do NOT treat other commit messages (like "initial", "draft", "wip", etc.) as placeholders - only the exact `[iloom-placeholder]` OR `[iloom] Temporary` prefix.
-   - **IMPORTANT**: We must NOT remove the placeholder from remote first (that would close the PR). Instead, we fix locally then force push to atomically replace it.
 
-3. **If PLACEHOLDER COMMIT detected:**
+3. **Create commit with descriptive message:**
+   - Generate a commit message summarizing the implementation work
+   - Include reference to Issue #{{ISSUE_NUMBER}}
+   - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
+   ```bash
+   git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
+   ```
 
-   a. **Reset the placeholder commit locally (keeps changes staged):**
-      ```bash
-      git reset --soft HEAD~1
-      ```
-      This undoes the placeholder commit but keeps all changes staged.
-
-   b. **Stage any additional implementation changes:**
-      ```bash
-      git add -A
-      ```
-
-   c. **Create the real implementation commit:**
-      - Generate a commit message summarizing the implementation work
-      - Include reference to Issue #{{ISSUE_NUMBER}}
-      - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
-      ```bash
-      git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
-      ```
-
-   d. **Force push to atomically replace the placeholder:**
-      ```bash
-      git push --force-with-lease {{GIT_REMOTE}} HEAD
-      ```
-      **NOTE**: `--force-with-lease` is safe here because we are replacing our own placeholder commit, not overwriting others' work. This atomically replaces the placeholder on the remote.
-
-4. **If NO placeholder commit detected (normal case):**
-
-   a. **Stage all changes:**
-      ```bash
-      git add -A
-      ```
-
-   b. **Create commit with descriptive message:**
-      - Generate a commit message summarizing the implementation work
-      - Include reference to Issue #{{ISSUE_NUMBER}}
-      - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
-      ```bash
-      git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
-      ```
-
-   c. **Push to remote:**
-      ```bash
-      git push {{GIT_REMOTE}} HEAD
-      ```
-      **IMPORTANT**: Do NOT use `--force` or `--force-with-lease` for normal pushes. If the push fails due to non-fast-forward (rejected), stop and notify the user - they may need to pull remote changes first.
+4. **Push with force-with-lease:**
+   ```bash
+   git push --force-with-lease {{GIT_REMOTE}} HEAD
+   ```
+   **NOTE**: `--force-with-lease` is always used in draft PR mode because the remote may have the placeholder commit (from `il start`) or previous force-pushed commits. This is safe because the branch is exclusively ours (created by `il start`).
 
 5. **Check for CI/CD and deployment URLs (after successful push):**
 
@@ -1293,7 +1256,6 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
    - If commit fails: Log error, inform user that manual commit is needed
    - If push fails: Log error, inform user that manual push is needed (changes are still committed locally)
    - Do NOT retry automatically - let user handle conflicts/issues manually
-   - **Force push safety**: `--force-with-lease` is ONLY allowed for replacing placeholder commits on draft PRs (step 3d). Regular `--force` is still forbidden. For normal pushes (step 4c), if rejected, inform user and stop.
 
 7. **Notify completion:**
    - Log: "Auto-commit and push complete. Changes pushed to draft PR #{{DRAFT_PR_NUMBER}}."

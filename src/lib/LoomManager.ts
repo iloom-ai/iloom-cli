@@ -261,6 +261,10 @@ export class LoomManager {
         // Push branch to remote (required for draft PR creation)
         getLogger().info('Pushing branch to remote for draft PR...')
         await pushBranchToRemote(branchName, worktreePath, { dryRun: false })
+
+        // Remove placeholder from local history - it only needs to exist on remote to keep draft PR open.
+        await executeGitCommand(['reset', '--soft', 'HEAD~1'], { cwd: worktreePath })
+        getLogger().debug('Placeholder commit removed from local branch (still on remote)')
       }
 
       // Check for existing draft PR before creating a new one
