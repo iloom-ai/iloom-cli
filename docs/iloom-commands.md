@@ -1594,13 +1594,13 @@ The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature,
 
 **Worker Model Configuration:**
 
-The swarm worker agent defaults to `opus`. To override, configure it via `.iloom/settings.json`:
+The swarm worker agent defaults to `sonnet`. To override, configure it via `.iloom/settings.json`:
 
 ```json
 {
   "agents": {
     "iloom-swarm-worker": {
-      "model": "sonnet"
+      "model": "opus"
     }
   }
 }
@@ -1644,7 +1644,7 @@ With the configuration above, the resolved models are:
 
 > **Important:** The blanket swarm model (step 2) overrides the base per-agent model (step 3). In the example above, `iloom-issue-planner` uses `opus` in non-swarm mode (from the base config) but `sonnet` in swarm mode (from the blanket swarm worker model). If you want a specific agent to use a different model than the blanket in swarm mode, use a swarm-specific per-agent override (step 1) as shown for `iloom-issue-implementer` above.
 
-> **Note:** The blanket override only activates when `agents.iloom-swarm-worker.model` is explicitly set in your configuration. If it is not configured, phase agents in swarm mode use their base per-agent model or `.md` default -- the worker agent's implicit `opus` default does not propagate to phase agents.
+> **Note:** The blanket override only activates when `agents.iloom-swarm-worker.model` is explicitly set in your configuration. If it is not configured, phase agents in swarm mode use their base per-agent model or `.md` default -- the worker agent's implicit `sonnet` default does not propagate to phase agents.
 
 **Example using the `--set` flag:**
 

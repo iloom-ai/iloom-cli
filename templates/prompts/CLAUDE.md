@@ -56,7 +56,7 @@ Failed children cascade: any child depending on a failed child is also marked `f
 
 ## Configuration
 
-- Worker model: `.iloom/settings.json` → `agents.iloom-swarm-worker.model` (default: `opus`)
+- Worker model: `.iloom/settings.json` → `agents.iloom-swarm-worker.model` (default: `sonnet`)
 - Phase agent models: `.iloom/settings.json` → `agents.iloom-issue-implementer.model`, etc.
 - Draft PR mode: `draftPrNumber` in metadata triggers auto-push via `--force-with-lease`
 - Issue tracker: `issueManagement.provider` (`github` | `linear` | `jira`)
