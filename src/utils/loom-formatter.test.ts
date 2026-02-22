@@ -1703,6 +1703,66 @@ describe('enrichSwarmIssues', () => {
     const result = enrichSwarmIssues([], [])
     expect(result).toEqual([])
   })
+
+  it('should fall back to finished metadata when child loom is not in active metadata', () => {
+    const childIssues = [
+      { number: '#101', title: 'Cleaned up task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+      { number: '#102', title: 'Still active task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+    ]
+    // Only #102 is active
+    const activeMetadata = [
+      createChildLoomMetadata('102', 'in_progress', '/Users/dev/projects/myapp-looms/issue-102__child'),
+    ]
+    // #101 was cleaned up/archived and exists in finished metadata
+    const finishedMetadata: LoomMetadata[] = [
+      {
+        ...createChildLoomMetadata('101', 'done', '/Users/dev/projects/myapp-looms/issue-101__child'),
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      },
+    ]
+
+    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+
+    expect(result).toEqual([
+      {
+        number: '#101',
+        title: 'Cleaned up task',
+        url: 'https://github.com/org/repo/issues/101',
+        state: 'done',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      },
+      {
+        number: '#102',
+        title: 'Still active task',
+        url: 'https://github.com/org/repo/issues/102',
+        state: 'in_progress',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+      },
+    ])
+  })
+
+  it('should prefer active metadata over finished metadata for the same issue', () => {
+    const childIssues = [
+      { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+    ]
+    const activeMetadata = [
+      createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__active'),
+    ]
+    const finishedMetadata: LoomMetadata[] = [
+      {
+        ...createChildLoomMetadata('101', 'done', '/Users/dev/projects/myapp-looms/issue-101__finished'),
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      },
+    ]
+
+    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+
+    // Active metadata should take precedence
+    expect(result[0]?.state).toBe('in_progress')
+    expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__active')
+  })
 })
 
 describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () => {

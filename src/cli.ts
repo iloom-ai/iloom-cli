@@ -1096,11 +1096,10 @@ program
         }
       }
 
-      // Get finished looms if needed
-      let finishedLooms: LoomMetadata[] = []
-      if (showFinished) {
-        finishedLooms = await metadataManager.listFinishedMetadata()
-      }
+      // Get finished looms if needed for display, and always for swarm issue enrichment
+      // Finished metadata is needed to populate state for child looms that have been
+      // cleaned up/archived but whose state should still appear in the epic's swarmIssues
+      const finishedLooms = await metadataManager.listFinishedMetadata()
 
       // Filter by current project for text output (include looms with null projectPath for legacy support)
       // When --global is set, globalActiveLooms is used instead of worktrees, and no project filtering is applied
@@ -1125,6 +1124,12 @@ program
           // Settings validation failed - continue without main worktree path
         }
 
+        // Collect all active metadata for enriching epic swarm issues
+        // (must be computed before formatting so it's available for swarmIssues enrichment)
+        const allActiveMetadata = options.global
+          ? globalActiveLooms
+          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+
         // Format active looms
         let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
         if (showActive) {
@@ -1133,7 +1138,7 @@ program
             activeJson = globalActiveLooms.map(loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms)
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
@@ -1166,7 +1171,7 @@ program
             })
           } else {
             // Format worktrees from current repo
-            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
+            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
@@ -1182,13 +1187,10 @@ program
           )
         }
 
-        // Collect all active metadata for enriching epic swarm issues
-        const allActiveMetadata = options.global
-          ? globalActiveLooms
-          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
-
-        // Format finished looms
-        let finishedJson = finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata))
+        // Format finished looms (only when --finished or --all is set)
+        let finishedJson = showFinished
+          ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+          : []
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
         if (currentProjectPath) {
