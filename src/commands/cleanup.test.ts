@@ -1155,6 +1155,7 @@ describe('CleanupCommand', () => {
             deleteBranch: true,  // Now includes branch deletion with safety checks
             keepDatabase: false,
             checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+            archive: false,
             worktree: { path: '/repo/issue-25', branch: 'issue-25' },
           }
         )
