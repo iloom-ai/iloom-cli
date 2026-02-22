@@ -1241,6 +1241,30 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
 5. **Check for CI/CD and deployment URLs (after successful push):**
 
+{{#if IS_BITBUCKET}}
+   Wait a moment for BitBucket Pipelines to register the push, then check for pipeline status:
+
+   a. **Check pipeline status via BitBucket Pipelines API:**
+      ```bash
+      # List recent pipelines for this branch (requires curl and BB credentials)
+      curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+        "https://api.bitbucket.org/2.0/repositories/{workspace}/{repo}/pipelines/?branch=$(git rev-parse --abbrev-ref HEAD)&sort=-created_on&pagelen=5"
+      ```
+      If Pipelines API credentials are not available, instruct the user to check the BitBucket Pipelines UI for build status.
+
+   b. **Check pull request for deployment environments:**
+      ```bash
+      # List deployment environments for the PR (requires curl and BB credentials)
+      curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+        "https://api.bitbucket.org/2.0/repositories/{workspace}/{repo}/deployments/?environment.name=Staging&sort=-created_on&pagelen=5"
+      ```
+
+   c. **Display available status to user:**
+      - If pipeline running: "BitBucket Pipeline is running. Check status at: https://bitbucket.org/{workspace}/{repo}/pipelines/"
+      - If pipeline passed: "CI/CD passed. Preview deployment (if configured) will appear in the PR."
+      - If pipeline failed: "Pipeline failed. Check details at: https://bitbucket.org/{workspace}/{repo}/pipelines/"
+      - If credentials not available: "CI/CD is running. Check the pull request page for pipeline status and deployment URLs."
+{{else}}
    Wait a moment for GitHub to register the push, then check for available URLs:
 
    a. **Check recent workflow runs:**
@@ -1265,6 +1289,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
       - If deployment URLs found: "Preview deployment: [URL]"
       - If workflow runs found: "CI/CD workflow: [run URL]"
       - If no URLs available yet: "CI/CD is likely still initializing. Check the PR page for updates: https://github.com/{owner}/{repo}/pull/{{DRAFT_PR_NUMBER}}"
+{{/if}}
 
 6. **Handle errors gracefully:**
    - If commit fails: Log error, inform user that manual commit is needed
