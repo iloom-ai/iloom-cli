@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { IgniteCommand, WorktreeValidationError } from './ignite.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import type { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
@@ -3037,15 +3038,17 @@ describe('IgniteCommand', () => {
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__child-epic')
 
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
-			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
-				epicWorktreePath: '/path/to/child-epic',
-				epicBranch: 'feat/issue-100__child-epic',
-				childWorktrees: [
-					{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-			})
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/child-epic',
+					epicBranch: 'feat/issue-100__child-epic',
+					childWorktrees: [
+						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
 
 			const readMetadataMock = vi.fn()
 			const parentLoom = {
@@ -3212,16 +3215,18 @@ describe('IgniteCommand', () => {
 
 			// Mock SwarmSetupService.setupSwarm
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
-			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-			})
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/epic',
+					epicBranch: 'feat/issue-100__epic',
+					childWorktrees: [
+						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
 		})
 
 		afterEach(() => {
