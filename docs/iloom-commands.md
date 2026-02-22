@@ -270,6 +270,7 @@ il finish [options]
 | `--no-browser` | Skip opening PR in browser (github-pr and github-draft-pr modes) |
 | `--cleanup` | Clean up worktree after finishing (default in local mode) |
 | `--no-cleanup` | Keep worktree after finishing (default in github-pr and github-draft-pr modes)|
+| `--review` | Review commit message before committing (default: auto-commit without review) |
 
 **Merge Behavior Modes:**
 

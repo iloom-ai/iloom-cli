@@ -185,6 +185,7 @@ export interface FinishOptions {
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
+  review?: boolean    // --review - Review commit message before committing (default: auto-commit without review)
 }
 
 /**

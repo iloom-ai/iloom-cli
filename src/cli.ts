@@ -613,6 +613,7 @@ program
   .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
+  .option('--review', 'Review commit message before committing (default: auto-commit without review)')
   .option('--json', 'Output result as JSON')
   .action(async (identifier: string | undefined, options: FinishOptions & { browser?: boolean }) => {
     // Commander.js --no-browser creates browser:false, map to noBrowser for FinishOptions

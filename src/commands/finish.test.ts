@@ -557,6 +557,56 @@ describe('FinishCommand', () => {
 				expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
 			})
 
+			describe('--review flag behavior', () => {
+				beforeEach(() => {
+					// Ensure uncommitted changes exist so commitChanges is called
+					vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
+						hasUncommittedChanges: true,
+						unstagedFiles: ['test.ts'],
+						stagedFiles: [],
+						currentBranch: 'feat/issue-123',
+						isAheadOfRemote: false,
+						isBehindRemote: false,
+					})
+				})
+
+				it('should pass noReview: true when --review is not specified', async () => {
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: true })
+					)
+				})
+
+				it('should pass noReview: false when --review is specified', async () => {
+					await command.execute({
+						identifier: '123',
+						options: { review: true },
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: false })
+					)
+				})
+
+				it('should force noReview: true when --json is used with --review', async () => {
+					await command.execute({
+						identifier: '123',
+						options: { json: true, review: true },
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: true })
+					)
+				})
+			})
+
 			it('should pass correct options to MergeManager', async () => {
 				await command.execute({
 					identifier: '123',

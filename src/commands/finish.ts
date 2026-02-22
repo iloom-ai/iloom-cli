@@ -720,6 +720,7 @@ export class FinishCommand {
 						skipVerify,
 						issuePrefix,
 						timeout: settings.git?.commitTimeout,
+						noReview: options.review !== true || options.json === true,
 					}
 
 					// Only add issueNumber if it's an issue
@@ -1006,6 +1007,7 @@ export class FinishCommand {
 							skipVerify,
 							issuePrefix,
 							timeout: settings.git?.commitTimeout,
+							noReview: options.review !== true || options.json === true,
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
 						getLogger().success('Changes committed')
