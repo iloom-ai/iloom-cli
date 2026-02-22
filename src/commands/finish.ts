@@ -671,6 +671,21 @@ export class FinishCommand {
 				success: true,
 			})
 
+			// Install dependencies after successful rebase (Issue #692)
+			if (!options.dryRun) {
+				getLogger().info('Installing dependencies...')
+				try {
+					await installDependencies(worktree.path, true, true) // frozen=true, quiet=true
+				} catch (error) {
+					// Log warning but don't fail - rebase succeeded, user can fix deps manually
+					const message = error instanceof Error ? error.message : 'Unknown error'
+					getLogger().warn(`Dependency installation failed: ${message}`)
+					getLogger().warn('Please run your package manager install command manually')
+				}
+			} else {
+				getLogger().info('[DRY RUN] Would install dependencies')
+			}
+
 			// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
 			// Validates code with latest main changes integrated
 			if (!options.dryRun) {

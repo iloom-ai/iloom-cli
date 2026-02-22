@@ -488,6 +488,10 @@ describe('FinishCommand', () => {
 					executionOrder.push('rebase')
 				})
 
+				vi.mocked(installDependencies).mockImplementationOnce(async () => {
+					executionOrder.push('installDeps')
+				})
+
 				vi.mocked(mockMergeManager.performFastForwardMerge).mockImplementation(async () => {
 					executionOrder.push('merge')
 				})
@@ -497,8 +501,8 @@ describe('FinishCommand', () => {
 					options: {},
 				})
 
-				// Verify all steps executed in correct order (Issue #344: rebase first)
-				expect(executionOrder).toEqual(['rebase', 'validation', 'detectChanges', 'merge'])
+				// Verify all steps executed in correct order (Issue #344: rebase first, Issue #692: install deps before validation)
+				expect(executionOrder).toEqual(['rebase', 'installDeps', 'validation', 'detectChanges', 'merge'])
 			})
 
 			it('should run validation BEFORE detecting and committing changes', async () => {
