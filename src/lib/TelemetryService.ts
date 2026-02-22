@@ -44,7 +44,7 @@ export class TelemetryService {
 			this.client.capture({
 				distinctId: this.manager.getDistinctId(),
 				event,
-				properties: { source: 'cli', ...properties },
+				properties: { ...properties, source: 'cli' },
 			})
 		} catch (error) {
 			logger.debug(`TelemetryService: track error: ${error}`)

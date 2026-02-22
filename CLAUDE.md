@@ -14,6 +14,30 @@ iloom is a TypeScript CLI tool that converts existing bash workflow scripts into
 * **Avoid dynamic imports**: Use static imports at the top of files unless there's a genuine need for lazy loading (e.g., CLI commands that may not be invoked) or breaking circular dependencies. Dynamic imports add complexity, hurt performance, and make dependencies harder to trace. Before adding a dynamic import, check if the module is already imported elsewhere in the file or if a static import would work.
 * **ALWAYS run `pnpm build` after completing major tasks** to ensure the TypeScript builds successfully and make the functionality available for testing. This catches compilation errors early and enables users to test new features immediately. Major tasks include: implementing new features, refactoring code, adding/modifying CLI commands, or making significant changes to core modules.
 
+### Telemetry Requirements
+
+**When adding new commands, features, or significant user-facing workflows, add telemetry tracking calls.** The telemetry system is in `src/lib/TelemetryService.ts` and event types are defined in `src/types/telemetry.ts`.
+
+**How to add telemetry:**
+- Import `TelemetryService` and call `TelemetryService.getInstance().track('event.name', { properties })` at the success point of the workflow
+- All tracking calls must be wrapped in try/catch with `logger.debug()` — telemetry must NEVER break user workflows
+- Tracking calls are fire-and-forget (non-blocking)
+- If adding a new event type, define its interface in `src/types/telemetry.ts` and add it to the `TelemetryEventMap`
+
+**CRITICAL — Anonymity and privacy rules for telemetry properties:**
+- **NEVER** include repository names, URLs, or remote origins
+- **NEVER** include branch names, issue titles, issue descriptions, or issue content
+- **NEVER** include file paths, code content, or AI-generated analysis/plan content
+- **NEVER** include GitHub/Linear/Jira usernames, emails, or any user identifiers
+- **NEVER** include error messages (they can contain file paths or PII) — only use `error.constructor.name` for error types
+- **DO** include: counts (child_count, duration_minutes), enums (tracker type, merge behavior, source type), booleans (success/failure, feature flags), and the CLI version
+- When in doubt, ask: "Could this property identify a specific person, project, or repository?" If yes, do not include it.
+
+**Existing patterns to follow:**
+- `src/commands/start.ts` — tracking `loom.created` after successful start
+- `src/commands/finish.ts` — tracking `loom.finished` with duration calculation
+- `src/commands/cleanup.ts` — `trackLoomAbandoned()` helper for reuse across single and batch cleanup paths
+
 ### Documentation Requirements
 
 **IMPORTANT: When adding features or configuration options, update the appropriate documentation file**:

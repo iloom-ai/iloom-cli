@@ -2167,7 +2167,6 @@ telemetryCmd
   .command('off')
   .description('Disable anonymous usage telemetry')
   .action(async () => {
-    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
     const manager = new TelemetryManager()
     manager.disable()
     logger.info('Telemetry disabled. No usage data will be collected.')
@@ -2177,7 +2176,6 @@ telemetryCmd
   .command('on')
   .description('Enable anonymous usage telemetry')
   .action(async () => {
-    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
     const manager = new TelemetryManager()
     manager.enable()
     logger.info('Telemetry enabled. Anonymous usage data will be collected to improve iloom.')
@@ -2187,7 +2185,6 @@ telemetryCmd
   .command('status')
   .description('Show current telemetry status')
   .action(async () => {
-    const { TelemetryManager } = await import('./lib/TelemetryManager.js')
     const manager = new TelemetryManager()
     const status = manager.getStatus()
     logger.info(`Telemetry: ${status.enabled ? 'enabled' : 'disabled'}`)

@@ -16,7 +16,9 @@ describe('TelemetryManager', () => {
 	describe('getDistinctId', () => {
 		it('returns generated UUID when no config file exists', () => {
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw new Error('ENOENT')
+				const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException
+				err.code = 'ENOENT'
+				throw err
 			})
 			vi.mocked(uuidv4).mockReturnValue('test-uuid-1234')
 
@@ -28,7 +30,9 @@ describe('TelemetryManager', () => {
 
 		it('persists UUID to config file on first call', () => {
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw new Error('ENOENT')
+				const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException
+				err.code = 'ENOENT'
+				throw err
 			})
 			vi.mocked(uuidv4).mockReturnValue('test-uuid-5678')
 
@@ -72,7 +76,9 @@ describe('TelemetryManager', () => {
 	describe('isEnabled', () => {
 		it('returns true by default (no config file)', () => {
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw new Error('ENOENT')
+				const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException
+				err.code = 'ENOENT'
+				throw err
 			})
 
 			const manager = new TelemetryManager('/tmp/test-config')
@@ -297,7 +303,9 @@ describe('TelemetryManager', () => {
 
 		it('all write methods handle permission errors silently', () => {
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw new Error('ENOENT')
+				const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException
+				err.code = 'ENOENT'
+				throw err
 			})
 			vi.mocked(fs.ensureDirSync).mockImplementation(() => {
 				throw new Error('EACCES: permission denied')

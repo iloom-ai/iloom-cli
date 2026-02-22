@@ -14,6 +14,20 @@ import { LoomManager } from '../lib/LoomManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+
+function trackLoomAbandoned(metadata: LoomMetadata): void {
+	try {
+		const durationMinutes = metadata.created_at
+			? Math.round((Date.now() - new Date(metadata.created_at).getTime()) / 60000)
+			: 0
+		TelemetryService.getInstance().track('loom.abandoned', {
+			duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+			phase_reached: metadata.state ?? 'unknown',
+		})
+	} catch (error: unknown) {
+		getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
+	}
+}
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -439,17 +453,7 @@ export class CleanupCommand {
 
     // Track loom.abandoned telemetry event (only for unfinished looms)
     if (cleanupResult.success && preCleanupMetadata && preCleanupMetadata.status !== 'finished') {
-      try {
-        const durationMinutes = preCleanupMetadata.created_at
-          ? Math.round((Date.now() - new Date(preCleanupMetadata.created_at).getTime()) / 60000)
-          : 0
-        TelemetryService.getInstance().track('loom.abandoned', {
-          duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
-          phase_reached: preCleanupMetadata.state ?? 'unknown',
-        })
-      } catch (error: unknown) {
-        getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
-      }
+      trackLoomAbandoned(preCleanupMetadata)
     }
 
     // Final success message
@@ -629,17 +633,7 @@ export class CleanupCommand {
 
           // Track loom.abandoned telemetry (only for unfinished looms)
           if (targetMetadata && targetMetadata.status !== 'finished') {
-            try {
-              const durationMinutes = targetMetadata.created_at
-                ? Math.round((Date.now() - new Date(targetMetadata.created_at).getTime()) / 60000)
-                : 0
-              TelemetryService.getInstance().track('loom.abandoned', {
-                duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
-                phase_reached: targetMetadata.state ?? 'unknown',
-              })
-            } catch (error: unknown) {
-              getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
-            }
+            trackLoomAbandoned(targetMetadata)
           }
         } else {
           failed++
