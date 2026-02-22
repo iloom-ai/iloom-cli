@@ -992,6 +992,7 @@ Need more advanced configuration? I can help you set up:
   • Multi-Provider Code Review - Get code reviews from Gemini or Codex alongside Claude
   • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
+  • Swarm Agent Models - Configure different models for agents when running in swarm mode
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
@@ -1009,6 +1010,7 @@ You can ask me questions like:
   "Can I disable the IDE from launching automatically?"
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
+  "How do I use different models for swarm workers vs normal mode?"
   "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
@@ -1039,6 +1041,35 @@ When configuring agents, use these model identifiers:
      "iloom-issue-planner": { "model": "sonnet" }
    }
    ```
+
+   **Swarm-Specific Phase Agent Models:**
+
+   In swarm mode, you can configure different models for phase agents (analyzer, planner, implementer, etc.) than in normal mode:
+
+   ```json
+   "agents": {
+     "iloom-issue-implementer": {
+       "model": "opus"
+     },
+     "iloom-swarm-worker": {
+       "model": "opus",
+       "agents": {
+         "iloom-issue-implementer": {
+           "model": "sonnet"
+         },
+         "iloom-issue-planner": {
+           "model": "haiku"
+         }
+       }
+     }
+   }
+   ```
+
+   Fallback chain in swarm mode:
+   1. `agents.iloom-swarm-worker.agents.<agent>.model` (swarm-specific per-agent)
+   2. `agents.iloom-swarm-worker.model` (blanket swarm worker model)
+   3. `agents.<agent>.model` (base per-agent model)
+   4. Agent default from its definition file
 
 2. **Database Environment Variable:**
    ```json
