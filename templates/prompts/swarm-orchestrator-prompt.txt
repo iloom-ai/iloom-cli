@@ -72,7 +72,16 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 7. Handle any failures (mark failed, continue with others)
 8. When all children are done or failed, finalize and clean up
 9. Create final commit with Fixes trailer for epic issue
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+10. Push epic branch to remote (draft PR mode)
+11. Print final summary
+{{else}}
 10. Print final summary
+{{/if}}
+{{else}}
+10. Print final summary
+{{/if}}
 
 ---
 
@@ -288,6 +297,43 @@ git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
 
 Note: `--allow-empty` is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message trailer to trigger issue closure.
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+### Step 5.3.5: Push Epic Branch to Remote (Draft PR Mode)
+
+After the final commit, push the epic branch to remote so the draft PR reflects the swarm's work.
+
+1. **Check for placeholder commit on the branch:**
+   ```bash
+   cd {{EPIC_WORKTREE_PATH}}
+   git log -1 --format=%s
+   ```
+   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]` OR `[iloom] Temporary`.
+
+2. **If PLACEHOLDER COMMIT detected (first push replacing placeholder):**
+
+   a. **Note**: The placeholder commit should already have been superseded by the child merges and final "Fixes" commit. If it's still the latest commit, something went wrong. In most cases, the placeholder will be in the history, not at HEAD. Check if the placeholder is at HEAD:
+   ```bash
+   git log --oneline | head -5
+   ```
+   If the placeholder is NOT at HEAD (normal case), proceed to step 3. If it IS at HEAD (no children succeeded), skip the push.
+
+3. **Push to remote:**
+   ```bash
+   cd {{EPIC_WORKTREE_PATH}}
+   git push --force-with-lease {{GIT_REMOTE}} HEAD
+   ```
+   **NOTE**: `--force-with-lease` is used because the remote branch may still have the placeholder commit that we need to replace. This is safe because we are replacing our own placeholder.
+
+4. **Handle errors gracefully:**
+   - If push fails: Log the error but do NOT fail the swarm. The work is committed locally and `il finish` will handle the push.
+   - Do NOT retry automatically.
+
+5. **Notify completion:**
+   - Log: "Epic branch pushed to remote. Draft PR #{{DRAFT_PR_NUMBER}} updated with swarm results."
+
+{{/if}}
+{{/if}}
 ### Step 5.4: Print Summary
 
 Print a comprehensive summary:
@@ -316,4 +362,12 @@ The epic branch at `{{EPIC_WORKTREE_PATH}}` contains merged work from all succes
 The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 ```
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+Mark todo #8, #9, #10, and #11 as completed.
+{{else}}
 Mark todo #8, #9, and #10 as completed.
+{{/if}}
+{{else}}
+Mark todo #8, #9, and #10 as completed.
+{{/if}}

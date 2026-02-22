@@ -929,6 +929,24 @@ export class IgniteCommand {
 			ISSUE_PREFIX: issuePrefix,
 		}
 
+		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
+		const draftPrNumber = metadata.draftPrNumber ?? undefined
+		if (draftPrNumber !== undefined) {
+			variables.DRAFT_PR_MODE = true
+			variables.DRAFT_PR_NUMBER = draftPrNumber
+			const draftPrUrl = metadata.prUrls?.[String(draftPrNumber)]
+			if (draftPrUrl) {
+				variables.DRAFT_PR_URL = draftPrUrl
+			}
+			const autoCommitPushEnabled = settings.mergeBehavior?.autoCommitPush !== false
+			variables.AUTO_COMMIT_PUSH = autoCommitPushEnabled
+			const remote = settings.mergeBehavior?.remote ?? 'origin'
+			if (!/^[a-zA-Z0-9_-]+$/.test(remote)) {
+				throw new Error(`Invalid git remote name: "${remote}". Remote names can only contain alphanumeric characters, underscores, and hyphens.`)
+			}
+			variables.GIT_REMOTE = remote
+		}
+
 		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)
 
 		// Build allowed tools
