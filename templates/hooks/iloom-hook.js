@@ -308,9 +308,17 @@ async function main() {
 
     // Special handling for UserPromptSubmit - output JSON additionalContext instead of broadcasting
     if (status === 'user_prompt_submit') {
-      // In swarm mode, skip the guidance entirely — agents handle their own workflow
+      // In swarm mode, agents handle their own workflow — only remind about code reviewer
       if (process.env.ILOOM_SWARM === '1') {
-        debug('UserPromptSubmit: swarm mode, skipping guidance');
+        const swarmReminder = `**REMINDER**: When the user requests a code review, use \`@agent-iloom-code-reviewer\`.`;
+        const output = {
+          hookSpecificOutput: {
+            hookEventName: 'UserPromptSubmit',
+            additionalContext: swarmReminder
+          }
+        };
+        console.log(JSON.stringify(output));
+        debug('UserPromptSubmit: swarm mode, output code reviewer reminder');
         process.exit(0);
       }
 
@@ -325,6 +333,7 @@ async function main() {
 | On 4rd or more repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyzer\` → if approved, \`@agent-iloom-issue-planner\` → if approved, \`@agent-iloom-issue-implementer\`  - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
 | New features / complex changes | \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
 | Deep questions (how/why something works) | \`@agent-iloom-issue-analyzer\` |
+| Code review request | \`@agent-iloom-code-reviewer\` |
 
 Regarding creating/updating comments - if it's a trivial fix or quick answer, DO NOT create or update issue comments to avoid polluting the issue history. Only create/update comments for complex changes or new features as outlined above.`;
 
