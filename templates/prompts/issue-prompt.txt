@@ -62,7 +62,21 @@ Use these Recap MCP tools:
 
 ---
 
-{{#unless SWARM_MODE}}
+{{#if SWARM_MODE}}
+## Comment Routing: Swarm Mode
+
+- **Read issue details** using `mcp__issue_management__get_issue` with the issue number from your Task prompt
+- **Write ALL workflow comments** to the issue using `type: "issue"`
+
+When calling `mcp__issue_management__create_comment`:
+```
+{
+  number: "<issue-number-from-task-prompt>",
+  body: "your comment content",
+  type: "issue"
+}
+```
+{{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
 
@@ -121,7 +135,7 @@ When calling `mcp__issue_management__create_comment`:
 }
 ```
 {{/if}}
-{{/unless}}
+{{/if}}
 
 ---
 
