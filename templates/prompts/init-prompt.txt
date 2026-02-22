@@ -204,6 +204,10 @@ Extract these current values if they exist:
 - `currentJiraUsername` from `issueManagement.jira.username` field (if Jira is provider)
 - `currentJiraProjectKey` from `issueManagement.jira.projectKey` field (if Jira is provider)
 - `currentJiraBoardId` from `issueManagement.jira.boardId` field (if Jira is provider, optional)
+- `currentVCSProvider` from `versionControl.provider` field (default: "github")
+- `currentBitBucketUsername` from `versionControl.bitbucket.username` field (if VCS provider is BitBucket)
+- `currentBitBucketApiToken` from `versionControl.bitbucket.apiToken` field (if VCS provider is BitBucket — display as 'set' or 'unset', never the actual value)
+- `currentBitBucketWorkspace` from `versionControl.bitbucket.workspace` field (if VCS provider is BitBucket, optional)
 
 **If configuration already exists, display current configuration summary:**
 
@@ -220,6 +224,10 @@ Linear Team ID: [currentLinearTeamId] (only if currentIssueProvider == linear)
 Jira Host: [currentJiraHost] (only if currentIssueProvider == jira)
 Jira Project Key: [currentJiraProjectKey] (only if currentIssueProvider == jira)
 Jira Board ID: [currentJiraBoardId] (only if currentIssueProvider == jira and boardId is set)
+VCS Provider: [currentVCSProvider or "github (default)"]
+BitBucket Username: [currentBitBucketUsername] (only if currentVCSProvider == bitbucket)
+BitBucket API Token: [set/unset] (only if currentVCSProvider == bitbucket — never show actual token)
+BitBucket Workspace: [currentBitBucketWorkspace or "auto-detect"] (only if currentVCSProvider == bitbucket)
 ```
 
 **Then ask the user what they want to do:**
@@ -380,6 +388,21 @@ Since this repository has multiple git remotes, GitHub Issues is suggested as th
 - Linear Issues + github-pr or github-draft-pr: Requires BOTH Linear API token AND authorized GitHub CLI (`gh`)
 - Jira Cloud + local merge: Requires Jira credentials (host, username, API token) only
 - Jira Cloud + github-pr or github-draft-pr: Requires BOTH Jira credentials AND authorized GitHub CLI (`gh`)
+- Jira Cloud + bitbucket-pr: Requires BOTH Jira credentials AND BitBucket credentials (username, API token)
+
+**Step 1b: VCS Provider Selection**
+
+After selecting the issue tracker, ask which version control system the project uses:
+
+1b. **VCS Provider**
+   - Question format: "Which version control provider does this project use?{{#if currentVCSProvider}} (Currently: [currentVCSProvider]){{/if}}"
+   - Options:
+     - "github" - GitHub (default)
+     - "bitbucket" - Atlassian BitBucket
+   - Default: currentVCSProvider or "github"
+   - Validation: Must be one of: github, bitbucket
+   - Store answer as: `versionControl.provider`
+   - Context: This determines how iloom creates pull requests when finishing work. GitHub uses the `gh` CLI tool; BitBucket uses the BitBucket REST API with credentials you provide.
 
 **Step 2: Provider-Specific Configuration**
 
@@ -488,6 +511,40 @@ This repository has multiple git remotes detected. iloom needs to know which rem
 
    **Note:** Advanced Jira settings like `transitionMappings`, `doneStatuses`, `defaultIssueType`, and `defaultSubtaskType` can be configured later by editing the settings files directly. Mention this to the user.
 
+**Step 2b: BitBucket Credential Configuration** (only ask if VCS provider from Step 1b is "bitbucket")
+
+After selecting BitBucket as the VCS provider, gather BitBucket credentials:
+
+1. **BitBucket Username** (only ask if VCS provider is "bitbucket")
+   - Question format: "What is your BitBucket username?{{#if currentBitBucketUsername}} (Currently: [currentBitBucketUsername]){{/if}}"
+   - Default: currentBitBucketUsername or NO DEFAULT (required if BitBucket selected)
+   - Validation: Non-empty string
+   - Store answer as: `versionControl.bitbucket.username`
+   - Context: This is your BitBucket account username (visible in your BitBucket profile URL, e.g., `bitbucket.org/{username}`)
+   - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`. This is personal account information that should not be committed to source control.
+
+2. **BitBucket API Token** (only ask if VCS provider is "bitbucket")
+   - Question format: "What is your BitBucket API token? (Currently: 'set' or 'unset' - do not print)"
+   - Options:
+     - I have it now - use the "Type something" option to enter it
+     - I'll come back to it
+   - Default: currentBitBucketApiToken or NO DEFAULT
+   - Validation: Non-empty string
+   - Guidance: Choose "Type something" to enter it
+   - Store answer as: `versionControl.bitbucket.apiToken`
+   - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`, regardless of which file the user selected for other settings. This token must never be committed to source control.
+   - Context: Generate a BitBucket API token at https://bitbucket.org/account/settings/app-passwords/ (or use repository Access Tokens for finer-grained access). Note: App passwords were deprecated in September 2025 — use API tokens or Access Tokens instead.
+
+3. **BitBucket Workspace** (only ask if VCS provider is "bitbucket")
+   - Question format: "What is your BitBucket workspace slug? (optional — auto-detected from git remote if not provided){{#if currentBitBucketWorkspace}} (Currently: [currentBitBucketWorkspace]){{/if}}"
+   - Options:
+     - Skip - Auto-detect from git remote
+     - Enter workspace - use the "Type something" option to enter it
+   - Default: currentBitBucketWorkspace or SKIP (optional)
+   - Validation: If provided, non-empty string
+   - Store answer as: `versionControl.bitbucket.workspace`
+   - Context: The workspace slug appears in your BitBucket repository URL (e.g., `bitbucket.org/{workspace}/{repo}`). If omitted, iloom will auto-detect it from your git remote URL.
+
 **Step 3: IDE Selection**
 
 4. **IDE Selection**
@@ -513,21 +570,26 @@ This repository has multiple git remotes detected. iloom needs to know which rem
      - "local" - Merge changes locally (traditional workflow)
      - "github-pr" - Create GitHub PR when finishing (for PR-based workflows)
      - "github-draft-pr" - Create draft PR at start, mark ready when finishing (recommended for forks)
+     - "bitbucket-pr" - Create BitBucket PR when finishing (requires BitBucket credentials configured in Step 1b/2b)
    - Default:
-     - If origin + upstream remotes detected (fork pattern): "github-draft-pr"
+     - If VCS provider (Step 1b) is "bitbucket": "bitbucket-pr"
+     - If origin + upstream remotes detected (fork pattern) and VCS is GitHub: "github-draft-pr"
      - Otherwise: currentMergeMode or "local"
-   - Validation: Must be one of: local, github-pr, github-draft-pr
+   - Validation: Must be one of: local, github-pr, github-draft-pr, bitbucket-pr
    - Store answer as: `mergeBehavior.mode`
    - Context:
      - **Fork workflows (with upstream remote)**: Use "github-draft-pr" mode. This creates a draft PR at the start of work, routes all AI agent comments to the PR (not the issue), and marks the PR ready for review when you finish. This keeps upstream issue trackers clean.
      - **Direct contribution workflows**: Use "github-pr" to create PRs when finishing, or "local" to merge locally.
-   - **IMPORTANT**: Both "github-pr" and "github-draft-pr" modes require GitHub CLI (`gh`) to be installed and authenticated, regardless of your issue tracker provider.
+     - **BitBucket workflows**: Use "bitbucket-pr" to create a BitBucket PR when finishing. Requires BitBucket credentials (username and API token) configured in the VCS provider settings.
+   - **IMPORTANT**: "github-pr" and "github-draft-pr" modes require GitHub CLI (`gh`) to be installed and authenticated. "bitbucket-pr" mode requires BitBucket credentials (versionControl.bitbucket.username and versionControl.bitbucket.apiToken).
 
 **Implementation Details:**
-- Ask Step 1 first to determine provider
-- Then ask Step 2 based on the provider selected (includes Linear API Token if Linear was selected, or Jira credentials if Jira was selected)
+- Ask Step 1 first to determine issue tracker provider
+- Ask Step 1b (VCS provider) immediately after Step 1 to determine VCS system
+- Then ask Step 2 based on the issue tracker provider selected (includes Linear API Token if Linear was selected, or Jira credentials if Jira was selected)
+- Ask Step 2b (BitBucket credentials) if VCS provider from Step 1b is "bitbucket"
 - Ask Step 3 (IDE) for all users
-- Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config
+- Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config; pre-select "bitbucket-pr" if VCS is BitBucket
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
 
@@ -587,6 +649,10 @@ Tooling Configuration (Phase 2):
   Jira Project Key: [value] (only if issue tracker is Jira)
   Jira Board ID: [value or "not configured"] (only if issue tracker is Jira)
   Jira API Token: [configured/not configured] (only if issue tracker is Jira - never show actual token)
+  VCS Provider: [value]
+  BitBucket Username: [value] (only if VCS provider is BitBucket)
+  BitBucket API Token: [configured/not configured] (only if VCS provider is BitBucket - never show actual token)
+  BitBucket Workspace: [value or "auto-detect"] (only if VCS provider is BitBucket)
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)
 ```
@@ -595,6 +661,8 @@ Tooling Configuration (Phase 2):
 - Include the GitHub Remote line in the summary ONLY if it was configured in Phase 2 (multiple remotes and GitHub selected)
 - Include Linear Team ID ONLY if Linear was selected as the issue tracker provider
 - Include Jira Host, Project Key, Board ID, and API Token ONLY if Jira was selected as the issue tracker provider
+- Include VCS Provider ONLY if it differs from "github" (the default) or if BitBucket was selected
+- Include BitBucket Username, API Token, and Workspace ONLY if BitBucket was selected as VCS provider
 - Include Merge Mode ONLY if it was asked and configured (multiple remotes or advanced config)
 
 Then ask: "Does this configuration look correct?"
@@ -773,17 +841,59 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
 
    **CRITICAL:** The `username` and `apiToken` fields MUST be saved to `settings.local.json`, never to `settings.json`. The `host`, `projectKey`, and `boardId` fields are safe to commit in `settings.json`.
 
-6. **Add mergeBehavior ONLY if mode is not "local":**
+6. **Add versionControl ONLY if provider is not "github" (the default) OR if bitbucket credentials were configured:**
+
+   **For GitHub (default):**
+   - If VCS provider is "github": OMIT the entire versionControl section (it's the default)
+
+   **For BitBucket:**
+
+   In settings.json (committed):
    ```json
    {
-     "mergeBehavior": {
-       "mode": "<user's answer>"  // "github-pr" or "github-draft-pr"
+     "versionControl": {
+       "provider": "bitbucket"
      }
    }
    ```
-   Note: Valid modes are "local", "github-pr", and "github-draft-pr". Only include if not "local".
 
-7. **Add colors settings based on Phase 2.5 recommendations (if vscode or cursor IDE):**
+   In settings.local.json (gitignored - MUST be separate from settings.json):
+   ```json
+   {
+     "versionControl": {
+       "bitbucket": {
+         "username": "<user's BitBucket username>",
+         "apiToken": "<user's BitBucket API token>"
+       }
+     }
+   }
+   ```
+
+   If a workspace was provided, add it to settings.json alongside the provider:
+   ```json
+   {
+     "versionControl": {
+       "provider": "bitbucket",
+       "bitbucket": {
+         "workspace": "<user's BitBucket workspace slug>"
+       }
+     }
+   }
+   ```
+
+   **CRITICAL:** The `username` and `apiToken` fields MUST be saved to `settings.local.json`, never to `settings.json`. The `provider` and `workspace` fields are safe to commit in `settings.json`.
+
+7. **Add mergeBehavior ONLY if mode is not "local":**
+   ```json
+   {
+     "mergeBehavior": {
+       "mode": "<user's answer>"  // "github-pr", "github-draft-pr", or "bitbucket-pr"
+     }
+   }
+   ```
+   Note: Valid modes are "local", "github-pr", "github-draft-pr", and "bitbucket-pr". Only include if not "local".
+
+8. **Add colors settings based on Phase 2.5 recommendations (if vscode or cursor IDE):**
    ```json
    {
      "colors": {
@@ -798,9 +908,9 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    - If user chose to keep disabled or enable anyway: set accordingly
    - Terminal should be true unless user explicitly disabled it
 
-8. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
+9. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
 
-9. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+10. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
 
 ### Phase 6: Write File
 
@@ -987,7 +1097,8 @@ Here's how to get started:
   • Run `iloom finish` when you're done working to merge changes and clean up
 
 Need more advanced configuration? I can help you set up:
-  • Merge Behavior - Choose between local merge, GitHub PR, or draft PR workflows
+  • Merge Behavior - Choose between local merge, GitHub PR, draft PR, or BitBucket PR workflows
+  • BitBucket Integration - Configure BitBucket credentials and PR creation
   • Copy Gitignored Files - Automatically copy local databases, test fixtures, or other gitignored files to new looms
   • Multi-Provider Code Review - Get code reviews from Gemini or Codex alongside Claude
   • Plan Configuration - Use different AI providers for planning and plan review
@@ -1001,6 +1112,8 @@ Need more advanced configuration? I can help you set up:
 
 You can ask me questions like:
   "How do I set up GitHub PR mode instead of local merge?"
+  "How do I configure BitBucket PR creation?"
+  "Can I use Jira for issues and BitBucket for PRs?"
   "How do I copy my local SQLite database to new looms?"
   "Can I get code reviews from Gemini as well as Claude?"
   "How do I use Codex for planning?"
@@ -1071,7 +1184,84 @@ When configuring agents, use these model identifiers:
    3. `agents.<agent>.model` (base per-agent model)
    4. Agent default from its definition file
 
-2. **Database Environment Variable:**
+2. **BitBucket VCS Configuration:**
+
+   In `.iloom/settings.json` (committed — safe to share):
+   ```json
+   {
+     "versionControl": {
+       "provider": "bitbucket",
+       "bitbucket": {
+         "workspace": "my-workspace"
+       }
+     },
+     "mergeBehavior": {
+       "mode": "bitbucket-pr"
+     }
+   }
+   ```
+
+   In `.iloom/settings.local.json` (gitignored — keep credentials here):
+   ```json
+   {
+     "versionControl": {
+       "bitbucket": {
+         "username": "my-bitbucket-username",
+         "apiToken": "ATB..."
+       }
+     }
+   }
+   ```
+
+   Generate a BitBucket API token at https://bitbucket.org/account/settings/app-passwords/. Note: App passwords were deprecated in September 2025 — use API tokens or repository Access Tokens instead.
+
+3. **Combined Jira + BitBucket Configuration:**
+
+   When using Jira as the issue tracker with BitBucket as the VCS provider:
+
+   In `.iloom/settings.json` (committed):
+   ```json
+   {
+     "issueManagement": {
+       "provider": "jira",
+       "jira": {
+         "host": "https://yourcompany.atlassian.net",
+         "projectKey": "PROJ"
+       }
+     },
+     "versionControl": {
+       "provider": "bitbucket",
+       "bitbucket": {
+         "workspace": "my-workspace"
+       }
+     },
+     "mergeBehavior": {
+       "mode": "bitbucket-pr"
+     }
+   }
+   ```
+
+   In `.iloom/settings.local.json` (gitignored — credentials only):
+   ```json
+   {
+     "issueManagement": {
+       "jira": {
+         "username": "user@company.com",
+         "apiToken": "<jira-api-token>"
+       }
+     },
+     "versionControl": {
+       "bitbucket": {
+         "username": "my-bitbucket-username",
+         "apiToken": "ATB..."
+       }
+     }
+   }
+   ```
+
+   This configuration allows iloom to read issues from Jira and create pull requests in BitBucket when you run `il finish`.
+
+4. **Database Environment Variable:**
    ```json
    "capabilities": {
      "database": {
@@ -1080,7 +1270,7 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-3. **Workflow Behavior:**
+6. **Workflow Behavior:**
    ```json
    "workflows": {
      "pr": {
@@ -1092,26 +1282,26 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-4. **Copy Gitignored Files:**
+7. **Copy Gitignored Files:**
    ```json
    "copyGitIgnoredPatterns": ["*.db", "data/*.sqlite", "tmp/fixtures/**"]
    ```
 
    Glob patterns for gitignored files that should be copied to new looms. Useful for local databases, large test fixtures, or generated files that are too big to commit. Note: `.env` files and iloom/claude local settings are automatically copied and don't need to be listed here.
 
-5. **Protected Branches:**
+8. **Protected Branches:**
    ```json
    "protectedBranches": ["main", "production", "release/*"]
    ```
 
-6. **IDE Configuration:**
+9. **IDE Configuration:**
    ```json
    "ide": {
      "type": "cursor"
    }
    ```
 
-7. **Code Review with Multiple Providers:**
+10. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -1125,7 +1315,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-8. **Custom Script Configuration (package.iloom.json):**
+11. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json
