@@ -442,7 +442,8 @@ export class CleanupCommand {
       force: force ?? false,
       deleteBranch: true,  // Always include branch deletion (safety checks run first)
       keepDatabase: false,
-      checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+      checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+      archive: parsed.options.archive ?? false,
     })
 
     // Add dryRun flag to result

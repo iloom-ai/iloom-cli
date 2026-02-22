@@ -273,16 +273,16 @@ git push --force-with-lease {{GIT_REMOTE}} HEAD
 #### Step 3.4.6: Clean Up Child Worktree
 
 {{#unless NO_CLEANUP}}
-After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il finish`. Since the child's branch is already rebased and merged into the epic branch, the merge step will be a no-op ("Already up to date").
+After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il cleanup --archive`. Since the child's work is already rebased and merged into the epic branch, we only need to remove the worktree and branch while preserving metadata.
 
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
-il finish <child-issue-number> --json --force --cleanup
+il cleanup <child-issue-number> --archive --force --json
 ```
 
-This archives the child's metadata to the `finished/` directory (accessible via `il list --finished`) and removes the worktree from disk.
+This archives the child's metadata to the `finished/` directory (accessible via `il list --finished`) and removes the worktree and branch from disk.
 
-If the `il finish` command fails, log the error but continue with the orchestration -- do not let a cleanup failure block other children.
+If the `il cleanup` command fails, log the error but continue with the orchestration -- do not let a cleanup failure block other children.
 {{/unless}}
 {{#if NO_CLEANUP}}
 **Note:** Child loom cleanup is disabled (`--skip-cleanup` flag). Child worktrees will be preserved after the swarm completes.

@@ -18,6 +18,8 @@ export interface ResourceCleanupOptions {
 	checkRemoteBranch?: boolean
 	/** Pre-resolved worktree to clean up (skips the search step) */
 	worktree?: { path: string; branch: string }
+	/** Archive metadata instead of deleting (preserves loom in il list --finished) */
+	archive?: boolean
 }
 
 /**

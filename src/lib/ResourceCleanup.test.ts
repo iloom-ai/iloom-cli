@@ -338,6 +338,83 @@ describe('ResourceCleanup', () => {
 			expect(result.operations.every(op => 'message' in op)).toBe(true)
 		})
 
+		it('should archive metadata instead of deleting when archive option is set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+				archive: true,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.success).toBe(true)
+			expect(metadataOp?.message).toBe('Metadata archived')
+		})
+
+		it('should delete metadata when archive option is not set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+				archive: false,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.success).toBe(true)
+			expect(metadataOp?.message).toBe('Metadata deleted')
+		})
+
+		it('should show archive in dry-run message when archive option is set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				dryRun: true,
+				deleteBranch: true,
+				keepDatabase: false,
+				archive: true,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.message).toContain('[DRY RUN]')
+			expect(metadataOp?.message).toContain('archive')
+		})
+
 		it('should support dry-run mode without executing changes', async () => {
 			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)

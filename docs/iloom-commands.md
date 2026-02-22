@@ -418,6 +418,7 @@ il cleanup [options] [identifier]
 | `-i`, `--issue` | Cleanup by issue number |
 | `-f`, `--force` | Skip confirmations and force removal |
 | `--dry-run` | Show what would be done without doing it |
+| `--archive` | Archive metadata instead of deleting (preserves loom in `il list --finished`) |
 
 **Workflow:**
 
@@ -447,6 +448,9 @@ il cleanup --all
 
 # Force cleanup without confirmation
 il cleanup 25 --force
+
+# Archive metadata instead of deleting (keeps loom visible in il list --finished)
+il cleanup 25 --archive
 ```
 
 **Safety:**
@@ -591,7 +595,7 @@ The orchestrator then:
 
 **Child Worktree Cleanup:**
 
-After each child agent's work is successfully merged into the epic branch, the orchestrator automatically runs `il finish` on the child worktree to archive its metadata and remove the worktree from disk. Archived child looms remain visible via `il list --finished`. Failed children are preserved for debugging and can be inspected manually.
+After each child agent's work is successfully merged into the epic branch, the orchestrator automatically runs `il cleanup --archive` on the child worktree to archive its metadata and remove the worktree and branch from disk. Archived child looms remain visible via `il list --finished`. Failed children are preserved for debugging and can be inspected manually.
 
 To disable automatic cleanup and keep all child worktrees after swarm completion, use the `--skip-cleanup` flag:
 

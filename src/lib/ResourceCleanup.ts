@@ -475,14 +475,35 @@ export class ResourceCleanup {
 			}
 		}
 
-		// Step 7: Delete metadata file
+		// Step 7: Delete or archive metadata file
 		if (worktree) {
 			if (options.dryRun) {
+				const action = options.archive ? 'archive' : 'delete'
 				operations.push({
 					type: 'metadata',
 					success: true,
-					message: `[DRY RUN] Would delete metadata for worktree: ${worktree.path}`,
+					message: `[DRY RUN] Would ${action} metadata for worktree: ${worktree.path}`,
 				})
+			} else if (options.archive) {
+				try {
+					await this.metadataManager.archiveMetadata(worktree.path)
+					getLogger().info(`Metadata archived for worktree: ${worktree.path}`)
+					operations.push({
+						type: 'metadata',
+						success: true,
+						message: 'Metadata archived',
+					})
+				} catch (error) {
+					const err = error instanceof Error ? error : new Error(String(error))
+					errors.push(err)
+					getLogger().warn(`Metadata archival failed: ${err.message}`)
+					operations.push({
+						type: 'metadata',
+						success: false,
+						message: 'Metadata archival failed (non-fatal)',
+						error: err.message,
+					})
+				}
 			} else {
 				try {
 					await this.metadataManager.deleteMetadata(worktree.path)

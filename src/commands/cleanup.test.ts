@@ -538,7 +538,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Now includes branch deletion with safety checks
             keepDatabase: false,
-            checkMergeSafety: true  // Run 5-point safety check before any deletion
+            checkMergeSafety: true,  // Run 5-point safety check before any deletion
+            archive: false,
           }
         )
         // No second prompt - branch deletion is handled atomically with safety checks
@@ -773,7 +774,8 @@ describe('CleanupCommand', () => {
             force: true,
             deleteBranch: true,
             keepDatabase: false,
-            checkMergeSafety: true  // checkMergeSafety is still passed, but force bypasses it in ResourceCleanup
+            checkMergeSafety: true,  // checkMergeSafety is still passed, but force bypasses it in ResourceCleanup
+            archive: false,
           }
         )
       })
@@ -827,7 +829,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Still includes branch deletion in dry run
             keepDatabase: false,
-            checkMergeSafety: true
+            checkMergeSafety: true,
+            archive: false,
           }
         )
       })
@@ -987,7 +990,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Now always true to enable safety checks before any deletion
             keepDatabase: false,
-            checkMergeSafety: true  // Run 5-point safety check
+            checkMergeSafety: true,  // Run 5-point safety check
+            archive: false,
           }
         )
       })

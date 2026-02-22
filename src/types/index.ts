@@ -207,6 +207,8 @@ export interface CleanupOptions {
   json?: boolean
   /** Wait specified milliseconds before cleanup execution */
   defer?: number
+  /** Archive metadata instead of deleting (preserves loom in il list --finished) */
+  archive?: boolean
 }
 
 export interface ListOptions {
