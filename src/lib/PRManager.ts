@@ -132,7 +132,7 @@ ${issueContext}
 </Requirements>
 
 <Output>
-IMPORTANT: Your entire response will be used directly as the GitHub pull request body.
+IMPORTANT: Your entire response will be used directly as the pull request body.
 Do not include any explanatory text, headers, or separators before or after the body.
 Start your response immediately with the PR body text.
 </Output>`
