@@ -290,7 +290,6 @@ export class FinishCommand {
 			TelemetryService.getInstance().track('loom.finished', {
 				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr') ?? 'local',
 				duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
-				had_conflicts: false, // TODO: wire up actual conflict detection when merge conflict tracking is added
 			})
 		} catch (error: unknown) {
 			getLogger().debug(`Failed to track loom.finished telemetry: ${error instanceof Error ? error.message : String(error)}`)

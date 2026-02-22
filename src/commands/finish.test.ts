@@ -3425,7 +3425,6 @@ describe('FinishCommand', () => {
 				expect(mockTrack).toHaveBeenCalledWith('loom.finished', {
 					merge_behavior: 'local',
 					duration_minutes: expect.any(Number),
-					had_conflicts: false,
 				})
 			})
 		})
