@@ -16,7 +16,18 @@ iloom is a TypeScript CLI tool that converts existing bash workflow scripts into
 
 ### Telemetry Requirements
 
-**When adding new commands, features, or significant user-facing workflows, add telemetry tracking calls.** The telemetry system is in `src/lib/TelemetryService.ts` and event types are defined in `src/types/telemetry.ts`.
+**Purpose:** Telemetry helps us understand which features are actually used, where users hit errors, and how workflows perform in practice. This data drives decisions about what to improve, what to deprecate, and where to invest effort. Without it, we're guessing.
+
+**What to track:** Add telemetry when adding new commands, features, or significant user-facing workflows. Specifically:
+- **Command usage**: When a new CLI command or subcommand is added, track that it was invoked and whether it succeeded
+- **Feature adoption**: When adding a new option, mode, or integration, track which variants users choose (e.g., tracker type, merge behavior, one-shot mode)
+- **Workflow outcomes**: Track success/failure of multi-step workflows (loom lifecycle, swarm execution, epic planning) with duration and outcome counts
+- **Error rates**: Track error types (NOT messages) at top-level catch boundaries so we can identify reliability issues
+- **Lifecycle events**: Track install, upgrade, and session start to understand the active user base and version distribution
+
+**You do NOT need to track:** Internal helper functions, intermediate steps within a workflow, or read-only operations (list, status, config display).
+
+The telemetry system is in `src/lib/TelemetryService.ts` and event types are defined in `src/types/telemetry.ts`.
 
 **How to add telemetry:**
 - Import `TelemetryService` and call `TelemetryService.getInstance().track('event.name', { properties })` at the success point of the workflow
