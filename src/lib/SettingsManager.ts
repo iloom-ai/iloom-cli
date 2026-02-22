@@ -12,9 +12,9 @@ import { logger } from '../utils/logger.js'
 const PROJECT_CAPABILITIES = ['cli', 'web'] as const
 
 /**
- * Zod schema for agent settings
+ * Zod schema for base agent settings (without nested agents)
  */
-export const AgentSettingsSchema = z.object({
+export const BaseAgentSettingsSchema = z.object({
 	model: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
@@ -34,6 +34,16 @@ export const AgentSettingsSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
+})
+
+/**
+ * Zod schema for agent settings, extends base with optional nested agents sub-record.
+ * The nested agents field is used for swarm-specific per-agent overrides under iloom-swarm-worker.
+ */
+export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
+	agents: z.record(z.string(), BaseAgentSettingsSchema)
+		.optional()
+		.describe('Nested per-agent overrides for swarm mode. Only consumed under iloom-swarm-worker.'),
 })
 
 /**
