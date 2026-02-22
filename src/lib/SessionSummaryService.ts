@@ -19,6 +19,7 @@ import { MetadataManager } from './MetadataManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueProvider } from '../mcp/types.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { formatRecapMarkdown } from '../utils/recap-formatter.js'
@@ -402,26 +403,36 @@ export class SessionSummaryService {
 		worktreePath: string,
 		prNumber?: number
 	): Promise<void> {
-		// Get the issue management provider from settings
-		// PRs only exist on GitHub, so always use 'github' provider when prNumber is provided
-		// (see types.ts:32-33 and LinearIssueManagementProvider.getPR())
-		const providerType = prNumber !== undefined
-			? 'github'
-			: (settings.issueManagement?.provider ?? 'github') as IssueProvider
-		const provider = IssueManagementProviderFactory.create(providerType, settings)
-
 		// Apply attribution if configured
 		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)
 
-		// When prNumber is provided, post to the PR instead of the issue
-		const targetNumber = prNumber ?? issueNumber
-		const targetType = prNumber !== undefined ? 'pr' : 'issue'
+		// When prNumber is provided, route through VCS provider if configured (e.g. BitBucket),
+		// otherwise fall back to the GitHub issue management provider for PR comments
+		if (prNumber !== undefined) {
+			const vcsProvider = VCSProviderFactory.create(settings)
+			if (vcsProvider) {
+				// Use the VCS provider (e.g. BitBucket) to post the PR comment
+				await vcsProvider.createPRComment(prNumber, finalSummary, worktreePath)
+				return
+			}
 
-		// Create the comment
+			// No non-GitHub VCS provider configured - use GitHub issue management provider
+			const provider = IssueManagementProviderFactory.create('github' as IssueProvider, settings)
+			await provider.createComment({
+				number: String(prNumber),
+				body: finalSummary,
+				type: 'pr',
+			})
+			return
+		}
+
+		// Post to issue using the configured issue management provider
+		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
+		const provider = IssueManagementProviderFactory.create(providerType, settings)
 		await provider.createComment({
-			number: String(targetNumber),
+			number: String(issueNumber),
 			body: finalSummary,
-			type: targetType,
+			type: 'issue',
 		})
 	}
 }

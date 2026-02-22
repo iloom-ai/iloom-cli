@@ -104,6 +104,8 @@ export interface TemplateVariables {
 	HAS_REVIEWER?: boolean
 	// Git remote configuration
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
+	// VCS provider configuration
+	IS_BITBUCKET?: boolean  // True when versionControl.provider is 'bitbucket'
 	// Swarm orchestrator variables
 	EPIC_ISSUE_NUMBER?: string | number
 	EPIC_WORKTREE_PATH?: string

@@ -302,6 +302,13 @@ export class PlanCommand {
 							throw new Error(
 								`Cannot start planning session after init: ${retryMessage}. Ensure you are in a git repository with a GitHub remote configured.`
 							)
+						} else if (provider === 'jira') {
+							logger.error(
+								'Jira issue management requires JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL to be configured.'
+							)
+							throw new Error(
+								`Cannot start planning session after init: ${retryMessage}. Ensure JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL are configured in settings or environment.`
+							)
 						} else {
 							logger.error(
 								'Linear issue management requires LINEAR_API_TOKEN to be configured.'
@@ -321,6 +328,13 @@ export class PlanCommand {
 						throw new Error(
 							`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
 						)
+					} else if (provider === 'jira') {
+						logger.error(
+							'Jira issue management requires JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL to be configured.'
+						)
+						throw new Error(
+							`Cannot start planning session: ${message}. Ensure JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL are configured in settings or environment.`
+						)
 					} else {
 						logger.error(
 							'Linear issue management requires LINEAR_API_TOKEN to be configured.'
@@ -339,6 +353,13 @@ export class PlanCommand {
 					)
 					throw new Error(
 						`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
+					)
+				} else if (provider === 'jira') {
+					logger.error(
+						'Jira issue management requires JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL to be configured.'
+					)
+					throw new Error(
+						`Cannot start planning session: ${message}. Ensure JIRA_API_TOKEN, JIRA_EMAIL, and JIRA_BASE_URL are configured in settings or environment.`
 					)
 				} else {
 					logger.error(

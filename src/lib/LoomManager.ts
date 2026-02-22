@@ -13,6 +13,8 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError, fetchOrigin } from '../utils/git.js'
 import { GitHubService } from './GitHubService.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
+import type { VersionControlProvider } from './VersionControlProvider.js'
 import { generateRandomSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
@@ -32,6 +34,7 @@ import { PRManager } from './PRManager.js'
 export class LoomManager {
   private metadataManager: MetadataManager
   private githubService: GitHubService | undefined
+  private vcsProvider: VersionControlProvider | null | undefined = undefined
 
   constructor(
     private gitWorktree: GitWorktreeManager,
@@ -43,10 +46,29 @@ export class LoomManager {
     private cliIsolation: CLIIsolationManager,
     private settings: SettingsManager,
     private database?: DatabaseManager,
-    githubService?: GitHubService
+    githubService?: GitHubService,
+    vcsProvider?: VersionControlProvider | null
   ) {
     this.metadataManager = new MetadataManager()
     this.githubService = githubService
+    // If explicitly provided (including null), use it; otherwise leave as undefined for lazy init
+    if (vcsProvider !== undefined) {
+      this.vcsProvider = vcsProvider
+    }
+  }
+
+  /**
+   * Get the configured VCS provider, if any.
+   * Returns null if no non-GitHub VCS provider is configured.
+   * Uses cached value after first load.
+   */
+  private async getVCSProvider(): Promise<VersionControlProvider | null> {
+    if (this.vcsProvider !== undefined) {
+      return this.vcsProvider
+    }
+    const iloomSettings = await this.settings.loadSettings()
+    this.vcsProvider = VCSProviderFactory.create(iloomSettings)
+    return this.vcsProvider
   }
 
   /**
@@ -441,6 +463,7 @@ export class LoomManager {
       issue_numbers,
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
+      vcsProvider: settingsData.versionControl?.provider ?? 'github',
       colorHex: colorData.hex,
       sessionId,
       projectPath: this.gitWorktree.workingDirectory,
@@ -611,7 +634,12 @@ export class LoomManager {
       if (this.issueTracker.supportsPullRequests && this.issueTracker.fetchPR) {
         return await this.issueTracker.fetchPR(input.identifier as number)
       }
-      // Use injected GitHubService if available
+      // Use VCS provider if configured (e.g., BitBucket)
+      const vcsProvider = await this.getVCSProvider()
+      if (vcsProvider) {
+        return await vcsProvider.fetchPR(input.identifier as number)
+      }
+      // Fall back to GitHubService for GitHub or unconfigured setups
       if (this.githubService) {
         return await this.githubService.fetchPR(input.identifier as number)
       }
@@ -1413,6 +1441,7 @@ export class LoomManager {
         issue_numbers,
         pr_numbers,
         issueTracker: this.issueTracker.providerName,
+        vcsProvider: settingsData.versionControl?.provider ?? 'github',
         colorHex,
         sessionId,
         projectPath: this.gitWorktree.workingDirectory,

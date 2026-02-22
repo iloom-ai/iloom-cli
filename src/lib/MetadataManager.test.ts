@@ -179,6 +179,40 @@ describe('MetadataManager', () => {
       expect(writtenContent.issueTracker).toBe('github')
     })
 
+    it('should write vcsProvider field when provided', async () => {
+      const inputWithVcsProvider = {
+        ...metadataInput,
+        vcsProvider: 'bitbucket',
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithVcsProvider)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.vcsProvider).toBe('bitbucket')
+    })
+
+    it('should write github as vcsProvider when specified', async () => {
+      const inputWithGithub = {
+        ...metadataInput,
+        vcsProvider: 'github',
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithGithub)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.vcsProvider).toBe('github')
+    })
+
+    it('should not include vcsProvider field when not provided', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.vcsProvider).toBeUndefined()
+    })
+
     it('should write sessionId to JSON file', async () => {
       await manager.writeMetadata(worktreePath, metadataInput)
 
@@ -366,6 +400,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['42'],
         pr_numbers: [],
         issueTracker: 'github',
+        vcsProvider: null,
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
         projectPath: '/Users/jane/dev/main-repo',
@@ -497,6 +532,7 @@ describe('MetadataManager', () => {
         issue_numbers: [],
         pr_numbers: [],
         issueTracker: null,
+        vcsProvider: null,
         colorHex: null,
         sessionId: null,
         projectPath: null,
@@ -785,6 +821,72 @@ describe('MetadataManager', () => {
 
       expect(result?.state).toBeNull()
     })
+
+    it('should return vcsProvider when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with BitBucket VCS',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        vcsProvider: 'bitbucket',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.vcsProvider).toBe('bitbucket')
+    })
+
+    it('should return github vcsProvider when stored as github', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with GitHub VCS',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        vcsProvider: 'github',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.vcsProvider).toBe('github')
+    })
+
+    it('should return null vcsProvider for legacy looms without vcsProvider field', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without vcsProvider',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        // Note: no vcsProvider field (backward compatibility)
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.vcsProvider).toBeNull()
+    })
   })
 
   describe('listAllMetadata', () => {
@@ -866,6 +968,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['1'],
         pr_numbers: [],
         issueTracker: 'github',
+        vcsProvider: null,
         colorHex: '#ff0000',
         sessionId: '11111111-1111-1111-1111-111111111111',
         projectPath: '/Users/alice/main-project',
@@ -891,6 +994,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['2'],
         pr_numbers: [],
         issueTracker: 'github',
+        vcsProvider: null,
         colorHex: '#00ff00',
         sessionId: '22222222-2222-2222-2222-222222222222',
         projectPath: '/Users/bob/main-project',
@@ -1000,6 +1104,7 @@ describe('MetadataManager', () => {
         issue_numbers: [],
         pr_numbers: [],
         issueTracker: null,
+        vcsProvider: null,
         colorHex: null,
         sessionId: null,
         projectPath: null,

@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
+import { BitBucketVCSProvider } from '../lib/providers/bitbucket/BitBucketVCSProvider.js'
 import type {
 	IssueProvider,
 	GetIssueInput,
@@ -28,10 +29,15 @@ import type {
 	CloseIssueInput,
 	ReopenIssueInput,
 	EditIssueInput,
+	PRResult,
+	CommentResult,
 } from './types.js'
 
 // Module-level settings loaded at startup
 let settings: IloomSettings | undefined
+
+// Module-level VCS provider for PR operations (non-null when BitBucket is configured)
+let bitBucketVCSProvider: BitBucketVCSProvider | undefined
 
 // Validate required environment variables
 function validateEnvironment(): IssueProvider {
@@ -181,19 +187,18 @@ server.registerTool(
 	}
 )
 
-// Import GitHubIssueManagementProvider for get_pr tool (PRs always use GitHub)
+// Import GitHubIssueManagementProvider for get_pr tool (fallback when BitBucket is not configured)
 import { GitHubIssueManagementProvider } from './GitHubIssueManagementProvider.js'
 
 // Register get_pr tool
-// Note: PRs only exist on GitHub, so this tool always uses the GitHub provider
-// regardless of the configured issue tracker
+// Routes through the configured VCS provider (BitBucket when configured, GitHub otherwise)
 server.registerTool(
 	'get_pr',
 	{
 		title: 'Get Pull Request',
 		description:
 			'Fetch pull request details including title, body, comments, files, commits, and branch information. ' +
-			'PRs only exist on GitHub, so this tool always uses GitHub regardless of configured issue tracker. ' +
+			'Routes through the configured VCS provider: BitBucket when versionControl.provider is "bitbucket", GitHub otherwise. ' +
 			'Author fields have normalized core fields: { id, displayName } plus provider-specific fields.',
 		inputSchema: {
 			number: z.string().describe('The PR number'),
@@ -256,9 +261,33 @@ server.registerTool(
 		console.error(`Fetching PR ${number}${repo ? ` from ${repo}` : ''}`)
 
 		try {
-			// PRs always use GitHub provider regardless of configured issue tracker
-			const provider = new GitHubIssueManagementProvider()
-			const result = await provider.getPR({ number, includeComments, repo })
+			let result: PRResult
+
+			if (bitBucketVCSProvider) {
+				// Route through BitBucket VCS provider
+				const prNumber = parseInt(number, 10)
+				if (isNaN(prNumber)) {
+					throw new Error(`Invalid PR number: ${number}. PR IDs must be numeric.`)
+				}
+				console.error(`Fetching PR #${prNumber} from BitBucket`)
+				const bbPR = await bitBucketVCSProvider.fetchPR(prNumber)
+				// Map PullRequest (from VersionControlProvider) to PRResult (MCP type)
+				result = {
+					id: String(bbPR.number),
+					number: bbPR.number,
+					title: bbPR.title,
+					body: bbPR.body,
+					state: bbPR.state.toUpperCase(),
+					url: bbPR.url,
+					author: null, // BitBucket fetchPR does not return author in PullRequest type
+					headRefName: bbPR.branch,
+					baseRefName: bbPR.baseBranch,
+				}
+			} else {
+				// Default: use GitHub provider
+				const provider = new GitHubIssueManagementProvider()
+				result = await provider.getPR({ number, includeComments, repo })
+			}
 
 			console.error(`PR fetched successfully: #${result.number} - ${result.title}`)
 
@@ -362,10 +391,27 @@ server.registerTool(
 		console.error(`Creating ${type} comment on ${number}`)
 
 		try {
-			// PR comments must always go to GitHub since PRs only exist on GitHub
-			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
-			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.createComment({ number, body, type })
+			let result: CommentResult
+
+			if (type === 'pr' && bitBucketVCSProvider) {
+				// Route PR comments through BitBucket VCS provider
+				const prNumber = parseInt(number, 10)
+				if (isNaN(prNumber)) {
+					throw new Error(`Invalid PR number: ${number}. PR IDs must be numeric.`)
+				}
+				console.error(`Creating BitBucket PR comment on PR #${prNumber}`)
+				await bitBucketVCSProvider.createPRComment(prNumber, body)
+				// BitBucket addPRComment returns void; construct a minimal CommentResult
+				result = {
+					id: `bitbucket-pr-${prNumber}-comment`,
+					url: '',
+				}
+			} else {
+				// Route to issue provider (GitHub for 'pr' type when not BitBucket, configured provider for 'issue' type)
+				const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
+				const provider = IssueManagementProviderFactory.create(providerType, settings)
+				result = await provider.createComment({ number, body, type })
+			}
 
 			console.error(
 				`Comment created successfully: ${result.id} at ${result.url}`
@@ -395,12 +441,14 @@ server.registerTool(
 	{
 		title: 'Update Comment',
 		description:
-			'Update an existing comment. Use this to update progress during a workflow phase.',
+			'Update an existing comment. Use this to update progress during a workflow phase. ' +
+			'Note: BitBucket does not support PR comment editing via its REST API. ' +
+			'When BitBucket VCS is configured and type is "pr", this operation will throw an error.',
 		inputSchema: {
 			commentId: z.string().describe('The comment identifier to update'),
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
 			body: z.string().describe('The updated comment body (markdown supported)'),
-			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments to GitHub regardless of configured provider'),
+			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments through the configured VCS provider'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -412,7 +460,15 @@ server.registerTool(
 		console.error(`Updating comment ${commentId} on ${type === 'pr' ? 'PR' : 'issue'} ${number}`)
 
 		try {
-			// PR comments must always go to GitHub since PRs only exist on GitHub
+			if (type === 'pr' && bitBucketVCSProvider) {
+				// BitBucket does not support PR comment editing via REST API
+				throw new Error(
+					'BitBucket does not support editing PR comments. ' +
+					'The BitBucket REST API does not provide a PUT/PATCH endpoint for pull request comments.'
+				)
+			}
+
+			// Route to issue provider (GitHub for 'pr' type when not BitBucket, configured provider for 'issue' type)
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
 			const result = await provider.updateComment({ commentId, number, body })
@@ -975,10 +1031,24 @@ async function main(): Promise<void> {
 	settings = await settingsManager.loadSettings()
 	console.error('Settings loaded')
 
+	// Initialize BitBucket VCS provider if configured in settings
+	// This enables PR operations (get_pr, create_comment type:pr) to route through BitBucket
+	if (settings?.versionControl?.provider === 'bitbucket') {
+		try {
+			bitBucketVCSProvider = BitBucketVCSProvider.fromSettings(settings)
+			console.error('BitBucket VCS provider initialized for PR operations')
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to initialize BitBucket VCS provider: ${errorMessage}`)
+			console.error('PR operations will fall back to GitHub provider')
+		}
+	}
+
 	// Validate environment and get provider
 	const provider = validateEnvironment()
 	console.error('Environment validated')
 	console.error(`Issue management provider: ${provider}`)
+	console.error(`VCS provider for PR operations: ${bitBucketVCSProvider ? 'bitbucket' : 'github'}`)
 
 	if (provider === 'github') {
 		console.error(`Repository: ${process.env.REPO_OWNER}/${process.env.REPO_NAME}`)

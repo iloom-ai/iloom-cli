@@ -531,6 +531,11 @@ export class IgniteCommand {
 			WORKSPACE_PATH: context.workspacePath,
 		}
 
+		// Set VCS provider flag for template conditionals
+		if (this.settings?.versionControl?.provider === 'bitbucket') {
+			variables.IS_BITBUCKET = true
+		}
+
 		if (context.issueNumber !== undefined) {
 			variables.ISSUE_NUMBER = context.issueNumber
 		}

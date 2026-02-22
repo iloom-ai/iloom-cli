@@ -27,6 +27,8 @@ import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setu
 import { isInteractiveEnvironment, promptConfirmation } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import type { LoomCreatedProperties } from '../types/telemetry.js'
+import { VCSProviderFactory } from '../lib/VCSProviderFactory.js'
+import type { VersionControlProvider } from '../lib/VersionControlProvider.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -46,6 +48,7 @@ export class StartCommand {
 	private settingsManager: SettingsManager
 	private providedLoomManager: LoomManager | undefined
 	private githubService: GitHubService | null = null
+	private vcsProvider: VersionControlProvider | null | undefined = undefined
 
 	constructor(
 		issueTracker: IssueTracker,
@@ -75,6 +78,20 @@ export class StartCommand {
 	private getGitHubService(): GitHubService {
 		this.githubService ??= new GitHubService()
 		return this.githubService
+	}
+
+	/**
+	 * Get the configured VCS provider, if any.
+	 * Returns null if no non-GitHub VCS provider is configured.
+	 * Uses cached value after first load.
+	 */
+	private async getVCSProvider(): Promise<VersionControlProvider | null> {
+		if (this.vcsProvider !== undefined) {
+			return this.vcsProvider
+		}
+		const settings = await this.settingsManager.loadSettings()
+		this.vcsProvider = VCSProviderFactory.create(settings)
+		return this.vcsProvider
 	}
 
 	/**
@@ -508,23 +525,44 @@ export class StartCommand {
 				}
 			} else {
 				// Issue tracker doesn't support PRs (e.g., Linear, Jira)
-				// Check GitHub first for PR, then fall back to issue tracker for issues
-				const githubService = this.getGitHubService()
-				const detection = await githubService.detectInputType(trimmedIdentifier, repo)
-
-				if (detection.type === 'pr') {
-					return {
-						type: 'pr',
-						number: detection.identifier ? parseInt(detection.identifier, 10) : number,
-						originalInput: trimmedIdentifier,
+				// Check VCS provider first for PR, then fall back to issue tracker for issues
+				const vcsProvider = await this.getVCSProvider()
+				if (vcsProvider) {
+					// Non-GitHub VCS provider configured (e.g., BitBucket): try fetching as PR
+					try {
+						await vcsProvider.fetchPR(number)
+						return {
+							type: 'pr',
+							number,
+							originalInput: trimmedIdentifier,
+						}
+					} catch {
+						// Not a VCS PR - treat as an issue
+						return {
+							type: 'issue',
+							number,
+							originalInput: trimmedIdentifier,
+						}
 					}
 				} else {
-					// Not a GitHub PR - try the configured issue tracker
-					// This allows future trackers with numeric IDs to work naturally
-					return {
-						type: 'issue',
-						number,
-						originalInput: trimmedIdentifier,
+					// No non-GitHub VCS provider: fall back to GitHubService
+					const githubService = this.getGitHubService()
+					const detection = await githubService.detectInputType(trimmedIdentifier, repo)
+
+					if (detection.type === 'pr') {
+						return {
+							type: 'pr',
+							number: detection.identifier ? parseInt(detection.identifier, 10) : number,
+							originalInput: trimmedIdentifier,
+						}
+					} else {
+						// Not a GitHub PR - try the configured issue tracker
+						// This allows future trackers with numeric IDs to work naturally
+						return {
+							type: 'issue',
+							number,
+							originalInput: trimmedIdentifier,
+						}
 					}
 				}
 			}
@@ -554,10 +592,17 @@ export class StartCommand {
 					const pr = await this.issueTracker.fetchPR(parsed.number, repo)
 					await this.issueTracker.validatePRState(pr)
 				} else {
-					// Use GitHubService for PR operations when issue tracker doesn't support PRs (e.g., Linear)
-					const githubService = this.getGitHubService()
-					const pr = await githubService.fetchPR(parsed.number as number, repo)
-					await githubService.validatePRState(pr)
+					// Use VCS provider if configured (e.g., BitBucket), otherwise fall back to GitHubService
+					const vcsProvider = await this.getVCSProvider()
+					if (vcsProvider) {
+						// VCS provider configured: fetch PR to validate it exists (providers throw on invalid PRs)
+						await vcsProvider.fetchPR(parsed.number as number)
+					} else {
+						// No non-GitHub VCS provider: fall back to GitHubService
+						const githubService = this.getGitHubService()
+						const pr = await githubService.fetchPR(parsed.number as number, repo)
+						await githubService.validatePRState(pr)
+					}
 				}
 				getLogger().debug(`Validated PR #${parsed.number}`)
 				break

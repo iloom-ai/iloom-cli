@@ -101,6 +101,18 @@ vi.mock('../lib/TelemetryService.js', () => ({
 	},
 }))
 
+// Mock VCSProviderFactory - default returns null (no non-GitHub VCS provider)
+const { mockVCSProviderCreate } = vi.hoisted(() => ({
+	mockVCSProviderCreate: vi.fn().mockReturnValue(null),
+}))
+vi.mock('../lib/VCSProviderFactory.js', () => ({
+	VCSProviderFactory: {
+		create: mockVCSProviderCreate,
+		isConfigured: vi.fn().mockReturnValue(false),
+		getProviderName: vi.fn().mockReturnValue(undefined),
+	},
+}))
+
 // Mock IssueTrackerFactory for epic child data fetching
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	IssueTrackerFactory: {
@@ -2230,6 +2242,149 @@ describe('StartCommand', () => {
 			})
 
 			expect(fetchChildIssues).not.toHaveBeenCalled()
+		})
+	})
+})
+
+describe('Jira+BitBucket VCS provider PR detection', () => {
+	let mockJiraService: {
+		supportsPullRequests: boolean
+		providerName: string
+		detectInputType: ReturnType<typeof vi.fn>
+		fetchIssue: ReturnType<typeof vi.fn>
+		validateIssueState: ReturnType<typeof vi.fn>
+	}
+	let mockBitBucketProvider: {
+		providerName: string
+		fetchPR: ReturnType<typeof vi.fn>
+		checkForExistingPR: ReturnType<typeof vi.fn>
+		createPR: ReturnType<typeof vi.fn>
+		createPRComment: ReturnType<typeof vi.fn>
+		detectRepository: ReturnType<typeof vi.fn>
+		getTargetRemote: ReturnType<typeof vi.fn>
+		getPRUrl: ReturnType<typeof vi.fn>
+		supportsForks: boolean
+		supportsDraftPRs: boolean
+	}
+	let jiraBBCommand: StartCommand
+
+	const mockBBPR = {
+		number: 42,
+		title: 'BitBucket PR',
+		body: '',
+		state: 'open' as const,
+		branch: 'feature-branch',
+		baseBranch: 'main',
+		url: 'https://bitbucket.org/workspace/repo/pull-requests/42',
+		isDraft: false,
+	}
+
+	beforeEach(() => {
+		// Jira doesn't support PRs
+		mockJiraService = {
+			supportsPullRequests: false,
+			providerName: 'jira',
+			detectInputType: vi.fn(),
+			fetchIssue: vi.fn(),
+			validateIssueState: vi.fn(),
+		}
+
+		// BitBucket VCS provider
+		mockBitBucketProvider = {
+			providerName: 'bitbucket',
+			supportsForks: false,
+			supportsDraftPRs: false,
+			fetchPR: vi.fn().mockResolvedValue(mockBBPR),
+			checkForExistingPR: vi.fn(),
+			createPR: vi.fn(),
+			createPRComment: vi.fn(),
+			detectRepository: vi.fn(),
+			getTargetRemote: vi.fn(),
+			getPRUrl: vi.fn(),
+		}
+
+		// Configure VCSProviderFactory to return the BitBucket provider
+		mockVCSProviderCreate.mockReturnValue(mockBitBucketProvider)
+
+		// Default: no child issues
+		vi.mocked(fetchChildIssues).mockResolvedValue([])
+
+		jiraBBCommand = new StartCommand(mockJiraService as unknown as GitHubService)
+	})
+
+	afterEach(() => {
+		// Reset VCSProviderFactory mock to default (null) for other tests
+		mockVCSProviderCreate.mockReturnValue(null)
+	})
+
+	describe('PR detection via numeric input', () => {
+		it('should detect BitBucket PR from numeric input when Jira+BitBucket is configured', async () => {
+			await expect(
+				jiraBBCommand.execute({
+					identifier: '42',
+					options: {},
+				})
+			).resolves.not.toThrow()
+
+			// BitBucket fetchPR should be called for detection
+			expect(mockBitBucketProvider.fetchPR).toHaveBeenCalledWith(42)
+			// GitHubService should NOT be called for detection
+			const MockedGitHubService = vi.mocked(GitHubService)
+			expect(MockedGitHubService.prototype.detectInputType).not.toHaveBeenCalled()
+		})
+
+		it('should fall back to issue tracker when BitBucket PR not found', async () => {
+			// BitBucket throws when PR doesn't exist
+			mockBitBucketProvider.fetchPR.mockRejectedValue(new Error('PR not found'))
+			mockJiraService.fetchIssue.mockResolvedValue({
+				number: 42,
+				title: 'Jira Issue',
+				body: '',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://jira.example.com/browse/PROJ-42',
+			})
+			mockJiraService.validateIssueState.mockResolvedValue(undefined)
+
+			await expect(
+				jiraBBCommand.execute({
+					identifier: '42',
+					options: {},
+				})
+			).resolves.not.toThrow()
+
+			// Should fall back to Jira issue
+			expect(mockJiraService.fetchIssue).toHaveBeenCalledWith(42, undefined)
+		})
+	})
+
+	describe('PR validation with BitBucket', () => {
+		it('should validate PR using BitBucket VCS provider for explicit pr/ format', async () => {
+			await expect(
+				jiraBBCommand.execute({
+					identifier: 'pr/42',
+					options: {},
+				})
+			).resolves.not.toThrow()
+
+			// BitBucket fetchPR should be called for validation
+			expect(mockBitBucketProvider.fetchPR).toHaveBeenCalledWith(42)
+			// GitHubService should NOT be used for PR operations
+			const MockedGitHubService = vi.mocked(GitHubService)
+			expect(MockedGitHubService.prototype.fetchPR).not.toHaveBeenCalled()
+			expect(MockedGitHubService.prototype.validatePRState).not.toHaveBeenCalled()
+		})
+
+		it('should throw when BitBucket PR validation fails', async () => {
+			mockBitBucketProvider.fetchPR.mockRejectedValue(new Error('PR #99 not found in BitBucket'))
+
+			await expect(
+				jiraBBCommand.execute({
+					identifier: 'pr/99',
+					options: {},
+				})
+			).rejects.toThrow('PR #99 not found in BitBucket')
 		})
 	})
 })

@@ -72,6 +72,11 @@ export class SummaryCommand {
 			return existingPR?.number
 		}
 
+		if (mergeMode === 'bitbucket-pr') {
+			const metadata = await this.metadataManager.readMetadata(worktreePath)
+			return metadata?.draftPrNumber ?? undefined
+		}
+
 		return undefined // local mode - post to issue
 	}
 

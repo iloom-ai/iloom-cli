@@ -23,6 +23,7 @@ export interface MetadataFile {
   issue_numbers?: string[]
   pr_numbers?: string[]
   issueTracker?: string
+  vcsProvider?: string // VCS provider at loom creation time ('github' | 'bitbucket')
   colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
   sessionId?: string // Claude Code session ID for resume support
   projectPath?: string // Main worktree path (project root) - enables project identification
@@ -65,6 +66,7 @@ export interface WriteMetadataInput {
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string
+  vcsProvider?: string // VCS provider at loom creation time ('github' | 'bitbucket')
   colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string // Claude Code session ID for resume support (required for new looms)
   projectPath: string // Main worktree path (project root) - required for new looms
@@ -108,6 +110,7 @@ export interface LoomMetadata {
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string | null
+  vcsProvider: string | null // VCS provider at loom creation time (null for legacy looms)
   colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string | null // Claude Code session ID (null for legacy looms)
   projectPath: string | null // Main worktree path (null for legacy looms)
@@ -170,6 +173,7 @@ export class MetadataManager {
       issue_numbers: data.issue_numbers ?? [],
       pr_numbers: data.pr_numbers ?? [],
       issueTracker: data.issueTracker ?? null,
+      vcsProvider: data.vcsProvider ?? null,
       colorHex: data.colorHex ?? null,
       sessionId: data.sessionId ?? null,
       projectPath: data.projectPath ?? null,
@@ -254,6 +258,7 @@ export class MetadataManager {
         issue_numbers: input.issue_numbers,
         pr_numbers: input.pr_numbers,
         issueTracker: input.issueTracker,
+        ...(input.vcsProvider && { vcsProvider: input.vcsProvider }),
         colorHex: input.colorHex,
         sessionId: input.sessionId,
         projectPath: input.projectPath,
