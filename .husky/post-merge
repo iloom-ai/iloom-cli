@@ -1,3 +1,4 @@
 #!/bin/sh
-# Rebuild after merge so `il` CLI is up to date
+# Install deps and rebuild after merge so `il` CLI is up to date
+pnpm install
 pnpm build
