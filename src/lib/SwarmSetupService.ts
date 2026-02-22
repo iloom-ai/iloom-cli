@@ -349,7 +349,7 @@ export class SwarmSetupService {
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
 			// Build the agent file with frontmatter
-			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'opus'
+			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
 
 			const frontmatter = [
 				'---',
