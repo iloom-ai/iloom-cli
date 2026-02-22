@@ -610,7 +610,7 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
-  .option('--skip-to-pr', 'Skip rebase/validation/commit, go directly to PR creation (debug)')
+  .addOption(new Option('--skip-to-pr').hideHelp())
   .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
