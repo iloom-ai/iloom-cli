@@ -86,6 +86,10 @@ export interface ErrorOccurredProperties {
   phase: string
 }
 
+export interface InitCompletedProperties {
+  mode: 'accept-defaults' | 'guided'
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -102,6 +106,7 @@ export interface TelemetryEventMap {
   'contribute.started': ContributeStartedProperties
   'session.started': SessionStartedProperties
   'error.occurred': ErrorOccurredProperties
+  'init.completed': InitCompletedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

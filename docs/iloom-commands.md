@@ -1735,6 +1735,12 @@ il config [description]
 **Arguments:**
 - `[description]` - Optional natural language description of what to configure
 
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--accept-defaults`, `-y` | *(Hidden/internal)* Skip interactive prompts and write default settings. Used by the VS Code extension for non-interactive setup. |
+
 **Workflow:**
 
 Without description (standard wizard):
@@ -1743,6 +1749,13 @@ Without description (standard wizard):
 3. Creates/updates `.iloom/settings.json` and `.iloom/settings.local.json`
 4. Sets up `.gitignore` entries
 5. Validates configuration
+
+With `--accept-defaults` (non-interactive):
+1. Creates `.iloom/` directory
+2. Writes `.iloom/settings.json` with sensible defaults (main branch, VS Code IDE, GitHub issues, local merge, port 3000)
+3. Marks the project as configured
+4. Skips Claude-guided configuration entirely
+5. If `settings.json` already exists, skips writing to preserve existing configuration
 
 With description (natural language):
 1. Claude interprets your intent

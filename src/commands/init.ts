@@ -13,6 +13,7 @@ import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { getRepoRoot, isFileGitignored } from '../utils/git.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 /**
  * Initialize iloom configuration
@@ -36,13 +37,15 @@ export class InitCommand {
   /**
    * Main entry point for the init command
    * @param customInitialMessage Optional custom initial message to send to Claude (defaults to "Help me configure iloom settings.")
+   * @param acceptDefaults If true, skip interactive prompts and mark project as configured with defaults
    */
-  public async execute(customInitialMessage?: string): Promise<void> {
+  public async execute(customInitialMessage?: string, acceptDefaults?: boolean): Promise<void> {
     try {
       logger.debug('InitCommand.execute() starting', {
         cwd: process.cwd(),
         nodeVersion: process.version,
-        hasCustomInitialMessage: !!customInitialMessage
+        hasCustomInitialMessage: !!customInitialMessage,
+        acceptDefaults: !!acceptDefaults
       })
 
       logger.info(chalk.bold('Welcome to iloom setup'))
@@ -51,6 +54,20 @@ export class InitCommand {
       logger.info(chalk.bold('Verifying current setup...'))
 
       await this.setupProjectConfiguration()
+
+      // If accept-defaults mode, mark project as configured and return early
+      if (acceptDefaults) {
+        await this.markProjectConfigured()
+        try {
+          TelemetryService.getInstance().track('init.completed', {
+            mode: 'accept-defaults',
+          })
+        } catch (e) {
+          logger.debug('Telemetry tracking failed', { error: e })
+        }
+        logger.info(chalk.green('Setup complete! Enjoy using iloom CLI.'))
+        return
+      }
 
       // Launch guided Claude configuration if available
       const guidedInitSucceeded = await this.launchGuidedInit(customInitialMessage)
@@ -449,6 +466,19 @@ export class InitCommand {
       logger.info('You can manually edit .iloom/settings.json to configure iloom.')
       return false
     }
+  }
+
+  /**
+   * Mark project as configured for non-interactive accept-defaults mode.
+   * No settings file is written — the application's built-in defaults are used.
+   */
+  private async markProjectConfigured(): Promise<void> {
+    logger.debug('markProjectConfigured() starting - accept-defaults mode')
+
+    const projectRoot = await getRepoRoot() ?? process.cwd()
+    const firstRunManager = new FirstRunManager()
+    await firstRunManager.markProjectAsConfigured(projectRoot)
+    logger.debug('Project marked as configured', { projectRoot })
   }
 
   /**

@@ -7,10 +7,24 @@ import { mkdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
+import * as gitUtils from '../utils/git.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 // Mock fs/promises and fs
 vi.mock('fs/promises')
 vi.mock('fs')
+
+// Mock TelemetryService
+vi.mock('../lib/TelemetryService.js', () => {
+  const mockTrack = vi.fn()
+  return {
+    TelemetryService: {
+      getInstance: vi.fn(() => ({
+        track: mockTrack,
+      })),
+    },
+  }
+})
 
 // Mock logger
 vi.mock('../utils/logger.js', () => ({
@@ -377,6 +391,63 @@ describe('InitCommand', () => {
 
       // Should inject empty string when README file is not found
       expect(capturedVariables.README_CONTENT).toBe('')
+    })
+  })
+
+  describe('accept-defaults mode', () => {
+    it('should mark project as configured and skip Claude launch', async () => {
+      vi.spyOn(gitUtils, 'getRepoRoot').mockResolvedValue('/mock/repo/root')
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined, true)
+
+      // Verify Claude was NOT launched
+      expect(claudeUtils.detectClaudeCli).not.toHaveBeenCalled()
+      expect(claudeUtils.launchClaude).not.toHaveBeenCalled()
+
+      // Verify project was marked as configured
+      const firstRunManagerInstance = vi.mocked(FirstRunManager).mock.results[0]?.value
+      expect(firstRunManagerInstance.markProjectAsConfigured).toHaveBeenCalledWith('/mock/repo/root')
+    })
+
+    it('should create .iloom directory via setupProjectConfiguration', async () => {
+      vi.spyOn(gitUtils, 'getRepoRoot').mockResolvedValue('/mock/repo/root')
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined, true)
+
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
+    })
+
+    it('should still run settings migration in accept-defaults mode', async () => {
+      vi.spyOn(gitUtils, 'getRepoRoot').mockResolvedValue('/mock/repo/root')
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined, true)
+
+      expect(SettingsMigrationManager).toHaveBeenCalled()
+    })
+
+    it('should use process.cwd() as fallback when getRepoRoot returns null', async () => {
+      vi.spyOn(gitUtils, 'getRepoRoot').mockResolvedValue(null)
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined, true)
+
+      const firstRunManagerInstance = vi.mocked(FirstRunManager).mock.results[0]?.value
+      expect(firstRunManagerInstance.markProjectAsConfigured).toHaveBeenCalledWith(process.cwd())
+    })
+
+    it('should track telemetry for accept-defaults mode', async () => {
+      vi.spyOn(gitUtils, 'getRepoRoot').mockResolvedValue('/mock/repo/root')
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined, true)
+
+      const mockTrack = TelemetryService.getInstance().track
+      expect(mockTrack).toHaveBeenCalledWith('init.completed', {
+        mode: 'accept-defaults',
+      })
     })
   })
 })
