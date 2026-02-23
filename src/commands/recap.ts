@@ -153,6 +153,26 @@ export class RecapCommand {
 			)) {
 				throw error
 			}
+
+			// IdentifierParser throws "No worktree found for identifier: N" when no active
+			// worktree exists for a numeric input. For plain numbers, still try archived recaps
+			// before giving up -- this is the primary archived-lookup path.
+			if (
+				error instanceof Error &&
+				error.message === `No worktree found for identifier: ${trimmedId}`
+			) {
+				const numericMatch = trimmedId.match(/^(\d+)$/)
+				if (numericMatch?.[1]) {
+					const num = parseInt(numericMatch[1], 10)
+					// Try issue first, then PR
+					const archivedIssue = await findArchivedRecap('issue', num)
+					if (archivedIssue) return archivedIssue
+					const archivedPr = await findArchivedRecap('pr', num)
+					if (archivedPr) return archivedPr
+					throw new Error(`No worktree or archived recap found for #${num}`)
+				}
+			}
+
 			// Re-throw IdentifierParser errors with context
 			if (error instanceof Error) {
 				throw new Error(`Could not resolve identifier '${identifier}': ${error.message}`)

@@ -349,7 +349,7 @@ describe('RecapCommand', () => {
 
 			const input: RecapCommandInput = { identifier: '999', json: true }
 
-			await expect(command.execute(input)).rejects.toThrow("Could not resolve identifier '999': No worktree found for identifier: 999")
+			await expect(command.execute(input)).rejects.toThrow("No worktree or archived recap found for #999")
 		})
 
 		it('should throw error when PR identifier has no matching worktree or archived recap', async () => {
