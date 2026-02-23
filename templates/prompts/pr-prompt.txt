@@ -56,6 +56,7 @@ Use these Recap MCP tools:
 ## Comment Routing: PR Mode
 
 - **Read PR details** using `mcp__issue_management__get_pr` with `{ number: "{{PR_NUMBER}}", includeComments: true }`
+- **Read inline code review comments** using `mcp__issue_management__get_review_comments` with `{ number: "{{PR_NUMBER}}" }`
 - **Write comments** to PR #{{PR_NUMBER}} using `type: "pr"`
 
 When calling `mcp__issue_management__create_comment`:
@@ -81,6 +82,14 @@ This will give you:
 - All comments and discussion
 - Commit history (commits) and changed files (files)
 - Current state and branch metadata (headRefName, baseRefName)
+
+To read inline code review comments (comments on specific files and lines), use:
+`mcp__issue_management__get_review_comments` with `{ number: "{{PR_NUMBER}}" }`
+
+This returns:
+- Inline comments on specific files and lines (path, line number, diff side)
+- Review comment threads and replies (inReplyToId)
+- Optionally filter by review ID: `{ number: "{{PR_NUMBER}}", reviewId: "REVIEW_ID" }`
 
 Also check if the branch name contains an issue number (like issue-123) and if so, read that issue for context:
 `mcp__issue_management__get_issue` with `{ number: "{{ISSUE_NUMBER}}", includeComments: true }`

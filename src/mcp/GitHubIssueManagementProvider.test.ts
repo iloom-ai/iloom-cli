@@ -680,6 +680,176 @@ describe('GitHubIssueManagementProvider', () => {
 		})
 	})
 
+	describe('getReviewComments', () => {
+		it('returns review comments with file path, line number, and body', async () => {
+			const mockResponse = [
+				{
+					id: 1001,
+					body: 'This needs refactoring',
+					path: 'src/foo.ts',
+					line: 42,
+					side: 'RIGHT',
+					user: { login: 'reviewer1' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: '2025-01-01T01:00:00Z',
+					in_reply_to_id: null,
+					pull_request_review_id: 5000,
+				},
+				{
+					id: 1002,
+					body: 'Good catch',
+					path: 'src/bar.ts',
+					line: 10,
+					side: 'LEFT',
+					user: { login: 'reviewer2' },
+					created_at: '2025-01-02T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 5001,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result).toHaveLength(2)
+			expect(result[0]).toEqual({
+				id: '1001',
+				body: 'This needs refactoring',
+				path: 'src/foo.ts',
+				line: 42,
+				side: 'RIGHT',
+				author: { id: 'reviewer1', displayName: 'reviewer1', login: 'reviewer1' },
+				createdAt: '2025-01-01T00:00:00Z',
+				updatedAt: '2025-01-01T01:00:00Z',
+				inReplyToId: null,
+				pullRequestReviewId: 5000,
+			})
+			expect(result[1].id).toBe('1002')
+			expect(result[1].path).toBe('src/bar.ts')
+		})
+
+		it('filters by reviewId when provided', async () => {
+			const mockResponse = [
+				{
+					id: 2001,
+					body: 'Comment from review A',
+					path: 'src/a.ts',
+					line: 1,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 100,
+				},
+				{
+					id: 2002,
+					body: 'Comment from review B',
+					path: 'src/b.ts',
+					line: 5,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 200,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42', reviewId: '100' })
+
+			expect(result).toHaveLength(1)
+			expect(result[0].id).toBe('2001')
+			expect(result[0].pullRequestReviewId).toBe(100)
+		})
+
+		it('handles empty review comments', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result).toEqual([])
+		})
+
+		it('passes repo to API path when provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42', repo: 'other-owner/other-repo' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/other-owner/other-repo/pulls/42/comments',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('uses :owner/:repo placeholder when repo is not provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/:owner/:repo/pulls/42/comments',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('throws error for non-numeric PR number', async () => {
+			await expect(provider.getReviewComments({ number: 'not-a-number' })).rejects.toThrow(
+				'Invalid GitHub PR number: not-a-number. GitHub PR IDs must be numeric.'
+			)
+		})
+
+		it('throws error for non-numeric review ID', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await expect(provider.getReviewComments({ number: '42', reviewId: 'abc' })).rejects.toThrow(
+				'Invalid review ID: abc. Review IDs must be numeric.'
+			)
+		})
+
+		it('uses --paginate flag in gh api call', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42' })
+
+			const callArgs = vi.mocked(executeGhCommand).mock.calls[0][0]
+			expect(callArgs).toContain('--paginate')
+		})
+
+		it('normalizes in_reply_to_id to string', async () => {
+			const mockResponse = [
+				{
+					id: 3001,
+					body: 'Reply comment',
+					path: 'src/foo.ts',
+					line: 42,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: 3000,
+					pull_request_review_id: 500,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result[0].inReplyToId).toBe('3000')
+		})
+	})
+
 	describe('createDependency', () => {
 		it('should create dependency between two issues', async () => {
 			vi.mocked(getIssueDatabaseId).mockResolvedValueOnce(123456789)

@@ -28,6 +28,7 @@ import type {
 	CloseIssueInput,
 	ReopenIssueInput,
 	EditIssueInput,
+	GetReviewCommentsInput,
 } from './types.js'
 
 // Module-level settings loaded at startup
@@ -276,6 +277,77 @@ server.registerTool(
 				error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to fetch PR: ${errorMessage}`)
 			throw new Error(`Failed to fetch PR: ${errorMessage}`)
+		}
+	}
+)
+
+// Register get_review_comments tool
+// Note: Review comments only exist on GitHub PRs, so this tool always uses the GitHub provider
+
+server.registerTool(
+	'get_review_comments',
+	{
+		title: 'Get PR Review Comments',
+		description:
+			'Fetch inline code review comments on a pull request (comments on specific files and lines). ' +
+			'Returns comments with file path, line number, diff side, author, and reply threading. ' +
+			'Optionally filter by review ID. PRs only exist on GitHub, so this tool always uses GitHub.',
+		inputSchema: {
+			number: z.string().describe('The PR number'),
+			reviewId: z
+				.string()
+				.optional()
+				.describe('Optional review ID to filter comments by a specific review'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository.'
+				),
+		},
+		outputSchema: {
+			comments: z.array(
+				z.object({
+					id: z.string().describe('Review comment ID'),
+					body: z.string().describe('Comment body content'),
+					path: z.string().describe('File path the comment is on'),
+					line: z.number().nullable().describe('Line number in the diff'),
+					side: z.string().nullable().describe('Side of the diff (LEFT or RIGHT)'),
+					author: flexibleAuthorSchema.nullable().describe('Comment author'),
+					createdAt: z.string().describe('Comment creation timestamp'),
+					updatedAt: z.string().nullable().describe('Comment last updated timestamp'),
+					inReplyToId: z.string().nullable().describe('ID of the comment this replies to'),
+					pullRequestReviewId: z.number().nullable().describe('The review this comment belongs to'),
+				})
+			).describe('Inline review comments on the PR'),
+		},
+	},
+	async ({ number, reviewId, repo }: GetReviewCommentsInput) => {
+		console.error(`Fetching review comments for PR ${number}${reviewId ? ` (review ${reviewId})` : ''}${repo ? ` from ${repo}` : ''}`)
+
+		try {
+			// Review comments always use GitHub provider regardless of configured issue tracker
+			const provider = new GitHubIssueManagementProvider()
+			const comments = await provider.getReviewComments({ number, reviewId, repo })
+
+			console.error(`Review comments fetched successfully: ${comments.length} comments`)
+
+			const result = { comments }
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to fetch review comments: ${errorMessage}`)
+			throw new Error(`Failed to fetch review comments: ${errorMessage}`)
 		}
 	}
 )

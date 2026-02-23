@@ -38,6 +38,32 @@ export interface GetPRInput {
 }
 
 /**
+ * Input schema for getting PR review comments (inline code comments)
+ * Note: PRs only exist on GitHub, so this always uses GitHub provider
+ */
+export interface GetReviewCommentsInput {
+	number: string // PR number
+	reviewId?: string | undefined // Optional review ID to filter by
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL
+}
+
+/**
+ * Output schema for a single PR review comment (inline code comment)
+ */
+export interface ReviewCommentResult {
+	id: string
+	body: string
+	path: string // File path the comment is on
+	line: number | null // Line number in the diff
+	side: string | null // Side of the diff ('LEFT' or 'RIGHT')
+	author: FlexibleAuthor | null
+	createdAt: string
+	updatedAt: string | null
+	inReplyToId: string | null // If this is a reply to another review comment
+	pullRequestReviewId: number | null // The review this comment belongs to
+}
+
+/**
  * Input schema for getting a specific comment
  */
 export interface GetCommentInput {
