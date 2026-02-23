@@ -453,14 +453,14 @@ export class ValidationRunner {
 			case 'compile':
 			case 'typecheck':
 				return (
-					`There are TypeScript errors in this codebase. ` +
+					`There are compilation errors in this codebase. ` +
 					`Please analyze the ${validationType} output, identify all type errors, and fix them. ` +
 					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all type issues. ` +
 					`When you are done, tell the user to quit using /exit to continue the validation process.`
 				)
 			case 'lint':
 				return (
-					`There are ESLint errors in this codebase. ` +
+					`There are Lint errors in this codebase. ` +
 					`Please analyze the linting output, identify all linting issues, and fix them. ` +
 					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all linting issues. ` +
 					`Focus on code quality, consistency, and following the project's linting rules. ` +

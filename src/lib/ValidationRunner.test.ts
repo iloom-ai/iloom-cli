@@ -999,7 +999,7 @@ describe('ValidationRunner', () => {
 				expect(result.steps[0]?.passed).toBe(true)
 				expect(claude.detectClaudeCli).toHaveBeenCalled()
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('TypeScript errors'),
+					expect.stringContaining('compilation errors'),
 					expect.objectContaining({
 						headless: false,
 						permissionMode: 'acceptEdits',
@@ -1089,7 +1089,7 @@ describe('ValidationRunner', () => {
 				expect(result.steps[0]?.passed).toBe(true)
 				expect(claude.detectClaudeCli).toHaveBeenCalled()
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('TypeScript errors'),
+					expect.stringContaining('compilation errors'),
 					expect.objectContaining({
 						headless: false,
 						permissionMode: 'acceptEdits',
@@ -1156,7 +1156,7 @@ describe('ValidationRunner', () => {
 				expect(result.success).toBe(true)
 				expect(result.steps[0]?.passed).toBe(true)
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('ESLint errors'),
+					expect.stringContaining('Lint errors'),
 					expect.objectContaining({
 						headless: false,
 						permissionMode: 'acceptEdits',
