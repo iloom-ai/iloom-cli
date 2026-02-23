@@ -1675,6 +1675,62 @@ il spin --set agents.iloom-swarm-worker.agents.iloom-issue-implementer.model=son
 il spin --set agents.iloom-swarm-worker.model=sonnet
 ```
 
+**Swarm Model Presets:**
+
+For quick configuration, iloom offers three preset modes that configure all swarm agent models at once. These can be set up during `il init` (advanced configuration) or by manually editing your settings file.
+
+| Preset | Worker | Phase Agents | Evaluator | Use Case |
+|--------|--------|-------------|-----------|----------|
+| **Expensive/Slow** | opus | opus | haiku | Maximum quality, highest cost |
+| **Balanced** | sonnet | sonnet | haiku | Good balance of quality and cost |
+| **Fast/Cheap** | haiku | haiku | haiku | Fastest and cheapest |
+
+**Expensive/Slow** - sets all swarm agents to opus except the complexity evaluator (stays haiku):
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "opus",
+      "agents": {
+        "iloom-issue-complexity-evaluator": { "model": "haiku" }
+      }
+    }
+  }
+}
+```
+
+**Balanced** - sets all swarm agents to sonnet except the complexity evaluator (stays haiku):
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "sonnet",
+      "agents": {
+        "iloom-issue-complexity-evaluator": { "model": "haiku" }
+      }
+    }
+  }
+}
+```
+
+**Fast/Cheap** - sets all swarm agents to haiku:
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "haiku"
+    }
+  }
+}
+```
+
+> **Note:** Presets configure only swarm-mode agent models. They do not affect non-swarm agent models or the spin orchestrator model (`spin.model`). You can fine-tune individual agent models after applying a preset using the per-agent override syntax above.
+
+> **Why the evaluator override?** The blanket `iloom-swarm-worker.model` (fallback step 2) overrides ALL phase agent defaults, including the complexity evaluator's haiku default. Both Expensive/Slow and Balanced presets include an explicit per-agent override for `iloom-issue-complexity-evaluator` to preserve its haiku model. Fast/Cheap doesn't need this since haiku is already the desired model.
+
 **Sub-Agent Timeout:**
 
 When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.

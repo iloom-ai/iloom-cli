@@ -1007,6 +1007,7 @@ Need more advanced configuration? I can help you set up:
   • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
   • Swarm Agent Models - Configure different models for agents when running in swarm mode
+  • Swarm Model Presets - Quickly configure cost/performance tradeoff for swarm mode
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
@@ -1025,6 +1026,9 @@ You can ask me questions like:
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
   "How do I use different models for swarm workers vs normal mode?"
+  "Set up swarm mode for maximum quality"
+  "Configure swarm for cost savings"
+  "Use balanced swarm settings"
   "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
@@ -1084,6 +1088,65 @@ When configuring agents, use these model identifiers:
    2. `agents.iloom-swarm-worker.model` (blanket swarm worker model)
    3. `agents.<agent>.model` (base per-agent model)
    4. Agent default from its definition file
+
+   **Swarm Model Presets:**
+
+   For quick setup, offer the user these preset modes that configure all swarm agent models at once:
+
+   **When the user asks about swarm model presets, swarm cost optimization, or wants to quickly configure swarm models**, present these three options:
+
+   1. **Expensive/Slow (Maximum Quality)** - All swarm agents use opus (except complexity evaluator which stays haiku)
+   2. **Balanced (Recommended)** - All swarm agents use sonnet (except complexity evaluator which stays haiku)
+   3. **Fast/Cheap (Cost Optimized)** - All swarm agents use haiku
+
+   **Settings generated for each preset:**
+
+   Expensive/Slow:
+   ```json
+   {
+     "agents": {
+       "iloom-swarm-worker": {
+         "model": "opus",
+         "agents": {
+           "iloom-issue-complexity-evaluator": { "model": "haiku" }
+         }
+       }
+     }
+   }
+   ```
+
+   Balanced:
+   ```json
+   {
+     "agents": {
+       "iloom-swarm-worker": {
+         "model": "sonnet",
+         "agents": {
+           "iloom-issue-complexity-evaluator": { "model": "haiku" }
+         }
+       }
+     }
+   }
+   ```
+
+   Fast/Cheap:
+   ```json
+   {
+     "agents": {
+       "iloom-swarm-worker": {
+         "model": "haiku"
+       }
+     }
+   }
+   ```
+
+   **Important notes when applying presets:**
+   - Presets configure ONLY swarm-mode agent models (under `agents.iloom-swarm-worker`). They do NOT affect non-swarm agent models or the spin orchestrator model.
+   - When writing these settings, deep-merge them into the user's existing settings.json. Do not overwrite or remove other existing configurations in the `agents` object that are unrelated to `iloom-swarm-worker`.
+   - If the user already has custom swarm agent model overrides in their settings, warn them that applying a preset will replace those overrides.
+   - The "Balanced" preset sets the blanket worker model to sonnet, which overrides the agent definition defaults for all phase agents in swarm mode. The explicit per-agent override for `iloom-issue-complexity-evaluator` ensures the evaluator stays at haiku despite the blanket sonnet.
+   - The "Expensive/Slow" preset similarly needs the evaluator override because the blanket opus would otherwise override the evaluator's haiku default.
+   - After applying a preset, the user can still fine-tune individual agent models using the per-agent override syntax shown above.
 
 2. **Database Environment Variable:**
    ```json
