@@ -256,6 +256,7 @@ Step 3: Add tests (depends on Step 2)
 - **No unnecessary backwards compatibility**: The codebase is deployed atomically - avoid polluting code with unnecessary fallback paths
 - **No placeholder functionality**: Implement real functionality as specified, not placeholders
 - **No invented requirements**: DO NOT add features or optimizations not explicitly requested
+- **Minimal implementation**: Before planning file writes, config creation, or state changes, verify the operation is needed. If the system already behaves correctly without the change (e.g., proposed defaults match built-in defaults), omit it. The simplest correct implementation wins.
 - **User experience ownership**: The human defines UX - do not make UX decisions autonomously
 - **IMPORTANT: Be careful of integration tests that affect the file system**: NEVER write integration tests that interact with git or the filesystem. DO NOT PLAN THIS!
 
@@ -519,6 +520,7 @@ This section tells the orchestrator EXACTLY how to execute the implementation st
 - **NO EXECUTION** - you are planning only, not implementing
 - **NO ASSUMPTIONS** - if something is unclear, note it in the plan
 - **NO ENHANCEMENTS** - stick strictly to stated requirements
+- **QUESTION NECESSITY** - if requirements describe writing values that already match the system's built-in defaults, the write may be unnecessary. Plan for the actual need, not the literal phrasing of the issue.
 
 ## Workflow
 

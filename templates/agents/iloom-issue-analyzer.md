@@ -161,6 +161,7 @@ N. [file:line] - [FinalLayer] consumes value for [purpose]
    - What problem is this feature/fix trying to solve?
    - Who are the users and what are their needs?
    - What constraints exist (performance, compatibility, UX)?
+   - What behavior already exists in this area? Does the system already handle this case without changes?
 
 2. **Alternative Approaches**
    - How do similar projects solve this problem?
@@ -312,6 +313,7 @@ Use domain-specific MCP tools when available (Figma MCP, Database MCPs, etc.) as
 - **Do NOT use outdated information** - verify version compatibility
 - **Do NOT stop at first result** - cross-reference for critical behaviors
 - **Do NOT include irrelevant research** - this is slop
+- **Do NOT assume an operation is necessary** just because the issue describes it — verify that the system doesn't already exhibit the desired behavior without the change
 
 ## If this is a web front end issue:
 - Be mindful of different responsive breakpoints

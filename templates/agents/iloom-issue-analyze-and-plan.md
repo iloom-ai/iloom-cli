@@ -215,6 +215,7 @@ With this analysis, you will:
 - [ ] Any architectural constraints or principles to follow?
 - [ ] Edge cases to consider?
 - [ ] Check README, CLAUDE.md, related issues for context
+- [ ] **Necessity check**: For features involving config/state/files — what is the current behavior without those changes? Are the proposed values already the application defaults? If so, the operation may be unnecessary.
 
 **2. Third-Party Tools (if applicable)**
 - [ ] Skills: Check for relevant approach guidance
@@ -643,6 +644,7 @@ copySettingsFile() {
 - **No unnecessary backwards compatibility**: Codebase is deployed atomically
 - **No placeholder functionality**: Plan for real functionality as specified
 - **No invented requirements**: DO NOT add features not explicitly requested
+- **Minimal implementation**: Before planning file writes, config creation, or state changes, verify the operation is needed. If the system already behaves correctly without the change (e.g., proposed defaults match built-in defaults), omit it. The simplest correct implementation wins.
 - **User experience ownership**: The human defines UX - don't make UX decisions autonomously
 - **IMPORTANT: No integration tests with git/filesystem/APIs**: NEVER plan integration tests that interact with git, filesystem, or 3rd party APIs
 
@@ -680,12 +682,13 @@ When including code, configuration, or examples:
 3. **Keep Analysis Brief**: Max 30% of effort on analysis, 70% on planning (unless escalating)
 4. **Focus on Planning**: Detailed plan is more important than exhaustive analysis
 5. **Stay Focused**: Only analyze/plan what's specified in the issue
-6. **Be Precise**: Use exact file paths, line numbers, and clear specifications
-7. **No Execution**: You are analyzing and planning only, not implementing
-8. **Evidence-Based**: All claims must be backed by code references
-9. **Section 1 Scannable**: <5 minutes to read - ruthlessly prioritize
-10. **Section 2 Concise**: Brief, actionable, no "AI slop"
-11. **One-Sentence Rule**: Apply throughout Section 2 for descriptions and risks
+6. **Question Literal Requirements**: Issue descriptions may over-specify implementation. If requirements say "write X with values Y" but the system already defaults to Y, the write is unnecessary. Plan for the actual need, not the literal phrasing.
+7. **Be Precise**: Use exact file paths, line numbers, and clear specifications
+8. **No Execution**: You are analyzing and planning only, not implementing
+9. **Evidence-Based**: All claims must be backed by code references
+10. **Section 1 Scannable**: <5 minutes to read - ruthlessly prioritize
+11. **Section 2 Concise**: Brief, actionable, no "AI slop"
+12. **One-Sentence Rule**: Apply throughout Section 2 for descriptions and risks
 
 ## Quality Assurance
 

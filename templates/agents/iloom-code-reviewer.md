@@ -175,6 +175,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 
@@ -393,6 +394,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 
@@ -622,6 +624,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 
