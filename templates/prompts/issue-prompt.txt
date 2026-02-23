@@ -76,6 +76,16 @@ When calling `mcp__issue_management__create_comment`:
   type: "issue"
 }
 ```
+
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "<issue-number-from-task-prompt>",
+  body: "updated comment content",
+  type: "issue"
+}
+```
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
@@ -99,6 +109,16 @@ When calling `mcp__issue_management__create_comment`:
 {
   number: "{{DRAFT_PR_NUMBER}}",
   body: "your comment content",
+  type: "pr"
+}
+```
+
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "{{DRAFT_PR_NUMBER}}",
+  body: "updated comment content",
   type: "pr"
 }
 ```
@@ -131,6 +151,16 @@ When calling `mcp__issue_management__create_comment`:
 {
   number: "{{ISSUE_NUMBER}}",
   body: "your comment content",
+  type: "issue"
+}
+```
+
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "{{ISSUE_NUMBER}}",
+  body: "updated comment content",
   type: "issue"
 }
 ```

@@ -68,6 +68,16 @@ When calling `mcp__issue_management__create_comment`:
 }
 ```
 
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "{{PR_NUMBER}}",
+  body: "updated comment content",
+  type: "pr"
+}
+```
+
 This ensures PR comments always go to GitHub regardless of the configured issue tracker.
 
 ---

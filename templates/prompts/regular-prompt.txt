@@ -80,6 +80,16 @@ When calling `mcp__issue_management__create_comment`:
 }
 ```
 
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "{{DRAFT_PR_NUMBER}}",
+  body: "updated comment content",
+  type: "pr"
+}
+```
+
 This keeps all AI workflow comments on the draft PR for visibility and traceability.
 {{/if}}
 {{#if STANDARD_BRANCH_MODE}}
