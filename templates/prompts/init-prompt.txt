@@ -301,7 +301,12 @@ The agent will:
 4. Create `.iloom/package.iloom.json` with the detected configuration
 5. Detect and set project capabilities (cli, web) based on the framework
 
-**File Format:**
+**package.iloom.json Schema:**
+```json
+{{{{raw}}}}{{PACKAGE_ILOOM_SCHEMA}}{{{{/raw}}}}
+```
+
+**File Format Example:**
 ```json
 {
   "capabilities": ["cli"],
@@ -342,7 +347,16 @@ If the framework detector did not set capabilities, or if you need to ask the us
   - "web" - Web application with dev server
   - "both" - Both CLI and web capabilities
   - "neither" - Library or other project type
-- Update `.iloom/package.iloom.json` with the appropriate `capabilities` array.
+
+**Choose where to save package.iloom configuration:**
+
+After determining the configuration, ask the user where to save it:
+- **Project** (`package.iloom.json`) - Shared with team, committed to git
+- **Local** (`package.iloom.local.json`) - Local only, gitignored, never committed
+
+Default to **Local** if fork was detected (origin + upstream remotes). Otherwise default to **Project**.
+
+Write the capabilities and scripts to the chosen file.
 
 **When to infer capabilities:**
 - Flask/Django/FastAPI/Rails/Actix/Rocket detected -> include "web"
@@ -903,16 +917,16 @@ Would you like to commit these changes?
   - Yes - Commit iloom configuration changes (strongly recommended)
   - No - Skip committing (not recommended)
 
-⚠️  WARNING: If you don't commit settings.json, iloom will not work correctly in new looms.
+⚠️  WARNING: If you don't commit settings.json and package.iloom.json, iloom will not work correctly in new looms.
     Looms are created from committed code, so your configuration won't be available.
-    (Local files like settings.local.json and .env are copied automatically - but settings.json must be committed.)
+    (Local files like settings.local.json, package.iloom.local.json, and .env are copied automatically - but shared files must be committed.)
 ```
 
 **CRITICAL RULES:**
-- **ONLY commit iloom-related files**: .iloom/settings.json, .gitignore
+- **ONLY commit iloom-related files**: .iloom/settings.json, .iloom/package.iloom.json, .gitignore
 - **NEVER stage or commit unrelated files** - even if they appear in `git status`
 - **If the commit fails, you must then subsequently request to use --no-verify flag** to bypass pre-commit hooks that might fail due to unrelated codebase state
-- **Do NOT commit settings.local.json** - it should be gitignored, not committed
+- **Do NOT commit local-only files** - settings.local.json and package.iloom.local.json should be gitignored, not committed
 - **YOU MAY NEED TO EDIT/UPDATE MORE THAN ONE FILE if the user is changing something like API Keys (local only), permissionsMode (local only), IDE (recommened global) as well as shared settings.
 
 **Step 3: If user says yes, commit the changes**
@@ -921,10 +935,10 @@ VERIFY YOU'RE NOT BUNDLING ALL CHANGES IN ONE FILE DESPITE GUIDANCE TO SPLIT ACC
 
 Stage ONLY the iloom-related files that should be committed:
 ```bash
-git add .iloom/settings.json .gitignore 2>/dev/null || true
+git add .iloom/settings.json .iloom/package.iloom.json .gitignore 2>/dev/null || true
 ```
 
-Note: Do NOT add .iloom/settings.local.json - it's meant to be local-only.
+Note: Do NOT add local-only files (.iloom/settings.local.json, .iloom/package.iloom.local.json) - they should be gitignored, not committed.
 
 Then commit:
 
@@ -1209,3 +1223,5 @@ iloom collects anonymous usage data to improve the product. If the user asks abo
 - **CRITICAL: PREVENT DUPLICATION** - When writing settings.local.json, ONLY include settings that differ from settings.json. If a setting has the same value in both files, it MUST be removed from the local file. Local should only contain overrides, never duplicates.
 - **Deep comparison required** - When comparing settings for duplication, compare nested objects deeply (e.g., capabilities.web.basePort), not just top-level keys
 - **Empty local is OK** - If all local settings match shared settings after deduplication, an empty settings.local.json file is perfectly valid (or the user may choose not to create it at all)
+- **ALWAYS ask where to save package.iloom configuration** - When creating or modifying package.iloom.json outside of the guided wizard flow, always ask the user whether to save to `package.iloom.json` (shared, committed) or `package.iloom.local.json` (local, gitignored) before writing. Apply the same fork detection logic — if origin + upstream remotes are detected, default to the local variant.
+- **ALWAYS offer to commit after writing shared files** - Whenever you create or modify a committable file (settings.json, package.iloom.json, .gitignore), offer to commit it — even outside the guided wizard flow. Looms are created from committed code, so uncommitted shared configuration won't be available in new looms. Follow the same commit rules from Phase 7: only stage iloom-related files, never stage local-only files.
