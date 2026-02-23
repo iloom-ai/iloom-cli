@@ -20,44 +20,15 @@ iloom
 
 [How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Telemetry](#telemetry) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
-## Built For Modern Tools...
+## How can your team trust the code your AI wrote, when you don't?
 
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
-[![Neon](https://img.shields.io/badge/Neon-00E699?style=for-the-badge)](https://neon.tech/)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-8A6FFF?style=for-the-badge)](https://claude.ai/)
+Your agent just shipped a 2,000-line PR. Why did it restructure that module? What assumptions did it make about the auth flow? Nobody knows. The reasoning evaporated when the chat session ended, and now your teammate is staring at a diff with zero context. Good luck getting that reviewed.
 
-...To Solve A Very Modern Problem
----------------------------------
+iloom persists the AI's analysis, plans, decisions, and risks as comments in your issue tracker. Not chat logs you'll never reopen. Not markdown files littering the repo. Your actual tracker, where your team can see what happened and why. That mountain of code you're sending for review? Now it comes with the reasoning behind it.
 
-The promise of AI-assisted development is profound: write more code, ship features faster. But there is a hidden cost. **AI agents write code quickly, but they struggle to stay in sync with their humans.**
+This matters because to get the most out of agents, you need to be multitasking across several of them. iloom gives every task its own isolated environment (git worktree, DB branch, unique port), and because all the reasoning is persisted, you can context-switch between tasks without losing the thread. The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=iloom-ai.iloom-vscode) lets you catch up with any agent in seconds. Your teammates can pick up where you left off without a briefing.
 
-The hard part isn't generating code, it's maintaining the shared mental model of _why_ that code exists. When you rely on ephemeral chat windows, friction piles up:
-
-*   You constantly re-brief the AI on the same context.
-    
-*   Hidden assumptions creep in (e.g., "Why did it use Axios instead of fetch?").
-    
-*   You spend more time reviewing and "babysitting" the AI than building.
-    
-
-**The bottleneck isn't output velocity. It's maintaining alignment between human and AI at scale.**
-
-### The iloom Approach: Context as Infrastructure
-
-iloom stops the "Context Window Tetris." It treats context as a first-class concern, persisting your AI's reasoning in **issue comments** rather than temporary chats.
-
-*   **Stop Babysitting, Start Collaborating:** Instead of arguing with Claude in a chat, you review structured analysis plans in your issue tracker _before_ a single line of code is written.
-    
-*   **Scale Understanding:** Because every loom holds its own isolated environment (Git worktree, DB branch, local server), you can switch between 5 complex features without losing your place or your AI's context.
-    
-*   **Visible Reasoning:** The AI's decisions are documented publicly. Your team sees the plan, and "future you" knows exactly why a decision was made.
-
-*   **Automatic Session Summaries:** When you finish a loom, iloom captures key insights, decisions, and lessons learned from your Claude session and posts them to the issue. These summaries become institutional knowledge that informs future tasks.
-
-
-_iloom is not just a tool for managing git worktrees - it's a control plane for maintaining alignment between you and your AI assistant._
+When a task outgrows one agent, `il plan` decomposes it into child issues with dependencies, and swarm mode launches parallel agents to execute them, each in its own worktree, running the full iloom workflow. You can one-shot entire features, entire products, and stay aligned. The VS Code extension gives you a Kanban board and dependency graph so you can see what's running, what's blocked, and what's done. The only real limit is your imagination. And maybe your Claude subscription.
 
 Quick Start
 -----------
