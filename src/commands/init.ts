@@ -55,13 +55,20 @@ export class InitCommand {
 
       await this.setupProjectConfiguration()
 
+      // Determine mode for telemetry
+      const mode = acceptDefaults ? 'accept-defaults' as const : customInitialMessage ? 'guided-custom-prompt' as const : 'guided' as const
+
+      try {
+        TelemetryService.getInstance().track('init.started', { mode })
+      } catch (e) {
+        logger.debug('Telemetry tracking failed', { error: e })
+      }
+
       // If accept-defaults mode, mark project as configured and return early
       if (acceptDefaults) {
         await this.markProjectConfigured()
         try {
-          TelemetryService.getInstance().track('init.completed', {
-            mode: 'accept-defaults',
-          })
+          TelemetryService.getInstance().track('init.completed', { mode })
         } catch (e) {
           logger.debug('Telemetry tracking failed', { error: e })
         }
@@ -75,14 +82,11 @@ export class InitCommand {
       // Only mark project as configured if guided init succeeded and not already marked
       // This enables VSCode extension detection and ensures project appears in `il projects` list
       if (guidedInitSucceeded) {
-        const projectRoot = await getRepoRoot() ?? process.cwd()
-        const firstRunManager = new FirstRunManager()
-        const alreadyConfigured = await firstRunManager.isProjectConfigured(projectRoot)
+        const alreadyConfigured = await this.isProjectConfigured()
         if (!alreadyConfigured) {
-          await firstRunManager.markProjectAsConfigured(projectRoot)
-          logger.debug('Project marked as configured', { projectRoot })
+          await this.markProjectConfigured()
         } else {
-          logger.debug('Project already marked as configured, skipping', { projectRoot })
+          logger.debug('Project already marked as configured, skipping')
         }
       } else {
         logger.debug('Skipping project marker - guided init did not complete successfully')
@@ -469,12 +473,19 @@ export class InitCommand {
   }
 
   /**
-   * Mark project as configured for non-interactive accept-defaults mode.
-   * No settings file is written — the application's built-in defaults are used.
+   * Check if the project is already marked as configured.
+   */
+  private async isProjectConfigured(): Promise<boolean> {
+    const projectRoot = await getRepoRoot() ?? process.cwd()
+    const firstRunManager = new FirstRunManager()
+    return firstRunManager.isProjectConfigured(projectRoot)
+  }
+
+  /**
+   * Mark the project as configured.
+   * Used by both accept-defaults mode and after guided init succeeds.
    */
   private async markProjectConfigured(): Promise<void> {
-    logger.debug('markProjectConfigured() starting - accept-defaults mode')
-
     const projectRoot = await getRepoRoot() ?? process.cwd()
     const firstRunManager = new FirstRunManager()
     await firstRunManager.markProjectAsConfigured(projectRoot)

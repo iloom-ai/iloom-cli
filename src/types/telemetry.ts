@@ -86,8 +86,12 @@ export interface ErrorOccurredProperties {
   phase: string
 }
 
+export interface InitStartedProperties {
+  mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
+}
+
 export interface InitCompletedProperties {
-  mode: 'accept-defaults' | 'guided'
+  mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
 }
 
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
@@ -106,6 +110,7 @@ export interface TelemetryEventMap {
   'contribute.started': ContributeStartedProperties
   'session.started': SessionStartedProperties
   'error.occurred': ErrorOccurredProperties
+  'init.started': InitStartedProperties
   'init.completed': InitCompletedProperties
 }
 
