@@ -13,20 +13,8 @@ const { mockUuidv4 } = vi.hoisted(() => ({
 }))
 vi.mock('uuid', () => ({ v4: mockUuidv4 }))
 
-/** Helper: assert that an atomic write occurred with the expected config content */
-function expectAtomicWrite(configPath: string, expected: Record<string, unknown>): void {
-	const tmpPath = `${configPath}.${process.pid}.tmp`
-	expect(nodeFs.writeFileSync).toHaveBeenCalledWith(tmpPath, expect.any(String), 'utf8')
-	expect(nodeFs.renameSync).toHaveBeenCalledWith(tmpPath, configPath)
-
-	// Verify the written JSON content matches expectations
-	const writtenData = vi.mocked(nodeFs.writeFileSync).mock.calls.find(
-		(call) => call[0] === tmpPath
-	)
-	expect(writtenData).toBeDefined()
-	const parsed = JSON.parse(writtenData![1] as string)
-	expect(parsed).toEqual(expect.objectContaining(expected))
-}
+const CONFIG_PATH = '/tmp/test-config/telemetry.json'
+const ID_PATH = '/tmp/test-config/telemetry-id'
 
 /** Helper: create an ENOENT error */
 function enoentError(): NodeJS.ErrnoException {
@@ -35,27 +23,125 @@ function enoentError(): NodeJS.ErrnoException {
 	return err
 }
 
-const CONFIG_PATH = '/tmp/test-config/telemetry.json'
+/**
+ * Helper: mock the ID file read.
+ * If `id` is provided, readFileSync returns it for the ID_PATH.
+ * If `id` is null, readFileSync throws ENOENT for the ID_PATH.
+ */
+function mockIdFile(id: string | null): void {
+	vi.mocked(nodeFs.readFileSync).mockImplementation((filePath) => {
+		if (filePath === ID_PATH) {
+			if (id === null) throw enoentError()
+			return id
+		}
+		return ''
+	})
+}
+
+/** Helper: assert that an atomic write occurred with the expected config content */
+function expectAtomicWrite(configPath: string, expected: Record<string, unknown>): void {
+	const tmpPath = `${configPath}.${process.pid}.tmp`
+	expect(nodeFs.writeFileSync).toHaveBeenCalledWith(tmpPath, expect.any(String), 'utf8')
+	expect(nodeFs.renameSync).toHaveBeenCalledWith(tmpPath, configPath)
+
+	// Verify the written JSON content matches expectations
+	const writtenData = vi.mocked(nodeFs.writeFileSync).mock.calls.find(
+		(call) => call[0] === tmpPath,
+	)
+	expect(writtenData).toBeDefined()
+	const parsed = JSON.parse(writtenData![1] as string)
+	expect(parsed).toEqual(expect.objectContaining(expected))
+	// Verify distinct_id is NEVER written to telemetry.json
+	expect(parsed).not.toHaveProperty('distinct_id')
+}
 
 describe('TelemetryManager', () => {
 	beforeEach(() => {
 		vi.mocked(os.homedir).mockReturnValue('/home/user')
 	})
 
-	describe('getDistinctId', () => {
-		it('returns generated UUID when no config file exists', () => {
+	describe('distinct ID file', () => {
+		it('reads existing ID from telemetry-id file', () => {
+			mockIdFile('existing-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('existing-id')
+			expect(mockUuidv4).not.toHaveBeenCalled()
+			// Should not write to ID file when it already exists
+			expect(nodeFs.writeFileSync).not.toHaveBeenCalledWith(ID_PATH, expect.anything(), expect.anything())
+		})
+
+		it('generates and writes new ID when telemetry-id does not exist', () => {
+			mockIdFile(null)
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
-			mockUuidv4.mockReturnValue('test-uuid-1234')
+			mockUuidv4.mockReturnValue('new-uuid')
 
 			const manager = new TelemetryManager('/tmp/test-config')
-			const id = manager.getDistinctId()
 
-			expect(id).toBe('test-uuid-1234')
+			expect(manager.getDistinctId()).toBe('new-uuid')
+			expect(nodeFs.writeFileSync).toHaveBeenCalledWith(ID_PATH, 'new-uuid', 'utf8')
 		})
 
+		it('handles empty telemetry-id file as missing (generates new)', () => {
+			mockIdFile('')
+			vi.mocked(fs.readJsonSync).mockImplementation(() => {
+				throw enoentError()
+			})
+			mockUuidv4.mockReturnValue('fallback-uuid')
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('fallback-uuid')
+		})
+
+		it('handles whitespace-only telemetry-id as missing', () => {
+			mockIdFile('   \n  ')
+			vi.mocked(fs.readJsonSync).mockImplementation(() => {
+				throw enoentError()
+			})
+			mockUuidv4.mockReturnValue('fallback-uuid')
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('fallback-uuid')
+		})
+
+		it('trims whitespace from read ID', () => {
+			mockIdFile('  some-uuid  \n')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('some-uuid')
+		})
+
+		it('handles permission errors reading ID file gracefully', () => {
+			vi.mocked(nodeFs.readFileSync).mockImplementation((filePath) => {
+				if (filePath === ID_PATH) {
+					const err = new Error('EACCES') as NodeJS.ErrnoException
+					err.code = 'EACCES'
+					throw err
+				}
+				return ''
+			})
+			vi.mocked(fs.readJsonSync).mockImplementation(() => {
+				throw enoentError()
+			})
+			mockUuidv4.mockReturnValue('generated-uuid')
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('generated-uuid')
+		})
+	})
+
+	describe('getDistinctId', () => {
 		it('getDistinctId is a simple getter (no additional write)', () => {
+			mockIdFile(null)
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
@@ -70,36 +156,11 @@ describe('TelemetryManager', () => {
 			expect(nodeFs.writeFileSync).not.toHaveBeenCalled()
 			expect(nodeFs.renameSync).not.toHaveBeenCalled()
 		})
-
-		it('returns existing UUID from config on subsequent calls', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'existing-uuid',
-				enabled: true,
-			})
-
-			const manager = new TelemetryManager('/tmp/test-config')
-			const id = manager.getDistinctId()
-
-			expect(id).toBe('existing-uuid')
-			expect(mockUuidv4).not.toHaveBeenCalled()
-		})
-
-		it('generates new UUID if config has empty distinct_id', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: '',
-				enabled: true,
-			})
-			mockUuidv4.mockReturnValue('new-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-			const id = manager.getDistinctId()
-
-			expect(id).toBe('new-uuid')
-		})
 	})
 
 	describe('isEnabled', () => {
 		it('returns true by default (no config file)', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
@@ -110,10 +171,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('returns false when config has enabled: false', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: false,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: false })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 
@@ -121,10 +180,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('returns true when config has enabled: true', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 
@@ -132,6 +189,7 @@ describe('TelemetryManager', () => {
 		})
 
 		it('returns false on read errors (corrupted file disables telemetry)', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw new Error('Permission denied')
 			})
@@ -144,10 +202,8 @@ describe('TelemetryManager', () => {
 
 	describe('enable / disable', () => {
 		it('disable() sets enabled: false and writes config atomically', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.disable()
@@ -157,10 +213,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('enable() sets enabled: true and writes config atomically', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: false,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: false })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.enable()
@@ -170,8 +224,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('preserves other config fields when toggling', () => {
+			mockIdFile('preserved-id')
 			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'preserved-id',
 				enabled: true,
 				disclosed_at: '2026-01-01T00:00:00.000Z',
 				last_version: '1.0.0',
@@ -181,7 +235,6 @@ describe('TelemetryManager', () => {
 			manager.disable()
 
 			expectAtomicWrite(CONFIG_PATH, {
-				distinct_id: 'preserved-id',
 				enabled: false,
 				disclosed_at: '2026-01-01T00:00:00.000Z',
 				last_version: '1.0.0',
@@ -189,11 +242,10 @@ describe('TelemetryManager', () => {
 		})
 
 		it('handles write errors silently', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
-			vi.mocked(nodeFs.writeFileSync).mockImplementation(() => {
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
+			vi.mocked(nodeFs.writeFileSync).mockImplementation((filePath) => {
+				if (filePath === ID_PATH) return
 				throw new Error('Disk full')
 			})
 
@@ -205,10 +257,8 @@ describe('TelemetryManager', () => {
 
 	describe('getStatus', () => {
 		it('returns { enabled, distinctId } from current config', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'status-uuid',
-				enabled: true,
-			})
+			mockIdFile('status-uuid')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			const status = manager.getStatus()
@@ -217,8 +267,9 @@ describe('TelemetryManager', () => {
 		})
 	})
 
-	describe('eager ID generation', () => {
-		it('generates and persists distinct_id at construction time when missing', () => {
+	describe('write-once ID behavior', () => {
+		it('generates and persists distinct_id at construction time when ID file missing', () => {
+			mockIdFile(null)
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
@@ -227,39 +278,39 @@ describe('TelemetryManager', () => {
 			const manager = new TelemetryManager('/tmp/test-config')
 
 			expect(manager.getDistinctId()).toBe('generated-uuid')
-			expectAtomicWrite(CONFIG_PATH, { distinct_id: 'generated-uuid' })
+			expect(nodeFs.writeFileSync).toHaveBeenCalledWith(ID_PATH, 'generated-uuid', 'utf8')
 		})
 
-		it('does not regenerate distinct_id when file already has one', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'existing-uuid',
-				enabled: true,
-			})
+		it('does not regenerate distinct_id when ID file already has one', () => {
+			mockIdFile('existing-uuid')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			new TelemetryManager('/tmp/test-config')
 
 			expect(mockUuidv4).not.toHaveBeenCalled()
 		})
 
-		it('all writes include the generated distinct_id', () => {
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw enoentError()
-			})
-			mockUuidv4.mockReturnValue('generated-uuid')
+		it('writeConfig never includes distinct_id in telemetry.json', () => {
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.markDisclosed()
 
-			expectAtomicWrite(CONFIG_PATH, { distinct_id: 'generated-uuid' })
+			const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`
+			const writtenData = vi.mocked(nodeFs.writeFileSync).mock.calls.find(
+				(call) => call[0] === tmpPath,
+			)
+			expect(writtenData).toBeDefined()
+			const parsed = JSON.parse(writtenData![1] as string)
+			expect(parsed).not.toHaveProperty('distinct_id')
 		})
 	})
 
 	describe('hasBeenDisclosed / markDisclosed', () => {
 		it('hasBeenDisclosed() returns false when disclosed_at is not set', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 
@@ -267,8 +318,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('hasBeenDisclosed() returns true when disclosed_at is set', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
 				enabled: true,
 				disclosed_at: '2026-01-01T00:00:00.000Z',
 			})
@@ -279,10 +330,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('markDisclosed() sets disclosed_at to ISO timestamp', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.markDisclosed()
@@ -291,7 +340,7 @@ describe('TelemetryManager', () => {
 
 			const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`
 			const writtenData = vi.mocked(nodeFs.writeFileSync).mock.calls.find(
-				(call) => call[0] === tmpPath
+				(call) => call[0] === tmpPath,
 			)
 			expect(writtenData).toBeDefined()
 			const parsed = JSON.parse(writtenData![1] as string)
@@ -301,10 +350,8 @@ describe('TelemetryManager', () => {
 
 	describe('getLastVersion / setLastVersion', () => {
 		it('getLastVersion() returns null when not set', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 
@@ -312,8 +359,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('getLastVersion() returns stored version string', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
 				enabled: true,
 				last_version: '0.9.2',
 			})
@@ -324,10 +371,8 @@ describe('TelemetryManager', () => {
 		})
 
 		it('setLastVersion() persists version to config', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.setLastVersion('1.2.3')
@@ -337,13 +382,15 @@ describe('TelemetryManager', () => {
 		})
 
 		it('setLastVersion() skips write when version is unchanged', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
 				enabled: true,
 				last_version: '0.9.2',
 			})
 
 			const manager = new TelemetryManager('/tmp/test-config')
+			vi.mocked(nodeFs.writeFileSync).mockClear()
+
 			manager.setLastVersion('0.9.2')
 
 			expect(nodeFs.writeFileSync).not.toHaveBeenCalled()
@@ -352,14 +399,17 @@ describe('TelemetryManager', () => {
 
 	describe('error resilience', () => {
 		it('constructor handles missing config directory gracefully', () => {
+			mockIdFile(null)
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw new Error('ENOENT: no such file or directory')
 			})
+			mockUuidv4.mockReturnValue('some-uuid')
 
 			expect(() => new TelemetryManager('/nonexistent/dir')).not.toThrow()
 		})
 
 		it('all write methods handle permission errors silently', () => {
+			mockIdFile(null)
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
@@ -378,6 +428,7 @@ describe('TelemetryManager', () => {
 		})
 
 		it('corrupt JSON file disables telemetry to respect user privacy', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw new SyntaxError('Unexpected token')
 			})
@@ -389,7 +440,20 @@ describe('TelemetryManager', () => {
 			expect(manager.getLastVersion()).toBeNull()
 		})
 
+		it('corrupt config does not affect distinct_id from ID file', () => {
+			mockIdFile('stable-id')
+			vi.mocked(fs.readJsonSync).mockImplementation(() => {
+				throw new SyntaxError('Unexpected token')
+			})
+
+			const manager = new TelemetryManager('/tmp/test-config')
+
+			expect(manager.getDistinctId()).toBe('stable-id')
+			expect(manager.isEnabled()).toBe(false)
+		})
+
 		it('missing file (ENOENT) defaults to enabled', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockImplementation(() => {
 				throw enoentError()
 			})
@@ -401,22 +465,9 @@ describe('TelemetryManager', () => {
 	})
 
 	describe('config validation', () => {
-		it('handles config with non-string distinct_id', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 12345,
-				enabled: true,
-			})
-			mockUuidv4.mockReturnValue('fallback-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-			const id = manager.getDistinctId()
-
-			expect(id).toBe('fallback-uuid')
-		})
-
 		it('handles config with non-boolean enabled', () => {
+			mockIdFile('some-id')
 			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
 				enabled: 'yes',
 			})
 
@@ -430,10 +481,13 @@ describe('TelemetryManager', () => {
 	describe('default config directory', () => {
 		it('uses ~/.config/iloom-ai when no configDir provided', () => {
 			vi.mocked(os.homedir).mockReturnValue('/home/testuser')
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
+			vi.mocked(nodeFs.readFileSync).mockImplementation((filePath) => {
+				if (filePath === '/home/testuser/.config/iloom-ai/telemetry-id') {
+					return 'some-id'
+				}
+				return ''
 			})
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager()
 			manager.disable()
@@ -447,10 +501,8 @@ describe('TelemetryManager', () => {
 
 	describe('atomic writes', () => {
 		it('writes to a temp file in the same directory and renames to the config path', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.disable()
@@ -461,33 +513,30 @@ describe('TelemetryManager', () => {
 			expect(nodeFs.renameSync).toHaveBeenCalledWith(tmpPath, CONFIG_PATH)
 		})
 
-		it('writes valid JSON with 2-space indentation', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+		it('writes valid JSON with 2-space indentation and no distinct_id', () => {
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 
 			const manager = new TelemetryManager('/tmp/test-config')
 			manager.disable()
 
 			const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`
 			const writtenData = vi.mocked(nodeFs.writeFileSync).mock.calls.find(
-				(call) => call[0] === tmpPath
+				(call) => call[0] === tmpPath,
 			)
 			expect(writtenData).toBeDefined()
 			const content = writtenData![1] as string
 			// Verify it's valid JSON
 			const parsed = JSON.parse(content)
-			expect(parsed).toHaveProperty('distinct_id', 'some-id')
+			expect(parsed).not.toHaveProperty('distinct_id')
+			expect(parsed).toHaveProperty('enabled', false)
 			// Verify 2-space indentation
 			expect(content).toBe(JSON.stringify(parsed, null, 2))
 		})
 
 		it('cleans up temp file if rename fails', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'some-id',
-				enabled: true,
-			})
+			mockIdFile('some-id')
+			vi.mocked(fs.readJsonSync).mockReturnValue({ enabled: true })
 			vi.mocked(nodeFs.renameSync).mockImplementation(() => {
 				throw new Error('rename failed')
 			})
@@ -497,113 +546,6 @@ describe('TelemetryManager', () => {
 
 			const tmpPath = `${CONFIG_PATH}.${process.pid}.tmp`
 			expect(nodeFs.unlinkSync).toHaveBeenCalledWith(tmpPath)
-		})
-	})
-
-	describe('re-read guard on UUID generation', () => {
-		it('prefers existing distinct_id from re-read over generated UUID', () => {
-			let readCount = 0
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				readCount++
-				if (readCount === 1) {
-					// First read: file doesn't exist
-					throw enoentError()
-				}
-				// Second read (re-read guard): another process wrote a config
-				return {
-					distinct_id: 'existing-from-other-process',
-					enabled: true,
-					disclosed_at: '2026-01-15T00:00:00.000Z',
-				}
-			})
-			mockUuidv4.mockReturnValue('my-generated-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-
-			// Should use the existing ID from the re-read, not the generated one
-			expect(manager.getDistinctId()).toBe('existing-from-other-process')
-			// Should also pick up other fields from the re-read
-			expect(manager.isEnabled()).toBe(true)
-			expect(manager.hasBeenDisclosed()).toBe(true)
-			// Should NOT have written (another process already did)
-			expect(nodeFs.writeFileSync).not.toHaveBeenCalled()
-		})
-
-		it('uses generated UUID when re-read also finds no distinct_id', () => {
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw enoentError()
-			})
-			mockUuidv4.mockReturnValue('my-generated-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-
-			expect(manager.getDistinctId()).toBe('my-generated-uuid')
-			// Should have written since re-read also found nothing
-			expectAtomicWrite(CONFIG_PATH, { distinct_id: 'my-generated-uuid' })
-		})
-
-		it('reads config exactly twice when distinct_id is missing (initial + re-read)', () => {
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw enoentError()
-			})
-			mockUuidv4.mockReturnValue('some-uuid')
-
-			new TelemetryManager('/tmp/test-config')
-
-			expect(fs.readJsonSync).toHaveBeenCalledTimes(2)
-		})
-
-		it('reads config exactly once when distinct_id already exists', () => {
-			vi.mocked(fs.readJsonSync).mockReturnValue({
-				distinct_id: 'existing-id',
-				enabled: true,
-			})
-
-			new TelemetryManager('/tmp/test-config')
-
-			expect(fs.readJsonSync).toHaveBeenCalledTimes(1)
-		})
-	})
-
-	describe('corruption leads to disabled telemetry', () => {
-		it('corrupt file on initial read disables telemetry and generates new distinct_id', () => {
-			// Simulates: concurrent process truncated the file, this process reads garbage
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				throw new SyntaxError('Unexpected end of JSON input')
-			})
-			mockUuidv4.mockReturnValue('recovery-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-
-			// Telemetry should be disabled (corruption path returns enabled: false)
-			// Both initial read AND re-read hit corruption, so telemetry stays disabled
-			expect(manager.isEnabled()).toBe(false)
-			// A distinct_id is still generated (for the case where corruption is transient)
-			expect(manager.getDistinctId()).toBe('recovery-uuid')
-		})
-
-		it('corrupt initial read but valid re-read recovers the existing distinct_id', () => {
-			let readCount = 0
-			vi.mocked(fs.readJsonSync).mockImplementation(() => {
-				readCount++
-				if (readCount === 1) {
-					// First read: corrupt file (mid-write by another process)
-					throw new SyntaxError('Unexpected token')
-				}
-				// Re-read: other process finished writing, file is now valid
-				return {
-					distinct_id: 'recovered-id',
-					enabled: true,
-				}
-			})
-			mockUuidv4.mockReturnValue('unused-uuid')
-
-			const manager = new TelemetryManager('/tmp/test-config')
-
-			// Should recover the ID from the re-read
-			expect(manager.getDistinctId()).toBe('recovered-id')
-			// Should adopt the enabled state from the valid re-read
-			expect(manager.isEnabled()).toBe(true)
 		})
 	})
 })

@@ -1,6 +1,5 @@
 // --- Config schema ---
 export interface TelemetryConfig {
-  distinct_id: string
   enabled: boolean
   disclosed_at?: string // ISO 8601 timestamp
   last_version?: string // e.g., "0.9.2"

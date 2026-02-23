@@ -6,32 +6,56 @@ import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../utils/logger.js'
 import type { TelemetryConfig } from '../types/telemetry.js'
 
-const DEFAULT_CONFIG: TelemetryConfig = { distinct_id: '', enabled: true }
+const DEFAULT_CONFIG: TelemetryConfig = { enabled: true }
 const CONFIG_FILE = 'telemetry.json'
+const ID_FILE = 'telemetry-id'
 
 export class TelemetryManager {
 	private configFilePath: string
+	private idFilePath: string
+	private distinctId: string
 	private config: TelemetryConfig
 
 	constructor(configDir?: string) {
 		const dir = configDir ?? path.join(os.homedir(), '.config', 'iloom-ai')
 		this.configFilePath = path.join(dir, CONFIG_FILE)
+		this.idFilePath = path.join(dir, ID_FILE)
+		this.distinctId = this.readOrCreateDistinctId()
 		this.config = this.readConfig()
-		if (!this.config.distinct_id) {
-			this.config.distinct_id = uuidv4()
-			// Re-read to check if another concurrent process already wrote a distinct_id
-			// between our first read and now. Prefer the existing one for consistency.
-			const freshConfig = this.readConfig()
-			if (freshConfig.distinct_id) {
-				this.config = freshConfig
+	}
+
+	private readOrCreateDistinctId(): string {
+		// 1. Try to read existing telemetry-id file
+		try {
+			const id = nodeFs.readFileSync(this.idFilePath, 'utf8').trim()
+			if (id) return id
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code
+			if (code !== 'ENOENT') {
+				if (code === 'EACCES' || code === 'EPERM') {
+					logger.warn(`TelemetryManager: Permission denied reading ID file: ${code}`)
+				} else {
+					logger.debug(`TelemetryManager: Failed to read ID file: ${error}`)
+				}
+			}
+		}
+
+		// 2. Generate new ID and write it
+		const newId = uuidv4()
+		this.writeDistinctId(newId)
+		return newId
+	}
+
+	private writeDistinctId(id: string): void {
+		try {
+			fs.ensureDirSync(path.dirname(this.idFilePath))
+			nodeFs.writeFileSync(this.idFilePath, id, 'utf8')
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code
+			if (code === 'EACCES' || code === 'EPERM') {
+				logger.warn(`TelemetryManager: Permission denied writing ID file: ${code}`)
 			} else {
-				// NOTE: There is an accepted residual race condition on first-ever file creation.
-				// If N processes all see ENOENT before any of them writes, each will generate a
-				// different UUID. This only affects the very first invocation on a new machine and
-				// subsequent invocations will read the persisted ID, so the impact is negligible.
-				freshConfig.distinct_id = this.config.distinct_id
-				this.config = freshConfig
-				this.writeConfig()
+				logger.debug(`TelemetryManager: Failed to write ID file: ${error}`)
 			}
 		}
 	}
@@ -43,7 +67,6 @@ export class TelemetryManager {
 				throw new Error('Invalid config format: expected a JSON object')
 			}
 			return {
-				distinct_id: typeof data.distinct_id === 'string' ? data.distinct_id : '',
 				enabled: typeof data.enabled === 'boolean' ? data.enabled : true,
 				...(typeof data.disclosed_at === 'string' ? { disclosed_at: data.disclosed_at } : {}),
 				...(typeof data.last_version === 'string' ? { last_version: data.last_version } : {}),
@@ -92,7 +115,7 @@ export class TelemetryManager {
 	}
 
 	getDistinctId(): string {
-		return this.config.distinct_id
+		return this.distinctId
 	}
 
 	isEnabled(): boolean {
