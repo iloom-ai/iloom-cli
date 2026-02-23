@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
+import { JiraWikiSanitizer } from '../utils/jira-wiki-sanitizer.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import type {
@@ -423,6 +424,7 @@ server.registerTool(
 			type: z
 				.enum(['issue', 'pr'])
 				.describe('Type of entity to comment on (issue or pr)'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -434,10 +436,11 @@ server.registerTool(
 		console.error(`Creating ${type} comment on ${number}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.createComment({ number, body, type })
+			const result = await provider.createComment({ number, body: sanitizedBody, type })
 
 			console.error(
 				`Comment created successfully: ${result.id} at ${result.url}`
@@ -473,6 +476,7 @@ server.registerTool(
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
 			body: z.string().describe('The updated comment body (markdown supported)'),
 			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments to GitHub regardless of configured provider'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -484,10 +488,11 @@ server.registerTool(
 		console.error(`Updating comment ${commentId} on ${type === 'pr' ? 'PR' : 'issue'} ${number}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.updateComment({ commentId, number, body })
+			const result = await provider.updateComment({ commentId, number, body: sanitizedBody })
 
 			console.error(
 				`Comment updated successfully: ${result.id} at ${result.url}`
@@ -532,6 +537,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -543,11 +549,12 @@ server.registerTool(
 		console.error(`Creating issue: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createIssue({ title, body, labels, teamKey, repo })
+			const result = await provider.createIssue({ title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Issue created successfully: ${result.id} at ${result.url}`)
 
@@ -592,6 +599,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -603,11 +611,12 @@ server.registerTool(
 		console.error(`Creating child issue for parent ${parentId}: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey, repo })
+			const result = await provider.createChildIssue({ parentId, title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Child issue created successfully: ${result.id} at ${result.url}`)
 
@@ -986,6 +995,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').optional().describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			success: z.boolean().describe('Whether the issue was edited successfully'),
@@ -995,11 +1005,12 @@ server.registerTool(
 		console.error(`Editing issue ${number}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = body ? JiraWikiSanitizer.sanitize(body) : undefined
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			await provider.editIssue({ number, title, body, state, labels, repo })
+			await provider.editIssue({ number, title, body: sanitizedBody, state, labels, repo })
 
 			console.error(`Issue edited successfully: ${number}`)
 
