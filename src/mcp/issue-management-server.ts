@@ -1039,8 +1039,8 @@ async function main(): Promise<void> {
 			console.error('BitBucket VCS provider initialized for PR operations')
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-			console.error(`Failed to initialize BitBucket VCS provider: ${errorMessage}`)
-			console.error('PR operations will fall back to GitHub provider')
+			console.error(`[WARNING] BitBucket VCS provider failed to initialize: ${errorMessage}`)
+			console.error('[WARNING] PR operations (get_pr, PR comments) will fall back to GitHub. Fix BitBucket config to use BitBucket for PRs.')
 		}
 	}
 

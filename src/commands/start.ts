@@ -392,6 +392,7 @@ export class StartCommand {
 				TelemetryService.getInstance().track('loom.created', {
 					source_type: parsed.type === 'epic' ? 'issue' : parsed.type as LoomCreatedProperties['source_type'],
 					tracker: this.issueTracker.providerName,
+					vcs_provider: (settings.versionControl?.provider as 'github' | 'bitbucket') ?? 'github',
 					is_child_loom: !!parentLoom,
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
 				})
@@ -536,13 +537,16 @@ export class StartCommand {
 							number,
 							originalInput: trimmedIdentifier,
 						}
-					} catch {
-						// Not a VCS PR - treat as an issue
-						return {
-							type: 'issue',
-							number,
-							originalInput: trimmedIdentifier,
+					} catch (error) {
+						// Only treat as "not a PR" for 404 errors; re-throw auth/network/server errors
+						if (error instanceof Error && error.message.includes('(404)')) {
+							return {
+								type: 'issue',
+								number,
+								originalInput: trimmedIdentifier,
+							}
 						}
+						throw error
 					}
 				} else {
 					// No non-GitHub VCS provider: fall back to GitHubService

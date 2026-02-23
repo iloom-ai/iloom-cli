@@ -91,17 +91,18 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 
 			return null
 		} catch (error) {
+			// Only return null for 404 (not found) — re-throw all other errors
 			if (error instanceof Error) {
 				const statusMatch = error.message.match(/BitBucket API error \((\d+)\)/)
 				if (statusMatch?.[1]) {
 					const statusCode = parseInt(statusMatch[1], 10)
-					if (statusCode === 401 || statusCode === 403) {
-						throw error
+					if (statusCode === 404) {
+						getLogger().debug('No existing PR found for branch', { error })
+						return null
 					}
 				}
 			}
-			getLogger().debug('Error checking for existing PR', { error })
-			return null
+			throw error
 		}
 	}
 

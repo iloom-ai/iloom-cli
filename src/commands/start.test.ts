@@ -1565,6 +1565,7 @@ describe('StartCommand', () => {
 			expect(mockTrack).toHaveBeenCalledWith('loom.created', {
 				source_type: 'issue',
 				tracker: 'github',
+				vcs_provider: 'github',
 				is_child_loom: false,
 				one_shot_mode: 'default',
 			})
@@ -2334,8 +2335,8 @@ describe('Jira+BitBucket VCS provider PR detection', () => {
 		})
 
 		it('should fall back to issue tracker when BitBucket PR not found', async () => {
-			// BitBucket throws when PR doesn't exist
-			mockBitBucketProvider.fetchPR.mockRejectedValue(new Error('PR not found'))
+			// BitBucket throws 404 when PR doesn't exist
+			mockBitBucketProvider.fetchPR.mockRejectedValue(new Error('BitBucket API error (404): Not Found'))
 			mockJiraService.fetchIssue.mockResolvedValue({
 				number: 42,
 				title: 'Jira Issue',

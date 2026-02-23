@@ -30,6 +30,7 @@ import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
+import { VCSProviderFactory } from '../lib/VCSProviderFactory.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -288,7 +289,7 @@ export class FinishCommand {
 				? Math.round((Date.now() - new Date(preFinishCreatedAt).getTime()) / 60000)
 				: 0
 			TelemetryService.getInstance().track('loom.finished', {
-				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr') ?? 'local',
+				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr' | 'bitbucket-pr') ?? 'local',
 				duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
 			})
 		} catch (error: unknown) {
@@ -901,12 +902,10 @@ export class FinishCommand {
 			// For BitBucket, we use the VCS provider layer - NOT the issue tracker
 			// This allows Jira/Linear issues to create PRs in BitBucket
 			// Read vcsProvider from metadata to confirm expected provider, then create from settings
-			const { MetadataManager: MetadataManagerForBB } = await import('../lib/MetadataManager.js')
-			const bbMetadataManager = new MetadataManagerForBB()
+			const bbMetadataManager = new MetadataManager()
 			const bbMetadata = await bbMetadataManager.readMetadata(worktree.path)
 			const metadataVcsProvider = bbMetadata?.vcsProvider
 
-			const { VCSProviderFactory } = await import('../lib/VCSProviderFactory.js')
 			const vcsProvider = VCSProviderFactory.create(settings)
 
 			if (!vcsProvider || vcsProvider.providerName !== 'bitbucket') {
@@ -951,7 +950,6 @@ export class FinishCommand {
 		await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
 
 		// Step 5.8: Archive metadata BEFORE cleanup decision (ensures it runs even with --no-cleanup)
-		const { MetadataManager } = await import('../lib/MetadataManager.js')
 		const metadataManager = new MetadataManager()
 		if (!options.dryRun) {
 			await metadataManager.archiveMetadata(worktree.path)
@@ -1235,22 +1233,18 @@ export class FinishCommand {
 			// Set PR URL in result
 			finishResult.prUrl = prUrl
 
-			// Generate session summary:
-			// - GitHub: post to the PR (prNumber is available)
-			// - Other providers (BitBucket): post to the issue, since the issue tracker
-			//   (Jira/Linear) doesn't support PR comments
+			// Generate session summary and post to the PR
 			await this.generateSessionSummaryIfConfigured(
 				parsed,
 				worktree,
 				options,
-				!vcsProvider ? prNumber : undefined
+				prNumber
 			)
 
 			// Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
-			const metadataManager = new MetadataManager()
+			const archiveMetadataManager = new MetadataManager()
 			if (!options.dryRun) {
-				await metadataManager.archiveMetadata(worktree.path)
+				await archiveMetadataManager.archiveMetadata(worktree.path)
 			}
 
 			// Interactive cleanup prompt (unless flags override)

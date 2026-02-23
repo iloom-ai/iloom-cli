@@ -349,10 +349,12 @@ export class BitBucketApiClient {
 	 * Fetch all workspace members with pagination
 	 */
 	private async getAllWorkspaceMembers(workspace: string): Promise<BitBucketWorkspaceMember[]> {
+		const MAX_PAGES = 10
 		const allMembers: BitBucketWorkspaceMember[] = []
 		let nextUrl: string | null = `/workspaces/${workspace}/members`
+		let pageCount = 0
 
-		while (nextUrl) {
+		while (nextUrl && pageCount < MAX_PAGES) {
 			const response: BitBucketWorkspaceMembersResponse =
 				await this.get(nextUrl)
 
@@ -361,6 +363,11 @@ export class BitBucketApiClient {
 			// BitBucket pagination uses 'next' field with full URL
 			// Use it directly since request() now handles full URLs
 			nextUrl = response.next ?? null
+			pageCount++
+		}
+
+		if (pageCount >= MAX_PAGES) {
+			getLogger().warn(`Stopped fetching workspace members after ${MAX_PAGES} pages. Some reviewers may not be resolved.`)
 		}
 
 		getLogger().debug(`Fetched ${allMembers.length} workspace members from BitBucket`)

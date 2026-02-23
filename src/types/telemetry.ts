@@ -26,12 +26,13 @@ export interface CliUpgradedProperties {
 export interface LoomCreatedProperties {
   source_type: 'issue' | 'pr' | 'branch' | 'freeform'
   tracker: string // 'github' | 'linear' | 'jira' | 'bitbucket'
+  vcs_provider?: 'github' | 'bitbucket'
   is_child_loom: boolean
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
 }
 
 export interface LoomFinishedProperties {
-  merge_behavior: 'local' | 'github-pr' | 'github-draft-pr'
+  merge_behavior: 'local' | 'github-pr' | 'github-draft-pr' | 'bitbucket-pr'
   duration_minutes: number
 }
 

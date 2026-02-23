@@ -418,7 +418,7 @@ describe('BitBucketVCSProvider', () => {
 			)
 		})
 
-		it('should return null for network/other errors', async () => {
+		it('should throw for network/other errors', async () => {
 			const config: BitBucketVCSConfig = {
 				username: 'testuser',
 				apiToken: 'test-token',
@@ -429,12 +429,10 @@ describe('BitBucketVCSProvider', () => {
 				new Error('BitBucket API request failed: ECONNREFUSED')
 			)
 
-			const result = await provider.checkForExistingPR('feature-branch')
-
-			expect(result).toBeNull()
+			await expect(provider.checkForExistingPR('feature-branch')).rejects.toThrow('ECONNREFUSED')
 		})
 
-		it('should return null for non-Error thrown values', async () => {
+		it('should throw for non-Error thrown values', async () => {
 			const config: BitBucketVCSConfig = {
 				username: 'testuser',
 				apiToken: 'test-token',
@@ -442,6 +440,20 @@ describe('BitBucketVCSProvider', () => {
 			provider = new BitBucketVCSProvider(config)
 
 			mockClient.listPullRequests.mockRejectedValue('string error')
+
+			await expect(provider.checkForExistingPR('feature-branch')).rejects.toBe('string error')
+		})
+
+		it('should return null for 404 errors', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPullRequests.mockRejectedValue(
+				new Error('BitBucket API error (404): Not Found')
+			)
 
 			const result = await provider.checkForExistingPR('feature-branch')
 
