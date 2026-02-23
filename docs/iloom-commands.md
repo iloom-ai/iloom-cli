@@ -1735,12 +1735,6 @@ il config [description]
 **Arguments:**
 - `[description]` - Optional natural language description of what to configure
 
-**Options:**
-
-| Flag | Description |
-|------|-------------|
-| `--accept-defaults`, `-y` | *(Hidden/internal)* Skip interactive prompts and write default settings. Used by the VS Code extension for non-interactive setup. |
-
 **Workflow:**
 
 Without description (standard wizard):
