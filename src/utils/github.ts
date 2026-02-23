@@ -438,6 +438,23 @@ export async function getRepoInfo(): Promise<RepoInfo> {
 	}
 }
 
+/**
+ * Get the authenticated user's permission level on a repository
+ * @param repo - Optional repo in "owner/repo" format (uses current repo if not provided)
+ * @returns Permission level string: 'ADMIN', 'MAINTAIN', 'WRITE', 'TRIAGE', 'READ', or '' (empty for no access)
+ */
+export async function getRepoPermission(repo?: string): Promise<string> {
+	logger.debug('Fetching repository permission', { repo })
+
+	const args = ['repo', 'view', '--json', 'viewerPermission']
+	if (repo) {
+		args.splice(2, 0, '--repo', repo)
+	}
+
+	const result = await executeGhCommand<{ viewerPermission: string }>(args)
+	return result.viewerPermission
+}
+
 // GitHub Sub-Issue Operations
 
 /**

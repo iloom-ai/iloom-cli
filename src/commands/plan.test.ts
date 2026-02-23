@@ -8,12 +8,15 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import { TelemetryService } from '../lib/TelemetryService.js'
 import * as identifierParser from '../utils/IdentifierParser.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import * as githubUtils from '../utils/github.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/mcp.js')
 vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
+vi.mock('../utils/github.js')
 vi.mock('../mcp/IssueManagementProviderFactory.js')
 vi.mock('../lib/TelemetryService.js', () => ({
 	TelemetryService: {
@@ -69,6 +72,8 @@ describe('PlanCommand', () => {
 		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
 		// Default: input is not an issue identifier (non-decomposition mode)
 		vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({ isIssueIdentifier: false })
+		// Default: user has write access (prevents read-only mode in existing tests)
+		vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('WRITE')
 		// Default: TelemetryService mock
 		const mockTrack = vi.fn()
 		vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
@@ -517,6 +522,7 @@ describe('PlanCommand', () => {
 			expect(mockTrack).toHaveBeenCalledWith('epic.planned', {
 				child_count: 3,
 				tracker: 'github',
+				read_only_mode: false,
 			})
 		})
 
@@ -535,6 +541,199 @@ describe('PlanCommand', () => {
 
 			// Should not throw — telemetry failure is non-blocking
 			await expect(command.execute('42')).resolves.toBeUndefined()
+		})
+	})
+
+	describe('read-only mode (no write access)', () => {
+		beforeEach(() => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('READ')
+		})
+
+		it('should pass READ_ONLY_MODE: true when user lacks write access', async () => {
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: true })
+			)
+		})
+
+		it('should pass READ_ONLY_MODE: true for TRIAGE permission', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('TRIAGE')
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: true })
+			)
+		})
+
+		it('should exclude write tools from allowedTools when READ_ONLY_MODE', async () => {
+			await command.execute()
+
+			const launchCall = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const allowedTools = launchCall[1].allowedTools as string[]
+			expect(allowedTools).not.toContain('mcp__issue_management__create_child_issue')
+			expect(allowedTools).not.toContain('mcp__issue_management__create_dependency')
+			expect(allowedTools).not.toContain('mcp__issue_management__remove_dependency')
+			// These should still be present
+			expect(allowedTools).toContain('mcp__issue_management__create_issue')
+			expect(allowedTools).toContain('mcp__issue_management__create_comment')
+			expect(allowedTools).toContain('mcp__issue_management__get_issue')
+			expect(allowedTools).toContain('mcp__issue_management__get_dependencies')
+		})
+
+		it('should log warning about read-only mode', async () => {
+			const { logger } = await import('../utils/logger.js')
+
+			await command.execute()
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('read-only mode')
+			)
+		})
+
+		it('should pass read_only_mode: true in telemetry for decomposition sessions', async () => {
+			const mockTrack = vi.fn()
+			vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
+
+			const mockGetChildIssues = vi.fn().mockResolvedValue([
+				{ id: '100', title: 'Child 1', state: 'open' },
+			])
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: mockGetChildIssues,
+			} as never)
+
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+			const mockIssueTracker = {
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test epic', body: 'Epic body' }),
+			}
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue(mockIssueTracker as never)
+
+			await command.execute('42')
+
+			expect(mockTrack).toHaveBeenCalledWith('epic.planned', expect.objectContaining({
+				read_only_mode: true,
+			}))
+		})
+	})
+
+	describe('write access mode', () => {
+		it('should pass READ_ONLY_MODE: false when user has WRITE permission', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('WRITE')
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
+		})
+
+		it('should pass READ_ONLY_MODE: false when user has ADMIN permission', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('ADMIN')
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
+		})
+
+		it('should pass READ_ONLY_MODE: false when user has MAINTAIN permission', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('MAINTAIN')
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
+		})
+
+		it('should include all tools when user has write access', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockResolvedValue('WRITE')
+
+			await command.execute()
+
+			const launchCall = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const allowedTools = launchCall[1].allowedTools as string[]
+			expect(allowedTools).toContain('mcp__issue_management__create_child_issue')
+			expect(allowedTools).toContain('mcp__issue_management__create_dependency')
+			expect(allowedTools).toContain('mcp__issue_management__remove_dependency')
+		})
+	})
+
+	describe('permission check failure (fail-open)', () => {
+		it('should default to write access if permission check fails', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockRejectedValue(new Error('API error'))
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
+		})
+
+		it('should include all tools when permission check fails', async () => {
+			vi.mocked(githubUtils.getRepoPermission).mockRejectedValue(new Error('API error'))
+
+			await command.execute()
+
+			const launchCall = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const allowedTools = launchCall[1].allowedTools as string[]
+			expect(allowedTools).toContain('mcp__issue_management__create_child_issue')
+			expect(allowedTools).toContain('mcp__issue_management__create_dependency')
+			expect(allowedTools).toContain('mcp__issue_management__remove_dependency')
+		})
+	})
+
+	describe('non-GitHub provider', () => {
+		beforeEach(() => {
+			// loadSettings must return a non-null value so getProviderName is actually called
+			// (when settings is null, provider defaults to 'github' via the ternary)
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+			}) as unknown as SettingsManager)
+		})
+
+		it('should skip permission check for Linear provider', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+
+			// Need a fresh command since we changed the SettingsManager mock
+			command = new PlanCommand(mockTemplateManager)
+			await command.execute()
+
+			expect(githubUtils.getRepoPermission).not.toHaveBeenCalled()
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
+		})
+
+		it('should skip permission check for Jira provider', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('jira')
+
+			// Need a fresh command since we changed the SettingsManager mock
+			command = new PlanCommand(mockTemplateManager)
+			await command.execute()
+
+			expect(githubUtils.getRepoPermission).not.toHaveBeenCalled()
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ READ_ONLY_MODE: false })
+			)
 		})
 	})
 })

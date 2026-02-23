@@ -15,6 +15,7 @@ import {
 	updateIssueComment,
 	createPRComment,
 	getRepoInfo,
+	getRepoPermission,
 } from './github.js'
 
 vi.mock('execa')
@@ -869,6 +870,76 @@ with multiple lines.
 			})
 
 			await expect(updateIssueComment(99999, 'Test')).rejects.toThrow('Failed to update comment')
+		})
+	})
+
+	describe('getRepoPermission', () => {
+		it('should return permission level for current repo', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify({ viewerPermission: 'WRITE' }),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await getRepoPermission()
+
+			expect(result).toBe('WRITE')
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				['repo', 'view', '--json', 'viewerPermission'],
+				expect.any(Object)
+			)
+		})
+
+		it('should return permission level for specified repo', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify({ viewerPermission: 'READ' }),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await getRepoPermission('owner/repo')
+
+			expect(result).toBe('READ')
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				['repo', 'view', '--repo', 'owner/repo', '--json', 'viewerPermission'],
+				expect.any(Object)
+			)
+		})
+
+		it('should return ADMIN permission level', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify({ viewerPermission: 'ADMIN' }),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await getRepoPermission()
+
+			expect(result).toBe('ADMIN')
+		})
+
+		it('should return TRIAGE permission level', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify({ viewerPermission: 'TRIAGE' }),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await getRepoPermission()
+
+			expect(result).toBe('TRIAGE')
+		})
+
+		it('should propagate errors from gh CLI', async () => {
+			vi.mocked(execa).mockRejectedValueOnce({
+				stderr: 'Could not resolve to a Repository',
+				message: 'Command failed',
+				exitCode: 1,
+			})
+
+			await expect(getRepoPermission()).rejects.toThrow('Command failed')
 		})
 	})
 })

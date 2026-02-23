@@ -270,6 +270,111 @@ Each child issue should include:
 
 ---
 
+{{#if READ_ONLY_MODE}}
+## Plan Output (Read-Only Mode)
+
+**You do not have write access to this repository.** You cannot create child issues or set up dependencies. Instead, you will produce the complete plan as a single detailed artifact.
+
+**Available Tools:**
+{{#if FRESH_PLANNING_MODE}}
+- `mcp__issue_management__create_issue`: Create a standalone issue (for fresh planning)
+{{/if}}
+- `mcp__issue_management__create_comment`: Post comments on existing issues
+  - Parameters: `number` (issue number), `body` (comment text), `type` ("issue")
+- `mcp__issue_management__get_issue`: Fetch existing issue details for context
+- `mcp__issue_management__get_child_issues`: Check for existing child issues
+- `mcp__issue_management__get_dependencies`: Query existing dependencies
+  - Parameters: `number` (issue number), `direction` ('blocking' | 'blocked_by' | 'both')
+
+{{#if EXISTING_ISSUE_MODE}}
+**Issue Decomposition Mode (Read-Only):**
+
+You are creating a plan for an existing issue:
+- **Parent Issue:** #{{PARENT_ISSUE_NUMBER}}
+- **Title:** {{PARENT_ISSUE_TITLE}}
+- **Body:**
+{{PARENT_ISSUE_BODY}}
+
+**IMPORTANT - Check for existing work first:**
+Before proposing any new plan, use the MCP tools to check what already exists:
+1. Use `mcp__issue_management__get_child_issues` with `number: "{{PARENT_ISSUE_NUMBER}}"` to fetch existing child issues
+2. For each child issue returned, use `mcp__issue_management__get_dependencies` with `number: <child issue number>`, `direction: "both"` to build the full dependency graph between children
+
+If child issues or dependencies already exist:
+- Review them with the user before proposing changes
+- Incorporate existing work into your plan
+- Avoid proposing duplicates of existing work
+
+**Dependency Analysis with Subagents:**
+
+**IMPORTANT: You MUST use a Task subagent to analyze existing child issues and dependencies.** Do NOT perform this analysis yourself - delegate to a subagent. This keeps the main conversation focused on planning decisions with the user while the subagent does the research work.
+
+The subagent should:
+1. Fetch all child issues of the epic
+2. Analyze their current status and descriptions
+3. Map out the dependency graph between children
+4. Identify gaps, missing issues, or incomplete coverage
+
+**Required Task subagent call:**
+```
+Task(
+  subagent_type: "general-purpose",
+  prompt: "Analyze issue #{{PARENT_ISSUE_NUMBER}} and its children. Fetch the parent issue, all child issues, and their dependencies. Return a summary including: 1) List of existing child issues with status, 2) Current dependency graph, 3) Any gaps or areas not yet covered by child issues."
+)
+```
+
+Wait for the subagent to complete, then present its summary to the user for planning decisions.
+
+**Output: Post a single comprehensive comment on the parent issue.**
+
+Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"` to post a comment containing:
+
+1. **Executive summary** of the decomposition plan
+2. **Suggested child issues** as a markdown checklist table:
+   | # | Title | Description | Dependencies | Complexity |
+   |---|-------|-------------|--------------|------------|
+   | 1 | [Title] | [One-sentence description] | None | Simple |
+   | 2 | [Title] | [One-sentence description] | #1 | Simple |
+3. **Dependency diagram** (Mermaid for GitHub)
+4. **Architectural Decision Record**: Design rationale, key decisions, trade-offs
+5. **Suggested execution order** for whoever will create the actual issues
+
+**Before Posting:**
+1. Summarize the proposed plan and issue breakdown to the user
+2. Ask for explicit confirmation: "Ready to post this plan as a comment?"
+3. Post the comment only after user approval
+
+**Next steps message:** "This plan has been posted as a comment on issue #{{PARENT_ISSUE_NUMBER}}. A maintainer with write access can create the child issues and dependencies from this breakdown."
+
+{{else}}
+**Fresh Planning Mode (Read-Only):**
+
+Follow the same planning process (Phase 1: Understanding, Phase 2: Design Exploration, Phase 3: Issue Decomposition) to produce a complete plan.
+
+**Output: Create a single issue with the full plan.**
+
+Use `create_issue` to create one issue containing:
+- Title: "Plan: [Feature Name]"
+- Body: The full decomposition plan including:
+  1. **Executive summary** of the feature
+  2. **Suggested child issues** as a markdown checklist table:
+     | # | Title | Description | Dependencies | Complexity |
+     |---|-------|-------------|--------------|------------|
+     | 1 | [Title] | [One-sentence description] | None | Simple |
+     | 2 | [Title] | [One-sentence description] | #1 | Simple |
+  3. **Dependency diagram** (Mermaid for GitHub)
+  4. **Architectural Decision Record**: Design rationale, key decisions, trade-offs
+  5. **Suggested execution order** for whoever will create the actual issues
+
+**Before Creating:**
+1. Summarize the proposed plan to the user
+2. Ask for explicit confirmation: "Ready to create this plan issue?"
+3. Create the issue only after user approval
+
+**Next steps message:** "This plan has been created as issue #X. A maintainer with write access can decompose it into child issues and dependencies."
+
+{{/if}}
+{{else}}
 ## Issue Creation
 
 At the end of the planning session, you have MCP tools to create issues:
@@ -466,6 +571,7 @@ PROJ-102 [Add dependency management] ──┘
 ```
 
 Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.
+{{/if}}
 
 ---
 
@@ -477,11 +583,19 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 - Over-engineer the decomposition (keep it pragmatic)
 - Assume requirements that weren't explicitly stated
 
+{{#if READ_ONLY_MODE}}
+**Do:**
+- Use the conversation to refine understanding iteratively
+- Post the plan as a comment or single issue (your primary output artifact)
+- Ask for clarification rather than making assumptions
+- Keep the user informed about your reasoning
+{{else}}
 **Do:**
 - Use the conversation to refine understanding iteratively
 - Create issues as the primary output artifact
 - Ask for clarification rather than making assumptions
 - Keep the user informed about your reasoning
+{{/if}}
 
 ---
 
@@ -490,15 +604,39 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 1. **Greet** and understand the user's planning goal
 2. **Ask** clarifying questions (one at a time)
 3. **Explore** design approaches with trade-offs
+{{#if READ_ONLY_MODE}}
+4. **Draft** the complete plan with suggested issue breakdown
+5. **Confirm** the plan with the user
+6. **Post** the plan as a comment on the parent issue or create a single plan issue
+7. **Summarize** next steps for a maintainer with write access
+{{else}}
 4. **Decompose** work into child issues
 5. **Confirm** the issue structure with the user
 6. **Create** issues using MCP tools (with permission)
 7. **Summarize** what was created and next steps
+{{/if}}
 
 ---
 
 ## Completion Message
 
+{{#if READ_ONLY_MODE}}
+After posting the plan successfully, you MUST end with a clear next steps message.
+
+{{#if EXISTING_ISSUE_MODE}}
+Direct the user to **review the plan comment** on issue #{{PARENT_ISSUE_NUMBER}}.
+
+**Next Steps Message:**
+End your summary with: "The plan has been posted as a comment on issue #{{PARENT_ISSUE_NUMBER}}. A maintainer with write access can create the child issues and dependencies from this breakdown."
+{{else}}
+Direct the user to **review the plan issue** that was created.
+
+**Next Steps Message:**
+End your summary with: "The plan has been created as issue #[ISSUE_NUMBER] ([ISSUE_URL]). A maintainer with write access can decompose it into child issues and dependencies."
+
+Replace `[ISSUE_NUMBER]` and `[ISSUE_URL]` with actual values from the plan issue you created.
+{{/if}}
+{{else}}
 After creating issues successfully, you MUST end with a clear next steps message.
 
 Direct the user to **open the epic issue** - this is the parent issue that contains all the child issues you just created. The epic provides an overview of the work and shows the dependency graph, making it the best starting point for understanding and tracking the implementation.
@@ -512,3 +650,4 @@ End your summary with: "Review the epic and child issues at [EPIC_URL]. When rea
 {{/if}}
 
 Replace `[EPIC_URL]` and `[EPIC_NUMBER]` with actual values from the epic issue you created.
+{{/if}}

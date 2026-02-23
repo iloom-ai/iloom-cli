@@ -114,6 +114,7 @@ export interface TemplateVariables {
 	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
 	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
+	READ_ONLY_MODE?: boolean  // True when user lacks write access to GitHub repo (plan command only)
 }
 
 /**
