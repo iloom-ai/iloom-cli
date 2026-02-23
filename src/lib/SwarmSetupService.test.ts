@@ -658,6 +658,147 @@ describe('SwarmSetupService', () => {
 				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
 			})
 
+			it('swarm-specific per-agent override beats per-agent swarmModel', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmModel: 'sonnet' },
+						'iloom-swarm-worker': {
+							agents: {
+								'iloom-issue-implementer': { model: 'haiku' },
+							},
+						},
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Priority 1 (haiku) should beat Priority 2 per-agent swarmModel (sonnet)
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+			})
+
+			it('uses per-agent swarmModel when configured', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmModel: 'haiku' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+			})
+
+			it('per-agent swarmModel beats blanket swarm worker model', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmModel: 'haiku' },
+						'iloom-swarm-worker': {
+							model: 'sonnet',
+						},
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// per-agent swarmModel (haiku) beats blanket swarm worker model (sonnet)
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+			})
+
+			it('per-agent swarmModel beats spin.swarmModel', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmModel: 'haiku' },
+					},
+					spin: { swarmModel: 'sonnet' },
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// per-agent swarmModel (haiku) beats spin.swarmModel (sonnet)
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+			})
+
+			it('spin.swarmModel acts as blanket override when no swarm-worker.model set', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					spin: { swarmModel: 'haiku' },
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// spin.swarmModel (haiku) overrides base per-agent model (opus)
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+			})
+
+			it('agents.iloom-swarm-worker.model beats spin.swarmModel', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-swarm-worker': {
+							model: 'sonnet',
+						},
+					},
+					spin: { swarmModel: 'haiku' },
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						tools: ['Bash', 'Read'],
+						model: 'opus',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// blanket swarm worker model (sonnet) beats spin.swarmModel (haiku)
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+			})
+
 			it('swarm override does not mutate tools metadata', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
@@ -773,6 +914,35 @@ describe('SwarmSetupService', () => {
 			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
 			expect(writtenContent).toContain('model: opus')
 			expect(writtenContent).not.toContain('model: sonnet')
+		})
+
+		it('uses spin.swarmModel for worker frontmatter when agents.iloom-swarm-worker.model not set', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				spin: { swarmModel: 'opus' },
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('model: opus')
+			expect(writtenContent).not.toContain('model: sonnet')
+		})
+
+		it('agents.iloom-swarm-worker.model beats spin.swarmModel for worker frontmatter', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'opus',
+					},
+				},
+				spin: { swarmModel: 'haiku' },
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('model: opus')
+			expect(writtenContent).not.toContain('model: haiku')
 		})
 
 		it('includes rendered template content in the body', async () => {

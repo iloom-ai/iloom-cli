@@ -13,6 +13,10 @@ export const BaseAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
 		.describe('Claude model shorthand: sonnet, opus, or haiku'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
 	enabled: z
 		.boolean()
 		.optional()
@@ -55,6 +59,10 @@ export const SpinAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.default('opus')
 		.describe('Claude model shorthand for spin orchestrator'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model for swarm worker agents. Sets the default model for all phase agents in swarm mode when not overridden by per-agent swarm-specific settings.'),
 })
 
 /**
@@ -593,6 +601,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	spin: z
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),

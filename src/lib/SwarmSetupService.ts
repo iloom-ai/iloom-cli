@@ -248,10 +248,12 @@ export class SwarmSetupService {
 
 		// Apply swarm-specific model overrides (fallback chain)
 		// Priority 1: agents.iloom-swarm-worker.agents.<agent-name>.model (swarm-specific per-agent)
-		// Priority 2: agents.iloom-swarm-worker.model (blanket swarm worker model, explicitly configured)
-		// Priority 2.5: built-in swarm defaults (e.g., implementer defaults to sonnet)
-		// Priority 3: agents.<agent-name>.model (base per-agent, already applied by loadAgents)
-		// Priority 4: agent .md file default (already applied by loadAgents)
+		// Priority 2: agents.<agent-name>.swarmModel (per-agent swarm model)
+		// Priority 3: agents.iloom-swarm-worker.model (blanket swarm worker model, explicitly configured)
+		// Priority 4: spin.swarmModel (spin config blanket swarm model)
+		// Priority 5: built-in swarm defaults (e.g., implementer defaults to sonnet)
+		// Priority 6: agents.<agent-name>.model (base per-agent, already applied by loadAgents)
+		// Priority 7: agent .md file default (already applied by loadAgents)
 		const swarmWorkerSettings = settings?.agents?.['iloom-swarm-worker']
 		const swarmAgentOverrides = swarmWorkerSettings?.agents
 		// NOTE: swarmWorkerModel is undefined when not explicitly set by the user.
@@ -259,25 +261,33 @@ export class SwarmSetupService {
 		// in the fallback chain. It only activates in renderSwarmWorkerAgent for the
 		// worker agent's own frontmatter model.
 		const swarmWorkerModel = swarmWorkerSettings?.model
+		const spinSwarmModel = settings?.spin?.swarmModel
 
-		// Built-in defaults for phase agents in swarm mode (priority 2.5)
+		// Built-in defaults for phase agents in swarm mode (priority 3)
 		const swarmAgentDefaults: Record<string, string> = {
 			'iloom-issue-implementer': 'sonnet',
 		}
 
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
 			const swarmOverrideModel = swarmAgentOverrides?.[agentName]?.model
+			const perAgentSwarmModel = settings?.agents?.[agentName]?.swarmModel
 			if (swarmOverrideModel) {
 				// Priority 1: swarm-specific agent model override
 				agents[agentName] = { ...agentConfig, model: swarmOverrideModel }
+			} else if (perAgentSwarmModel) {
+				// Priority 2: per-agent swarmModel
+				agents[agentName] = { ...agentConfig, model: perAgentSwarmModel }
 			} else if (swarmWorkerModel) {
-				// Priority 2: blanket swarm worker model (overrides base per-agent model)
+				// Priority 3: blanket swarm worker model (overrides base per-agent model)
 				agents[agentName] = { ...agentConfig, model: swarmWorkerModel }
+			} else if (spinSwarmModel) {
+				// Priority 4: spin config blanket swarm model
+				agents[agentName] = { ...agentConfig, model: spinSwarmModel }
 			} else if (swarmAgentDefaults[agentName]) {
-				// Priority 2.5: built-in swarm defaults for specific agents
+				// Priority 5: built-in swarm defaults for specific agents
 				agents[agentName] = { ...agentConfig, model: swarmAgentDefaults[agentName] }
 			}
-			// Priority 3/4: keep model from loadAgents() (base agent model / .md default)
+			// Priority 6/7: keep model from loadAgents() (base agent model / .md default)
 		}
 
 		const renderedFiles: string[] = []
@@ -354,7 +364,7 @@ export class SwarmSetupService {
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
 			// Build the agent file with frontmatter
-			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
+			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? settings?.spin?.swarmModel ?? 'sonnet'
 
 			const frontmatter = [
 				'---',
