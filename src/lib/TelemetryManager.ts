@@ -1,5 +1,6 @@
 import os from 'os'
 import path from 'path'
+import nodeFs from 'node:fs'
 import fs from 'fs-extra'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../utils/logger.js'
@@ -18,18 +19,34 @@ export class TelemetryManager {
 		this.config = this.readConfig()
 		if (!this.config.distinct_id) {
 			this.config.distinct_id = uuidv4()
-			this.writeConfig()
+			// Re-read to check if another concurrent process already wrote a distinct_id
+			// between our first read and now. Prefer the existing one for consistency.
+			const freshConfig = this.readConfig()
+			if (freshConfig.distinct_id) {
+				this.config = freshConfig
+			} else {
+				// NOTE: There is an accepted residual race condition on first-ever file creation.
+				// If N processes all see ENOENT before any of them writes, each will generate a
+				// different UUID. This only affects the very first invocation on a new machine and
+				// subsequent invocations will read the persisted ID, so the impact is negligible.
+				freshConfig.distinct_id = this.config.distinct_id
+				this.config = freshConfig
+				this.writeConfig()
+			}
 		}
 	}
 
 	private readConfig(): TelemetryConfig {
 		try {
 			const data = fs.readJsonSync(this.configFilePath)
+			if (!data || typeof data !== 'object' || Array.isArray(data)) {
+				throw new Error('Invalid config format: expected a JSON object')
+			}
 			return {
 				distinct_id: typeof data.distinct_id === 'string' ? data.distinct_id : '',
 				enabled: typeof data.enabled === 'boolean' ? data.enabled : true,
-				disclosed_at: typeof data.disclosed_at === 'string' ? data.disclosed_at : undefined,
-				last_version: typeof data.last_version === 'string' ? data.last_version : undefined,
+				...(typeof data.disclosed_at === 'string' ? { disclosed_at: data.disclosed_at } : {}),
+				...(typeof data.last_version === 'string' ? { last_version: data.last_version } : {}),
 			}
 		} catch (error: unknown) {
 			const code = (error as NodeJS.ErrnoException).code
@@ -45,14 +62,31 @@ export class TelemetryManager {
 
 	private writeConfig(): void {
 		try {
-			fs.ensureDirSync(path.dirname(this.configFilePath))
-			fs.writeJsonSync(this.configFilePath, this.config, { spaces: 2 })
+			const dir = path.dirname(this.configFilePath)
+			fs.ensureDirSync(dir)
+			// Atomic write: write to a temp file in the same directory, then rename.
+			// renameSync is atomic on the same filesystem, so concurrent readers will
+			// either see the old file or the new file, never a partially-written one.
+			const tmpPath = `${this.configFilePath}.${process.pid}.tmp`
+			const data = JSON.stringify(this.config, null, 2)
+			nodeFs.writeFileSync(tmpPath, data, 'utf8')
+			nodeFs.renameSync(tmpPath, this.configFilePath)
 		} catch (error: unknown) {
 			const code = (error as NodeJS.ErrnoException).code
 			if (code === 'EACCES' || code === 'EPERM') {
 				logger.warn(`TelemetryManager: Permission denied writing config: ${code}`)
 			} else {
 				logger.debug(`TelemetryManager: Failed to write config: ${error}`)
+			}
+			// Clean up temp file if it exists
+			try {
+				const tmpPath = `${this.configFilePath}.${process.pid}.tmp`
+				nodeFs.unlinkSync(tmpPath)
+			} catch (cleanupError: unknown) {
+				const cleanupCode = (cleanupError as NodeJS.ErrnoException).code
+				if (cleanupCode !== 'ENOENT') {
+					logger.debug(`TelemetryManager: Failed to clean up temp file: ${cleanupError}`)
+				}
 			}
 		}
 	}
