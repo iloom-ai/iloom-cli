@@ -1,7 +1,19 @@
+import { realpathSync } from 'fs'
 import { extractIssueNumber } from './git.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata, SwarmState } from '../lib/MetadataManager.js'
 import type { ProjectCapability } from '../types/loom.js'
+
+/**
+ * Resolve a path through symlinks, falling back to the original path on error.
+ */
+function resolvePathSafe(p: string): string {
+  try {
+    return realpathSync(p)
+  } catch {
+    return p
+  }
+}
 
 /**
  * Reference to a parent loom for child looms
@@ -169,16 +181,28 @@ function extractIssueNumbers(branch: string): string[] {
  * @param childIssues - Child issues from epic metadata
  * @param allMetadata - All active loom metadata to search for child looms
  * @param finishedMetadata - Optional finished/archived loom metadata for fallback lookup
+ * @param projectPath - Optional project path to scope metadata filtering (prevents cross-project collisions)
  * @returns Array of SwarmIssue with enriched state and worktreePath
  */
 export function enrichSwarmIssues(
   childIssues: LoomMetadata['childIssues'],
   allMetadata: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
+  projectPath?: string | null,
 ): SwarmIssue[] {
+  // When projectPath is provided, filter metadata to only entries from the same project.
+  // This prevents cross-project collisions where different projects share issue numbers.
+  const resolvedProjectPath = projectPath ? resolvePathSafe(projectPath) : null
+  const scopedActive = resolvedProjectPath
+    ? allMetadata.filter(m => m.projectPath && resolvePathSafe(m.projectPath) === resolvedProjectPath)
+    : allMetadata
+  const scopedFinished = resolvedProjectPath && finishedMetadata
+    ? finishedMetadata.filter(m => m.projectPath && resolvePathSafe(m.projectPath) === resolvedProjectPath)
+    : finishedMetadata
+
   // Build a map of issue number -> metadata for fast lookup
   const issueNumberToMetadata = new Map<string, LoomMetadata>()
-  for (const meta of allMetadata) {
+  for (const meta of scopedActive) {
     for (const issueNum of meta.issue_numbers) {
       issueNumberToMetadata.set(issueNum, meta)
     }
@@ -186,8 +210,8 @@ export function enrichSwarmIssues(
 
   // Build a separate map for finished metadata (only used as fallback)
   const finishedIssueNumberToMetadata = new Map<string, LoomMetadata>()
-  if (finishedMetadata) {
-    for (const meta of finishedMetadata) {
+  if (scopedFinished) {
+    for (const meta of scopedFinished) {
       for (const issueNum of meta.issue_numbers) {
         finishedIssueNumberToMetadata.set(issueNum, meta)
       }
@@ -259,7 +283,7 @@ export function formatLoomForJson(
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata?.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata)
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata?.projectPath)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata?.dependencyMap && Object.keys(metadata.dependencyMap).length > 0
@@ -330,7 +354,7 @@ export function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: 
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata)
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata.projectPath)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata.dependencyMap && Object.keys(metadata.dependencyMap).length > 0

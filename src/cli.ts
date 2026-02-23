@@ -1139,7 +1139,7 @@ program
             activeJson = globalActiveLooms.map(loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms)
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
