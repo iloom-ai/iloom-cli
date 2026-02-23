@@ -587,6 +587,10 @@ export class IgniteCommand {
 			variables.STANDARD_ISSUE_MODE = true
 		}
 
+		// Detect VS Code mode
+		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+		variables.IS_VSCODE_MODE = isVscodeMode
+
 		return variables
 	}
 

@@ -795,6 +795,31 @@ When an epic issue is created or the user wants to break a large task into child
 
 When the user says they're done or ready to wrap up, provide these instructions:
 
+{{#if IS_VSCODE_MODE}}
+"## Wrapping Up
+
+Your changes have been implemented in the current branch.
+
+**Note: This was branch mode - no GitHub issue is associated with this work. Context from this session is ephemeral and not persisted.**
+
+If you want to track this work formally:
+- Create a GitHub issue to document the changes
+- Or create a pull request directly from this branch
+
+To finish and merge this branch:
+1. In the iloom Explorer panel, click the **Finish** flag on this loom
+
+This will automatically:
+- Stop any running web servers
+- Merge your changes back to the main branch
+- Clean up the worktree
+- Delete the database branch (if applicable)
+- Remove the workspace
+
+Alternatively, you can exit this Claude session (type `/exit`) and run `iloom finish` from the terminal.
+
+2. Once the finish process completes, you can close any IDE windows that were opened for this branch"
+{{else}}
 "## Wrapping Up
 
 Your changes have been implemented in the current branch.
@@ -818,3 +843,4 @@ This will automatically:
 - Clean up the worktree
 - Delete the database branch (if applicable)
 - Remove the workspace"
+{{/if}}

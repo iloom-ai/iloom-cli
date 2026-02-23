@@ -561,6 +561,64 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('VS Code mode detection', () => {
+		it('should pass IS_VSCODE_MODE: true when ILOOM_VSCODE=1', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__vscode-test')
+
+			const originalEnv = process.env.ILOOM_VSCODE
+			process.env.ILOOM_VSCODE = '1'
+
+			try {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						IS_VSCODE_MODE: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_VSCODE
+				} else {
+					process.env.ILOOM_VSCODE = originalEnv
+				}
+			}
+		})
+
+		it('should pass IS_VSCODE_MODE: false when ILOOM_VSCODE is not set', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__vscode-test')
+
+			const originalEnv = process.env.ILOOM_VSCODE
+			delete process.env.ILOOM_VSCODE
+
+			try {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						IS_VSCODE_MODE: false,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEnv !== undefined) {
+					process.env.ILOOM_VSCODE = originalEnv
+				}
+			}
+		})
+	})
+
 	describe('Error Handling', () => {
 		it('should handle git command failures gracefully', async () => {
 			// Spy on launchClaude

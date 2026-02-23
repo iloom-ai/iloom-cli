@@ -269,6 +269,24 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
 When the user says they're done or ready to wrap up, provide these instructions:
 
+{{#if IS_VSCODE_MODE}}
+"## Wrapping Up
+
+To complete the workflow and merge your changes:
+
+1. In the iloom Explorer panel, click the **Finish** flag on this loom
+
+This will automatically detect the current PR and:
+- Stop any running web servers for this PR
+- Merge your changes back to the main branch
+- Clean up the worktree
+- Delete the database branch (if applicable)
+- Remove the workspace
+
+Alternatively, you can exit this Claude session (type `/exit`) and run `iloom finish` from the terminal.
+
+2. Once the finish process completes, you can close any IDE windows that were opened specifically for this PR"
+{{else}}
 "## Wrapping Up
 
 To complete the workflow and merge your changes:
@@ -287,3 +305,4 @@ This will automatically detect the current PR and:
 - Remove the workspace
 
 3. Once the finish command completes, you can close any terminal or IDE windows that were opened specifically for this PR"
+{{/if}}
