@@ -16,6 +16,10 @@ export class TelemetryManager {
 		const dir = configDir ?? path.join(os.homedir(), '.config', 'iloom-ai')
 		this.configFilePath = path.join(dir, CONFIG_FILE)
 		this.config = this.readConfig()
+		if (!this.config.distinct_id) {
+			this.config.distinct_id = uuidv4()
+			this.writeConfig()
+		}
 	}
 
 	private readConfig(): TelemetryConfig {
@@ -31,10 +35,11 @@ export class TelemetryManager {
 			const code = (error as NodeJS.ErrnoException).code
 			if (code === 'ENOENT') {
 				logger.debug('TelemetryManager: Config file not found, using defaults')
-			} else {
-				logger.warn(`TelemetryManager: Unexpected error reading config (${code}), using defaults`)
+				return { ...DEFAULT_CONFIG }
 			}
-			return { ...DEFAULT_CONFIG }
+			// Corrupted/unreadable file: disable telemetry to respect user opt-out
+			logger.warn(`TelemetryManager: Unexpected error reading config (${code ?? error}), disabling telemetry`)
+			return { ...DEFAULT_CONFIG, enabled: false }
 		}
 	}
 
@@ -53,10 +58,6 @@ export class TelemetryManager {
 	}
 
 	getDistinctId(): string {
-		if (!this.config.distinct_id) {
-			this.config.distinct_id = uuidv4()
-			this.writeConfig()
-		}
 		return this.config.distinct_id
 	}
 
@@ -92,6 +93,7 @@ export class TelemetryManager {
 	}
 
 	setLastVersion(version: string): void {
+		if (this.config.last_version === version) return
 		this.config.last_version = version
 		this.writeConfig()
 	}

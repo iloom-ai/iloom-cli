@@ -38,7 +38,8 @@ const packageJson = getPackageInfo(__filename)
  * Extracted for testability.
  */
 export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boolean): void {
-  const telemetryManager = new TelemetryManager()
+  const service = TelemetryService.getInstance()
+  const telemetryManager = service.getManager()
 
   // First-run disclosure
   if (!telemetryManager.hasBeenDisclosed()) {
@@ -51,7 +52,7 @@ export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boole
       logger.info('')
     }
     telemetryManager.markDisclosed()
-    TelemetryService.getInstance().track('cli.installed', {
+    service.track('cli.installed', {
       version: currentVersion,
       os: process.platform,
       node_version: process.version,
@@ -61,7 +62,7 @@ export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boole
   // Upgrade detection
   const lastVersion = telemetryManager.getLastVersion()
   if (lastVersion && lastVersion !== currentVersion) {
-    TelemetryService.getInstance().track('cli.upgraded', {
+    service.track('cli.upgraded', {
       version: currentVersion,
       previous_version: lastVersion,
       os: process.platform,

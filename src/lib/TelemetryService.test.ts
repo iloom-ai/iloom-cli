@@ -45,6 +45,14 @@ describe('TelemetryService', () => {
 		})
 	})
 
+	describe('getManager', () => {
+		it('exposes the internal TelemetryManager instance', () => {
+			const manager = createMockManager()
+			const service = new TelemetryService(manager)
+			expect(service.getManager()).toBe(manager)
+		})
+	})
+
 	describe('track', () => {
 		it('sends event via posthog.capture() when enabled', () => {
 			const service = new TelemetryService(createMockManager())

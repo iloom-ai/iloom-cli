@@ -16,12 +16,16 @@ export class TelemetryService {
 		this.manager = manager ?? new TelemetryManager()
 		if (this.manager.isEnabled()) {
 			try {
-				this.client = new PostHog(POSTHOG_API_KEY, { host: POSTHOG_HOST })
+				this.client = new PostHog(POSTHOG_API_KEY, { host: POSTHOG_HOST, flushAt: 1, flushInterval: 0 })
 			} catch (error) {
 				logger.debug(`TelemetryService: Failed to initialize PostHog: ${error}`)
 				this.client = null
 			}
 		}
+	}
+
+	getManager(): TelemetryManager {
+		return this.manager
 	}
 
 	static getInstance(): TelemetryService {
@@ -53,13 +57,18 @@ export class TelemetryService {
 
 	async shutdown(): Promise<void> {
 		if (!this.client) return
+		let timeoutId: NodeJS.Timeout | undefined
 		try {
 			await Promise.race([
 				this.client.shutdown(),
-				new Promise<void>((resolve) => globalThis.setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+				new Promise<void>((resolve) => {
+					timeoutId = globalThis.setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)
+				}),
 			])
 		} catch (error) {
 			logger.debug(`TelemetryService: Shutdown error: ${error}`)
+		} finally {
+			if (timeoutId) globalThis.clearTimeout(timeoutId)
 		}
 	}
 }
