@@ -6,12 +6,6 @@ import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
 /**
- * Valid project capability values for Zod enum validation.
- * When updating this constant, also update ProjectCapability type in src/types/loom.ts
- */
-const PROJECT_CAPABILITIES = ['cli', 'web'] as const
-
-/**
  * Zod schema for base agent settings (without nested agents)
  */
 export const BaseAgentSettingsSchema = z.object({
@@ -183,10 +177,6 @@ export const WorkflowsSettingsSchemaNoDefaults = z
  */
 export const CapabilitiesSettingsSchema = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -196,7 +186,8 @@ export const CapabilitiesSettingsSchema = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -216,10 +207,6 @@ export const CapabilitiesSettingsSchema = z
  */
 export const CapabilitiesSettingsSchemaNoDefaults = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -229,7 +216,8 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z

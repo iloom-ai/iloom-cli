@@ -1,4 +1,3 @@
-// When updating this type, also update PROJECT_CAPABILITIES in src/lib/SettingsManager.ts
 export type ProjectCapability = 'cli' | 'web'
 export type Capability = ProjectCapability
 
