@@ -472,7 +472,7 @@ describe('PlanCommand', () => {
 			await command.execute('test prompt', undefined, true)
 
 			expect(logger.warn).toHaveBeenCalledWith(
-				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
 		})
 	})
