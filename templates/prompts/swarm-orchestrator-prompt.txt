@@ -14,12 +14,18 @@ You are running with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. You have access t
 
 The recap panel is visible to the user in VS Code. Use these Recap MCP tools to capture knowledge:
 
-- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
-- `recap.get_recap` - Call before adding entries to check what's already captured
-- `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content. **Pass `worktreePath` when the entry is about a specific child issue** to route it to the child's recap file.
+- `recap.get_recap` - Call before adding entries to check what's already captured. **Pass `worktreePath` to read a specific child's recap.**
+- `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced. **Pass `worktreePath` when the artifact belongs to a child issue.**
 - `recap.set_loom_state` - Update the loom state (in_progress, done, failed, etc.)
 
-**Artifact logging is mandatory.** Every time you close an issue or merge a branch, call `recap.add_artifact` to log it. This keeps the recap panel up to date for the user.
+### Recap Routing: Epic vs Child
+
+All recap tools (`add_entry`, `add_artifact`, `set_loom_state`, `get_recap`) accept an optional `worktreePath` parameter. When omitted, entries are written to the epic's recap file. When provided, entries are routed to the specified child's recap file.
+
+**Rule:** Any recap call made about a specific child issue MUST include `worktreePath: "<child-worktree-path>"`. Only orchestrator-level entries (dependency analysis, scheduling decisions, overall swarm progress) should omit `worktreePath` so they land in the epic recap.
+
+**Artifact and entry logging is mandatory.** Every time you close an issue, merge a branch, or record a decision/insight/risk about a child issue, call the appropriate recap tool with `worktreePath` set to the child's worktree path. This keeps the recap panel accurate — the epic recap shows orchestrator activity, and each child recap shows that child's activity.
 
 ---
 
@@ -316,11 +322,12 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
 1. **Update tracking**: Mark the child's status as `failed`
 2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
 3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. Log the comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Failure comment for #<child-number>", worktreePath: "<child-worktree-path>" }`.
-4. **Log the failure**: Record the failure reason and which step failed
+4. **Log the failure as a recap entry**: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<child-number> failed: <brief reason>", worktreePath: "<child-worktree-path>" }` to record the failure in the child's recap
 5. **Do NOT block other children**: Continue processing remaining children
 6. **Handle downstream dependencies**: For any children that depend on the failed child:
    - Mark them as `failed` with reason: "Blocked by failed dependency #<failed-child-number>"
-   - Update their metadata state to `failed`
+   - Update their loom state: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<downstream-child-worktree-path>" }`
+   - Log a recap entry for each: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Blocked by failed dependency #<failed-child-number>", worktreePath: "<downstream-child-worktree-path>" }`
    - Do NOT spawn agents for them
 
 {{#if DRAFT_PR_MODE}}

@@ -55,9 +55,9 @@ Use these Recap MCP tools:
 **Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
 
 {{#if SWARM_MODE}}
-**Swarm Mode Recap**: When calling recap tools, the recap server is configured for this worktree. No additional worktreePath parameter is needed.
+**Swarm Mode Recap**: When calling recap tools directly (not via sub-agents), you MUST pass `worktreePath: "{{WORKTREE_PATH}}"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Without it, entries default to the epic's recap file instead of this child's recap. Sub-agents spawned via `claude -p` with `--mcp-config` have their own MCP server and do NOT need worktreePath.
 
-**Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>" }`. This keeps the recap panel up to date for the user.
+**Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>", worktreePath: "{{WORKTREE_PATH}}" }`. This keeps the recap panel up to date for the user.
 {{/if}}
 
 ---
@@ -373,16 +373,16 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 **Todo List:**
 1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent). After completion, call `mcp__recap__add_artifact` with the enhancement comment URL.
+3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent). After completion, call `mcp__recap__add_artifact` with the enhancement comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
 3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL.
+4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
-6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent.
+6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
 6a. If COMPLEX: Run artifact review on analysis output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
@@ -392,14 +392,14 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
 6c. If SIMPLE: Run artifact review on combined analysis and plan output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-7. Run implementation via headless claude -p process (implementer agent). After completion, call `mcp__recap__add_artifact` with the implementation comment URL.
+7. Run implementation via headless claude -p process (implementer agent). After completion, call `mcp__recap__add_artifact` with the implementation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
 7a. Run artifact review on implementation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
-8. Set state to `code_review`, run code review via headless claude -p process (code reviewer agent)
+8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via headless claude -p process (code reviewer agent)
 9. If critical/high issues found, auto-fix and optionally re-review
 10. Stage and commit all changes: `git add -A && git commit -m "fixes {{ISSUE_PREFIX}}<issue-number>"`
-11. Set state to `done`, report structured result to orchestrator
+11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
 {{else}}
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
 
@@ -834,14 +834,22 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 **Check the confirmed complexity:**
 
 **IF TRIVIAL complexity confirmed:**
+{{#if SWARM_MODE}}
+1. Call `recap.set_complexity({ complexity: 'trivial', reason: '[brief reason from evaluator]', worktreePath: '<your-worktree-path>' })`
+{{else}}
 1. Call `recap.set_complexity({ complexity: 'trivial', reason: '[brief reason from evaluator]' })`
+{{/if}}
 2. Display to user: "Using TRIVIAL workflow: Skipping analysis and planning, proceeding directly to implementation"
 3. Mark todo #8 as completed
 4. Mark todos #9, #10, #11, #12, #13, #14, and #15 as completed (analysis/planning steps that will not execute)
 5. Skip directly to **STEP 4** (Implementation Phase)
 
 **IF SIMPLE complexity confirmed:**
+{{#if SWARM_MODE}}
+1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]', worktreePath: '<your-worktree-path>' })`
+{{else}}
 1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]' })`
+{{/if}}
 {{#if SWARM_MODE}}
 2. Log: "Using SIMPLE workflow: Combined analysis and planning via headless claude -p process, then implementation"
 {{else}}
@@ -853,7 +861,11 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 6. Note: After STEP 2-SIMPLE completes, skip separate analysis (STEP 2) and planning (STEP 3) phases, go directly to implementation (STEP 4)
 
 **IF COMPLEX complexity confirmed:**
+{{#if SWARM_MODE}}
+1. Call `recap.set_complexity({ complexity: 'complex', reason: '[brief reason from evaluator]', worktreePath: '<your-worktree-path>' })`
+{{else}}
 1. Call `recap.set_complexity({ complexity: 'complex', reason: '[brief reason from evaluator]' })`
+{{/if}}
 2. Display to user: "✓ Using COMPLEX workflow: Separate analysis, planning, and implementation phases"
 3. Mark todo #8 as completed
 4. Mark todo #9 as completed (SIMPLE workflow step that will not execute)
@@ -1056,7 +1068,11 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
      - [ ] Implementation in progress...
      ```
    - Store the comment ID
+{{#if SWARM_MODE}}
+   - Call `mcp__recap__add_artifact` to log the comment (include `worktreePath: "<your-worktree-path>"`)
+{{else}}
    - Call `mcp__recap__add_artifact` to log the comment
+{{/if}}
 
 3. **Execute implementation:**
 
@@ -1136,7 +1152,11 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
      </details>
      ```
+{{#if SWARM_MODE}}
+   - Call `mcp__recap__add_artifact` again with the same `primaryUrl` but updated `description` reflecting the completed state and `worktreePath: "<your-worktree-path>"` (this replaces the original "in progress" artifact)
+{{else}}
    - Call `mcp__recap__add_artifact` again with the same `primaryUrl` but updated `description` reflecting the completed state (this replaces the original "in progress" artifact)
+{{/if}}
 
 5. Mark todo #16 as completed
 {{#if IMPLEMENTER_REVIEW_ENABLED}}
@@ -1189,7 +1209,7 @@ If workflow plan determined SKIP_IMPLEMENTATION:
 This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
 
 {{#if SWARM_MODE}}
-**State transition**: Before running review, call `recap.set_loom_state('code_review')`.
+**State transition**: Before running review, call `recap.set_loom_state('code_review')` with `worktreePath: "<your-worktree-path>"`.
 {{/if}}
 
 {{#if REVIEW_ENABLED}}
@@ -1330,11 +1350,11 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 ## Post-Workflow: Report to Orchestrator
 
 After committing changes successfully:
-1. Call `recap.set_loom_state('done')`
+1. Call `recap.set_loom_state('done')` with `worktreePath: "<your-worktree-path>"`
 2. Return the structured Swarm Workflow Result (see format in preamble above)
 
 If any step failed unrecoverably:
-1. Call `recap.set_loom_state('failed')`
+1. Call `recap.set_loom_state('failed')` with `worktreePath: "<your-worktree-path>"`
 2. Return the structured result with status: `failed` and error details
 3. Do NOT commit partial work
 {{else}}
