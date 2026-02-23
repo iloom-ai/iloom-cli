@@ -8,6 +8,12 @@ You are running with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. You have access t
 
 **This is a fully autonomous workflow. Do NOT pause for user input, call AskUserQuestion, or wait for human checkpoints at any point.**
 
+### Orchestrator Discipline: Stay Lean
+
+You are a **coordinator**, not an executor. Your job is to schedule work, track state, and make decisions -- NOT to run heavy operations directly. All git operations (rebasing, merging, committing, pushing, conflict resolution) and any other code-level work MUST be delegated to subagents via the `Task` tool. The only commands you should run directly are lightweight reads: `cat` for metadata files, `git log`/`git status` for state checks, and `il cleanup` for worktree management.
+
+**Why:** Running heavy operations in the orchestrator bloats its context window, risks mid-operation failures that are harder to recover from, and mixes coordination concerns with execution concerns. Subagents are disposable -- if one fails, the orchestrator can reason about the failure and retry or fail gracefully without losing its own state.
+
 ---
 
 ## Loom Recap
@@ -213,35 +219,54 @@ This is the core orchestration loop. After spawning initial agents, monitor for 
 
 When a child agent reports back with status `success` (or goes idle after completing its tasks):
 
-#### Step 3.1: Merge the Child's Branch
+#### Step 3.1: Rebase and Merge the Child's Branch
 
-Rebase the child branch onto the epic branch from the child's worktree, then fast-forward merge from the epic worktree. You must run the rebase from the child's worktree because that's where the child branch is checked out — git will refuse to rebase a branch that's checked out in another worktree.
+**Delegate this entire operation to a subagent.** Do NOT run git rebase, merge, or conflict resolution commands directly in the orchestrator.
 
-```bash
-cd <child-worktree-path>
-git rebase epic/{{EPIC_ISSUE_NUMBER}}
-cd {{EPIC_WORKTREE_PATH}}
-git merge --ff-only <child-branch-name>
+Spawn a subagent using the `Task` tool:
+- `subagent_type`: `"general-purpose"`
+- Prompt:
+
+```
+Rebase and merge child branch `<child-branch-name>` (issue #<child-number>: "<child-title>") into the epic branch.
+
+## Instructions
+
+1. Rebase the child branch onto the epic branch FROM THE CHILD'S WORKTREE (git refuses to rebase a branch checked out in another worktree):
+   ```bash
+   cd <child-worktree-path>
+   git rebase epic/{{EPIC_ISSUE_NUMBER}}
+   ```
+
+2. If the rebase has conflicts, resolve them:
+   - Understand the intent of both sides
+   - Stage resolved files with `git add`
+   - Run `git rebase --continue`
+   - Repeat for any remaining conflicts
+   - Ensure the code compiles after resolution
+
+3. After the rebase succeeds, fast-forward merge from the epic worktree:
+   ```bash
+   cd {{EPIC_WORKTREE_PATH}}
+   git merge --ff-only <child-branch-name>
+   ```
+
+4. Report back with:
+   - Status: "success" or "failed"
+   - If conflicts were resolved, briefly describe what was resolved
+   - If failed, explain why (e.g., "Rebase conflict could not be resolved" or specific error)
+
+IMPORTANT: Use rebase + fast-forward merge, NOT merge commits. This keeps the epic branch history linear and clean.
 ```
 
-Where `<child-worktree-path>` and `<child-branch-name>` are from the child's entry in `CHILD_ISSUES`.
+**Handle the subagent result:**
+- If the subagent reports `success`: proceed to Step 3.2
+- If the subagent reports `failed`:
+  - Ensure the rebase is aborted (spawn another subagent if needed): `cd <child-worktree-path> && git rebase --abort`
+  - Mark the child as `failed` with reason from the subagent's report
+  - Skip to Phase 4 failure handling for this child
 
-**Important**: Use rebase + fast-forward merge, NOT merge commits. This keeps the epic branch history linear and clean.
-
-#### Step 3.2: Handle Rebase Conflicts
-
-If the rebase has conflicts:
-
-1. **Attempt automatic resolution**: Spawn a subagent to resolve the conflicts:
-   - `subagent_type`: `"general-purpose"`
-   - Prompt: "There are rebase conflicts while rebasing branch `<child-branch-name>` (issue #<child-number>: '<child-title>') onto the epic branch in `{{EPIC_WORKTREE_PATH}}`. Please resolve the conflicts by understanding the intent of both sides, stage the resolved files with `git add`, and run `git rebase --continue`. Ensure the code compiles after resolution."
-2. If the subagent resolves the conflicts: proceed with the fast-forward merge, then Step 3.3
-3. If the subagent fails to resolve:
-   - Abort the rebase: `git rebase --abort`
-   - Mark the child as `failed` with reason: "Rebase conflict could not be resolved"
-   - Skip to Phase 4 failure handling for this child
-
-#### Step 3.3: Ensure Completion Comment Exists
+#### Step 3.2: Ensure Completion Comment Exists
 
 Child agents are expected to post a summary comment on their issue when they finish. However, if a child agent completes without posting a comment, the orchestrator must post one on its behalf.
 
@@ -252,7 +277,7 @@ Child agents are expected to post a summary comment on their issue when they fin
    - `body`: A summary including: what was implemented, the branch name, and that it was merged into the epic branch
 3. Log any new comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Completion comment for #<child-number>", worktreePath: "<child-worktree-path>" }`
 
-#### Step 3.4: Update State
+#### Step 3.3: Update State
 
 1. Update the child's tracking status to `done`
 2. Update the child's loom state: Call `mcp__recap__set_loom_state` with `{ state: "done", worktreePath: "<child-worktree-path>" }`
@@ -261,22 +286,32 @@ Child agents are expected to post a summary comment on their issue when they fin
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-#### Step 3.4.5: Push Epic Branch to Remote (Incremental)
+#### Step 3.3.5: Push Epic Branch to Remote (Incremental)
 
-After each successful child merge, push the epic branch to remote so the draft PR reflects incremental progress.
+**Delegate this to a subagent.** After each successful child merge, push the epic branch to remote so the draft PR reflects incremental progress.
+
+Spawn a subagent using the `Task` tool:
+- `subagent_type`: `"general-purpose"`
+- Prompt:
+
+```
+Push the epic branch to remote from the epic worktree.
 
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
 git push --force-with-lease {{GIT_REMOTE}} HEAD
 ```
 
-**NOTE**: `--force-with-lease` is required because the remote branch may still have the placeholder commit (on first push) or because the history was rewritten by a previous force push.
+NOTE: --force-with-lease is required because the remote branch may still have the placeholder commit (on first push) or because the history was rewritten by a previous force push.
 
-**Error handling**: If the push fails, log the error and continue. Do NOT fail the swarm or skip remaining children. The work is committed locally and will be pushed either by a later successful push or by `il finish`.
+Report back with status: "success" or "failed" and any error output.
+```
+
+**Error handling**: If the subagent reports a push failure, log the error and continue. Do NOT fail the swarm or skip remaining children. The work is committed locally and will be pushed either by a later successful push or by `il finish`.
 
 {{/if}}
 {{/if}}
-#### Step 3.4.6: Clean Up Child Worktree
+#### Step 3.3.6: Clean Up Child Worktree
 
 {{#unless NO_CLEANUP}}
 After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il cleanup --archive`. Since the child's work is already rebased and merged into the epic branch, we only need to remove the worktree and branch while preserving metadata.
@@ -294,7 +329,7 @@ If the `il cleanup` command fails, log the error but continue with the orchestra
 **Note:** Child loom cleanup is disabled (`--skip-cleanup` flag). Child worktrees will be preserved after the swarm completes.
 {{/if}}
 
-#### Step 3.5: Check for Newly Unblocked Issues
+#### Step 3.4: Check for Newly Unblocked Issues
 
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
@@ -357,7 +392,14 @@ Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
 
 ### Step 5.3: Final Commit on Epic Branch
 
-If at least one child succeeded, create a final commit on the epic branch that fixes the epic issue. This ensures the epic issue is automatically closed when the PR is merged.
+If at least one child succeeded, **delegate the final commit to a subagent.**
+
+Spawn a subagent using the `Task` tool:
+- `subagent_type`: `"general-purpose"`
+- Prompt:
+
+```
+Create the final commit on the epic branch that closes the epic issue.
 
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
@@ -365,36 +407,47 @@ git add -A
 git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
 ```
 
-Note: `--allow-empty` is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message trailer to trigger issue closure.
+NOTE: --allow-empty is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message to trigger issue closure.
+
+Report back with status: "success" or "failed" and the commit hash if successful.
+```
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 ### Step 5.3.5: Push Epic Branch to Remote (Final Commit)
 
-After the final "Fixes" commit, push the epic branch to remote so the draft PR includes the issue-closing trailer.
+After the final "Fixes" commit, push the epic branch to remote so the draft PR includes the issue-closing trailer. **Delegate this to a subagent.**
 
-**Note**: Incremental pushes in Step 3.4.5 should have already pushed merged child work. This final push adds the "Fixes" commit.
+**Note**: Incremental pushes in Step 3.3.5 should have already pushed merged child work. This final push adds the "Fixes" commit.
 
-1. **Check if push is needed:**
-   ```bash
-   cd {{EPIC_WORKTREE_PATH}}
-   git log -1 --format=%s
-   ```
-   - If the latest commit message starts with `[iloom-placeholder]` or `[iloom] Temporary`, no children succeeded. Skip the push.
+First, check if push is needed (this is a lightweight read, OK to do directly):
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git log -1 --format=%s
+```
+- If the latest commit message starts with `[iloom-placeholder]` or `[iloom] Temporary`, no children succeeded. Skip the push.
 
-2. **Push to remote:**
-   ```bash
-   cd {{EPIC_WORKTREE_PATH}}
-   git push --force-with-lease {{GIT_REMOTE}} HEAD
-   ```
-   **NOTE**: `--force-with-lease` is required because the branch history includes rebased child commits.
+If a push is needed, spawn a subagent using the `Task` tool:
+- `subagent_type`: `"general-purpose"`
+- Prompt:
 
-3. **Handle errors gracefully:**
-   - If push fails: Log the error but do NOT fail the swarm. The work is committed locally and `il finish` will handle the push.
-   - Do NOT retry automatically.
+```
+Push the epic branch to remote (final commit with Fixes trailer).
 
-4. **Notify completion:**
-   - Log: "Epic branch pushed to remote. Draft PR #{{DRAFT_PR_NUMBER}} updated with final commit."
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git push --force-with-lease {{GIT_REMOTE}} HEAD
+```
+
+NOTE: --force-with-lease is required because the branch history includes rebased child commits.
+
+Report back with status: "success" or "failed" and any error output.
+```
+
+**Handle the subagent result:**
+- If push fails: Log the error but do NOT fail the swarm. The work is committed locally and `il finish` will handle the push.
+- Do NOT retry automatically.
+- If push succeeds: Log "Epic branch pushed to remote. Draft PR #{{DRAFT_PR_NUMBER}} updated with final commit."
 
 {{/if}}
 {{/if}}

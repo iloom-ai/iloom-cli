@@ -26,6 +26,8 @@ vi.mock('fs-extra', () => ({
 	default: {
 		ensureDir: vi.fn().mockResolvedValue(undefined),
 		writeFile: vi.fn().mockResolvedValue(undefined),
+		pathExists: vi.fn().mockResolvedValue(true),
+		copy: vi.fn().mockResolvedValue(undefined),
 	},
 }))
 
@@ -119,8 +121,10 @@ describe('SwarmSetupService', () => {
 			getPrompt: vi.fn().mockResolvedValue('# Rendered swarm skill content'),
 		} as unknown as PromptTemplateManager
 
-		// Re-configure mock after vitest's automatic mockReset
+		// Re-configure mocks after vitest's automatic mockReset
 		mockGenerateAndWriteMcpConfigFile.mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+		vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+		vi.mocked(fs.copy).mockResolvedValue(undefined)
 
 		service = new SwarmSetupService(
 			mockGitWorktree,
@@ -816,6 +820,118 @@ describe('SwarmSetupService', () => {
 
 			expect(result).toBe(false)
 		})
+
+		describe('sub-agent timeout', () => {
+			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 1200000 (20 minutes) when not configured', async () => {
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 1200000,
+					}),
+				)
+			})
+
+			it('converts configured subAgentTimeout from minutes to milliseconds', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-swarm-worker': {
+							subAgentTimeout: 30,
+						},
+					},
+				} as unknown as IloomSettings)
+
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 1800000, // 30 * 60 * 1000
+					}),
+				)
+			})
+
+			it('uses configured subAgentTimeout of 1 minute correctly', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-swarm-worker': {
+							subAgentTimeout: 1,
+						},
+					},
+				} as unknown as IloomSettings)
+
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 60000, // 1 * 60 * 1000
+					}),
+				)
+			})
+		})
+	})
+
+	describe('copyAgentsToChildWorktrees', () => {
+		it('copies .claude/agents/ from epic to each successful child worktree', async () => {
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(2)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+				'/Users/dev/project__issue-101/.claude/agents',
+				{ overwrite: true },
+			)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+				'/Users/dev/project__issue-102/.claude/agents',
+				{ overwrite: true },
+			)
+		})
+
+		it('skips failed child worktrees', async () => {
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '', branch: '', success: false, error: 'Branch already exists' },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(1)
+		})
+
+		it('skips copy when epic agents directory does not exist', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValueOnce(false as never)
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).not.toHaveBeenCalled()
+		})
+
+		it('continues if copy fails for one child', async () => {
+			vi.mocked(fs.copy)
+				.mockRejectedValueOnce(new Error('Permission denied'))
+				.mockResolvedValueOnce(undefined)
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(2)
+		})
 	})
 
 	describe('setupSwarm', () => {
@@ -834,6 +950,23 @@ describe('SwarmSetupService', () => {
 			expect(result.childWorktrees).toHaveLength(2)
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
+		})
+
+		it('copies agents to child worktrees after rendering', async () => {
+			await service.setupSwarm(
+				'610',
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				childIssues,
+				'/Users/dev/project',
+				'github',
+			)
+
+			// Should check for agents dir and copy to each successful child
+			expect(fs.pathExists).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+			)
+			expect(fs.copy).toHaveBeenCalledTimes(2)
 		})
 
 		it('passes agent metadata to renderSwarmWorkerAgent (no mcpConfigJson)', async () => {

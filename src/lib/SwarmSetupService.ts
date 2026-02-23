@@ -335,12 +335,17 @@ export class SwarmSetupService {
 			const providerType = settings?.issueManagement?.provider ?? 'github'
 			const issuePrefix = IssueManagementProviderFactory.create(providerType, settings ?? undefined).issuePrefix
 
+			// Compute sub-agent timeout in milliseconds (default: 20 minutes)
+			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 20
+			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
+
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
 				ISSUE_PREFIX: issuePrefix,
+				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
@@ -372,6 +377,42 @@ export class SwarmSetupService {
 			)
 			return false
 		}
+	}
+
+	/**
+	 * Copy .claude/agents/ from the epic worktree to each child worktree.
+	 *
+	 * Child workers need local access to agent files (used via --append-system-prompt-file).
+	 * Without this copy, child worktrees lack the rendered agent files since they only
+	 * exist in the epic worktree after renderSwarmAgents/renderSwarmWorkerAgent.
+	 */
+	async copyAgentsToChildWorktrees(
+		epicWorktreePath: string,
+		childWorktrees: SwarmSetupResult['childWorktrees'],
+	): Promise<void> {
+		const sourceDir = path.join(epicWorktreePath, '.claude', 'agents')
+
+		if (!await fs.pathExists(sourceDir)) {
+			getLogger().warn('No .claude/agents/ directory in epic worktree to copy')
+			return
+		}
+
+		const successfulChildren = childWorktrees.filter((c) => c.success)
+
+		for (const child of successfulChildren) {
+			try {
+				const targetDir = path.join(child.worktreePath, '.claude', 'agents')
+				await fs.copy(sourceDir, targetDir, { overwrite: true })
+				getLogger().debug(`Copied .claude/agents/ to ${child.worktreePath}`)
+			} catch (error) {
+				// Non-fatal: worker can fall back to epic worktree path
+				getLogger().warn(
+					`Failed to copy agents to child worktree ${child.issueId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				)
+			}
+		}
+
+		getLogger().success(`Copied agents to ${successfulChildren.length} child worktrees`)
 	}
 
 	/**
@@ -408,6 +449,9 @@ export class SwarmSetupService {
 			epicWorktreePath,
 			agentMetadata,
 		)
+
+		// 4. Copy .claude/agents/ from epic worktree to each child worktree
+		await this.copyAgentsToChildWorktrees(epicWorktreePath, childWorktrees)
 
 		const successCount = childWorktrees.filter((c) => c.success).length
 		const failCount = childWorktrees.filter((c) => !c.success).length

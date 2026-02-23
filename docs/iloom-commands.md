@@ -583,7 +583,8 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
 3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
 4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
-5. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+5. **Copies agents to child worktrees** - Copies `.claude/agents/` from the epic worktree to each child worktree so workers can resolve agent files locally
+6. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
@@ -1674,6 +1675,29 @@ il spin --set agents.iloom-swarm-worker.agents.iloom-issue-implementer.model=son
 il spin --set agents.iloom-swarm-worker.model=sonnet
 ```
 
+**Sub-Agent Timeout:**
+
+When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
+
+- **Default:** 20 minutes
+- **Setting:** `agents.iloom-swarm-worker.subAgentTimeout` (in minutes)
+- **Range:** 1 to 120 minutes
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "subAgentTimeout": 30
+    }
+  }
+}
+```
+
+```bash
+# Override via CLI flag
+il spin --set agents.iloom-swarm-worker.subAgentTimeout=30
+```
+
 ### Merge Strategy
 
 When a child agent completes successfully:
@@ -1708,13 +1732,18 @@ During swarm mode, the following files are created:
 │           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
 │           └── ...
 ├── issue-101/                         # Child worktree (branched off epic)
+│   ├── .claude/
+│   │   └── agents/                    # Copied from epic worktree during setup (not committed)
+│   │       ├── iloom-swarm-worker.md
+│   │       ├── iloom-swarm-issue-implementer.md
+│   │       └── ...
 │   └── iloom-metadata.json            # state: pending -> in_progress -> done
 ├── issue-102/                         # Another child worktree
 │   └── iloom-metadata.json
 └── ...
 ```
 
-Swarm agent files are automatically added to `.gitignore` by iloom migrations.
+Swarm agent files are not committed to the repository.
 
 ---
 

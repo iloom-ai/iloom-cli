@@ -344,6 +344,8 @@ env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
   "<prompt for the phase>"
 ```
 
+**Bash tool timeout:** When invoking the command above via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` (milliseconds). This prevents sub-agent invocations from hanging indefinitely.
+
 **Agent metadata (model and tools per agent):**
 
 Parse this JSON to look up the correct `--model` and `--allowedTools` for each agent:

@@ -38,6 +38,12 @@ export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
 	agents: z.record(z.string(), BaseAgentSettingsSchema)
 		.optional()
 		.describe('Nested per-agent model overrides for swarm mode. Configure under agents.iloom-swarm-worker.agents.<agent-name>.model to set a different model for phase agents when running inside swarm workers. Fallback chain: swarm-specific agent model > explicit swarm worker model > base agent model. Only meaningful under the iloom-swarm-worker agent entry.'),
+	subAgentTimeout: z
+		.number()
+		.min(1, 'Sub-agent timeout must be at least 1 minute')
+		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
+		.optional()
+		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 20 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
