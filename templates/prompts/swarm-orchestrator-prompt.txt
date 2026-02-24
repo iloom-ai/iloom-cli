@@ -175,22 +175,24 @@ You are working on issue #<child-number>: "<child-title>"
 
 **Worktree path:** `<child-worktree-path>`
 
-IMPORTANT: You MUST work in this worktree path. cd to it first before doing anything:
-cd <child-worktree-path>
+## MANDATORY FIRST STEPS — NO EXCEPTIONS
 
-All file reads, writes, searches, and git operations must happen within this directory. Do NOT work in the epic worktree or any other child's worktree.
+Your FIRST actions, before reading any source code, before any analysis, before any implementation:
 
-## Strict Boundaries
+1. cd to your worktree: `cd <child-worktree-path>`
+2. Read `.claude/iloom-swarm-mcp-config-path` to get your MCP config path
+3. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<child-worktree-path>" })`
+4. Call `mcp__issue_management__get_issue` to read the full issue details
+5. Run STEP 0 (workflow scan) to determine which phases are needed
+
+Your system prompt defines the complete workflow — follow it exactly. You are an ORCHESTRATOR: you never write code or read source files directly at any point. All technical work is delegated to sub-agents via `claude -p`.
+
+## Scope Boundaries
 
 - You are ONLY responsible for issue #<child-number>. Do not implement, fix, commit, or merge work for any other issue.
 - NEVER cd into, read from, or modify files in any other worktree path. Your entire scope is `<child-worktree-path>`.
 - Do NOT merge branches, close issues, or perform any orchestration tasks. The orchestrator handles all merging and issue management.
 - Do NOT pick up tasks from the team task list. You have exactly one job.
-
-**Issue body:**
-<child-issue-body>
-
-Implement this issue following your workflow instructions.
 
 ## After Completion
 
@@ -202,8 +204,6 @@ When your implementation is done, report back with:
 
 After sending your report, STOP. Do not look for more work. Do not check on other issues. Do not attempt to help with other worktrees. Wait for a shutdown request and approve it.
 ```
-
-Note: The child issue body is available directly in the `CHILD_ISSUES` template data above (each entry has a `body` field). Make sure to include it in the Task prompt for each child.
 
 Update each child's tracking status to `in_progress`.
 

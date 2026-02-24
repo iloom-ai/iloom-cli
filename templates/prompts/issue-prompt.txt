@@ -262,6 +262,20 @@ Since this is a first-time user:
 {{#if SWARM_MODE}}
 ## Swarm Mode - Autonomous Workflow
 
+### MANDATORY FIRST STEP — NO EXCEPTIONS
+
+Before ANY file reads, ANY source code inspection, ANY analysis, ANY coding:
+
+1. `cd` to your worktree path (provided in the Task prompt)
+2. Read `.claude/iloom-swarm-mcp-config-path` to get your MCP config path
+3. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<your-worktree-path>" })`
+4. Call `mcp__issue_management__get_issue` to read the full issue details
+5. Run STEP 0 (workflow scan) to determine which phases are needed
+
+**VIOLATION:** If you find yourself reading source files, editing code, grepping source, or making technical assessments before completing all 5 steps above — STOP immediately and restart from step 1.
+
+---
+
 ### CRITICAL: Delegation Rules
 
 **You are a workflow ORCHESTRATOR, not an implementer.** You MUST NOT:
