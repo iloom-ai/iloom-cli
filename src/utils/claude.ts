@@ -578,6 +578,7 @@ Generate a git branch name for the following issue:
 			model,
 			headless: true,
 			noSessionPersistence: true, // Utility operation - don't persist session
+			env: { CLAUDE_CODE_SIMPLE: '1' }, // Minimal mode - no MCP, hooks, or CLAUDE.md loading
 		})) as string
 
 		// Normalize to lowercase for consistency (Linear IDs are uppercase but branches should be lowercase)

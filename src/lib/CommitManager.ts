@@ -344,6 +344,7 @@ export class CommitManager {
         timeout: 120000, // 120 second timeout
         appendSystemPrompt: 'Output only the requested content. Never include preamble, analysis, or meta-commentary. Your response is used verbatim.',
         noSessionPersistence: true, // Utility operation - don't persist session
+        env: { CLAUDE_CODE_SIMPLE: '1' }, // Minimal mode - no MCP, hooks, or CLAUDE.md loading
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,

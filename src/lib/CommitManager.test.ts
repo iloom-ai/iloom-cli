@@ -637,6 +637,20 @@ describe('CommitManager', () => {
       )
     })
 
+    it('should pass CLAUDE_CODE_SIMPLE env var for minimal mode', async () => {
+      vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
+
+      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
+      expect(claudeCall[1]).toEqual(
+        expect.objectContaining({
+          env: { CLAUDE_CODE_SIMPLE: '1' },
+        })
+      )
+    })
+
     it('should use structured XML prompt format', async () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
