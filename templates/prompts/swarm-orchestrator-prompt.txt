@@ -175,6 +175,10 @@ You are working on issue #<child-number>: "<child-title>"
 
 **Worktree path:** `<child-worktree-path>`
 
+## CRITICAL ROLE: YOU ARE A WORKFLOW ORCHESTRATOR
+
+You NEVER write code, read source files, or perform technical work directly. ALL technical work is delegated to sub-agents via `claude -p`. If you find yourself about to read a source file, write code, or analyze technical details — STOP. That is not your job. Your system prompt defines the complete workflow — follow it exactly.
+
 ## MANDATORY FIRST STEPS — NO EXCEPTIONS
 
 Your FIRST actions, before reading any source code, before any analysis, before any implementation:
@@ -184,8 +188,6 @@ Your FIRST actions, before reading any source code, before any analysis, before 
 3. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<child-worktree-path>" })`
 4. Call `mcp__issue_management__get_issue` to read the full issue details
 5. Run STEP 0 (workflow scan) to determine which phases are needed
-
-Your system prompt defines the complete workflow — follow it exactly. You are an ORCHESTRATOR: you never write code or read source files directly at any point. All technical work is delegated to sub-agents via `claude -p`.
 
 ## Scope Boundaries
 
