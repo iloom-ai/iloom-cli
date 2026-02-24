@@ -1251,6 +1251,20 @@ il plan --yolo 42
 
 **Warning:** Autonomous mode will create issues and dependencies without confirmation. Use with caution - it can make irreversible changes to your issue tracker.
 
+**Read-Only Mode (No Write Access):**
+
+When you run `il plan` on a GitHub repository where you lack write or triage permissions (e.g., contributing to an open-source project you don't maintain), `il plan` automatically detects this and switches to read-only mode.
+
+In read-only mode, `il plan` produces the full decomposition plan but posts it as a detailed comment on the parent issue (or as a single standalone issue in fresh planning mode) instead of creating child issues and dependencies. This avoids leaving orphaned issues that cannot be linked.
+
+To check your permission level on a repository:
+
+```bash
+gh repo view --json viewerPermission
+```
+
+Permission levels `ADMIN`, `MAINTAIN`, and `WRITE` grant full `il plan` functionality. `TRIAGE` and `READ` (or no access) trigger read-only mode. Non-GitHub providers (Linear, Jira) are unaffected.
+
 **Available MCP Tools in Session:**
 
 | Category | Tools |

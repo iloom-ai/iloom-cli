@@ -42,6 +42,7 @@ export interface LoomAbandonedProperties {
 export interface EpicPlannedProperties {
   child_count: number
   tracker: string
+  read_only_mode: boolean
 }
 
 export interface SwarmStartedProperties {

@@ -115,6 +115,7 @@ export interface TemplateVariables {
 	SWARM_SUB_AGENT_TIMEOUT_MS?: number  // Timeout in milliseconds for sub-agent claude -p Bash tool calls (default: 1200000 = 20 minutes)
 	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
+	READ_ONLY_MODE?: boolean  // True when user lacks write access to GitHub repo (plan command only)
 }
 
 /**

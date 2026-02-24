@@ -12,6 +12,7 @@ import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setu
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
+import { getRepoPermission } from '../utils/github.js'
 
 // Define provider arrays for validation and dynamic flag generation
 const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
@@ -268,8 +269,11 @@ export class PlanCommand {
 		// This will throw if no git remote is configured - offer to run 'il init' as fallback
 		logger.debug('Generating MCP config for issue management')
 		let mcpConfig: Record<string, unknown>[]
+		let resolvedRepo: string | undefined
 		try {
-			mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+			const mcpResult = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+			mcpConfig = mcpResult.configs
+			resolvedRepo = mcpResult.repo
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
 
@@ -291,7 +295,9 @@ export class PlanCommand {
 					// Retry MCP config generation after init
 					logger.info(chalk.bold('Retrying planning session setup...'))
 					try {
-						mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+						const retryResult = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+						mcpConfig = retryResult.configs
+						resolvedRepo = retryResult.repo
 					} catch (retryError) {
 						const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error'
 						logger.error(`Failed to generate MCP config: ${retryMessage}`)
@@ -355,6 +361,22 @@ export class PlanCommand {
 			serverCount: mcpConfig.length,
 		})
 
+		// Check repository permission level for GitHub repos
+		let hasWriteAccess = true // default for non-GitHub or if check fails
+		if (provider === 'github') {
+			try {
+				const permission = await getRepoPermission(resolvedRepo)
+				hasWriteAccess = ['ADMIN', 'MAINTAIN', 'WRITE'].includes(permission)
+				if (!hasWriteAccess) {
+					logger.warn('You do not have write access to this repository. Running in read-only mode — the plan will be posted as a comment instead of creating child issues.')
+				}
+			} catch (error) {
+				logger.debug('Permission check failed, defaulting to write access', {
+					error: error instanceof Error ? error.message : 'Unknown error',
+				})
+			}
+		}
+
 		// Detect VS Code mode
 		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
 		logger.debug('VS Code mode detection', { isVscodeMode })
@@ -389,6 +411,7 @@ export class PlanCommand {
 			PLANNER: effectivePlanner,
 			REVIEWER: effectiveReviewer,
 			HAS_REVIEWER: effectiveReviewer !== 'none',
+			READ_ONLY_MODE: !hasWriteAccess,
 			...providerFlags,
 		}
 		const architectPrompt = await this.templateManager.getPrompt('plan', templateVariables)
@@ -401,15 +424,15 @@ export class PlanCommand {
 		const allowedTools = [
 			// Issue management tools
 			'mcp__issue_management__create_issue',
-			'mcp__issue_management__create_child_issue',
+			...(hasWriteAccess ? ['mcp__issue_management__create_child_issue'] : []),
 			'mcp__issue_management__get_issue',
 			'mcp__issue_management__get_child_issues',
 			'mcp__issue_management__get_comment',
 			'mcp__issue_management__create_comment',
 			// Dependency management tools
-			'mcp__issue_management__create_dependency',
+			...(hasWriteAccess ? ['mcp__issue_management__create_dependency'] : []),
 			'mcp__issue_management__get_dependencies',
-			'mcp__issue_management__remove_dependency',
+			...(hasWriteAccess ? ['mcp__issue_management__remove_dependency'] : []),
 			// Codebase exploration tools (read-only)
 			'Read',
 			'Glob',
@@ -516,6 +539,7 @@ ${initialMessage}`
 				TelemetryService.getInstance().track('epic.planned', {
 					child_count: children.length,
 					tracker: provider,
+					read_only_mode: !hasWriteAccess,
 				})
 			} catch (error) {
 				logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)
