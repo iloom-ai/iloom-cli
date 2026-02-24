@@ -64,9 +64,10 @@ describe('PlanCommand', () => {
 		// Setup default mocks
 		vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
 		vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
-		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue([
-			{ mcpServers: { issue_management: {} } },
-		])
+		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue({
+			configs: [{ mcpServers: { issue_management: {} } }],
+			repo: 'test-owner/test-repo',
+		})
 		// Default: project is already configured (no first-run setup needed)
 		vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
 		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
@@ -582,6 +583,17 @@ describe('PlanCommand', () => {
 			expect(allowedTools).toContain('mcp__issue_management__create_comment')
 			expect(allowedTools).toContain('mcp__issue_management__get_issue')
 			expect(allowedTools).toContain('mcp__issue_management__get_dependencies')
+		})
+
+		it('should pass resolved repo from MCP config to getRepoPermission', async () => {
+			vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue({
+				configs: [{ mcpServers: { issue_management: {} } }],
+				repo: 'upstream-owner/upstream-repo',
+			})
+
+			await command.execute()
+
+			expect(githubUtils.getRepoPermission).toHaveBeenCalledWith('upstream-owner/upstream-repo')
 		})
 
 		it('should log warning about read-only mode', async () => {

@@ -228,7 +228,8 @@ Press any key to open issue for editing...`
 
 		try {
 			const provider = this.issueTrackerService.providerName as 'github' | 'linear'
-			mcpConfig = await generateIssueManagementMcpConfig('issue', repo, provider, settings)
+			const mcpResult = await generateIssueManagementMcpConfig('issue', repo, provider, settings)
+			mcpConfig = mcpResult.configs
 			getLogger().debug('Generated MCP configuration for issue management:', { mcpConfig })
 
 			// Configure tool filtering for issue workflows

@@ -273,11 +273,15 @@ Each child issue should include:
 {{#if READ_ONLY_MODE}}
 ## Plan Output (Read-Only Mode)
 
-**You do not have write access to this repository.** You cannot create child issues or set up dependencies. Instead, you will produce the complete plan as a single detailed artifact.
+**You do not have write access to this repository.** You MUST NOT create separate issues for each child task. Do NOT use `create_issue` or `create_child_issue` to create individual child issues — you do not have permission to set up sub-issue links or dependencies, and creating orphaned issues is not acceptable.
+
+Instead, your output is a **single detailed artifact** — either a comment on an existing parent issue, or (in fresh planning mode only) a single epic/parent issue with the full breakdown embedded in its body.
+
+**CRITICAL CONSTRAINT: Do NOT create multiple issues.** All child task details (descriptions, acceptance criteria, dependencies, scope boundaries) MUST be included as a structured breakdown within a single comment or single issue body. Never create standalone issues for individual child tasks.
 
 **Available Tools:**
 {{#if FRESH_PLANNING_MODE}}
-- `mcp__issue_management__create_issue`: Create a standalone issue (for fresh planning)
+- `mcp__issue_management__create_issue`: Create ONE epic/parent issue only (do NOT use this to create individual child issues)
 {{/if}}
 - `mcp__issue_management__create_comment`: Post comments on existing issues
   - Parameters: `number` (issue number), `body` (comment text), `type` ("issue")
@@ -325,16 +329,28 @@ Task(
 
 Wait for the subagent to complete, then present its summary to the user for planning decisions.
 
-**Output: Post a single comprehensive comment on the parent issue.**
+**Output: Post a single comprehensive breakdown comment on the parent issue.**
+
+Do NOT create separate issues for each child task. Instead, post ALL child task details as a structured breakdown within a single comment on the parent issue. This comment should contain the same level of detail that would normally go into individual child issues (descriptions, acceptance criteria, dependencies, scope boundaries) — just formatted as sections within one comment.
 
 Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"` to post a comment containing:
 
 1. **Executive summary** of the decomposition plan
-2. **Suggested child issues** as a markdown checklist table:
+2. **Detailed task breakdown** — for each suggested child task, include:
+   - Title and one-sentence summary
+   - Acceptance criteria (clear, testable conditions for "done")
+   - Dependencies on other tasks in the breakdown
+   - Scope boundaries (what is explicitly NOT included)
+   - Complexity estimate (Simple/Trivial)
+   - Shared contracts (interfaces/APIs consumed or produced, if applicable)
+
+   Format as a structured list or table:
    | # | Title | Description | Dependencies | Complexity |
    |---|-------|-------------|--------------|------------|
    | 1 | [Title] | [One-sentence description] | None | Simple |
-   | 2 | [Title] | [One-sentence description] | #1 | Simple |
+   | 2 | [Title] | [One-sentence description] | Task 1 | Simple |
+
+   Follow each table with expanded details per task (acceptance criteria, scope boundaries, etc.) using collapsible sections if needed.
 3. **Dependency diagram** (Mermaid for GitHub)
 4. **Architectural Decision Record**: Design rationale, key decisions, trade-offs
 5. **Suggested execution order** for whoever will create the actual issues
@@ -351,25 +367,45 @@ Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"` t
 
 Follow the same planning process (Phase 1: Understanding, Phase 2: Design Exploration, Phase 3: Issue Decomposition) to produce a complete plan.
 
-**Output: Create a single issue with the full plan.**
+**Output: Create ONE epic/parent issue with a high-level overview, then post the detailed breakdown as a comment.**
 
-Use `create_issue` to create one issue containing:
+Use `create_issue` to create exactly ONE issue. Do NOT create additional issues for individual child tasks.
+
 - Title: "Plan: [Feature Name]"
-- Body: The full decomposition plan including:
-  1. **Executive summary** of the feature
-  2. **Suggested child issues** as a markdown checklist table:
+- Body: A high-level overview including:
+  1. **Problem statement**: What problem this feature solves
+  2. **Goals**: What success looks like
+  3. **Scope**: What is and isn't included
+  4. **Summary of approach**: Brief description of the implementation strategy
+  5. **Task overview table** — a concise summary of the child tasks:
+
      | # | Title | Description | Dependencies | Complexity |
      |---|-------|-------------|--------------|------------|
      | 1 | [Title] | [One-sentence description] | None | Simple |
-     | 2 | [Title] | [One-sentence description] | #1 | Simple |
-  3. **Dependency diagram** (Mermaid for GitHub)
-  4. **Architectural Decision Record**: Design rationale, key decisions, trade-offs
-  5. **Suggested execution order** for whoever will create the actual issues
+     | 2 | [Title] | [One-sentence description] | Task 1 | Simple |
+
+After creating the epic issue, post the detailed task breakdown as a comment on that issue using `create_comment`. The comment should contain:
+  1. **Detailed task breakdown** — for each suggested child task, include:
+     - Title and one-sentence summary
+     - Acceptance criteria (clear, testable conditions for "done")
+     - Dependencies on other tasks in the breakdown
+     - Scope boundaries (what is explicitly NOT included)
+     - Complexity estimate (Simple/Trivial)
+     - Shared contracts (interfaces/APIs consumed or produced, if applicable)
+
+     Use collapsible sections if needed for per-task details.
+  2. **Dependency diagram** (Mermaid for GitHub)
+  3. **Architectural Decision Record**: Design rationale, key decisions, trade-offs
+  4. **Suggested execution order** for whoever will create the actual issues
+
+This keeps the issue body as a concise overview while the comment contains the full implementation details.
 
 **Before Creating:**
 1. Summarize the proposed plan to the user
 2. Ask for explicit confirmation: "Ready to create this plan issue?"
 3. Create the issue only after user approval
+
+**REMINDER: Create exactly ONE issue. Do NOT create separate issues for child tasks. All task details go into the single issue body and/or a comment on that issue.**
 
 **Next steps message:** "This plan has been created as issue #X. A maintainer with write access can decompose it into child issues and dependencies."
 
@@ -582,11 +618,17 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 - Create issues without user confirmation
 - Over-engineer the decomposition (keep it pragmatic)
 - Assume requirements that weren't explicitly stated
+{{#if READ_ONLY_MODE}}
+- Create separate issues for individual child tasks (post the breakdown as a comment or embed it in a single issue instead)
+- Use `create_issue` more than once (fresh planning mode) or at all (existing issue mode)
+- Use `create_child_issue` — this tool is not available in read-only mode
+{{/if}}
 
 {{#if READ_ONLY_MODE}}
 **Do:**
 - Use the conversation to refine understanding iteratively
 - Post the plan as a comment or single issue (your primary output artifact)
+- Include full child task details (acceptance criteria, dependencies, scope) in the breakdown comment or issue body
 - Ask for clarification rather than making assumptions
 - Keep the user informed about your reasoning
 {{else}}

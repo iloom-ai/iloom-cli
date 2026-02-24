@@ -269,8 +269,11 @@ export class PlanCommand {
 		// This will throw if no git remote is configured - offer to run 'il init' as fallback
 		logger.debug('Generating MCP config for issue management')
 		let mcpConfig: Record<string, unknown>[]
+		let resolvedRepo: string | undefined
 		try {
-			mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+			const mcpResult = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+			mcpConfig = mcpResult.configs
+			resolvedRepo = mcpResult.repo
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
 
@@ -292,7 +295,9 @@ export class PlanCommand {
 					// Retry MCP config generation after init
 					logger.info(chalk.bold('Retrying planning session setup...'))
 					try {
-						mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+						const retryResult = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+						mcpConfig = retryResult.configs
+						resolvedRepo = retryResult.repo
 					} catch (retryError) {
 						const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error'
 						logger.error(`Failed to generate MCP config: ${retryMessage}`)
@@ -360,7 +365,7 @@ export class PlanCommand {
 		let hasWriteAccess = true // default for non-GitHub or if check fails
 		if (provider === 'github') {
 			try {
-				const permission = await getRepoPermission()
+				const permission = await getRepoPermission(resolvedRepo)
 				hasWriteAccess = ['ADMIN', 'MAINTAIN', 'WRITE'].includes(permission)
 				if (!hasWriteAccess) {
 					logger.warn('You do not have write access to this repository. Running in read-only mode — the plan will be posted as a comment instead of creating child issues.')

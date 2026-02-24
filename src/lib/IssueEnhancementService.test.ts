@@ -7,6 +7,7 @@ import { openBrowser } from '../utils/browser.js'
 import { launchClaude } from '../utils/claude.js'
 import { logger } from '../utils/logger.js'
 import { waitForKeypress } from '../utils/prompt.js'
+import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 
 // Mock dependencies
 vi.mock('./GitHubService.js')
@@ -37,7 +38,7 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 vi.mock('../utils/mcp.js', () => ({
-	generateIssueManagementMcpConfig: vi.fn().mockResolvedValue([]),
+	generateIssueManagementMcpConfig: vi.fn().mockResolvedValue({ configs: [], repo: undefined }),
 }))
 
 describe('IssueEnhancementService', () => {
@@ -564,6 +565,8 @@ describe('IssueEnhancementService', () => {
 				},
 			})
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue('agent1=path1')
+			// Re-seed after mockReset wipes the vi.mock factory return value
+			vi.mocked(generateIssueManagementMcpConfig).mockResolvedValue({ configs: [], repo: undefined })
 			// Mock providerName
 			Object.defineProperty(mockGitHubService, 'providerName', { value: 'github', configurable: true })
 		})

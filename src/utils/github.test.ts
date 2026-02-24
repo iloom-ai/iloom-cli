@@ -903,7 +903,7 @@ with multiple lines.
 			expect(result).toBe('READ')
 			expect(execa).toHaveBeenCalledWith(
 				'gh',
-				['repo', 'view', '--repo', 'owner/repo', '--json', 'viewerPermission'],
+				['repo', 'view', 'owner/repo', '--json', 'viewerPermission'],
 				expect.any(Object)
 			)
 		})

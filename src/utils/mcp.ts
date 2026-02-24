@@ -16,13 +16,19 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
  * @param settings - Optional settings to extract Linear API token from
  * @param draftPrNumber - Optional draft PR number for github-draft-pr mode (routes comments to PR)
  */
+export interface IssueMcpConfigResult {
+	configs: Record<string, unknown>[]
+	/** Resolved "owner/repo" string when provider is GitHub */
+	repo?: string
+}
+
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
 	repo?: string,
 	provider: 'github' | 'linear' | 'jira' = 'github',
 	settings?: IloomSettings,
 	draftPrNumber?: number
-): Promise<Record<string, unknown>[]> {
+): Promise<IssueMcpConfigResult> {
 	// When draftPrNumber is provided (github-draft-pr mode), force contextType to 'pr'
 	// This ensures agents route comments to the draft PR instead of the issue
 	const effectiveContextType = draftPrNumber ? 'pr' : contextType
@@ -36,6 +42,9 @@ export async function generateIssueManagementMcpConfig(
 	if (draftPrNumber) {
 		envVars.DRAFT_PR_NUMBER = String(draftPrNumber)
 	}
+
+	// Track the resolved repo string for the caller
+	let resolvedRepo: string | undefined
 
 	if (provider === 'github') {
 		// Get repository information for GitHub - either from provided repo string or auto-detect
@@ -54,6 +63,8 @@ export async function generateIssueManagementMcpConfig(
 			owner = repoInfo.owner
 			name = repoInfo.name
 		}
+
+		resolvedRepo = `${owner}/${name}`
 
 		// Map logical types to GitHub's webhook event names (handle GitHub's naming quirk here)
 		// Use effectiveContextType which may be overridden by draftPrNumber
@@ -146,7 +157,7 @@ export async function generateIssueManagementMcpConfig(
 		},
 	}
 
-	return [mcpServerConfig]
+	return { configs: [mcpServerConfig], ...(resolvedRepo !== undefined && { repo: resolvedRepo }) }
 }
 
 /**
@@ -260,13 +271,13 @@ export async function generateAndWriteMcpConfigFile(
 
 	// Generate issue management MCP config
 	try {
-		const issueMcpConfigs = await generateIssueManagementMcpConfig(
+		const issueMcpResult = await generateIssueManagementMcpConfig(
 			'issue',
 			undefined,
 			provider,
 			settings,
 		)
-		mcpConfigs.push(...issueMcpConfigs)
+		mcpConfigs.push(...issueMcpResult.configs)
 	} catch (error) {
 		logger.warn(`Failed to generate issue management MCP config for loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
 	}

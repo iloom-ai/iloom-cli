@@ -358,7 +358,8 @@ export class IgniteCommand {
 				try {
 					const provider = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
 					// Pass draftPrNumber to route comments to PR when in github-draft-pr mode
-					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings, draftPrNumber)
+					const mcpResult = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings, draftPrNumber)
+					mcpConfig = mcpResult.configs
 					logger.debug('Generated MCP configuration for issue management', { provider, draftPrNumber })
 
 					// Configure tool filtering for issue/PR workflows
@@ -886,13 +887,13 @@ export class IgniteCommand {
 
 		// Issue management MCP
 		try {
-			const issueMcpConfigs = await generateIssueManagementMcpConfig(
+			const issueMcpResult = await generateIssueManagementMcpConfig(
 				'issue',
 				undefined,
 				providerName as 'github' | 'linear' | 'jira',
 				settings,
 			)
-			mcpConfigs.push(...issueMcpConfigs)
+			mcpConfigs.push(...issueMcpResult.configs)
 		} catch (error) {
 			logger.warn(`Failed to generate issue management MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
