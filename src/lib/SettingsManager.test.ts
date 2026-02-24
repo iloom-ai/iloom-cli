@@ -2855,16 +2855,46 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('sonnet')
 		})
 
-		it('should fall back to spin.model when mode is swarm but swarmModel is not set', () => {
+		it('should default to sonnet when mode is swarm but swarmModel is not set', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('haiku')
+			expect(result).toBe('sonnet')
 		})
 
 		it('should ignore swarmModel when mode is not swarm', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
 			expect(result).toBe('opus')
+		})
+
+		it('swarm mode defaults to sonnet even when spin.model is opus', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('swarm mode defaults to sonnet even when spin.model is haiku', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('swarm mode defaults to sonnet even when no spin config exists', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('explicit spin.swarmModel overrides the default in swarm mode', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const, swarmModel: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('non-swarm mode ignores swarmModel and uses spin.model', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const, swarmModel: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
+			expect(result).toBe('haiku')
 		})
 	})
 

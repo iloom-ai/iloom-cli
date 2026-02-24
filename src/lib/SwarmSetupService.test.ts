@@ -326,7 +326,8 @@ describe('SwarmSetupService', () => {
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 			expect(result.metadata).toHaveProperty('iloom-swarm-issue-implementer')
-			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
+			// iloom-issue-implementer is in the default swarmModel map, so model is overridden to sonnet
+			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
 			expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
 		})
 
@@ -341,7 +342,7 @@ describe('SwarmSetupService', () => {
 
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('sonnet')
+			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
 			expect(result.metadata['iloom-swarm-issue-analyzer']).not.toHaveProperty('tools')
 		})
 
@@ -367,7 +368,7 @@ describe('SwarmSetupService', () => {
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
 			})
 
-			it('keeps base model when no swarmModel configured', async () => {
+			it('applies default swarmModel (sonnet) for agents in default map when no swarmModel configured', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { model: 'opus' },
@@ -385,7 +386,88 @@ describe('SwarmSetupService', () => {
 
 				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
+				// iloom-issue-implementer is in the default swarmModel map, so it should be sonnet
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+			})
+
+			it('applies default swarmModel (opus) for analyzer agent', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'sonnet',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// iloom-issue-analyzer is in the default swarmModel map as opus
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
+			})
+
+			it('non-swarm model override does not affect swarm mode when default map covers the agent', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { model: 'haiku' },
+						'iloom-issue-analyzer': { model: 'haiku' },
+						'iloom-issue-planner': { model: 'haiku' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'haiku',
+					},
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'haiku',
+					},
+					'iloom-issue-planner': {
+						description: 'Planner agent',
+						prompt: 'Plan things',
+						model: 'haiku',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Even though non-swarm model is set to haiku, swarm defaults override
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
+				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('sonnet')
+			})
+
+			it('explicit swarmModel overrides both non-swarm model and default map', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { model: 'haiku', swarmModel: 'opus' },
+						'iloom-issue-analyzer': { model: 'haiku', swarmModel: 'haiku' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'haiku',
+					},
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'haiku',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Explicit swarmModel always wins over both non-swarm model and default map
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('haiku')
 			})
 
 			it('different agents can have different swarmModels', async () => {

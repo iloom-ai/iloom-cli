@@ -1122,8 +1122,12 @@ export class SettingsManager {
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
 	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): 'sonnet' | 'opus' | 'haiku' {
-		if (mode === 'swarm' && settings?.spin?.swarmModel) {
-			return settings.spin.swarmModel
+		if (mode === 'swarm') {
+			if (settings?.spin?.swarmModel) {
+				return settings.spin.swarmModel
+			}
+			// Default to sonnet for swarm orchestrator ("Balanced" mode)
+			return 'sonnet'
 		}
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
 	}

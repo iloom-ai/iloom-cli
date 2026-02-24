@@ -588,9 +588,9 @@ Swarms are iloom's most powerful feature. Give them an epic and they'll decompos
 
 You can tune how swarms balance thinking depth versus speed:
 
-  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most.
+  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most. Uses Opus for all agents, which is significantly more expensive.
   ⚖️  Balanced (recommended) — Strong reasoning at a practical pace. The sweet spot for most work.
-  ⚡ Fast & Cheap — Agents move quickly through issues with lighter analysis. Great for well-scoped tasks or rapid prototyping where you'll review closely.
+  ⚡ Fast & Cheap — Agents move quickly through issues with lighter analysis. Great for rapid prototyping or if you're on a budget.
 ```
 
 Ask: "Which swarm mode would you prefer?"
@@ -1083,34 +1083,22 @@ When configuring agents, use these model identifiers:
    }
    ```
 
+   **Important: Non-swarm and swarm models are independent.** Changing an agent's `model` here only affects non-swarm mode (single-issue looms via `il start`). Swarm mode has its own model configuration via `swarmModel` and the Swarm Quality Mode presets (see item 2 below). This separation is intentional — swarms run many agents in parallel and costs scale quickly, so swarm models should be an explicit choice.
+
    **Swarm-Specific Phase Agent Models:**
 
-   In swarm mode, you can configure different models for phase agents (analyzer, planner, implementer, etc.) than in normal mode:
+   To override a specific agent's model in swarm mode, use `swarmModel`:
 
    ```json
    "agents": {
      "iloom-issue-implementer": {
-       "model": "opus"
-     },
-     "iloom-swarm-worker": {
        "model": "opus",
-       "agents": {
-         "iloom-issue-implementer": {
-           "model": "sonnet"
-         },
-         "iloom-issue-planner": {
-           "model": "haiku"
-         }
-       }
+       "swarmModel": "sonnet"
      }
    }
    ```
 
-   Fallback chain in swarm mode:
-   1. `agents.iloom-swarm-worker.agents.<agent>.model` (swarm-specific per-agent)
-   2. `agents.iloom-swarm-worker.model` (blanket swarm worker model)
-   3. `agents.<agent>.model` (base per-agent model)
-   4. Agent default from its definition file
+   In this example, the implementer uses Opus in non-swarm mode but Sonnet in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see item 2 below) — not the agent's base `model`.
 
 2. **Swarm Quality Mode:**
 
@@ -1119,7 +1107,7 @@ When configuring agents, use these model identifiers:
    | Mode | Focus | Models used | Best for |
    |------|-------|-------------|----------|
    | **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (except complexity evaluator stays Haiku) | Complex epics, critical features |
-   | **Balanced** (default) | Good reasoning at reasonable cost | Sonnet everywhere (complexity evaluator stays Haiku) | Most tasks |
+   | **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
    | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
 
    Note: The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
@@ -1129,7 +1117,7 @@ When configuring agents, use these model identifiers:
    When the user selects a mode, **merge** the model values into their existing settings. Only set the `swarmModel` (or `model` for the worker) field on each agent — do not overwrite or remove other agent settings.
 
    - **Maximum Quality:** Set `spin.swarmModel` to `"opus"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
-   - **Balanced (default):** This matches the existing defaults. If the user has no other agent model overrides, no explicit settings changes are needed — only write overrides if the user wants to be explicit.
+   - **Balanced (default):** Set `spin.swarmModel` to `"sonnet"`. Set `agents.iloom-swarm-worker.model` to `"sonnet"`. Set `swarmModel` to `"opus"` on analysis agents (`iloom-issue-analyzer`, `iloom-issue-analyze-and-plan`). Set `swarmModel` to `"sonnet"` on all other phase agents (`iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
    - **Fast & Cheap:** Set `spin.swarmModel` to `"haiku"`. Set `agents.iloom-swarm-worker.model` to `"haiku"`. Set `swarmModel` to `"haiku"` on all phase agents and `iloom-issue-complexity-evaluator`.
 
    **Important notes:**

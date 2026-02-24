@@ -246,11 +246,27 @@ export class SwarmSetupService {
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
 
-		// Apply per-agent swarmModel overrides
+		// Default swarmModel map for "Balanced" mode. All swarm phase agents are
+		// listed explicitly so that swarm mode never accidentally inherits a
+		// non-swarm model override. User-configured swarmModel values always
+		// take precedence.
+		const defaultSwarmModels: Record<string, 'sonnet' | 'opus' | 'haiku'> = {
+			'iloom-issue-analyzer': 'opus',
+			'iloom-issue-analyze-and-plan': 'opus',
+			'iloom-issue-planner': 'sonnet',
+			'iloom-issue-implementer': 'sonnet',
+			'iloom-issue-enhancer': 'sonnet',
+			'iloom-code-reviewer': 'sonnet',
+			'iloom-issue-complexity-evaluator': 'haiku',
+		}
+
+		// Apply per-agent swarmModel overrides (user-configured takes precedence over defaults)
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
-			const swarmModel = settings?.agents?.[agentName]?.swarmModel
-			if (swarmModel) {
-				agents[agentName] = { ...agentConfig, model: swarmModel }
+			const userSwarmModel = settings?.agents?.[agentName]?.swarmModel
+			if (userSwarmModel) {
+				agents[agentName] = { ...agentConfig, model: userSwarmModel }
+			} else if (defaultSwarmModels[agentName]) {
+				agents[agentName] = { ...agentConfig, model: defaultSwarmModels[agentName] }
 			}
 		}
 
