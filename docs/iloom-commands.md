@@ -1674,21 +1674,21 @@ il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
 il spin --set spin.swarmModel=sonnet
 ```
 
-**Swarm Model Presets:**
+**Swarm Quality Mode:**
 
-Instead of configuring each swarm agent model individually, you can apply a preset during `il init` that sets all swarm agent models at once. There are three presets:
+During `il init`, you'll be asked to choose a swarm quality mode that tunes the trade-off between reasoning quality and speed/cost:
 
-| Preset | Orchestrator | Worker | Phase Agents | Complexity Evaluator | Best for |
-|--------|-------------|--------|-------------|---------------------|----------|
-| **Expensive / Slow** | Opus | Opus | Opus | Haiku | Maximum quality, complex epics |
-| **Balanced** (default) | Sonnet | Sonnet | Sonnet | Haiku | Good quality/cost tradeoff |
-| **Cheap / Fast** | Haiku | Haiku | Haiku | Haiku | Quick iterations, simple tasks |
+| Mode | Focus | Models used | Best for |
+|------|-------|-------------|----------|
+| **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (complexity evaluator stays Haiku) | Complex epics, critical features |
+| **Balanced** (default) | Good reasoning at reasonable cost | Sonnet everywhere (complexity evaluator stays Haiku) | Most tasks |
+| **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
 
-The complexity evaluator always stays on Haiku regardless of preset, since it performs a simple classification task that does not benefit from a larger model.
+The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
 
-Example settings for each preset:
+Example settings for each mode:
 
-**Expensive / Slow:**
+**Maximum Quality:**
 ```json
 {
   "spin": { "swarmModel": "opus" },
@@ -1722,7 +1722,7 @@ Example settings for each preset:
 }
 ```
 
-**Cheap / Fast:**
+**Fast & Cheap:**
 ```json
 {
   "spin": { "swarmModel": "haiku" },
@@ -1739,9 +1739,9 @@ Example settings for each preset:
 }
 ```
 
-Presets use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Presets merge with existing agent settings -- only the `swarmModel` (and worker `model`) fields are overwritten.
+These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
 
-To configure a preset, run `il init` and ask about swarm model presets in the advanced configuration section.
+To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
 
 **Sub-Agent Timeout:**
 
