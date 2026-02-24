@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, type IloomSettings } from './SettingsManager.js'
+import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, DevServerSettingsSchema, DevServerSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -3636,6 +3636,182 @@ const error: { code?: string; message: string } = {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBeUndefined()
+		})
+	})
+
+	describe('DevServerSettingsSchema', () => {
+		it('should accept a valid full Docker config', () => {
+			const result = DevServerSettingsSchema.parse({
+				mode: 'docker',
+				docker: {
+					dockerFile: './Dockerfile',
+					containerPort: 4200,
+					buildArgs: { NODE_ENV: 'development' },
+					runArgs: ['--rm', '--network=host'],
+				},
+			})
+			expect(result).toEqual({
+				mode: 'docker',
+				docker: {
+					dockerFile: './Dockerfile',
+					containerPort: 4200,
+					buildArgs: { NODE_ENV: 'development' },
+					runArgs: ['--rm', '--network=host'],
+				},
+			})
+		})
+
+		it('should apply defaults: mode defaults to "docker", dockerFile defaults to "./Dockerfile"', () => {
+			const result = DevServerSettingsSchema.parse({
+				docker: {},
+			})
+			expect(result?.mode).toBe('docker')
+			expect(result?.docker?.dockerFile).toBe('./Dockerfile')
+		})
+
+		it('should apply mode default when only docker sub-object is present', () => {
+			const result = DevServerSettingsSchema.parse({
+				docker: { containerPort: 3000 },
+			})
+			expect(result?.mode).toBe('docker')
+		})
+
+		it('should accept absent devServer section (backwards compat)', () => {
+			const result = DevServerSettingsSchema.parse(undefined)
+			expect(result).toBeUndefined()
+		})
+
+		it('should accept devServer as undefined when omitted from parent schema', async () => {
+			const projectRoot = '/test/project'
+			const enoent = { code: 'ENOENT', message: 'ENOENT: no such file or directory' }
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(enoent) // global settings
+				.mockResolvedValueOnce(JSON.stringify({ mainBranch: 'main' })) // settings.json
+				.mockRejectedValueOnce(enoent) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.devServer).toBeUndefined()
+		})
+
+		it('should reject containerPort below 1', () => {
+			expect(() =>
+				DevServerSettingsSchema.parse({
+					docker: { containerPort: 0 },
+				}),
+			).toThrow('Container port must be >= 1')
+		})
+
+		it('should reject containerPort above 65535', () => {
+			expect(() =>
+				DevServerSettingsSchema.parse({
+					docker: { containerPort: 65536 },
+				}),
+			).toThrow('Container port must be <= 65535')
+		})
+
+		it('should accept containerPort at boundary values 1 and 65535', () => {
+			const low = DevServerSettingsSchema.parse({ docker: { containerPort: 1 } })
+			expect(low?.docker?.containerPort).toBe(1)
+
+			const high = DevServerSettingsSchema.parse({ docker: { containerPort: 65535 } })
+			expect(high?.docker?.containerPort).toBe(65535)
+		})
+
+		it('should reject an absolute dockerFile path', () => {
+			expect(() =>
+				DevServerSettingsSchema.parse({
+					docker: { dockerFile: '/absolute/Dockerfile' },
+				}),
+			).toThrow('relative path')
+		})
+
+		it('should reject a dockerFile path that traverses outside project root', () => {
+			expect(() =>
+				DevServerSettingsSchema.parse({
+					docker: { dockerFile: '../sibling/Dockerfile' },
+				}),
+			).toThrow('relative path')
+		})
+
+		it('should reject a deeply traversing dockerFile path', () => {
+			expect(() =>
+				DevServerSettingsSchema.parse({
+					docker: { dockerFile: 'subdir/../../outside/Dockerfile' },
+				}),
+			).toThrow('relative path')
+		})
+
+		it('should accept a valid relative dockerFile in a subdirectory', () => {
+			const result = DevServerSettingsSchema.parse({
+				docker: { dockerFile: 'docker/Dockerfile.dev' },
+			})
+			expect(result?.docker?.dockerFile).toBe('docker/Dockerfile.dev')
+		})
+
+		it('should load devServer config from settings.json', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				devServer: {
+					mode: 'docker',
+					docker: {
+						dockerFile: './Dockerfile',
+						containerPort: 4200,
+					},
+				},
+			}
+			const enoent = { code: 'ENOENT', message: 'ENOENT: no such file or directory' }
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(enoent) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(enoent) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.devServer?.mode).toBe('docker')
+			expect(result.devServer?.docker?.dockerFile).toBe('./Dockerfile')
+			expect(result.devServer?.docker?.containerPort).toBe(4200)
+		})
+	})
+
+	describe('DevServerSettingsSchemaNoDefaults', () => {
+		it('should accept a full Docker config without applying defaults', () => {
+			const result = DevServerSettingsSchemaNoDefaults.parse({
+				mode: 'docker',
+				docker: { dockerFile: './Dockerfile', containerPort: 8080 },
+			})
+			expect(result?.mode).toBe('docker')
+			expect(result?.docker?.dockerFile).toBe('./Dockerfile')
+		})
+
+		it('should accept partial config without injecting defaults', () => {
+			const result = DevServerSettingsSchemaNoDefaults.parse({
+				docker: {},
+			})
+			// In the NoDefaults variant, mode and dockerFile should NOT be filled in
+			expect(result?.mode).toBeUndefined()
+			expect(result?.docker?.dockerFile).toBeUndefined()
+		})
+
+		it('should accept undefined (absent section)', () => {
+			const result = DevServerSettingsSchemaNoDefaults.parse(undefined)
+			expect(result).toBeUndefined()
+		})
+
+		it('should reject absolute dockerFile path', () => {
+			expect(() =>
+				DevServerSettingsSchemaNoDefaults.parse({
+					docker: { dockerFile: '/etc/Dockerfile' },
+				}),
+			).toThrow('relative path')
+		})
+
+		it('should reject path escaping project root', () => {
+			expect(() =>
+				DevServerSettingsSchemaNoDefaults.parse({
+					docker: { dockerFile: '../Dockerfile' },
+				}),
+			).toThrow('relative path')
 		})
 	})
 })

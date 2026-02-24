@@ -245,6 +245,104 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 	.optional()
 
 /**
+ * Zod schema for Docker dev server settings (with defaults)
+ */
+export const DevServerSettingsSchema = z
+	.object({
+		mode: z
+			.enum(['docker'])
+			.default('docker')
+			.describe('Dev server mode. Currently only "docker" is supported.'),
+		docker: z
+			.object({
+				dockerFile: z
+					.string()
+					.default('./Dockerfile')
+					.refine(
+						(val) => {
+							// Must be a relative path — no leading slash (absolute paths not allowed)
+							if (path.isAbsolute(val)) return false
+							// Reject paths that traverse outside the project root
+							const normalized = path.normalize(val)
+							if (normalized.startsWith('..')) return false
+							return true
+						},
+						{
+							message:
+								'dockerFile must be a relative path that does not traverse outside the project root (no "../" escaping)',
+						},
+					)
+					.describe('Path to the Dockerfile, relative to the project root. Defaults to "./Dockerfile".'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port exposed by the container. Auto-detected if omitted.'),
+				buildArgs: z
+					.record(z.string(), z.string())
+					.optional()
+					.describe('Docker build arguments passed via --build-arg (key=value pairs).'),
+				runArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments passed to "docker run".'),
+			})
+			.optional()
+			.describe('Docker-specific dev server settings.'),
+	})
+	.optional()
+
+/**
+ * Non-defaulting variant of DevServerSettingsSchema for pre-merge validation.
+ * Prevents Zod from polluting partial settings with defaults before merge.
+ */
+export const DevServerSettingsSchemaNoDefaults = z
+	.object({
+		mode: z
+			.enum(['docker'])
+			.optional()
+			.describe('Dev server mode. Currently only "docker" is supported.'),
+		docker: z
+			.object({
+				dockerFile: z
+					.string()
+					.optional()
+					.refine(
+						(val) => {
+							if (val === undefined) return true
+							if (path.isAbsolute(val)) return false
+							const normalized = path.normalize(val)
+							if (normalized.startsWith('..')) return false
+							return true
+						},
+						{
+							message:
+								'dockerFile must be a relative path that does not traverse outside the project root (no "../" escaping)',
+						},
+					)
+					.describe('Path to the Dockerfile, relative to the project root. Defaults to "./Dockerfile".'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port exposed by the container. Auto-detected if omitted.'),
+				buildArgs: z
+					.record(z.string(), z.string())
+					.optional()
+					.describe('Docker build arguments passed via --build-arg (key=value pairs).'),
+				runArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments passed to "docker run".'),
+			})
+			.optional()
+			.describe('Docker-specific dev server settings.'),
+	})
+	.optional()
+
+/**
  * Zod schema for Neon database provider settings
  */
 export const NeonSettingsSchema = z.object({
@@ -361,6 +459,9 @@ export const IloomSettingsSchema = z.object({
 		'Session summary generation configuration. Model defaults to sonnet when not configured.',
 	),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
+	devServer: DevServerSettingsSchema.describe(
+		'Dev server configuration for Docker-based development environments.',
+	),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
@@ -619,6 +720,9 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.optional()
 		.describe('Session summary generation configuration'),
 	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
+	devServer: DevServerSettingsSchemaNoDefaults.describe(
+		'Dev server configuration for Docker-based development environments.',
+	),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
@@ -766,6 +870,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.optional()
 		.describe('Git operation settings'),
 })
+
+/**
+ * TypeScript type for dev server settings derived from Zod schema
+ */
+export type DevServerSettings = z.infer<typeof DevServerSettingsSchema>
 
 /**
  * TypeScript type for Neon settings derived from Zod schema
