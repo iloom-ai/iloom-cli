@@ -12,6 +12,23 @@ import { SettingsManager } from '../../src/lib/SettingsManager.js'
 import type { PullRequest, Issue, GitWorktree } from '../../src/types/index.js'
 import { pushBranchToRemote, getMergeTargetBranch } from '../../src/utils/git.js'
 
+// Mock TelemetryService to prevent real PostHog events during tests
+const mockTrack = vi.fn()
+vi.mock('../../src/lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: () => ({ track: mockTrack }),
+	},
+}))
+
+// Mock MetadataManager for telemetry duration calculation
+const mockReadMetadata = vi.fn().mockResolvedValue(null)
+vi.mock('../../src/lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(() => ({
+		readMetadata: mockReadMetadata,
+		archiveMetadata: vi.fn().mockResolvedValue(undefined),
+	})),
+}))
+
 // Mock git utils module for pushBranchToRemote, findMainWorktreePathWithSettings, and getMergeTargetBranch
 vi.mock('../../src/utils/git.js', async () => {
 	const actual = await vi.importActual<typeof import('../../src/utils/git.js')>('../../src/utils/git.js')
