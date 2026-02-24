@@ -54,7 +54,16 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
+			// subAgentTimeout defaults to 10 for each agent
+			expect(result).toEqual({
+				agents: {
+					'iloom-issue-analyzer': { model: 'sonnet', subAgentTimeout: 10 },
+					'iloom-issue-planner': { model: 'opus', subAgentTimeout: 10 },
+				},
+				sourceEnvOnStart: false,
+				attribution: 'upstreamOnly',
+				...defaultSettings,
+			})
 		})
 
 		it('should return empty object when settings file does not exist', async () => {
@@ -183,7 +192,15 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings()
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
+			// subAgentTimeout defaults to 10 for each agent
+			expect(result).toEqual({
+				agents: {
+					'test-agent': { model: 'haiku', subAgentTimeout: 10 },
+				},
+				sourceEnvOnStart: false,
+				attribution: 'upstreamOnly',
+				...defaultSettings,
+			})
 		})
 
 		it('should load settings with mainBranch field', async () => {
@@ -3614,7 +3631,7 @@ const error: { code?: string; message: string } = {
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
 		})
 
-		it('should leave subAgentTimeout undefined when not configured', async () => {
+		it('should default subAgentTimeout to 10 when not configured', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
@@ -3635,7 +3652,7 @@ const error: { code?: string; message: string } = {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBeUndefined()
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(10)
 		})
 	})
 })

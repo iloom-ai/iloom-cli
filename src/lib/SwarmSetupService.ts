@@ -325,8 +325,8 @@ export class SwarmSetupService {
 			const providerType = settings?.issueManagement?.provider ?? 'github'
 			const issuePrefix = IssueManagementProviderFactory.create(providerType, settings ?? undefined).issuePrefix
 
-			// Compute sub-agent timeout in milliseconds (default: 20 minutes)
-			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 20
+			// Compute sub-agent timeout in milliseconds (default: 10 minutes)
+			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
 			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
 
 			// Build template variables for swarm worker agent rendering

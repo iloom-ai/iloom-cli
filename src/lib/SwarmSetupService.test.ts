@@ -659,13 +659,13 @@ describe('SwarmSetupService', () => {
 		})
 
 		describe('sub-agent timeout', () => {
-			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 1200000 (20 minutes) when not configured', async () => {
+			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 600000 (10 minutes) when not configured', async () => {
 				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						SWARM_SUB_AGENT_TIMEOUT_MS: 1200000,
+						SWARM_SUB_AGENT_TIMEOUT_MS: 600000,
 					}),
 				)
 			})

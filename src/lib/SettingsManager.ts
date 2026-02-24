@@ -45,8 +45,8 @@ export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
 		.number()
 		.min(1, 'Sub-agent timeout must be at least 1 minute')
 		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
-		.optional()
-		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 20 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
+		.default(10)
+		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 10 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
