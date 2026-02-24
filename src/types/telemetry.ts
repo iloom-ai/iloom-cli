@@ -93,6 +93,18 @@ export interface InitCompletedProperties {
   mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
 }
 
+export interface DevServerStartedProperties {
+  mode: 'docker' | 'process'
+  success: boolean
+  buildDurationMs?: number // Docker only
+  startDurationMs: number
+}
+
+export interface DevServerStoppedProperties {
+  mode: 'docker' | 'process'
+  reason: 'user' | 'cleanup' | 'error'
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -111,6 +123,8 @@ export interface TelemetryEventMap {
   'error.occurred': ErrorOccurredProperties
   'init.started': InitStartedProperties
   'init.completed': InitCompletedProperties
+  'devServer.started': DevServerStartedProperties
+  'devServer.stopped': DevServerStoppedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

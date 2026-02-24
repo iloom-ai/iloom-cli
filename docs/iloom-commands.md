@@ -758,6 +758,80 @@ il dev-server feat/my-branch
 
 ---
 
+### Docker Dev Server
+
+iloom supports running your dev server inside a Docker container instead of as a host process. This provides environment isolation, consistent dependencies, and avoids port conflicts with other local services.
+
+#### Prerequisites
+
+- Docker must be installed and running on your machine
+- Your project must have a `Dockerfile` (or a custom image configured)
+
+#### Configuration
+
+Add a `devServer.docker` block to `.iloom/settings.json`:
+
+```json
+{
+  "devServer": {
+    "docker": {
+      "enabled": true,
+      "containerPort": 3000,
+      "buildArgs": {},
+      "runArgs": [],
+      "envVars": {}
+    }
+  }
+}
+```
+
+#### Field Reference
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `docker.enabled` | `boolean` | `false` | Enable Docker mode for the dev server |
+| `docker.containerPort` | `number` | Auto-detected from Dockerfile `EXPOSE` | The port the app listens on inside the container |
+| `docker.buildArgs` | `object` | `{}` | Docker build arguments passed as `--build-arg KEY=VALUE` |
+| `docker.runArgs` | `string[]` | `[]` | Additional arguments appended verbatim to `docker run` |
+| `docker.envVars` | `object` | `{}` | Extra environment variables injected into the container at runtime |
+
+#### Port Mapping
+
+iloom calculates a unique `hostPort` for each loom using the formula `basePort + issueNumber` (the same port assignment used for process-based dev servers). The container's `containerPort` is mapped to this host port so you can access the server at `http://localhost:<hostPort>`.
+
+For example, if your base port is `3000` and you are working on issue `#42`, the dev server is accessible at `http://localhost:3042` regardless of what port the app uses inside the container.
+
+#### Container and Image Naming
+
+Containers and images are named using the pattern `iloom-dev-<identifier>`, where `<identifier>` is the loom's sanitized branch or issue slug. This makes it easy to identify iloom-managed containers with `docker ps`.
+
+#### Known Limitations
+
+**macOS file watching**
+
+Docker Desktop on macOS uses VirtioFS for bind mounts. Hot-reload frameworks (Vite, webpack, nodemon) may not detect file changes automatically. If hot reload is not working, enable polling mode in your dev tool:
+
+- Vite: set `server.watch.usePolling: true` in `vite.config.ts`
+- webpack: set `watchOptions.poll: true`
+- nodemon: use the `--legacy-watch` flag
+- Or set `CHOKIDAR_USEPOLLING=true` in your container environment via `docker.envVars`
+
+This is a Docker Desktop limitation, not an iloom limitation.
+
+**Anonymous `node_modules` volume**
+
+iloom mounts your project source into the container but keeps `node_modules` in an anonymous Docker volume so the container's compiled native modules do not conflict with your host installation. This means changes to `package.json` dependencies require rebuilding the image — stopping and restarting the dev server is not enough. Run `docker rmi iloom-dev-<identifier>` to force a rebuild on next start.
+
+**Container orphaning on crash**
+
+If the iloom process is killed with `SIGKILL` (not `SIGTERM`), the container may continue running in the background. Use `docker ps` to check for orphaned containers and `docker rm -f iloom-dev-*` to clean them up manually.
+
+**`runArgs` is passed verbatim**
+
+Arguments in `docker.runArgs` are appended directly to the `docker run` command without validation. You are responsible for the flags you pass. Conflicting flags (e.g., a second `-p` that clashes with iloom's port mapping) may cause unexpected behaviour.
+
+---
+
 ### il build
 
 Run the build script for a workspace.
