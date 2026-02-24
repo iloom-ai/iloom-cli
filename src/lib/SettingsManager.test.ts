@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema } from './SettingsManager.js'
+import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -2846,6 +2846,24 @@ const error: { code?: string; message: string } = {
 			// the default 'opus' should be applied
 			const settings = { sourceEnvOnStart: false, spin: {} as { model: 'opus' } }
 			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('opus')
+		})
+
+		it('should return spin.swarmModel when mode is swarm and swarmModel is set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('should fall back to spin.model when mode is swarm but swarmModel is not set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('haiku')
+		})
+
+		it('should ignore swarmModel when mode is not swarm', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
 			expect(result).toBe('opus')
 		})
 	})

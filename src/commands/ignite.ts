@@ -989,7 +989,7 @@ export class IgniteCommand {
 		]
 
 		// Launch Claude with agent teams enabled
-		const model = this.settingsManager.getSpinModel(settings)
+		const model = this.settingsManager.getSpinModel(settings, 'swarm')
 
 		logger.info('Launching swarm orchestrator...')
 		logger.info(`   Model: ${model ?? 'default'}`)

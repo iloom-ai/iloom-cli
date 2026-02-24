@@ -1626,7 +1626,7 @@ The swarm worker agent defaults to `sonnet`. To override, configure it via `.ilo
 }
 ```
 
-You can also set the worker model from the spin config using `swarmModel`:
+You can also set a different model for the spin orchestrator when running in swarm mode using `swarmModel`:
 
 ```json
 {
@@ -1637,7 +1637,7 @@ You can also set the worker model from the spin config using `swarmModel`:
 }
 ```
 
-The `spin.swarmModel` field is especially useful for presets that need to configure both the orchestrator and worker models together. The `agents.iloom-swarm-worker.model` setting takes priority over `spin.swarmModel`.
+In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, spin uses `model` for all modes. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
 
 **Phase Agent Model Overrides (Swarm Mode):**
 
@@ -1654,58 +1654,23 @@ Each agent supports a `swarmModel` field for a clean, per-agent swarm model over
 }
 ```
 
-For more granular control, you can also use the nested `agents.iloom-swarm-worker.agents` structure:
+If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If not set, the agent uses its base `model` (or `.md` default) in both modes.
 
-```json
-{
-  "agents": {
-    "iloom-issue-implementer": { "model": "opus" },
-    "iloom-issue-planner": { "model": "opus" },
-    "iloom-swarm-worker": {
-      "model": "sonnet",
-      "agents": {
-        "iloom-issue-implementer": { "model": "haiku" }
-      }
-    }
-  }
-}
-```
+With the configuration above:
 
-**Fallback chain** for phase agent models in swarm mode (highest priority first):
-
-1. `agents.iloom-swarm-worker.agents.<agent-name>.model` -- Swarm-specific per-agent override
-2. `agents.<agent-name>.swarmModel` -- Per-agent swarm model
-3. `agents.iloom-swarm-worker.model` -- Blanket swarm worker model
-4. `spin.swarmModel` -- Spin config blanket swarm model
-5. Built-in swarm defaults (e.g., implementer defaults to `sonnet`)
-6. `agents.<agent-name>.model` -- Base per-agent override (also used in non-swarm mode)
-7. Agent default from `.md` file
-
-With the nested configuration above, the resolved models are:
-
-| Agent | Non-swarm mode | Swarm mode | Why |
-|-------|---------------|------------|-----|
-| `iloom-issue-implementer` | `opus` (base per-agent) | `haiku` (swarm-specific override) | Fallback step 1 |
-| `iloom-issue-planner` | `opus` (base per-agent) | `sonnet` (blanket swarm model) | Fallback step 3 |
-| `iloom-issue-analyzer` | `.md` default | `sonnet` (blanket swarm model) | Fallback step 3 |
-
-> **Important:** The blanket swarm model (step 3) overrides the base per-agent model (step 6). In the example above, `iloom-issue-planner` uses `opus` in non-swarm mode (from the base config) but `sonnet` in swarm mode (from the blanket swarm worker model). If you want a specific agent to use a different model than the blanket in swarm mode, use a swarm-specific per-agent override (step 1) or a per-agent `swarmModel` (step 2).
-
-> **Note:** The blanket overrides (steps 3-4) only activate when explicitly set in your configuration. If neither `agents.iloom-swarm-worker.model` nor `spin.swarmModel` is configured, phase agents in swarm mode use their per-agent `swarmModel`, built-in defaults, base per-agent model, or `.md` default -- the worker agent's implicit `sonnet` default does not propagate to phase agents.
+| Agent | Non-swarm mode | Swarm mode |
+|-------|---------------|------------|
+| `iloom-issue-implementer` | `opus` | `sonnet` (swarmModel) |
+| `iloom-issue-complexity-evaluator` | `haiku` | `haiku` (swarmModel) |
+| `iloom-issue-analyzer` | `.md` default | `.md` default (no swarmModel set) |
 
 **Example using the `--set` flag:**
 
 ```bash
-# Override a specific phase agent's model in swarm mode
-il spin --set agents.iloom-swarm-worker.agents.iloom-issue-implementer.model=sonnet
-
 # Set per-agent swarmModel
 il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
 
-# Override ALL phase agent models in swarm mode
-il spin --set agents.iloom-swarm-worker.model=sonnet
-
-# Set worker model from spin config
+# Set spin orchestrator model for swarm mode
 il spin --set spin.swarmModel=sonnet
 ```
 

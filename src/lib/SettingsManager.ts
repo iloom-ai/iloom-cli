@@ -35,13 +35,12 @@ export const BaseAgentSettingsSchema = z.object({
 })
 
 /**
- * Zod schema for agent settings, extends base with optional nested agents sub-record.
- * The nested agents field is used for swarm-specific per-agent overrides under iloom-swarm-worker.
+ * Zod schema for agent settings, extends base with sub-agent timeout and nested agents record.
  */
 export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
 	agents: z.record(z.string(), BaseAgentSettingsSchema)
 		.optional()
-		.describe('Nested per-agent model overrides for swarm mode. Configure under agents.iloom-swarm-worker.agents.<agent-name>.model to set a different model for phase agents when running inside swarm workers. Fallback chain: swarm-specific agent model > explicit swarm worker model > base agent model. Only meaningful under the iloom-swarm-worker agent entry.'),
+		.describe('Nested per-agent settings. Only meaningful under the iloom-swarm-worker agent entry for sub-agent timeout configuration.'),
 	subAgentTimeout: z
 		.number()
 		.min(1, 'Sub-agent timeout must be at least 1 minute')
@@ -62,7 +61,7 @@ export const SpinAgentSettingsSchema = z.object({
 	swarmModel: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
-		.describe('Model for swarm worker agents. Sets the default model for all phase agents in swarm mode when not overridden by per-agent swarm-specific settings.'),
+		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
 })
 
 /**
@@ -350,7 +349,7 @@ export const IloomSettingsSchema = z.object({
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
 				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
-				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -596,7 +595,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
 				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
-				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: z
 		.object({
@@ -1122,7 +1121,10 @@ export class SettingsManager {
 	 * @param settings - Pre-loaded settings object
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
-	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): 'sonnet' | 'opus' | 'haiku' {
+		if (mode === 'swarm' && settings?.spin?.swarmModel) {
+			return settings.spin.swarmModel
+		}
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
 	}
 
