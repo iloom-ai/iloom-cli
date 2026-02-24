@@ -1007,6 +1007,7 @@ Need more advanced configuration? I can help you set up:
   • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
   • Swarm Agent Models - Configure different models for agents when running in swarm mode
+  • Swarm Model Presets - Quick setup: choose Expensive (Opus), Balanced (Sonnet), or Cheap (Haiku) for all swarm agents at once
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
@@ -1025,6 +1026,8 @@ You can ask me questions like:
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
   "How do I use different models for swarm workers vs normal mode?"
+  "How do I set up swarm model presets?"
+  "What are the swarm preset options?"
   "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
@@ -1085,7 +1088,33 @@ When configuring agents, use these model identifiers:
    3. `agents.<agent>.model` (base per-agent model)
    4. Agent default from its definition file
 
-2. **Database Environment Variable:**
+2. **Swarm Model Presets:**
+
+   Instead of configuring each swarm agent individually, you can apply a preset that sets all swarm agent models at once. There are three presets:
+
+   | Preset | Orchestrator | Worker | Phase Agents | Complexity Evaluator | Best for |
+   |--------|-------------|--------|-------------|---------------------|----------|
+   | **Expensive / Slow** | Opus | Opus | Opus | Haiku | Maximum quality, complex epics |
+   | **Balanced** (default) | Sonnet | Sonnet | Sonnet | Haiku | Good quality/cost tradeoff |
+   | **Cheap / Fast** | Haiku | Haiku | Haiku | Haiku | Quick iterations, simple tasks |
+
+   Note: The complexity evaluator always stays on Haiku regardless of preset, since it performs a simple classification task that does not benefit from a larger model.
+
+   **Applying presets — rules for generating settings JSON:**
+
+   When the user selects a preset, **merge** the preset's model values into their existing settings. Only set the `swarmModel` (or `model` for the worker) field on each agent — do not overwrite or remove other agent settings.
+
+   - **Expensive / Slow:** Set `spin.swarmModel` to `"opus"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Balanced (default):** This matches the existing defaults (Sonnet for all phase agents, Haiku for complexity evaluator). If the user has no other agent model overrides, no explicit settings changes are needed — only write overrides if the user wants to be explicit about the values.
+   - **Cheap / Fast:** Set `spin.swarmModel` to `"haiku"`. Set `agents.iloom-swarm-worker.model` to `"haiku"`. Set `swarmModel` to `"haiku"` on all phase agents and `iloom-issue-complexity-evaluator`.
+
+   **Important notes about presets:**
+   - Presets set `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used.
+   - Only merge preset fields into existing agent settings — never replace the entire agent object.
+   - If the user has already configured per-agent models, the preset values take precedence for swarm-related model fields only.
+   - If the user is unsure which preset to choose, recommend **Balanced** as the default.
+
+3. **Database Environment Variable:**
    ```json
    "capabilities": {
      "database": {
@@ -1094,7 +1123,7 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-3. **Workflow Behavior:**
+4. **Workflow Behavior:**
    ```json
    "workflows": {
      "pr": {
@@ -1106,26 +1135,26 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-4. **Copy Gitignored Files:**
+5. **Copy Gitignored Files:**
    ```json
    "copyGitIgnoredPatterns": ["*.db", "data/*.sqlite", "tmp/fixtures/**"]
    ```
 
    Glob patterns for gitignored files that should be copied to new looms. Useful for local databases, large test fixtures, or generated files that are too big to commit. Note: `.env` files and iloom/claude local settings are automatically copied and don't need to be listed here.
 
-5. **Protected Branches:**
+6. **Protected Branches:**
    ```json
    "protectedBranches": ["main", "production", "release/*"]
    ```
 
-6. **IDE Configuration:**
+7. **IDE Configuration:**
    ```json
    "ide": {
      "type": "cursor"
    }
    ```
 
-7. **Code Review with Multiple Providers:**
+8. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -1139,7 +1168,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-8. **Custom Script Configuration (package.iloom.json):**
+9. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json

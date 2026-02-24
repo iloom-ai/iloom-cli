@@ -1674,6 +1674,75 @@ il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
 il spin --set spin.swarmModel=sonnet
 ```
 
+**Swarm Model Presets:**
+
+Instead of configuring each swarm agent model individually, you can apply a preset during `il init` that sets all swarm agent models at once. There are three presets:
+
+| Preset | Orchestrator | Worker | Phase Agents | Complexity Evaluator | Best for |
+|--------|-------------|--------|-------------|---------------------|----------|
+| **Expensive / Slow** | Opus | Opus | Opus | Haiku | Maximum quality, complex epics |
+| **Balanced** (default) | Sonnet | Sonnet | Sonnet | Haiku | Good quality/cost tradeoff |
+| **Cheap / Fast** | Haiku | Haiku | Haiku | Haiku | Quick iterations, simple tasks |
+
+The complexity evaluator always stays on Haiku regardless of preset, since it performs a simple classification task that does not benefit from a larger model.
+
+Example settings for each preset:
+
+**Expensive / Slow:**
+```json
+{
+  "spin": { "swarmModel": "opus" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "opus" },
+    "iloom-issue-analyzer": { "swarmModel": "opus" },
+    "iloom-issue-planner": { "swarmModel": "opus" },
+    "iloom-issue-implementer": { "swarmModel": "opus" },
+    "iloom-issue-enhancer": { "swarmModel": "opus" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "opus" },
+    "iloom-code-reviewer": { "swarmModel": "opus" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Balanced (recommended default):**
+```json
+{
+  "spin": { "swarmModel": "sonnet" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "sonnet" },
+    "iloom-issue-analyzer": { "swarmModel": "sonnet" },
+    "iloom-issue-planner": { "swarmModel": "sonnet" },
+    "iloom-issue-implementer": { "swarmModel": "sonnet" },
+    "iloom-issue-enhancer": { "swarmModel": "sonnet" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "sonnet" },
+    "iloom-code-reviewer": { "swarmModel": "sonnet" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Cheap / Fast:**
+```json
+{
+  "spin": { "swarmModel": "haiku" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "haiku" },
+    "iloom-issue-analyzer": { "swarmModel": "haiku" },
+    "iloom-issue-planner": { "swarmModel": "haiku" },
+    "iloom-issue-implementer": { "swarmModel": "haiku" },
+    "iloom-issue-enhancer": { "swarmModel": "haiku" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "haiku" },
+    "iloom-code-reviewer": { "swarmModel": "haiku" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+Presets use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Presets merge with existing agent settings -- only the `swarmModel` (and worker `model`) fields are overwritten.
+
+To configure a preset, run `il init` and ask about swarm model presets in the advanced configuration section.
+
 **Sub-Agent Timeout:**
 
 When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
