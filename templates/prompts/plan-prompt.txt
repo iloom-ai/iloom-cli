@@ -206,9 +206,22 @@ AskUserQuestion(
 
 ### Phase 3: Issue Decomposition (Writing Plans)
 
-Break the work into actionable issues. Each issue should be:
+**Step 1: Identify work units, define shared contracts, and design the DAG.**
+
+Start by listing the work units at a high level (title + one sentence each). Then, before writing full issue descriptions, design the dependency graph:
+
+1. **Assume all issues run in parallel.** This is your starting point — not something you optimize toward later.
+2. **Define shared contracts to keep them parallel.** When Issue B needs an API, module, or type that Issue A is building, do NOT make A block B. Instead, define the shared contract (interface, function signature, module API) explicitly, and specify it in both issue descriptions. Both agents implement against the agreed contract simultaneously — a later integration step catches any mismatches.
+3. **Only add blocking dependencies you truly cannot eliminate with a contract.** Hard blockers are rare — they apply when Issue B literally modifies files that Issue A creates from scratch (not just imports them), or when Issue B requires a database migration from Issue A.
+4. **Check the shape.** Ask: "What is the widest, shallowest DAG I can create?" If the graph is mostly linear (A → B → C → D), rethink the decomposition. The shape of the graph matters as much as the content of individual issues, because a narrow graph kills swarm throughput.
+
+**Example:** If Issue A creates a `UserService` class and Issue B needs to call `UserService.getById()`, don't block B on A. Instead, specify the contract in both issues: "`UserService` exposes a `getById(id)` method that returns a user object." Both agents implement against this contract simultaneously.
+
+**Compilation errors are expected and OK.** When issues run in parallel against shared contracts, individual branches will have build errors — Issue B imports a module that Issue A hasn't merged yet. This is normal. The errors resolve when branches merge into the epic branch. Agents should not block on or try to fix compilation errors caused by missing contract implementations from parallel issues.
+
+**Step 2: Write full issue descriptions.** Now flesh out each node in your DAG. Each issue should be:
 - Self-contained with clear inputs and outputs
-- Ordered by dependencies (what must come first)
+- Connected to other issues via shared contracts (already defined in Step 1) rather than blocking dependencies
 
 **Right-size your issues.** Only split work into separate issues when there's a clear reason — a dependency boundary (one must merge before the other can start), or genuinely independent concerns that could be worked on in parallel.
 
@@ -243,29 +256,13 @@ A sign that issues should be consolidated: several small issues share the same d
 
 **The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-120 LOC of meaningful changes. When you're on the fence about whether to split, lean toward splitting — smaller issues enable more parallelism and are easier for agents to get right on the first attempt.
 
-**Maximize Parallel Execution.** The entire value of swarm mode is running many issues concurrently. Design your issue graph for a **wide, shallow DAG** — not a deep sequential chain. Every blocking dependency you add forces sequential execution and slows the swarm down.
-
-**Use contract-based parallelism instead of blocking dependencies.** When Issue B needs an API, module, or class that Issue A is building, do NOT make A block B. Instead:
-1. Define the shared contract (interface, function signature, module API) explicitly in both issue descriptions
-2. Let both issues execute in parallel — each implements against the agreed contract
-3. A later integration step (or the PR review) catches any mismatches
-
-**Example:** If Issue A creates a `UserService` class and Issue B needs to call `UserService.getById()`, don't block B on A. Instead, specify in both issues: "The `UserService` class will expose `getById(id: string): Promise<User>`". Both agents implement against this contract simultaneously.
-
-**Only create hard blocking dependencies when truly necessary:**
-- Issue B literally modifies files that Issue A creates from scratch (not just imports them)
-- Issue B requires a database migration or schema change from Issue A
-- Issue B cannot define any meaningful contract without Issue A's output (rare)
-
-**A sign your plan needs more parallelism:** If your dependency graph is mostly linear (A → B → C → D), rethink the decomposition. Ask: "Can I define contracts so these run concurrently?" Usually the answer is yes.
-
 **Issue Structure:**
 Each child issue should include:
 1. **Summary**: One-sentence description of what this issue accomplishes
 2. **Context**: Why this issue exists (relationship to parent feature)
 3. **Acceptance Criteria**: Clear, testable conditions for "done"
-4. **Dependencies**: Which issues must be completed first (if any) — keep these minimal
-5. **Shared Contracts**: If this issue produces or consumes an interface/API that other parallel issues depend on, specify the exact contract (function signatures, types, module exports)
+4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports)
+5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
 6. **Scope Boundaries**: What is explicitly NOT included
 
 ---
@@ -291,6 +288,12 @@ At the end of the planning session, you have MCP tools to create issues:
   - Parameters: `number` (issue number), `direction` ('blocking' | 'blocked_by' | 'both')
 - `mcp__issue_management__remove_dependency`: Remove a dependency between issues
   - Parameters: `blockingIssue`, `blockedIssue`
+
+**Validation Gate — Check Before Presenting Your Plan:**
+Before presenting the plan to the user, audit it against these questions:
+1. **For each blocking dependency:** "Can I replace this with a shared contract so both issues run in parallel?" If yes, rewrite the issues with an explicit contract and remove the dependency.
+2. **DAG shape check:** Is the graph wide and shallow, or narrow and linear? If your longest chain is more than 2 deep, re-examine whether intermediate dependencies are truly hard blockers.
+3. **Contract completeness:** Does every issue that produces or consumes a shared API specify the exact contract (function signatures, types, module exports) in its description?
 
 **Before Creating Issues:**
 1. Summarize the proposed issues and their relationships
