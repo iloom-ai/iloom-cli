@@ -91,9 +91,7 @@ export class SwarmSetupService {
 		issueTrackerName: string,
 		settings?: IloomSettings,
 	): Promise<SwarmSetupResult['childWorktrees']> {
-		const results: SwarmSetupResult['childWorktrees'] = []
-
-		for (const child of childIssues) {
+		return Promise.all(childIssues.map(async (child) => {
 			try {
 				// Strip prefix from child number (e.g., "#123" -> "123", "ENG-123" stays as-is for branch naming)
 				const rawId = child.number.replace(/^#/, '')
@@ -198,29 +196,26 @@ export class SwarmSetupService {
 					)
 				}
 
-				results.push({
+				getLogger().success(`Created child worktree for ${child.number}`)
+				return {
 					issueId: rawId,
 					worktreePath: childWorktreePath,
 					branch: childBranch,
 					success: true,
-				})
-
-				getLogger().success(`Created child worktree for ${child.number}`)
+				}
 			} catch (error) {
 				const rawId = child.number.replace(/^#/, '')
 				const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 				getLogger().warn(`Failed to create child worktree for ${child.number}: ${errorMessage}`)
-				results.push({
+				return {
 					issueId: rawId,
 					worktreePath: '',
 					branch: '',
 					success: false,
 					error: errorMessage,
-				})
+				}
 			}
-		}
-
-		return results
+		}))
 	}
 
 	/**
@@ -389,7 +384,7 @@ export class SwarmSetupService {
 
 		const successfulChildren = childWorktrees.filter((c) => c.success)
 
-		for (const child of successfulChildren) {
+		await Promise.all(successfulChildren.map(async (child) => {
 			try {
 				const targetDir = path.join(child.worktreePath, '.claude', 'agents')
 				await fs.copy(sourceDir, targetDir, { overwrite: true })
@@ -400,7 +395,7 @@ export class SwarmSetupService {
 					`Failed to copy agents to child worktree ${child.issueId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
 				)
 			}
-		}
+		}))
 
 		getLogger().success(`Copied agents to ${successfulChildren.length} child worktrees`)
 	}
