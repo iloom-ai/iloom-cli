@@ -2872,10 +2872,10 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('sonnet')
 		})
 
-		it('should default to sonnet when mode is swarm but swarmModel is not set', () => {
+		it('should default to opus when mode is swarm but swarmModel is not set', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('sonnet')
+			expect(result).toBe('opus')
 		})
 
 		it('should ignore swarmModel when mode is not swarm', () => {
@@ -2884,22 +2884,22 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('opus')
 		})
 
-		it('swarm mode defaults to sonnet even when spin.model is opus', () => {
-			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const } }
+		it('swarm mode defaults to opus even when spin.model is sonnet', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('sonnet')
+			expect(result).toBe('opus')
 		})
 
-		it('swarm mode defaults to sonnet even when spin.model is haiku', () => {
+		it('swarm mode defaults to opus even when spin.model is haiku', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('sonnet')
+			expect(result).toBe('opus')
 		})
 
-		it('swarm mode defaults to sonnet even when no spin config exists', () => {
+		it('swarm mode defaults to opus even when no spin config exists', () => {
 			const settings = { sourceEnvOnStart: false }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('sonnet')
+			expect(result).toBe('opus')
 		})
 
 		it('explicit spin.swarmModel overrides the default in swarm mode', () => {

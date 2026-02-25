@@ -587,20 +587,20 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('includes frontmatter with correct fields and defaults model to sonnet', async () => {
+		it('includes frontmatter with correct fields and defaults model to opus', async () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
 			expect(writtenContent).toContain('name: iloom-swarm-worker')
 			expect(writtenContent).toContain('description: Swarm worker agent that implements a child issue following the full iloom workflow.')
-			expect(writtenContent).toContain('model: sonnet')
+			expect(writtenContent).toContain('model: opus')
 		})
 
 		it('uses model from settings.agents["iloom-swarm-worker"] when configured', async () => {
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 				agents: {
 					'iloom-swarm-worker': {
-						model: 'opus',
+						model: 'haiku',
 					},
 				},
 			} as unknown as IloomSettings)
@@ -608,8 +608,8 @@ describe('SwarmSetupService', () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
-			expect(writtenContent).toContain('model: opus')
-			expect(writtenContent).not.toContain('model: sonnet')
+			expect(writtenContent).toContain('model: haiku')
+			expect(writtenContent).not.toContain('model: opus')
 		})
 
 		it('includes rendered template content in the body', async () => {

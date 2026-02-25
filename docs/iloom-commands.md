@@ -1648,13 +1648,13 @@ The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature,
 
 **Worker Model Configuration:**
 
-The swarm worker agent defaults to `sonnet`. To override, configure it via `.iloom/settings.json`:
+The swarm worker agent defaults to `opus`. To override, configure it via `.iloom/settings.json`:
 
 ```json
 {
   "agents": {
     "iloom-swarm-worker": {
-      "model": "opus"
+      "model": "haiku"
     }
   }
 }
@@ -1671,7 +1671,7 @@ You can also set a different model for the spin orchestrator when running in swa
 }
 ```
 
-In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `sonnet` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
+In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `opus` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
 
 **Phase Agent Model Overrides (Swarm Mode):**
 
@@ -1717,7 +1717,7 @@ During `il init`, you'll be asked to choose a swarm quality mode that tunes the 
 | Mode | Focus | Models used | Best for |
 |------|-------|-------------|----------|
 | **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (complexity evaluator stays Haiku) | Complex epics, critical features |
-| **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+| **Balanced** (default) | Opus for orchestration, analysis, and workers; Sonnet for phase agents | Opus: orchestrator, worker, analyzer, analyze-and-plan. Sonnet: planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
 | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
 
 The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
@@ -1744,9 +1744,9 @@ Example settings for each mode:
 **Balanced (recommended default):**
 ```json
 {
-  "spin": { "swarmModel": "sonnet" },
+  "spin": { "swarmModel": "opus" },
   "agents": {
-    "iloom-swarm-worker": { "model": "sonnet" },
+    "iloom-swarm-worker": { "model": "opus" },
     "iloom-issue-analyzer": { "swarmModel": "opus" },
     "iloom-issue-planner": { "swarmModel": "sonnet" },
     "iloom-issue-implementer": { "swarmModel": "sonnet" },
