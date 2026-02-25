@@ -11,6 +11,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { fileURLToPath } from 'node:url'
 import net from 'net'
 
 const SIGNAL_TIMEOUT_MS = 30_000
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
 	console.error(`PID: ${process.pid}`)
 	console.error(`Node version: ${process.version}`)
 	console.error(`CWD: ${process.cwd()}`)
-	console.error(`Script: ${new URL(import.meta.url).pathname}`)
+	console.error(`Script: ${fileURLToPath(import.meta.url)}`)
 
 	console.error('Environment variables:')
 	console.error(`  ILOOM_HARNESS_SOCKET=${process.env.ILOOM_HARNESS_SOCKET ?? '<not set>'}`)
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
 }
 
 // Only run main when executed directly (not when imported in tests)
-const isMain = process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
 if (isMain) {
 	main().catch((error) => {
 		console.error('Fatal error starting MCP server:', error)

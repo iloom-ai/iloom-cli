@@ -614,12 +614,10 @@ describe('PlanCommand', () => {
 
 		it('does not create HarnessServer when ILOOM_HARNESS_SOCKET is set', async () => {
 			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
-			// No done handler registered for external socket → epicData stays null → throws
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 
-			await expect(
-				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
-			).rejects.toThrow('Plan phase exited without completing')
+			// External harness mode: exits cleanly without checking epicData
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
 
 			expect(HarnessServer).not.toHaveBeenCalled()
 		})
@@ -628,10 +626,8 @@ describe('PlanCommand', () => {
 			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 
-			// Will throw because no done handler, but we still verify the socket path was used
-			await expect(
-				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
-			).rejects.toThrow()
+			// External harness mode: exits cleanly, VS Code manages the pipeline
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
 
 			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith('/tmp/external.sock')
 		})
@@ -677,7 +673,7 @@ describe('PlanCommand', () => {
 		it('registers done handler on harness server', async () => {
 			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
 
-			expect(mockHarnessInstance.registerHandler).toHaveBeenCalledWith('done', expect.any(Function))
+			expect(mockHarnessInstance.registerHandler).toHaveBeenCalledWith('done', expect.any(Function), { idempotent: true })
 		})
 
 		it('resolves successfully when done signal is received', async () => {

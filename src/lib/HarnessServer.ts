@@ -25,17 +25,21 @@ export class HarnessServer {
 	private server: net.Server | null = null
 	private readonly socketPath: string
 	private readonly handlers: Map<string, HarnessHandler> = new Map()
+	private readonly idempotentTypes: Set<string> = new Set()
 	private readonly handledTypes: Set<string> = new Set()
 	private readonly connections: Set<net.Socket> = new Set()
 	private readonly waiters: Map<string, Array<(data: unknown) => void>> = new Map()
-	private readonly boundSignalHandler: () => void
+	private readonly boundSignalHandler: (signal: NodeJS.Signals) => void
 
 	constructor(options: HarnessServerOptions = {}) {
 		this.socketPath =
 			options.socketPath ??
 			path.join(os.tmpdir(), `iloom-harness-${randomUUID()}.sock`)
-		this.boundSignalHandler = (): void => {
-			void this.stop()
+		this.boundSignalHandler = (signal: NodeJS.Signals): void => {
+			void this.stop().finally(() => {
+				// Re-raise so the default handler terminates the process
+				process.kill(process.pid, signal)
+			})
 		}
 	}
 
@@ -43,8 +47,11 @@ export class HarnessServer {
 		return this.socketPath
 	}
 
-	registerHandler(type: string, handler: HarnessHandler): void {
+	registerHandler(type: string, handler: HarnessHandler, options?: { idempotent?: boolean }): void {
 		this.handlers.set(type, handler)
+		if (options?.idempotent) {
+			this.idempotentTypes.add(type)
+		}
 	}
 
 	async start(): Promise<void> {
@@ -90,24 +97,21 @@ export class HarnessServer {
 		const serverToClose = this.server
 		this.server = null
 
-		await new Promise<void>((resolve, reject) => {
-			serverToClose.close((err) => {
-				if (err) reject(err)
-				else resolve()
+		try {
+			await new Promise<void>((resolve, reject) => {
+				serverToClose.close((err) => {
+					if (err) reject(err)
+					else resolve()
+				})
 			})
-		})
-
-		// Remove socket file
-		fs.rmSync(this.socketPath, { force: true })
-
-		// Clear any pending waiters to prevent memory leaks
-		this.waiters.clear()
-
-		// Remove signal handlers
-		process.off('SIGINT', this.boundSignalHandler)
-		process.off('SIGTERM', this.boundSignalHandler)
-
-		logger.debug('HarnessServer stopped')
+		} finally {
+			// Cleanup must run even if server.close() rejects
+			fs.rmSync(this.socketPath, { force: true })
+			this.waiters.clear()
+			process.off('SIGINT', this.boundSignalHandler)
+			process.off('SIGTERM', this.boundSignalHandler)
+			logger.debug('HarnessServer stopped')
+		}
 	}
 
 	waitFor(type: string): Promise<unknown> {
@@ -172,8 +176,8 @@ export class HarnessServer {
 			}
 		}
 
-		// Idempotent handling: duplicate signals return acknowledged without re-invoking handler
-		if (this.handledTypes.has(message.type)) {
+		// Idempotent handling: only applies to handlers registered with { idempotent: true }
+		if (this.idempotentTypes.has(message.type) && this.handledTypes.has(message.type)) {
 			this.sendResponse(socket, { type: 'acknowledged' })
 			return
 		}
@@ -188,8 +192,10 @@ export class HarnessServer {
 			return
 		}
 
-		// Mark as handled before calling handler to prevent re-entry
-		this.handledTypes.add(message.type)
+		// Mark as handled before calling handler (only for idempotent types)
+		if (this.idempotentTypes.has(message.type)) {
+			this.handledTypes.add(message.type)
+		}
 		const response = await handler(message.data)
 		this.sendResponse(socket, response)
 	}

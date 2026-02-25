@@ -1,80 +1,72 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import net from 'net'
 import { sendSignalToHarness } from './harness-server.js'
+
+vi.mock('net')
 
 /**
  * Tests for the harness MCP server's socket communication logic.
  *
- * We test sendSignalToHarness() directly by creating a real Unix socket
- * server that acts as the mock harness.
+ * Uses mocked net.createConnection to test sendSignalToHarness() without
+ * creating real Unix domain sockets.
  */
 
-/** Create a temporary socket path for tests */
-function makeSocketPath(): string {
-	return `/tmp/iloom-harness-test-${process.pid}-${Date.now()}.sock`
+type MockSocket = {
+	on: ReturnType<typeof vi.fn>
+	write: ReturnType<typeof vi.fn>
+	destroy: ReturnType<typeof vi.fn>
+	simulateConnect: () => void
+	simulateData: (data: string) => void
+	simulateError: (err: NodeJS.ErrnoException) => void
+	simulateClose: () => void
 }
 
-/** Start a mock harness socket server that responds with a fixed response */
-function startMockHarness(
-	socketPath: string,
-	handler: (message: Record<string, unknown>) => Record<string, unknown>
-): Promise<net.Server> {
-	return new Promise((resolve, reject) => {
-		const server = net.createServer((socket) => {
-			let buffer = ''
+function createMockSocket(): MockSocket {
+	const handlers: Record<string, Array<(...args: unknown[]) => void>> = {}
 
-			socket.on('data', (chunk: Buffer) => {
-				buffer += chunk.toString()
-				const newlineIndex = buffer.indexOf('\n')
-				if (newlineIndex !== -1) {
-					const line = buffer.slice(0, newlineIndex).trim()
-					buffer = buffer.slice(newlineIndex + 1)
-					try {
-						const message = JSON.parse(line) as Record<string, unknown>
-						const response = handler(message)
-						socket.write(JSON.stringify(response) + '\n')
-					} catch {
-						socket.write(JSON.stringify({ type: 'error', message: 'invalid JSON' }) + '\n')
-					}
-				}
-			})
+	const socket: MockSocket = {
+		on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+			handlers[event] = handlers[event] ?? []
+			handlers[event].push(handler)
+			return socket
+		}),
+		write: vi.fn(),
+		destroy: vi.fn(),
+		simulateConnect: () => {
+			for (const h of handlers['connect'] ?? []) h()
+		},
+		simulateData: (data: string) => {
+			for (const h of handlers['data'] ?? []) h(Buffer.from(data))
+		},
+		simulateError: (err: NodeJS.ErrnoException) => {
+			for (const h of handlers['error'] ?? []) h(err)
+		},
+		simulateClose: () => {
+			for (const h of handlers['close'] ?? []) h()
+		},
+	}
 
-			socket.on('error', () => {
-				// Ignore socket errors in test harness
-			})
-		})
-
-		server.listen(socketPath, () => resolve(server))
-		server.on('error', reject)
-	})
-}
-
-/** Stop a mock harness server */
-function stopMockHarness(server: net.Server): Promise<void> {
-	return new Promise((resolve) => server.close(() => resolve()))
+	return socket
 }
 
 describe('sendSignalToHarness', () => {
-	const servers: net.Server[] = []
+	let mockSocket: MockSocket
 
-	afterEach(async () => {
-		for (const server of servers) {
-			await stopMockHarness(server)
-		}
-		servers.length = 0
+	beforeEach(() => {
+		mockSocket = createMockSocket()
+		vi.mocked(net.createConnection).mockReturnValue(mockSocket as unknown as net.Socket)
 	})
 
 	describe('successful communication', () => {
 		it('should send signal and receive acknowledged response', async () => {
-			const socketPath = makeSocketPath()
-			const server = await startMockHarness(socketPath, (message) => ({
-				type: 'acknowledged',
-				echo: message,
-			}))
-			servers.push(server)
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
 
-			const response = await sendSignalToHarness(socketPath, { type: 'done' })
+			mockSocket.simulateConnect()
+			expect(mockSocket.write).toHaveBeenCalledWith('{"type":"done"}\n')
 
+			mockSocket.simulateData('{"type":"acknowledged","echo":{"type":"done"}}\n')
+
+			const response = await promise
 			expect(response).toEqual({
 				type: 'acknowledged',
 				echo: { type: 'done' },
@@ -82,16 +74,17 @@ describe('sendSignalToHarness', () => {
 		})
 
 		it('should send signal with data payload', async () => {
-			const socketPath = makeSocketPath()
-			const server = await startMockHarness(socketPath, (message) => ({
-				type: 'acknowledged',
-				echo: message,
-			}))
-			servers.push(server)
-
 			const data = { epicIssueNumber: '42', childIssues: [1, 2, 3] }
-			const response = await sendSignalToHarness(socketPath, { type: 'done', data })
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done', data })
 
+			mockSocket.simulateConnect()
+			expect(mockSocket.write).toHaveBeenCalledWith(
+				JSON.stringify({ type: 'done', data }) + '\n'
+			)
+
+			mockSocket.simulateData(JSON.stringify({ type: 'acknowledged', echo: { type: 'done', data } }) + '\n')
+
+			const response = await promise
 			expect(response).toEqual({
 				type: 'acknowledged',
 				echo: { type: 'done', data },
@@ -99,105 +92,83 @@ describe('sendSignalToHarness', () => {
 		})
 
 		it('should return instruction response from harness', async () => {
-			const socketPath = makeSocketPath()
-			const server = await startMockHarness(socketPath, () => ({
-				type: 'instruction',
-				content: 'Continue with the next step.',
-			}))
-			servers.push(server)
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'status' })
 
-			const response = await sendSignalToHarness(socketPath, { type: 'status' })
+			mockSocket.simulateConnect()
+			mockSocket.simulateData('{"type":"instruction","content":"Continue with the next step."}\n')
 
+			const response = await promise
 			expect(response.type).toBe('instruction')
 			expect(response.content).toBe('Continue with the next step.')
 		})
 
 		it('should send only the type field when data is not provided', async () => {
-			const socketPath = makeSocketPath()
-			let receivedMessage: Record<string, unknown> = {}
-			const server = await startMockHarness(socketPath, (message) => {
-				receivedMessage = message
-				return { type: 'acknowledged' }
-			})
-			servers.push(server)
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'ping' })
 
-			await sendSignalToHarness(socketPath, { type: 'ping' })
+			mockSocket.simulateConnect()
+			const writtenPayload = mockSocket.write.mock.calls[0][0] as string
+			const parsed = JSON.parse(writtenPayload.trim()) as Record<string, unknown>
+			expect(parsed).toEqual({ type: 'ping' })
+			expect(parsed).not.toHaveProperty('data')
 
-			expect(receivedMessage).toEqual({ type: 'ping' })
-			expect(receivedMessage).not.toHaveProperty('data')
+			mockSocket.simulateData('{"type":"acknowledged"}\n')
+			await promise
 		})
 	})
 
 	describe('error handling', () => {
-		it('should reject when socket does not exist', async () => {
-			const socketPath = makeSocketPath()
+		it('should reject when socket emits error', async () => {
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
 
-			await expect(sendSignalToHarness(socketPath, { type: 'done' })).rejects.toThrow()
+			const err = new Error('ENOENT') as NodeJS.ErrnoException
+			err.code = 'ENOENT'
+			mockSocket.simulateError(err)
+
+			await expect(promise).rejects.toThrow()
 		})
 
 		it('should reject when harness closes connection without responding', async () => {
-			const socketPath = makeSocketPath()
-			// Server that closes connection immediately without sending response
-			const server = await new Promise<net.Server>((resolve, reject) => {
-				const s = net.createServer((socket) => {
-					socket.destroy()
-				})
-				s.listen(socketPath, () => resolve(s))
-				s.on('error', reject)
-			})
-			servers.push(server)
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
 
-			await expect(sendSignalToHarness(socketPath, { type: 'done' })).rejects.toThrow(
-				'Harness closed connection before responding.'
-			)
+			mockSocket.simulateConnect()
+			mockSocket.simulateClose()
+
+			await expect(promise).rejects.toThrow('Harness closed connection before responding.')
+		})
+
+		it('should reject with friendly message for EPIPE errors', async () => {
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
+
+			const err = new Error('EPIPE') as NodeJS.ErrnoException
+			err.code = 'EPIPE'
+			mockSocket.simulateError(err)
+
+			await expect(promise).rejects.toThrow('Harness closed connection before responding.')
 		})
 
 		it('should reject when harness returns invalid JSON', async () => {
-			const socketPath = makeSocketPath()
-			const server = await new Promise<net.Server>((resolve, reject) => {
-				const s = net.createServer((socket) => {
-					socket.on('data', () => {
-						socket.write('not valid json\n')
-					})
-				})
-				s.listen(socketPath, () => resolve(s))
-				s.on('error', reject)
-			})
-			servers.push(server)
+			const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
 
-			await expect(sendSignalToHarness(socketPath, { type: 'done' })).rejects.toThrow(
-				'Harness returned invalid JSON:'
-			)
+			mockSocket.simulateConnect()
+			mockSocket.simulateData('not valid json\n')
+
+			await expect(promise).rejects.toThrow('Harness returned invalid JSON:')
 		})
 	})
 
 	describe('timeout behavior', () => {
 		it('should reject with timeout error when harness does not respond within 30s', async () => {
-			const socketPath = makeSocketPath()
-
-			// Server that accepts but never responds
-			const server = await new Promise<net.Server>((resolve, reject) => {
-				const s = net.createServer(() => {
-					// Intentionally do nothing - simulate unresponsive harness
-				})
-				s.listen(socketPath, () => resolve(s))
-				s.on('error', reject)
-			})
-			servers.push(server)
-
-			// Use fake timers to control the timeout
 			vi.useFakeTimers()
 			try {
-				// Create the promise first
-				const signalPromise = sendSignalToHarness(socketPath, { type: 'done' })
+				const promise = sendSignalToHarness('/tmp/test.sock', { type: 'done' })
+				mockSocket.simulateConnect()
 
-				// Attach rejection handler before advancing timers to prevent unhandled rejection
-				const rejection = expect(signalPromise).rejects.toThrow('Harness did not respond within 30s.')
+				const rejection = expect(promise).rejects.toThrow('Harness did not respond within 30s.')
 
-				// Advance past the 30s timeout
 				await vi.runAllTimersAsync()
 
 				await rejection
+				expect(mockSocket.destroy).toHaveBeenCalled()
 			} finally {
 				vi.useRealTimers()
 			}

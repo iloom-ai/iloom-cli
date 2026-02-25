@@ -111,6 +111,7 @@ describe('HarnessServer', () => {
 		mockServer = setupMockServer()
 		vi.spyOn(process, 'on').mockReturnValue(process)
 		vi.spyOn(process, 'off').mockReturnValue(process)
+		vi.spyOn(process, 'kill').mockReturnValue(true)
 	})
 
 	// ── constructor ────────────────────────────────────────────────────────────
@@ -225,20 +226,22 @@ describe('HarnessServer', () => {
 			expect(mockServer.close).toHaveBeenCalledTimes(1)
 		})
 
-		it('signal handler calls stop() when SIGINT fires', async () => {
+		it('signal handler calls stop() and re-raises signal when SIGINT fires', async () => {
 			const server = new HarnessServer({ socketPath: '/tmp/test.sock' })
 			await server.start()
 
 			const onCalls = vi.mocked(process.on).mock.calls
 			const sigintEntry = onCalls.find(([signal]) => signal === 'SIGINT')
-			const sigintHandler = sigintEntry?.[1] as (() => void) | undefined
+			const sigintHandler = sigintEntry?.[1] as ((signal: NodeJS.Signals) => void) | undefined
 
 			expect(sigintHandler).toBeDefined()
-			sigintHandler?.()
+			sigintHandler?.('SIGINT')
 			await flushAsync()
 
 			// Server was closed via the signal handler calling stop()
 			expect(mockServer.close).toHaveBeenCalled()
+			// Signal was re-raised to let default handler terminate the process
+			expect(process.kill).toHaveBeenCalledWith(process.pid, 'SIGINT')
 		})
 	})
 
@@ -413,7 +416,7 @@ describe('HarnessServer', () => {
 
 	// ── idempotent done handling ───────────────────────────────────────────────
 
-	describe('idempotent done handling', () => {
+	describe('idempotent handling', () => {
 		let server: HarnessServer
 		let socket: MockSocket
 
@@ -428,14 +431,14 @@ describe('HarnessServer', () => {
 			await server.stop()
 		})
 
-		it('first signal of a type calls handler and returns its response', async () => {
+		it('first signal of an idempotent type calls handler and returns its response', async () => {
 			const handler = vi.fn(
 				(_data: unknown): HarnessResponse => ({
 					type: 'instruction',
 					content: 'Planning complete',
 				})
 			)
-			server.registerHandler('done', handler)
+			server.registerHandler('done', handler, { idempotent: true })
 
 			socket.simulateData('{"type":"done","data":{"epicIssue":"42"}}\n')
 			await flushAsync()
@@ -448,11 +451,11 @@ describe('HarnessServer', () => {
 			expect(written).toEqual({ type: 'instruction', content: 'Planning complete' })
 		})
 
-		it('duplicate signal of same type returns acknowledged without calling handler again', async () => {
+		it('duplicate signal of idempotent type returns acknowledged without calling handler again', async () => {
 			const handler = vi.fn(
 				(_data: unknown): HarnessResponse => ({ type: 'instruction', content: 'done' })
 			)
-			server.registerHandler('done', handler)
+			server.registerHandler('done', handler, { idempotent: true })
 
 			socket.simulateData('{"type":"done"}\n')
 			await flushAsync()
@@ -465,6 +468,21 @@ describe('HarnessServer', () => {
 			const writeCalls = vi.mocked(socket.write).mock.calls
 			const secondResponse = JSON.parse(writeCalls[1][0] as string) as HarnessResponse
 			expect(secondResponse.type).toBe('acknowledged')
+		})
+
+		it('non-idempotent handler is called on every invocation', async () => {
+			const handler = vi.fn(
+				(_data: unknown): HarnessResponse => ({ type: 'acknowledged' })
+			)
+			server.registerHandler('status', handler)
+
+			socket.simulateData('{"type":"status"}\n')
+			await flushAsync()
+
+			socket.simulateData('{"type":"status"}\n')
+			await flushAsync()
+
+			expect(handler).toHaveBeenCalledTimes(2)
 		})
 	})
 
@@ -519,7 +537,7 @@ describe('HarnessServer', () => {
 		})
 
 		it('resolves new waiters registered after idempotent duplicate signals', async () => {
-			server.registerHandler('done', (): HarnessResponse => ({ type: 'acknowledged' }))
+			server.registerHandler('done', (): HarnessResponse => ({ type: 'acknowledged' }), { idempotent: true })
 
 			// First signal — resolves first waiter, handler called
 			const p1 = server.waitFor('done')
