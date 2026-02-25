@@ -242,48 +242,45 @@ export function generateWorktreePath(
     sanitized = `${sanitized}_pr_${options.prNumber}`
   }
 
+  if (options?.prefix === undefined) {
+    // New default: .iloom/worktrees/ under rootDir
+    return path.join(rootDir, '.iloom', 'worktrees', sanitized)
+  }
+
+  // Legacy prefix modes (for backwards compatibility during deprecation)
   const parentDir = path.dirname(rootDir)
 
-  // Handle prefix logic
-  let prefix: string
-
-  if (options?.prefix === undefined) {
-    // No prefix in options - calculate default: <basename>-looms
-    const mainFolderName = path.basename(rootDir)
-    prefix = mainFolderName ? `${mainFolderName}-looms/` : 'looms/'
-  } else if (options.prefix === '') {
+  if (options.prefix === '') {
     // Empty string = no prefix mode
-    prefix = ''
+    return path.join(parentDir, sanitized)
+  }
+
+  // Custom prefix provided
+  let prefix = options.prefix
+
+  // Check if prefix contains forward slashes (nested directory structure)
+  const hasNestedPath = prefix.includes('/')
+
+  if (hasNestedPath) {
+    // Check if it ends with a separator character (dash, underscore, or slash)
+    const endsWithSeparator = /[-_/]$/.test(prefix)
+
+    if (!endsWithSeparator) {
+      // Has nested path but no trailing separator: auto-append hyphen
+      // Example: "temp/looms" becomes "temp/looms-"
+      prefix = `${prefix}-`
+    }
+    // If it already ends with -, _, or /, keep as-is
   } else {
-    // Custom prefix provided
-    prefix = options.prefix
-
-    // Check if prefix contains forward slashes (nested directory structure)
-    const hasNestedPath = prefix.includes('/')
-
-    if (hasNestedPath) {
-      // Check if it ends with a separator character (dash, underscore, or slash)
-      const endsWithSeparator = /[-_/]$/.test(prefix)
-
-      if (!endsWithSeparator) {
-        // Has nested path but no trailing separator: auto-append hyphen
-        // Example: "temp/looms" becomes "temp/looms-"
-        prefix = `${prefix}-`
-      }
-      // If it already ends with -, _, or /, keep as-is
-    } else {
-      // Single-level prefix: auto-append separator if it doesn't end with one
-      const endsWithSeparator = /[-_]$/.test(prefix)
-      if (!endsWithSeparator) {
-        prefix = `${prefix}-`
-      }
+    // Single-level prefix: auto-append separator if it doesn't end with one
+    const endsWithSeparator = /[-_]$/.test(prefix)
+    if (!endsWithSeparator) {
+      prefix = `${prefix}-`
     }
   }
 
-  // Apply prefix (or not, if empty)
-  if (prefix === '') {
-    return path.join(parentDir, sanitized)
-  } else if (prefix.endsWith('/')) {
+  // Apply custom prefix
+  if (prefix.endsWith('/')) {
     // Forward slash = nested directory, use path.join for proper handling
     return path.join(parentDir, prefix, sanitized)
   } else if (prefix.includes('/')) {

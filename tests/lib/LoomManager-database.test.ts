@@ -68,6 +68,22 @@ vi.mock('../../src/utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock gitignore utility
+vi.mock('../../src/utils/gitignore.js', () => ({
+  ensureWorktreeGitignore: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock logger-context
+vi.mock('../../src/utils/logger-context.js', () => ({
+  getLogger: () => ({
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
+}))
+
 describe('LoomManager - Database Integration', () => {
   let manager: LoomManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>

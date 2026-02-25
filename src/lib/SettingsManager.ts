@@ -323,7 +323,7 @@ export const IloomSettingsSchema = z.object({
 			},
 		)
 		.describe(
-			'Prefix for worktree directories. Empty string disables prefix. Defaults to <repo-name>-looms if not set.',
+			'DEPRECATED: Prefix for worktree directories. Worktrees now default to .iloom/worktrees/ under the project root. This setting will be removed in a future release.',
 		),
 	protectedBranches: z
 		.array(z.string().min(1, 'Protected branch name cannot be empty'))
@@ -569,7 +569,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 			},
 		)
 		.describe(
-			'Prefix for worktree directories. Empty string disables prefix. Defaults to <repo-name>-looms if not set.',
+			'DEPRECATED: Prefix for worktree directories. Worktrees now default to .iloom/worktrees/ under the project root. This setting will be removed in a future release.',
 		),
 	protectedBranches: z
 		.array(z.string().min(1, 'Protected branch name cannot be empty'))

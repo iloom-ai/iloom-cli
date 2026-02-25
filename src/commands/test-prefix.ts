@@ -26,6 +26,10 @@ export class TestPrefixCommand {
    */
   public async execute(): Promise<void> {
     try {
+      logger.warn('DEPRECATED: The worktreePrefix setting and this test-prefix command are deprecated.')
+      logger.warn('Worktrees now default to .iloom/worktrees/ under the project root.')
+      logger.info('')
+
       logger.info('🧪 Testing Worktree Prefix Configuration\n')
 
       // Display the current working directory
@@ -37,11 +41,11 @@ export class TestPrefixCommand {
 
       // Display configured prefix
       if (settings.worktreePrefix === undefined) {
-        logger.info('Prefix: <default> (will calculate from repo name)')
+        logger.info('Prefix: <default> (uses .iloom/worktrees/ under project root)')
       } else if (settings.worktreePrefix === '') {
         logger.info('Prefix: "" (no prefix mode)')
       } else {
-        logger.info(`Prefix: "${settings.worktreePrefix}"`)
+        logger.info(`Prefix: "${settings.worktreePrefix}" (deprecated - remove to use new default)`)
       }
 
       logger.info('')
@@ -71,7 +75,7 @@ export class TestPrefixCommand {
         logger.info('')
       }
 
-      logger.info('💡 Tip: Edit .iloom/settings.json to change the worktreePrefix\n')
+      logger.info('💡 Tip: Worktrees now default to .iloom/worktrees/ under the project root. Remove worktreePrefix from .iloom/settings.json to use the new default.\n')
       logger.success('Test completed!')
 
     } catch (error) {

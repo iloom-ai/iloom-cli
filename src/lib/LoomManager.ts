@@ -24,6 +24,7 @@ import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
 import { PRManager } from './PRManager.js'
+import { ensureWorktreeGitignore } from '../utils/gitignore.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -536,15 +537,16 @@ export class LoomManager {
         return []
       }
 
-      // Sanitize parent branch name the same way as in createWorktreeOnly (lines 361-363)
-      const sanitizedBranchName = parentBranchName
-        .replace(/\//g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '-')
+      // Use metadata-based detection: find all looms whose parentLoom.branchName matches
+      const allMetadata = await this.metadataManager.listAllMetadata()
+      const childBranches = new Set(
+        allMetadata
+          .filter(m => m.parentLoom?.branchName === parentBranchName)
+          .map(m => m.branchName)
+          .filter((b): b is string => b != null),
+      )
 
-      // Child looms are in directory: {sanitizedBranchName}-looms/
-      const pattern = `${sanitizedBranchName}-looms/`
-
-      return worktrees.filter(wt => wt.path.includes(pattern))
+      return worktrees.filter(wt => childBranches.has(wt.branch))
     } catch (error) {
       getLogger().debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return []
@@ -669,16 +671,15 @@ export class LoomManager {
 
     // Load worktree prefix from settings
     const settingsData = await this.settings.loadSettings()
-    let worktreePrefix = settingsData.worktreePrefix
+    const worktreePrefix = settingsData.worktreePrefix
 
-    // If this is a child loom, compute dynamic prefix based on parent
-    if (input.parentLoom) {
-      // Sanitize branch name for directory use
-      const sanitizedBranchName = input.parentLoom.branchName
-        .replace(/\//g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '-')
-      worktreePrefix = `${sanitizedBranchName}-looms/`
-      getLogger().info(`Creating child loom with prefix: ${worktreePrefix}`)
+    // Deprecation warning for worktreePrefix
+    if (worktreePrefix !== undefined) {
+      getLogger().warn(
+        'DEPRECATED: The "worktreePrefix" setting is deprecated and will be removed in a future release. ' +
+        'Worktrees are now created under .iloom/worktrees/ in the project root. ' +
+        'Remove "worktreePrefix" from your .iloom/settings.json to use the new default.'
+      )
     }
 
     // Build options object, only including prefix if it's defined
@@ -687,6 +688,7 @@ export class LoomManager {
         ? { isPR: true, prNumber: input.identifier as number }
         : {}
 
+    // Only pass prefix if explicitly configured (deprecated behavior)
     if (worktreePrefix !== undefined) {
       pathOptions.prefix = worktreePrefix
     }
@@ -696,6 +698,18 @@ export class LoomManager {
       undefined,
       pathOptions
     )
+
+    // Ensure .iloom/worktrees/ is in the project's .gitignore (only when using new default path)
+    if (worktreePrefix === undefined) {
+      try {
+        await ensureWorktreeGitignore(this.gitWorktree.workingDirectory)
+      } catch (error) {
+        getLogger().warn(
+          `Could not update .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+          'You may want to manually add ".iloom/worktrees/" to your .gitignore.'
+        )
+      }
+    }
 
     // Detect if this is a fork PR
     const isForkPR = input.type === 'pr' && issueData && 'isFork' in issueData && (issueData as PullRequest).isFork === true

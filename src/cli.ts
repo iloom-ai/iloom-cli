@@ -1971,7 +1971,7 @@ program
 // Test command for worktree prefix configuration
 program
   .command('test-prefix')
-  .description('Test worktree prefix configuration - preview worktree paths (reads .iloom/settings.json)')
+  .description('[DEPRECATED] Test worktree prefix configuration - preview worktree paths')
   .action(async () => {
     try {
       const { TestPrefixCommand } = await import('./commands/test-prefix.js')

@@ -140,6 +140,28 @@ vi.mock('../utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock gitignore utility
+const mockEnsureWorktreeGitignore = vi.fn().mockResolvedValue(undefined)
+vi.mock('../utils/gitignore.js', () => ({
+  ensureWorktreeGitignore: (...args: unknown[]) => mockEnsureWorktreeGitignore(...args),
+}))
+
+// Mock logger-context for capturing deprecation warnings
+const mockLoggerWarn = vi.fn()
+const mockLoggerInfo = vi.fn()
+const mockLoggerDebug = vi.fn()
+const mockLoggerError = vi.fn()
+const mockLoggerSuccess = vi.fn()
+vi.mock('../utils/logger-context.js', () => ({
+  getLogger: () => ({
+    warn: mockLoggerWarn,
+    info: mockLoggerInfo,
+    debug: mockLoggerDebug,
+    error: mockLoggerError,
+    success: mockLoggerSuccess,
+  }),
+}))
+
 describe('LoomManager', testOptions, () => {
   let manager: LoomManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
@@ -205,6 +227,7 @@ describe('LoomManager', testOptions, () => {
     mockListAllMetadata.mockResolvedValue([])
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
     mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
+    mockEnsureWorktreeGitignore.mockResolvedValue(undefined)
   })
 
   describe('createIloom', () => {
@@ -3568,6 +3591,391 @@ describe('LoomManager', testOptions, () => {
 
       // Verify writeMetadata was NOT called (existing metadata preserved)
       expect(mockWriteMetadata).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('worktreePrefix deprecation and gitignore wiring', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 123,
+      originalInput: '123',
+    }
+
+    it('should log deprecation warning when worktreePrefix is set in settings', async () => {
+      // Mock settings with worktreePrefix set
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        worktreePrefix: 'custom-prefix/',
+      })
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      // Verify deprecation warning was logged
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.stringContaining('DEPRECATED')
+      )
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.stringContaining('worktreePrefix')
+      )
+    })
+
+    it('should NOT log deprecation warning when worktreePrefix is not set', async () => {
+      // Mock settings without worktreePrefix
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      // Verify no deprecation warning was logged
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+        expect.stringContaining('DEPRECATED')
+      )
+    })
+
+    it('should still pass worktreePrefix to generateWorktreePath for backwards compat', async () => {
+      // Mock settings with worktreePrefix
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        worktreePrefix: 'my-looms/',
+      })
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      // Verify generateWorktreePath was called with the prefix
+      expect(mockGitWorktree.generateWorktreePath).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        expect.objectContaining({ prefix: 'my-looms/' })
+      )
+    })
+
+    it('should NOT pass prefix to generateWorktreePath when worktreePrefix is not set', async () => {
+      // Mock settings without worktreePrefix
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      // Verify generateWorktreePath was called without prefix
+      expect(mockGitWorktree.generateWorktreePath).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        expect.not.objectContaining({ prefix: expect.anything() })
+      )
+    })
+
+    it('should call ensureWorktreeGitignore during loom creation', async () => {
+      // Mock settings
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      // Verify ensureWorktreeGitignore was called with the working directory
+      expect(mockEnsureWorktreeGitignore).toHaveBeenCalledWith(
+        mockGitWorktree.workingDirectory
+      )
+    })
+
+    it('should not remove child prefix computation for child looms', async () => {
+      // Child looms should now go to .iloom/worktrees/ like all other worktrees
+      // (no more dynamic prefix based on parent branch)
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 456,
+        title: 'Child Issue',
+        body: 'Child description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/456',
+      })
+
+      const childInput: CreateLoomInput = {
+        type: 'issue',
+        identifier: 456,
+        originalInput: '456',
+        parentLoom: {
+          type: 'issue',
+          identifier: 123,
+          branchName: 'feat/issue-123__parent',
+          worktreePath: '/test/worktree-issue-123',
+        },
+      }
+
+      // Mock worktree creation
+      const expectedPath = '/test/.iloom/worktrees/feat-issue-456__child'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      await manager.createIloom(childInput)
+
+      // Verify generateWorktreePath was called WITHOUT a prefix for child looms
+      // (child looms no longer get a dynamic prefix, they go under .iloom/worktrees/)
+      expect(mockGitWorktree.generateWorktreePath).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        expect.not.objectContaining({ prefix: expect.anything() })
+      )
+    })
+  })
+
+  describe('findChildLooms', () => {
+    const parentBranch = 'feat/issue-100__epic-feature'
+
+    const makeMetadata = (overrides: Partial<{
+      branchName: string | null
+      parentLoom: { type: 'issue' | 'pr' | 'branch' | 'epic'; identifier: string | number; branchName: string; worktreePath: string } | null
+    }>) => ({
+      description: 'test',
+      created_at: null,
+      branchName: overrides.branchName ?? null,
+      worktreePath: null,
+      issueType: null as const,
+      issueKey: null,
+      issue_numbers: [],
+      pr_numbers: [],
+      issueTracker: null,
+      colorHex: null,
+      sessionId: null,
+      projectPath: null,
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: null,
+      childIssueNumbers: [],
+      parentLoom: overrides.parentLoom ?? null,
+      childIssues: [],
+      dependencyMap: {},
+      mcpConfigPath: null,
+    })
+
+    const makeWorktree = (branch: string, wtPath: string) => ({
+      path: wtPath,
+      branch,
+      commit: 'abc123',
+      bare: false,
+      detached: false,
+    })
+
+    it('should return worktrees whose metadata has matching parentLoom.branchName', async () => {
+      const childMetadata1 = makeMetadata({
+        branchName: 'feat/issue-101__child-one',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+        },
+      })
+      const childMetadata2 = makeMetadata({
+        branchName: 'feat/issue-102__child-two',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+        },
+      })
+      const unrelatedMetadata = makeMetadata({
+        branchName: 'feat/issue-200__unrelated',
+        parentLoom: {
+          type: 'issue',
+          identifier: 999,
+          branchName: 'feat/issue-999__other-epic',
+          worktreePath: '/project/.iloom/worktrees/feat-issue-999__other-epic',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([childMetadata1, childMetadata2, unrelatedMetadata])
+
+      const worktrees = [
+        makeWorktree('feat/issue-101__child-one', '/project/.iloom/worktrees/feat-issue-101__child-one'),
+        makeWorktree('feat/issue-102__child-two', '/project/.iloom/worktrees/feat-issue-102__child-two'),
+        makeWorktree('feat/issue-200__unrelated', '/project/.iloom/worktrees/feat-issue-200__unrelated'),
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(2)
+      expect(result.map(wt => wt.branch)).toEqual([
+        'feat/issue-101__child-one',
+        'feat/issue-102__child-two',
+      ])
+    })
+
+    it('should return empty array when no metadata matches', async () => {
+      const unrelatedMetadata = makeMetadata({
+        branchName: 'feat/issue-200__unrelated',
+        parentLoom: null,
+      })
+
+      mockListAllMetadata.mockResolvedValue([unrelatedMetadata])
+
+      const worktrees = [
+        makeWorktree('feat/issue-200__unrelated', '/project/.iloom/worktrees/feat-issue-200__unrelated'),
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should return empty array when metadata exists but worktree does not (pruned)', async () => {
+      // Metadata says a child exists, but the worktree has been pruned/removed
+      const childMetadata = makeMetadata({
+        branchName: 'feat/issue-101__child-one',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project/.iloom/worktrees/feat-issue-101__child-one',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([childMetadata])
+
+      // Only main worktree exists -- child was pruned
+      const worktrees = [
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should return empty array when listWorktrees returns null', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(null as unknown as [])
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should handle errors gracefully and return empty array', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockRejectedValue(new Error('git failed'))
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should skip metadata entries with null branchName', async () => {
+      const nullBranchMetadata = makeMetadata({
+        branchName: null,
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([nullBranchMetadata])
+
+      const worktrees = [
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
     })
   })
 })

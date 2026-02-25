@@ -95,7 +95,7 @@ You are in the loop at every stage. You can review the AI's analysis, edit the p
 
 Each loom is a fully isolated container for your work:
 
-*   **Git Worktree:** A separate filesystem at ~/project-looms/issue-25/. No stashing, no branch switching overhead.
+*   **Git Worktree:** A separate filesystem at ~/project/.iloom/worktrees/issue-25/. No stashing, no branch switching overhead.
     
 *   **Database Branch:** (Neon support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
 
@@ -526,11 +526,10 @@ Sometimes a task spawns sub-tasks, or you get interrupted by an urgent bug while
     
 *  **Structure**
 ```
-    ~/my-project-looms/
+    ~/my-project/.iloom/worktrees/
     ├── feat-issue-25-auth/           # Parent Loom
-    └── feat-issue-25-auth-looms/     # Child Looms Directory
-      ├── fix-issue-42-bug/         # Child Loom (inherits from #25)
-      └── feat-issue-43-subtask/    # Another Child Loom
+    ├── fix-issue-42-bug/             # Child Loom (inherits from #25)
+    └── feat-issue-43-subtask/        # Another Child Loom
 ```
 
 ### CLI Tool Development

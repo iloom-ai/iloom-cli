@@ -578,29 +578,29 @@ describe('Git Utility Functions', () => {
       })
 
       describe('default prefix calculation', () => {
-        it('should calculate default prefix from repo basename when prefix undefined', () => {
+        it('should place worktree under .iloom/worktrees/ when prefix undefined', () => {
           const result = generateWorktreePath('issue-123', '/Users/dev/my-awesome-project', {})
-          expect(result).toBe('/Users/dev/my-awesome-project-looms/issue-123')
+          expect(result).toBe('/Users/dev/my-awesome-project/.iloom/worktrees/issue-123')
         })
 
-        it('should use default when no options provided', () => {
+        it('should use .iloom/worktrees/ when no options provided', () => {
           const result = generateWorktreePath('issue-123', '/Users/dev/my-project')
-          expect(result).toBe('/Users/dev/my-project-looms/issue-123')
+          expect(result).toBe('/Users/dev/my-project/.iloom/worktrees/issue-123')
         })
 
         it('should handle repo names with special characters in default calculation', () => {
           const result = generateWorktreePath('issue-123', '/Users/dev/my.project-v2')
-          expect(result).toBe('/Users/dev/my.project-v2-looms/issue-123')
+          expect(result).toBe('/Users/dev/my.project-v2/.iloom/worktrees/issue-123')
         })
 
         it('should handle single-character repo name', () => {
           const result = generateWorktreePath('issue-123', '/Users/dev/p')
-          expect(result).toBe('/Users/dev/p-looms/issue-123')
+          expect(result).toBe('/Users/dev/p/.iloom/worktrees/issue-123')
         })
 
-        it('should fallback to "looms" when basename is empty', () => {
+        it('should handle root directory', () => {
           const result = generateWorktreePath('issue-123', '/')
-          expect(result).toBe('/looms/issue-123')
+          expect(result).toBe('/.iloom/worktrees/issue-123')
         })
       })
 
@@ -619,7 +619,7 @@ describe('Git Utility Functions', () => {
             isPR: true,
             prNumber: 456
           })
-          expect(result).toBe('/Users/dev/project-looms/issue-123_pr_456')
+          expect(result).toBe('/Users/dev/project/.iloom/worktrees/issue-123_pr_456')
         })
 
         it('should handle PR suffix with empty prefix', () => {
@@ -651,7 +651,7 @@ describe('Git Utility Functions', () => {
 
         it('should sanitize branch slashes and apply default prefix', () => {
           const result = generateWorktreePath('feature/add-login', '/Users/dev/project')
-          expect(result).toBe('/Users/dev/project-looms/feature-add-login')
+          expect(result).toBe('/Users/dev/project/.iloom/worktrees/feature-add-login')
         })
 
         it('should sanitize branch slashes with nested directory prefix', () => {
