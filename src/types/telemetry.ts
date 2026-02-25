@@ -93,6 +93,20 @@ export interface InitCompletedProperties {
   mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
 }
 
+export interface AutoSwarmStartedProperties {
+  source: 'decomposition' | 'fresh'
+  planner: string // 'claude' | 'gemini' | 'codex'
+}
+
+export interface AutoSwarmCompletedProperties {
+  source: 'decomposition' | 'fresh'
+  success: boolean
+  child_count: number
+  duration_minutes: number
+  phase_reached: 'plan' | 'start' | 'spin'
+  fallback_to_normal: boolean
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -111,6 +125,8 @@ export interface TelemetryEventMap {
   'error.occurred': ErrorOccurredProperties
   'init.started': InitStartedProperties
   'init.completed': InitCompletedProperties
+  'auto_swarm.started': AutoSwarmStartedProperties
+  'auto_swarm.completed': AutoSwarmCompletedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

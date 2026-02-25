@@ -1177,6 +1177,7 @@ il plan <issue-number> [options]
 |------|--------|-------------|
 | `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
 | `--yolo` | - | Autonomous mode: skip permission prompts and proceed automatically |
+| `--auto-swarm` | - | Fully autonomous pipeline: plan → start --epic → spin (implies `--yolo`) |
 | `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
@@ -1251,6 +1252,33 @@ il plan --yolo 42
 
 **Warning:** Autonomous mode will create issues and dependencies without confirmation. Use with caution - it can make irreversible changes to your issue tracker.
 
+### `--auto-swarm`
+
+Enables fully autonomous execution: decompose an issue into child tasks, create an epic workspace, and launch swarm mode — all in one command with no manual intervention.
+
+**Usage:**
+```bash
+# Decompose existing issue and auto-start swarm
+il plan --auto-swarm 42
+
+# Fresh planning with auto-swarm
+il plan --auto-swarm "Build user authentication system"
+```
+
+**Behavior:**
+- Implies `--yolo` (autonomous mode, no confirmation prompts)
+- Both plan and spin phases run with `bypassPermissions`
+- Pipeline: plan → start --epic → spin (swarm mode)
+- If no child issues are created, falls back to a normal autonomous loom
+
+**Environment Variables:**
+- `ILOOM_HARNESS_SOCKET`: Optional. Path to an external harness socket (e.g., provided by VS Code extension). If not set, the CLI creates its own harness server.
+
+**Error Handling:**
+- If the plan phase fails or exits without signaling completion, the pipeline aborts
+- If `il start` fails, the pipeline aborts with an error
+- Spin phase uses standard swarm error handling
+
 **Available MCP Tools in Session:**
 
 | Category | Tools |
@@ -1312,6 +1340,12 @@ il plan --print "Add feature X"
 
 # Headless mode with JSON output format
 il plan --print --output-format=json 42
+
+# Auto-swarm - fully autonomous pipeline from planning to swarm
+il plan --auto-swarm 42
+
+# Auto-swarm - fresh planning with auto-swarm
+il plan --auto-swarm "Build user authentication system"
 ```
 
 **Notes:**

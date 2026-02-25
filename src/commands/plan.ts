@@ -363,8 +363,22 @@ export class PlanCommand {
 		let harness: HarnessServer | null = null
 		let epicData: { epicIssueNumber: string; childIssues: number[] } | null = null
 		const controller = autoSwarm ? new AbortController() : null
+		const autoSwarmStartTime = autoSwarm ? Date.now() : null
+		let autoSwarmSuccess = false
+		let autoSwarmPhaseReached: 'plan' | 'start' | 'spin' = 'plan'
+		let autoSwarmFallbackToNormal = false
 
 		if (autoSwarm) {
+			const autoSwarmSource = decompositionContext ? 'decomposition' : 'fresh'
+			try {
+				TelemetryService.getInstance().track('auto_swarm.started', {
+					source: autoSwarmSource,
+					planner: effectivePlanner,
+				})
+			} catch (error) {
+				logger.debug(`Telemetry auto_swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
+			}
+
 			// 1. Force yolo mode
 			yolo = true
 
@@ -568,6 +582,9 @@ ${initialMessage}`
 				// Cast required because TypeScript cannot narrow let variables mutated in closures
 				const resolvedEpicData = epicData as { epicIssueNumber: string; childIssues: number[] }
 				logger.info(chalk.green(`Planning complete. Epic issue: #${resolvedEpicData.epicIssueNumber}`))
+				autoSwarmSuccess = true
+				autoSwarmPhaseReached = 'spin'
+				autoSwarmFallbackToNormal = resolvedEpicData.childIssues.length === 0
 			}
 
 			// Track epic.planned telemetry for decomposition sessions
@@ -598,6 +615,24 @@ ${initialMessage}`
 		} finally {
 			if (harness) {
 				await harness.stop()
+			}
+
+			if (autoSwarm && autoSwarmStartTime !== null) {
+				const durationMinutes = (Date.now() - autoSwarmStartTime) / 60000
+				const autoSwarmSource = decompositionContext ? 'decomposition' : 'fresh'
+				const resolvedEpicData = epicData as { epicIssueNumber: string; childIssues: number[] } | null
+				try {
+					TelemetryService.getInstance().track('auto_swarm.completed', {
+						source: autoSwarmSource,
+						success: autoSwarmSuccess,
+						child_count: resolvedEpicData?.childIssues.length ?? 0,
+						duration_minutes: Math.round(durationMinutes * 10) / 10,
+						phase_reached: autoSwarmPhaseReached,
+						fallback_to_normal: autoSwarmFallbackToNormal,
+					})
+				} catch (error) {
+					logger.debug(`Telemetry auto_swarm.completed tracking failed: ${error instanceof Error ? error.message : error}`)
+				}
 			}
 		}
 	}
