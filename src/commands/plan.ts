@@ -14,6 +14,8 @@ import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setu
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
+import { StartCommand } from './start.js'
+import { IgniteCommand } from './ignite.js'
 
 // Define provider arrays for validation and dynamic flag generation
 const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
@@ -578,13 +580,63 @@ ${initialMessage}`
 				if (!epicData) {
 					throw new Error('Plan phase exited without completing. The Architect did not signal done.')
 				}
-				// epicData is available for chaining (Issue #767)
 				// Cast required because TypeScript cannot narrow let variables mutated in closures
 				const resolvedEpicData = epicData as { epicIssueNumber: string; childIssues: number[] }
 				logger.info(chalk.green(`Planning complete. Epic issue: #${resolvedEpicData.epicIssueNumber}`))
+				autoSwarmFallbackToNormal = resolvedEpicData.childIssues.length === 0
+
+				// Chain: start epic workspace + launch swarm
+				const { epicIssueNumber, childIssues } = resolvedEpicData
+
+				const startCommand = new StartCommand(IssueTrackerFactory.create(settings ?? {}))
+
+				if (childIssues.length === 0) {
+					// Zero-children fallback: normal (non-epic) autonomous loom
+					logger.info('No child issues created. Starting as a normal autonomous loom.')
+					let startResult
+					try {
+						startResult = await startCommand.execute({
+							identifier: String(epicIssueNumber),
+							options: { oneShot: 'bypassPermissions', json: true, claude: false, code: false, devServer: false, terminal: false },
+						})
+					} catch (startError) {
+						throw new Error(
+							`Auto-swarm: failed to create epic workspace. ${startError instanceof Error ? startError.message : String(startError)}`
+						)
+					}
+
+					const epicWorktreePath = startResult?.path
+					if (!epicWorktreePath) {
+						throw new Error('Auto-swarm: StartCommand did not return a workspace path.')
+					}
+
+					const igniteCommand = new IgniteCommand()
+					await igniteCommand.execute('bypassPermissions', undefined, undefined, epicWorktreePath)
+				} else {
+					// Epic mode: start + spin with swarm
+					let startResult
+					try {
+						startResult = await startCommand.execute({
+							identifier: String(epicIssueNumber),
+							options: { epic: true, json: true, oneShot: 'bypassPermissions', claude: false, code: false, devServer: false, terminal: false },
+						})
+					} catch (startError) {
+						throw new Error(
+							`Auto-swarm: failed to create epic workspace. ${startError instanceof Error ? startError.message : String(startError)}`
+						)
+					}
+
+					const epicWorktreePath = startResult?.path
+					if (!epicWorktreePath) {
+						throw new Error('Auto-swarm: StartCommand did not return a workspace path.')
+					}
+
+					const igniteCommand = new IgniteCommand()
+					await igniteCommand.execute('bypassPermissions', undefined, undefined, epicWorktreePath)
+				}
+
 				autoSwarmSuccess = true
 				autoSwarmPhaseReached = 'spin'
-				autoSwarmFallbackToNormal = resolvedEpicData.childIssues.length === 0
 			}
 
 			// Track epic.planned telemetry for decomposition sessions

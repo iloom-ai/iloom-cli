@@ -19,6 +19,23 @@ vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('../mcp/IssueManagementProviderFactory.js')
 vi.mock('../lib/HarnessServer.js')
+vi.mock('./start.js', () => {
+	class MockStartCommand {
+		async execute() {
+			return { id: 'test-loom', path: '/tmp/test-epic-worktree', branch: 'issue/42', type: 'epic' as const, identifier: '42' }
+		}
+	}
+	return { StartCommand: MockStartCommand }
+})
+
+vi.mock('./ignite.js', () => {
+	class MockIgniteCommand {
+		async execute() {
+			return undefined
+		}
+	}
+	return { IgniteCommand: MockIgniteCommand, WorktreeValidationError: class WorktreeValidationError extends Error {} }
+})
 vi.mock('../lib/TelemetryService.js', () => ({
 	TelemetryService: {
 		getInstance: vi.fn(),

@@ -77,10 +77,11 @@ export class IgniteCommand {
 
 	/**
 	 * Validate that we're not running from the main worktree
+	 * @param workspacePath - Optional explicit workspace path; defaults to process.cwd()
 	 * @throws WorktreeValidationError if running from main worktree
 	 */
-	private async validateNotMainWorktree(): Promise<void> {
-		const currentDir = process.cwd()
+	private async validateNotMainWorktree(workspacePath?: string): Promise<void> {
+		const currentDir = workspacePath ?? process.cwd()
 
 		// Step 1: Check if we're in a git repository at all
 		const isGitRepo = await isValidGitRepo(currentDir)
@@ -130,6 +131,8 @@ export class IgniteCommand {
 	 * Main entry point for spin command
 	 * @param oneShot - One-shot automation mode
 	 * @param printOptions - Print mode options for headless/CI execution
+	 * @param skipCleanup - Skip cleanup after execution
+	 * @param workspacePath - Optional explicit workspace path for programmatic invocation (avoids process.chdir())
 	 */
 	async execute(oneShot?: OneShotMode, printOptions?: {
 		print?: boolean
@@ -137,30 +140,30 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}, skipCleanup?: boolean): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath))
 		}
 
-		return this.executeInternal(oneShot, skipCleanup)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
 
 		// Validate we're not in the main worktree first
 		try {
-			await this.validateNotMainWorktree()
+			await this.validateNotMainWorktree(workspacePath)
 		} catch (error) {
 			if (error instanceof WorktreeValidationError) {
 				logger.error(error.message)
@@ -183,7 +186,7 @@ export class IgniteCommand {
 			await this.hookManager.installHooks()
 
 			// Step 1: Auto-detect workspace context
-			const context = await this.detectWorkspaceContext()
+			const context = await this.detectWorkspaceContext(workspacePath)
 
 			logger.debug('Auto-detected workspace context', { context })
 
@@ -633,9 +636,9 @@ export class IgniteCommand {
 	 *
 	 * This leverages the same logic as FinishCommand.autoDetectFromCurrentDirectory()
 	 */
-	private async detectWorkspaceContext(): Promise<ClaudeWorkflowOptions> {
-		const workspacePath = process.cwd()
-		const currentDir = path.basename(workspacePath)
+	private async detectWorkspaceContext(workspacePath?: string): Promise<ClaudeWorkflowOptions> {
+		const workspacePath_ = workspacePath ?? process.cwd()
+		const currentDir = path.basename(workspacePath_)
 
 		// Check for PR worktree pattern: _pr_N suffix
 		// Pattern: /.*_pr_(\d+)$/
@@ -646,7 +649,7 @@ export class IgniteCommand {
 			const prNumber = parseInt(prMatch[1], 10)
 			logger.debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForPR(prNumber, workspacePath)
+			return this.buildContextForPR(prNumber, workspacePath_)
 		}
 
 		// Check for issue pattern in directory name
@@ -655,7 +658,7 @@ export class IgniteCommand {
 		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForIssue(issueNumber, workspacePath)
+			return this.buildContextForIssue(issueNumber, workspacePath_)
 		}
 
 		// Fallback: Try to extract from git branch name
@@ -669,7 +672,7 @@ export class IgniteCommand {
 				if (branchIssueNumber !== null) {
 					logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
 
-					return this.buildContextForIssue(branchIssueNumber, workspacePath, currentBranch)
+					return this.buildContextForIssue(branchIssueNumber, workspacePath_, currentBranch)
 				}
 			}
 		} catch (error) {
@@ -679,7 +682,7 @@ export class IgniteCommand {
 
 		// Last resort: use regular workflow
 		logger.debug('No specific context detected, using regular workflow')
-		return this.buildContextForRegular(workspacePath)
+		return this.buildContextForRegular(workspacePath_)
 	}
 
 	/**
