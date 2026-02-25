@@ -201,6 +201,16 @@ export class IgniteCommand {
 				? metadata.prUrls[String(draftPrNumber)]
 				: undefined
 
+			// Step 2.0.3: Prevent il spin in child worktrees of epic looms
+			// Child issues managed by a swarm orchestrator must not launch independent agents.
+			// Exception: child epics (issueType === 'epic') need il spin for their own swarm.
+			if (metadata?.parentLoom?.type === 'epic' && metadata.issueType !== 'epic') {
+				throw new WorktreeValidationError(
+					'Cannot run il spin in a child worktree of an epic loom. The swarm orchestrator manages agent execution for these issues.',
+					'Run il spin from the parent epic worktree instead to launch the swarm orchestrator.'
+				)
+			}
+
 			// Step 2.0.4: Determine effective oneShot mode
 			// If print mode is enabled, force noReview to skip interactive reviews
 			// If oneShot is provided (any value including 'default'), use it

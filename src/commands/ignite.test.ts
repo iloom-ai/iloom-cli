@@ -3537,6 +3537,206 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('Epic child worktree spin prevention', () => {
+		it('should throw WorktreeValidationError when running il spin in a child worktree of an epic loom', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-200__child-issue')
+
+			// Mock MetadataManager to return child-of-epic metadata
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Child issue of epic',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-200__child-issue',
+					worktreePath: '/path/to/feat/issue-200__child-issue',
+					issueType: 'issue',
+					issue_numbers: ['200'],
+					parentLoom: {
+						type: 'epic' as const,
+						identifier: 100,
+						branchName: 'feat/issue-100__epic',
+						worktreePath: '/path/to/epic',
+					},
+					sessionId: '12345678-1234-4567-8901-123456789012',
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			try {
+				const error = await command.execute().catch((e: Error) => e)
+				expect(error).toBeInstanceOf(WorktreeValidationError)
+				expect((error as Error).message).toContain('Cannot run il spin in a child worktree of an epic loom')
+
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should allow il spin in regular child looms (child of non-epic parent)', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-300__child-of-regular')
+
+			// Mock MetadataManager to return child-of-regular-loom metadata
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Child of regular loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-300__child-of-regular',
+					worktreePath: '/path/to/feat/issue-300__child-of-regular',
+					issueType: 'issue',
+					issue_numbers: ['300'],
+					parentLoom: {
+						type: 'issue' as const,
+						identifier: 250,
+						branchName: 'feat/issue-250__parent',
+						worktreePath: '/path/to/parent',
+					},
+					sessionId: '12345678-1234-4567-8901-123456789012',
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			try {
+				await command.execute()
+
+				// Verify launchClaude WAS called - regular child looms should work
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should allow il spin in child epics (child of epic that is itself an epic)', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-400__child-epic')
+
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/child-epic',
+					epicBranch: 'feat/issue-400__child-epic',
+					childWorktrees: [
+						{ issueId: '501', worktreePath: '/path/to/child-501', branch: 'feat/issue-501', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
+
+			const parentLoom = {
+				type: 'epic' as const,
+				identifier: 100,
+				branchName: 'feat/issue-100__parent-epic',
+				worktreePath: '/path/to/parent-epic',
+			}
+
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-400__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['400'],
+				parentLoom,
+				childIssues: [
+					{ number: '#501', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				sessionId: 'child-epic-session-id',
+			})
+			// Second call: fresh metadata re-read for swarm mode
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-400__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['400'],
+				parentLoom,
+				childIssues: [
+					{ number: '#501', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				dependencyMap: {},
+				sessionId: 'child-epic-session-id',
+			})
+			// Child metadata for telemetry
+			readMetadataMock.mockResolvedValueOnce({
+				state: 'done',
+				created_at: '2025-01-01T00:00:00Z',
+			})
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const cmd = new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-400__child-epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAgents: vi.fn().mockResolvedValue([]),
+					formatForCli: vi.fn().mockReturnValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+
+			try {
+				// Should NOT throw - child epics need il spin for their own swarm
+				await cmd.execute()
+
+				// Verify launchClaude WAS called (swarm mode)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should allow il spin in looms without a parent (top-level looms)', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-500__standalone')
+
+			// Default mock metadata has no parentLoom, so this tests the happy path
+			// The default MetadataManager mock returns parentLoomBranch: null (no parentLoom)
+
+			try {
+				await command.execute()
+
+				// Verify launchClaude WAS called - top-level looms should work
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('--skip-cleanup flag threading', () => {
 		// Epic metadata that triggers swarm mode: has issue_numbers, no parentLoom, and childIssues
 		const epicMetadata = {
