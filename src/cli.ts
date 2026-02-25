@@ -1540,6 +1540,7 @@ program
   .option('--verbose', 'Enable verbose output (requires --print)')
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .option('--auto-swarm', 'Enable auto-swarm: plan, start epic, and spin automatically')
   .action(async (prompt?: string, options?: {
     model?: string
     yolo?: boolean
@@ -1550,6 +1551,7 @@ program
     verbose?: boolean
     json?: boolean
     jsonStream?: boolean
+    autoSwarm?: boolean
   }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
@@ -1580,7 +1582,7 @@ program
             ...(options?.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions)
+      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions, options?.autoSwarm)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

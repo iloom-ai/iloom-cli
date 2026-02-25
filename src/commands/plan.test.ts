@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+/* global AbortSignal */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PlanCommand } from './plan.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
@@ -8,6 +9,8 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import { TelemetryService } from '../lib/TelemetryService.js'
 import * as identifierParser from '../utils/IdentifierParser.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { HarnessServer } from '../lib/HarnessServer.js'
+import type { HarnessHandler } from '../lib/HarnessServer.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
@@ -15,6 +18,7 @@ vi.mock('../utils/mcp.js')
 vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('../mcp/IssueManagementProviderFactory.js')
+vi.mock('../lib/HarnessServer.js')
 vi.mock('../lib/TelemetryService.js', () => ({
 	TelemetryService: {
 		getInstance: vi.fn(),
@@ -535,6 +539,184 @@ describe('PlanCommand', () => {
 
 			// Should not throw — telemetry failure is non-blocking
 			await expect(command.execute('42')).resolves.toBeUndefined()
+		})
+	})
+
+	describe('auto-swarm harness lifecycle', () => {
+		let capturedHandlers: Map<string, HarnessHandler>
+		let mockHarnessInstance: {
+			path: string
+			start: ReturnType<typeof vi.fn>
+			stop: ReturnType<typeof vi.fn>
+			registerHandler: ReturnType<typeof vi.fn>
+		}
+
+		beforeEach(() => {
+			capturedHandlers = new Map<string, HarnessHandler>()
+
+			mockHarnessInstance = {
+				path: '/tmp/test-harness.sock',
+				start: vi.fn().mockResolvedValue(undefined),
+				stop: vi.fn().mockResolvedValue(undefined),
+				registerHandler: vi.fn((type: string, handler: HarnessHandler) => {
+					capturedHandlers.set(type, handler)
+				}),
+			}
+
+			vi.mocked(HarnessServer).mockImplementation(
+				() => mockHarnessInstance as unknown as HarnessServer
+			)
+
+			// generateHarnessMcpConfig is synchronous — must use mockReturnValue
+			vi.mocked(mcpUtils.generateHarnessMcpConfig).mockReturnValue([
+				{ mcpServers: { harness: {} } },
+			])
+
+			// Default: launchClaude simulates successful planning by invoking the done handler
+			vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+				const doneHandler = capturedHandlers.get('done')
+				if (doneHandler) {
+					await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+				}
+				return undefined
+			})
+		})
+
+		afterEach(() => {
+			delete process.env.ILOOM_HARNESS_SOCKET
+		})
+
+		it('creates and starts HarnessServer when ILOOM_HARNESS_SOCKET is not set', async () => {
+			delete process.env.ILOOM_HARNESS_SOCKET
+
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(HarnessServer).toHaveBeenCalled()
+			expect(mockHarnessInstance.start).toHaveBeenCalled()
+		})
+
+		it('does not create HarnessServer when ILOOM_HARNESS_SOCKET is set', async () => {
+			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
+			// No done handler registered for external socket → epicData stays null → throws
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow('Plan phase exited without completing')
+
+			expect(HarnessServer).not.toHaveBeenCalled()
+		})
+
+		it('uses ILOOM_HARNESS_SOCKET path for harness MCP config', async () => {
+			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			// Will throw because no done handler, but we still verify the socket path was used
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow()
+
+			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith('/tmp/external.sock')
+		})
+
+		it('forces yolo mode (bypassPermissions) when autoSwarm is true', async () => {
+			await command.execute('plan my epic', undefined, false, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ permissionMode: 'bypassPermissions' })
+			)
+		})
+
+		it('adds mcp__harness__signal to allowed tools', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					allowedTools: expect.arrayContaining(['mcp__harness__signal']),
+				})
+			)
+		})
+
+		it('sets AUTO_SWARM_MODE: true in template variables', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ AUTO_SWARM_MODE: true })
+			)
+		})
+
+		it('passes AbortSignal to launchClaude', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ signal: expect.any(AbortSignal) })
+			)
+		})
+
+		it('registers done handler on harness server', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockHarnessInstance.registerHandler).toHaveBeenCalledWith('done', expect.any(Function))
+		})
+
+		it('resolves successfully when done signal is received', async () => {
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).resolves.toBeUndefined()
+		})
+
+		it('throws when launchClaude resolves without done signal', async () => {
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow('Plan phase exited without completing. The Architect did not signal done.')
+		})
+
+		it('stops harness server in finally block on success', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockHarnessInstance.stop).toHaveBeenCalled()
+		})
+
+		it('stops harness server in finally block when launchClaude throws', async () => {
+			vi.mocked(claudeUtils.launchClaude).mockRejectedValue(new Error('Claude crashed'))
+
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow('Claude crashed')
+
+			expect(mockHarnessInstance.stop).toHaveBeenCalled()
+		})
+
+		it('done handler returns planning complete instruction', async () => {
+			let doneResponse: unknown
+
+			vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+				const doneHandler = capturedHandlers.get('done')
+				if (doneHandler) {
+					doneResponse = await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+				}
+				return undefined
+			})
+
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(doneResponse).toEqual({
+				type: 'instruction',
+				content: expect.stringContaining('Planning complete'),
+			})
+		})
+
+		it('merges harness MCP config with base MCP config', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			// generateHarnessMcpConfig called with the harness socket path
+			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith(mockHarnessInstance.path)
 		})
 	})
 })

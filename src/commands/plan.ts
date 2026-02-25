@@ -1,9 +1,11 @@
+/* global AbortController, setImmediate */
 import { logger, createStderrLogger } from '../utils/logger.js'
 import { withLogger } from '../utils/logger-context.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
+import { HarnessServer } from '../lib/HarnessServer.js'
 import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
@@ -91,16 +93,17 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		}
+		},
+		autoSwarm?: boolean
 	): Promise<void> {
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (printOptions?.json ?? false) || (printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions))
+			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions, autoSwarm))
 		}
 
-		return this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions)
+		return this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions, autoSwarm)
 	}
 
 	/**
@@ -118,7 +121,8 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		}
+		},
+		autoSwarm?: boolean
 	): Promise<void> {
 		// Validate and normalize planner CLI argument
 		let normalizedPlanner: PlannerProvider | undefined
@@ -355,6 +359,46 @@ export class PlanCommand {
 			serverCount: mcpConfig.length,
 		})
 
+		// --- Auto-swarm harness lifecycle ---
+		let harness: HarnessServer | null = null
+		let epicData: { epicIssueNumber: string; childIssues: number[] } | null = null
+		const controller = autoSwarm ? new AbortController() : null
+
+		if (autoSwarm) {
+			// 1. Force yolo mode
+			yolo = true
+
+			// 2. Check for external harness
+			const externalSocket = process.env.ILOOM_HARNESS_SOCKET
+
+			if (!externalSocket) {
+				// 3. Create and start harness server
+				harness = new HarnessServer()
+				await harness.start()
+			}
+
+			const socketPath = externalSocket ?? harness?.path
+			if (!socketPath) {
+				throw new Error('Unexpected: no harness socket path available')
+			}
+
+			// 4. Register "done" handler (only when we own the harness server)
+			if (harness) {
+				harness.registerHandler('done', (data) => {
+					epicData = data as typeof epicData
+					setImmediate(() => { controller?.abort() })
+					return {
+						type: 'instruction' as const,
+						content: 'Planning complete. The auto-swarm pipeline will now create the epic workspace and launch swarm mode automatically.',
+					}
+				})
+			}
+
+			// 5. Merge harness MCP config
+			const harnessMcpConfig = generateHarnessMcpConfig(socketPath)
+			mcpConfig = [...mcpConfig, ...harnessMcpConfig]
+		}
+
 		// Detect VS Code mode
 		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
 		logger.debug('VS Code mode detection', { isVscodeMode })
@@ -389,6 +433,7 @@ export class PlanCommand {
 			PLANNER: effectivePlanner,
 			REVIEWER: effectiveReviewer,
 			HAS_REVIEWER: effectiveReviewer !== 'none',
+			AUTO_SWARM_MODE: autoSwarm ?? false,
 			...providerFlags,
 		}
 		const architectPrompt = await this.templateManager.getPrompt('plan', templateVariables)
@@ -426,6 +471,10 @@ export class PlanCommand {
 			'Bash(git diff:*)',
 			'Bash(git show:*)',
 		]
+
+		if (autoSwarm) {
+			allowedTools.push('mcp__harness__signal')
+		}
 
 		// Determine if we're in print/headless mode
 		const isHeadless = printOptions?.print ?? false
@@ -503,35 +552,53 @@ Proceed through the flow without requiring user interaction. Make and document y
 ${initialMessage}`
 		}
 
-		const claudeResult = await launchClaude(initialMessage, {
-			...claudeOptions,
-			...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
-		})
+		try {
+			const claudeResult = await launchClaude(initialMessage, {
+				...claudeOptions,
+				...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
+				...(controller && { signal: controller.signal }),
+			})
 
-		// Track epic.planned telemetry for decomposition sessions
-		if (decompositionContext) {
-			try {
-				const mcpProv = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
-				const children = await mcpProv.getChildIssues({ number: decompositionContext.identifier })
-				TelemetryService.getInstance().track('epic.planned', {
-					child_count: children.length,
-					tracker: provider,
-				})
-			} catch (error) {
-				logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)
+			// Check auto-swarm outcome: epicData must be set by the "done" handler
+			if (autoSwarm) {
+				if (!epicData) {
+					throw new Error('Plan phase exited without completing. The Architect did not signal done.')
+				}
+				// epicData is available for chaining (Issue #767)
+				// Cast required because TypeScript cannot narrow let variables mutated in closures
+				const resolvedEpicData = epicData as { epicIssueNumber: string; childIssues: number[] }
+				logger.info(chalk.green(`Planning complete. Epic issue: #${resolvedEpicData.epicIssueNumber}`))
+			}
+
+			// Track epic.planned telemetry for decomposition sessions
+			if (decompositionContext) {
+				try {
+					const mcpProv = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
+					const children = await mcpProv.getChildIssues({ number: decompositionContext.identifier })
+					TelemetryService.getInstance().track('epic.planned', {
+						child_count: children.length,
+						tracker: provider,
+					})
+				} catch (error) {
+					logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)
+				}
+			}
+
+			// Output final JSON for --json mode (--json-stream already streamed to stdout)
+			if (printOptions?.json) {
+				// eslint-disable-next-line no-console
+				console.log(JSON.stringify({
+					success: true,
+					output: claudeResult ?? ''
+				}))
+			}
+
+			logger.debug('Claude session completed')
+			logger.info(chalk.green('Planning session ended.'))
+		} finally {
+			if (harness) {
+				await harness.stop()
 			}
 		}
-
-		// Output final JSON for --json mode (--json-stream already streamed to stdout)
-		if (printOptions?.json) {
-			// eslint-disable-next-line no-console
-			console.log(JSON.stringify({
-				success: true,
-				output: claudeResult ?? ''
-			}))
-		}
-
-		logger.debug('Claude session completed')
-		logger.info(chalk.green('Planning session ended.'))
 	}
 }
