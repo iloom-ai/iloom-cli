@@ -225,17 +225,38 @@ Rebase and merge child branch `<child-branch-name>` (issue #<child-number>: "<ch
    git merge --ff-only <child-branch-name>
    ```
 
-4. Report back with:
-   - Status: "success" or "failed"
-   - If conflicts were resolved, briefly describe what was resolved
-   - If failed, explain why (e.g., "Rebase conflict could not be resolved" or specific error)
+4. After the merge succeeds, install dependencies in the epic worktree to ensure subsequent workers have up-to-date dependencies:
+   ```bash
+   cd {{EPIC_WORKTREE_PATH}}
+   ```
+
+   Check for an install script in the following order (first match wins):
+   a. If `.iloom/package.iloom.local.json` exists and has a `scripts.install` field, run that command via `sh -c "<install-command>"`
+   b. Otherwise, if `.iloom/package.iloom.json` exists and has a `scripts.install` field, run that command via `sh -c "<install-command>"`
+   c. Otherwise, detect the Node.js package manager and use frozen lockfile semantics:
+      - If `pnpm-lock.yaml` exists, run `pnpm install --frozen-lockfile`
+      - If `package-lock.json` exists, run `npm ci`
+      - If `yarn.lock` exists, run `yarn install --frozen-lockfile`
+   d. If none of the above apply (no iloom config, no package.json/lockfiles), skip dependency installation silently — not all projects have managed dependencies.
+
+   **IMPORTANT**: If the install command fails, do NOT treat the merge as failed. The merge (rebase + fast-forward) already succeeded. Log the install failure as a warning and continue.
+
+5. Report back with two separate statuses:
+   - **Merge outcome**: "success" or "failed" (covers rebase + fast-forward merge)
+     - If conflicts were resolved, briefly describe what was resolved
+     - If merge failed, explain why (e.g., "Rebase conflict could not be resolved" or specific error)
+   - **Install outcome**: "success", "failed", or "skipped"
+     - If success, state which install mechanism was used (e.g., "pnpm install --frozen-lockfile" or "iloom config install script")
+     - If failed, include the error output as a warning (merge is still considered successful)
+     - If skipped, state why (e.g., "No install mechanism found")
 
 IMPORTANT: Use rebase + fast-forward merge, NOT merge commits. This keeps the epic branch history linear and clean.
 ```
 
 **Handle the subagent result:**
-- If the subagent reports `success`: proceed to Step 3.2
-- If the subagent reports `failed`:
+- If the subagent reports **Merge outcome: "success"**: proceed to Step 3.2
+  (Install outcome is informational only — log it but do not affect merge status)
+- If the subagent reports **Merge outcome: "failed"**:
   - Ensure the rebase is aborted (spawn another subagent if needed): `cd <child-worktree-path> && git rebase --abort`
   - Mark the child as `failed` with reason from the subagent's report
   - Skip to Phase 4 failure handling for this child

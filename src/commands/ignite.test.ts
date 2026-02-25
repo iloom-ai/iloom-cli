@@ -1,3 +1,5 @@
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { IgniteCommand, WorktreeValidationError } from './ignite.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
@@ -3918,5 +3920,40 @@ describe('IgniteCommand', () => {
 				findMainWorktreeSpy.mockRestore()
 			}
 		})
+	})
+})
+
+describe('Swarm orchestrator template content', () => {
+	it('should include dependency install step in merge subagent prompt', async () => {
+		// Dynamic import needed because PromptTemplateManager is mocked at module level for the rest of this file
+		const { PromptTemplateManager: RealPromptTemplateManager } = await import('../lib/PromptTemplateManager.js')
+		const currentDir = path.dirname(fileURLToPath(import.meta.url))
+		const templateManager = new RealPromptTemplateManager(
+			path.resolve(currentDir, '../../templates/prompts')
+		)
+		const rendered = await templateManager.getPrompt('swarm-orchestrator', {
+			EPIC_ISSUE_NUMBER: '999',
+			EPIC_WORKTREE_PATH: '/tmp/test-epic',
+			EPIC_METADATA_PATH: '/tmp/test-epic/.iloom/metadata.json',
+			CHILD_ISSUES: '[]',
+			DEPENDENCY_MAP: '{}',
+			ISSUE_PREFIX: '#',
+		})
+
+		// Verify install step references all three sources in precedence order
+		expect(rendered).toContain('package.iloom.local.json')
+		expect(rendered).toContain('package.iloom.json')
+		expect(rendered).toContain('sh -c')
+		// Verify frozen lockfile semantics for all Node.js package managers
+		expect(rendered).toContain('pnpm install --frozen-lockfile')
+		expect(rendered).toContain('npm ci')
+		expect(rendered).toContain('yarn install --frozen-lockfile')
+		// Verify install failure is warning-only (does not fail merge)
+		expect(rendered).toContain('do NOT treat the merge as failed')
+		// Verify separate merge/install status reporting
+		expect(rendered).toContain('Merge outcome')
+		expect(rendered).toContain('Install outcome')
+		// Verify skip-silently path for projects without managed dependencies
+		expect(rendered).toContain('skip dependency installation silently')
 	})
 })
