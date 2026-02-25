@@ -369,7 +369,8 @@ export async function launchClaude(
 			} catch (interactiveError) {
 				if (signal?.aborted) return
 				const interactiveExecaError = interactiveError as { stderr?: string; message?: string }
-				const interactiveErrorMessage = interactiveExecaError.stderr ?? interactiveExecaError.message ?? ''
+				// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
+				const interactiveErrorMessage = interactiveExecaError.stderr || interactiveExecaError.message || ''
 
 				// Check for session ID conflict
 				const sessionMatch = interactiveErrorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
@@ -419,7 +420,8 @@ export async function launchClaude(
 			exitCode?: number
 		}
 
-		const errorMessage = execaError.stderr ?? execaError.message ?? 'Unknown Claude CLI error'
+		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
+		const errorMessage = execaError.stderr || execaError.message || 'Unknown Claude CLI error'
 
 		// Check for "Session ID ... is already in use" error and retry with --resume
 		const sessionInUseMatch = errorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
@@ -512,7 +514,8 @@ export async function launchClaude(
 				}
 			} catch (retryError) {
 				const retryExecaError = retryError as { stderr?: string; message?: string }
-				const retryErrorMessage = retryExecaError.stderr ?? retryExecaError.message ?? 'Unknown Claude CLI error'
+				// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
+				const retryErrorMessage = retryExecaError.stderr || retryExecaError.message || 'Unknown Claude CLI error'
 				throw new Error(`Claude CLI error: ${retryErrorMessage}`)
 			}
 		}

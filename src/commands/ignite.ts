@@ -503,8 +503,6 @@ export class IgniteCommand {
 					success: false,
 					error: errorMessage
 				}))
-			} else {
-				logger.error(`Failed to launch Claude: ${errorMessage}`)
 			}
 			throw error
 		}
