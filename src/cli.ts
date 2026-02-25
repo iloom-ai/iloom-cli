@@ -985,6 +985,25 @@ program
   })
 
 program
+  .command('install-deps')
+  .description('Install dependencies for a workspace')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('--no-frozen', 'Allow lockfile updates (default: frozen/locked)')
+  .action(async (identifier?: string, options?: { frozen?: boolean }) => {
+    try {
+      const { InstallDepsCommand } = await import('./commands/install-deps.js')
+      const cmd = new InstallDepsCommand()
+      const input: Record<string, unknown> = {}
+      if (identifier) input.identifier = identifier
+      if (options?.frozen === false) input.frozen = false
+      await cmd.execute(input)
+    } catch (error) {
+      logger.error(`Install failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .alias('remove')
   .alias('clean')

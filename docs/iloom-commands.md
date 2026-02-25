@@ -20,6 +20,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il lint](#il-lint)
   - [il test](#il-test)
   - [il compile](#il-compile)
+  - [il install-deps](#il-install-deps)
   - [il summary](#il-summary)
   - [il shell](#il-shell)
 - [Planning Commands](#planning-commands)
@@ -1003,6 +1004,67 @@ il typecheck feat/my-feature
 - Useful for catching type errors without running full test suite
 - Environment variables are automatically loaded before execution
 - Compilation failures are reported with exit codes for CI/CD integration
+
+---
+
+### il install-deps
+
+Install dependencies for a workspace.
+
+**Usage:**
+```bash
+il install-deps [identifier]
+il install-deps [identifier] --no-frozen
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, installs for current loom
+- If omitted outside a loom, prompts for selection
+
+**Options:**
+- `--no-frozen` - Allow lockfile updates (by default uses frozen/locked lockfiles)
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Checks for install scripts in order of precedence:
+   - `.iloom/package.iloom.local.json` `scripts.install` (highest priority)
+   - `.iloom/package.iloom.json` `scripts.install`
+   - `package.json` `scripts.install`
+3. If no install script found, falls back to Node.js lockfile detection:
+   - `pnpm-lock.yaml` → `pnpm install --frozen-lockfile`
+   - `package-lock.json` → `npm ci`
+   - `yarn.lock` → `yarn install --frozen-lockfile`
+4. Silently skips if no install mechanism is found
+
+**Examples:**
+```bash
+# Install deps for current loom (auto-detected)
+il install-deps
+
+# Install deps for a specific issue
+il install-deps 42
+
+# Install deps allowing lockfile updates
+il install-deps --no-frozen
+```
+
+**Supported Languages:**
+
+| Language | Typical Command | Configuration |
+|----------|-----------------|---------------|
+| Node.js | `pnpm install`, `npm ci`, `yarn install` | Auto-detected from lockfiles |
+| Ruby | `bundle install` | `.iloom/package.iloom.json` |
+| Python | `poetry install`, `pip install -r requirements.txt` | `.iloom/package.iloom.json` |
+| Rust | `cargo fetch` | `.iloom/package.iloom.json` |
+| Go | `go mod download` | `.iloom/package.iloom.json` |
+
+**Notes:**
+- By default uses frozen lockfiles to prevent unintended dependency changes
+- Use `--no-frozen` when you intentionally want to update the lockfile
+- Non-Node.js projects should define an install script in `.iloom/package.iloom.json`
+- Install failures exit with non-zero code for CI/CD integration
 
 ---
 

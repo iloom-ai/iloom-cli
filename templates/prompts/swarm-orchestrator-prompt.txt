@@ -228,16 +228,9 @@ Rebase and merge child branch `<child-branch-name>` (issue #<child-number>: "<ch
 4. After the merge succeeds, install dependencies in the epic worktree to ensure subsequent workers have up-to-date dependencies:
    ```bash
    cd {{EPIC_WORKTREE_PATH}}
+   il install-deps
    ```
-
-   Check for an install script in the following order (first match wins):
-   a. If `.iloom/package.iloom.local.json` exists and has a `scripts.install` field, run that command via `sh -c "<install-command>"`
-   b. Otherwise, if `.iloom/package.iloom.json` exists and has a `scripts.install` field, run that command via `sh -c "<install-command>"`
-   c. Otherwise, detect the Node.js package manager and use frozen lockfile semantics:
-      - If `pnpm-lock.yaml` exists, run `pnpm install --frozen-lockfile`
-      - If `package-lock.json` exists, run `npm ci`
-      - If `yarn.lock` exists, run `yarn install --frozen-lockfile`
-   d. If none of the above apply (no iloom config, no package.json/lockfiles), skip dependency installation silently — not all projects have managed dependencies.
+   This handles all install resolution automatically (iloom config scripts, package.json scripts, Node.js lockfile detection). It silently skips if no install mechanism is found.
 
    **IMPORTANT**: If the install command fails, do NOT treat the merge as failed. The merge (rebase + fast-forward) already succeeded. Log the install failure as a warning and continue.
 

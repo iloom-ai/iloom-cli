@@ -3940,20 +3940,12 @@ describe('Swarm orchestrator template content', () => {
 			ISSUE_PREFIX: '#',
 		})
 
-		// Verify install step references all three sources in precedence order
-		expect(rendered).toContain('package.iloom.local.json')
-		expect(rendered).toContain('package.iloom.json')
-		expect(rendered).toContain('sh -c')
-		// Verify frozen lockfile semantics for all Node.js package managers
-		expect(rendered).toContain('pnpm install --frozen-lockfile')
-		expect(rendered).toContain('npm ci')
-		expect(rendered).toContain('yarn install --frozen-lockfile')
+		// Verify install step uses il install-deps command
+		expect(rendered).toContain('il install-deps')
 		// Verify install failure is warning-only (does not fail merge)
 		expect(rendered).toContain('do NOT treat the merge as failed')
 		// Verify separate merge/install status reporting
 		expect(rendered).toContain('Merge outcome')
 		expect(rendered).toContain('Install outcome')
-		// Verify skip-silently path for projects without managed dependencies
-		expect(rendered).toContain('skip dependency installation silently')
 	})
 })
