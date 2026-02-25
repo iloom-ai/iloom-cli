@@ -1,3 +1,4 @@
+/* global AbortController */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
@@ -2274,6 +2275,135 @@ describe('claude utils', () => {
 
 			// Should accept the lowercase branch name, not fall back
 			expect(result).toBe('feat/issue-mark-1__nextjs-vercel')
+		})
+	})
+
+	describe('AbortSignal support', () => {
+		it('should send SIGTERM to the child process when signal is aborted (headless mode)', async () => {
+			const controller = new AbortController()
+			const killMock = vi.fn()
+			const onExitListeners: Array<() => void> = []
+
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn((event: string, listener: () => void) => {
+					if (event === 'exit') onExitListeners.push(listener)
+				}),
+				kill: killMock,
+			}
+
+			// Reject with an error to simulate SIGTERM exit
+			const abortError = Object.assign(new Error('Process killed'), { exitCode: null })
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(abortError), fakeSubprocess)
+			)
+
+			// Abort the signal before awaiting so aborted is true when the error is caught
+			controller.abort()
+
+			const result = await launchClaude('test prompt', {
+				headless: true,
+				signal: controller.signal,
+			})
+
+			// Should not throw and should return void
+			expect(result).toBeUndefined()
+		})
+
+		it('should not throw when process exits due to intentional abort (headless mode)', async () => {
+			const controller = new AbortController()
+			const killMock = vi.fn()
+
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: killMock,
+			}
+
+			const abortError = Object.assign(new Error('Aborted'), { exitCode: 1 })
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(abortError), fakeSubprocess)
+			)
+
+			controller.abort()
+
+			await expect(
+				launchClaude('test prompt', {
+					headless: true,
+					signal: controller.signal,
+				})
+			).resolves.toBeUndefined()
+		})
+
+		it('should throw error when process fails without abort signal being triggered', async () => {
+			const controller = new AbortController()
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			const processError = Object.assign(new Error('Process failed'), {
+				stderr: 'Some unexpected error',
+				exitCode: 1,
+			})
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(processError), fakeSubprocess)
+			)
+
+			// Do NOT abort the controller - this should still throw
+			await expect(
+				launchClaude('test prompt', {
+					headless: true,
+					signal: controller.signal,
+				})
+			).rejects.toThrow('Claude CLI error')
+		})
+
+		it('should work normally when no signal is provided', async () => {
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.resolve({ stdout: 'output', exitCode: 0 }), fakeSubprocess)
+			)
+
+			const result = await launchClaude('test prompt', { headless: true })
+			expect(result).toBe('output')
+		})
+
+		it('should register abort listener on signal and clean up on process exit (headless mode)', async () => {
+			const controller = new AbortController()
+			const addEventListenerSpy = vi.spyOn(controller.signal, 'addEventListener')
+			const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener')
+
+			const exitListeners: Array<() => void> = []
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn((event: string, listener: () => void) => {
+					if (event === 'exit') exitListeners.push(listener)
+				}),
+				kill: vi.fn(),
+			}
+
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.resolve({ stdout: 'result', exitCode: 0 }), fakeSubprocess)
+			)
+
+			await launchClaude('test prompt', {
+				headless: true,
+				signal: controller.signal,
+			})
+
+			// Verify abort listener was registered
+			expect(addEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true })
+
+			// Simulate process exit - cleanup should be called
+			for (const listener of exitListeners) listener()
+			expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function))
 		})
 	})
 })

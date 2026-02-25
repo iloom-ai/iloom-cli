@@ -1,4 +1,5 @@
-import { execa } from 'execa'
+/* global AbortSignal */
+import { execa, type ExecaChildProcess } from 'execa'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -75,6 +76,7 @@ export interface ClaudeCliOptions {
 	jsonMode?: 'json' | 'stream' // JSON output mode: 'json' for final object, 'stream' for real-time JSONL
 	passthroughStdout?: boolean // In headless mode, pipe stdout to process.stdout instead of capturing
 	env?: Record<string, string> // Additional environment variables to pass to the Claude process
+	signal?: AbortSignal // Optional AbortSignal for graceful termination of the Claude process
 }
 
 /**
@@ -147,7 +149,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -221,6 +223,18 @@ export async function launchClaude(
 	// Set CLAUDECODE=0 to prevent Claude from detecting it's running inside Claude Code
 	const claudeEnv = { ...process.env, CLAUDECODE: '0' }
 
+	// Helper to attach AbortSignal to a subprocess for graceful termination
+	function attachAbortSignal(subprocess: ExecaChildProcess): void {
+		if (!signal) return
+		const onAbort = (): void => {
+			subprocess.kill('SIGTERM')
+		}
+		signal.addEventListener('abort', onAbort, { once: true })
+		subprocess.on('exit', (): void => {
+			signal.removeEventListener('abort', onAbort)
+		})
+	}
+
 	try {
 		if (headless && passthroughStdout) {
 			// Headless + passthrough: Claude's stdout goes directly to process.stdout
@@ -233,7 +247,13 @@ export async function launchClaude(
 				stdio: ['pipe', 'inherit', 'pipe'], // stdin: pipe (for prompt), stdout: inherit (passthrough), stderr: pipe (capture errors)
 			})
 
-			await subprocess
+			attachAbortSignal(subprocess)
+			try {
+				await subprocess
+			} catch (err) {
+				if (signal?.aborted) return
+				throw err
+			}
 			return // No output to return - it went directly to stdout
 		}
 
@@ -252,6 +272,7 @@ export async function launchClaude(
 			}
 
 			const subprocess = execa('claude', args, execaOptions)
+			attachAbortSignal(subprocess)
 
 			// Check if JSON streaming format is enabled (always true in headless mode)
 			const isJsonStreamFormat = args.includes('--output-format') && args.includes('stream-json')
@@ -286,7 +307,15 @@ export async function launchClaude(
 				})
 			}
 
-			const result = await subprocess
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			let result: any
+			try {
+				result = await subprocess
+			} catch (subprocessError) {
+				// If aborted intentionally, do not treat as an error
+				if (signal?.aborted) return
+				throw subprocessError
+			}
 
 			// Return streamed output if we were streaming, otherwise use result.stdout
 			if (isStreaming) {
@@ -322,15 +351,23 @@ export async function launchClaude(
 			// First attempt: capture stderr to detect session ID conflicts
 			// stdin/stdout inherit for interactivity, stderr captured for error detection
 			try {
-				await execa('claude', [...args, '--', prompt], {
+				const interactiveSubprocess = execa('claude', [...args, '--', prompt], {
 					...(addDir && { cwd: addDir }),
 					stdio: ['inherit', 'inherit', 'pipe'], // Capture stderr to detect session conflicts
 					timeout: 0, // Disable timeout
 					verbose: logger.isDebugEnabled(),
 					env: { ...claudeEnv, ...extraEnv }, // CLAUDECODE=0 + any extra env vars
 				})
+				attachAbortSignal(interactiveSubprocess)
+				try {
+					await interactiveSubprocess
+				} catch (err) {
+					if (signal?.aborted) return
+					throw err
+				}
 				return
 			} catch (interactiveError) {
+				if (signal?.aborted) return
 				const interactiveExecaError = interactiveError as { stderr?: string; message?: string }
 				const interactiveErrorMessage = interactiveExecaError.stderr ?? interactiveExecaError.message ?? ''
 
@@ -350,13 +387,20 @@ export async function launchClaude(
 
 					// Retry with full stdio inherit for proper interactive experience
 					// Note: When using --resume, we omit the prompt since the session already has context
-					await execa('claude', resumeArgs, {
+					const resumeSubprocess = execa('claude', resumeArgs, {
 						...(addDir && { cwd: addDir }),
 						stdio: 'inherit',
 						timeout: 0,
 						verbose: logger.isDebugEnabled(),
 						env: claudeEnv,
 					})
+					attachAbortSignal(resumeSubprocess)
+					try {
+						await resumeSubprocess
+					} catch (err) {
+						if (signal?.aborted) return
+						throw err
+					}
 					return
 				}
 
@@ -365,6 +409,9 @@ export async function launchClaude(
 			}
 		}
 	} catch (error) {
+		// If aborted intentionally, do not treat as an error
+		if (signal?.aborted) return
+
 		// Check for specific Claude CLI errors
 		const execaError = error as {
 			stderr?: string
