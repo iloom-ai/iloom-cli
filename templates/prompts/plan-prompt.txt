@@ -256,18 +256,29 @@ A sign that issues should be consolidated: several small issues share the same d
 
 **The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-120 LOC of meaningful changes. When you're on the fence about whether to split, lean toward splitting — smaller issues enable more parallelism and are easier for agents to get right on the first attempt.
 
+**CRITICAL: Issue bodies must NOT contain implementation details.** The implementing agent will discover the *how* through its own codebase research. Baking implementation instructions into the issue body causes agents to skip their research phase and treat your instructions as ground truth, which produces brittle implementations based on potentially stale assumptions.
+
+Implementation details include:
+- **Code snippets or pseudocode** — exact TypeScript interfaces, function bodies, logic sequences
+- **File paths** — `src/types/telemetry.ts`, `src/commands/plan.ts`, etc.
+- **Step-by-step implementation instructions** — "Add X to file Y, then call Z"
+- **Pre-written content** — exact documentation text, config blocks, or error messages to paste in
+- **Internal behavior descriptions** — conditional logic, specific APIs to call, error handling patterns
+
+A contract describes an *interface boundary* (what a function accepts and returns). Implementation detail describes *how* something works internally. Contracts belong in the issue body. Implementation detail does NOT.
+
+**The test:** For every sentence in the issue body, ask: "Does this tell the implementing agent *what* to build, or *how* to build it?" If it's how — remove it.
+
 **Issue Structure:**
-Each child issue should include:
+Each child issue should include ONLY these sections:
 1. **Summary**: One-sentence description of what this issue accomplishes
 2. **Context**: Why this issue exists (relationship to parent feature)
-3. **Acceptance Criteria**: Clear, testable conditions for "done"
+3. **Acceptance Criteria**: Clear, testable, outcome-focused conditions for "done" — describe the desired result, not the implementation mechanism (e.g., "auto-swarm pipeline events are observable" not "tracking calls fire at pipeline start and end")
 4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports). A contract is an interface boundary — what one issue exposes for another to consume. Example: `PlanCommand.execute()` gains an optional `autoSwarm?: boolean` 7th parameter. NOT an implementation: do not describe what happens internally when `autoSwarm` is true — that is implementation detail, not a contract.
 5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
 6. **Scope Boundaries**: What is explicitly NOT included
 
-**CRITICAL: Issue bodies must NOT contain implementation details.** A contract describes an interface boundary (what a function accepts and returns). Implementation detail describes HOW something works internally (conditional logic, specific APIs to call, code sequences, error handling patterns). Contracts belong in the issue body. Implementation detail does NOT — the implementing agent will discover the how through its own codebase research. Baking implementation instructions into the issue body causes agents to skip their research phase and treat your instructions as ground truth, which produces brittle implementations.
-
-**The test:** "Does this sentence tell the implementing agent *what* to build, or *how* to build it?" If it's how — remove it.
+Do NOT add "Implementation Details", "Technical Approach", or similar sections — these violate the rule above.
 
 ---
 
@@ -483,6 +494,7 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 - Create issues without user confirmation
 - Over-engineer the decomposition (keep it pragmatic)
 - Assume requirements that weren't explicitly stated
+- Include implementation details in issue bodies (code snippets, file paths, step-by-step instructions, pre-written content)
 
 **Do:**
 - Use the conversation to refine understanding iteratively
