@@ -225,6 +225,38 @@ export function generateRecapMcpConfig(
 }
 
 /**
+ * Generate MCP configuration for the harness server
+ *
+ * The harness server provides Claude with a `signal` tool to send structured
+ * messages to the iloom harness process via Unix domain socket.
+ *
+ * @param socketPath - Absolute path to the harness Unix domain socket
+ */
+export function generateHarnessMcpConfig(socketPath: string): Record<string, unknown>[] {
+	const harnessServerJsPath = path.resolve(
+		path.join(
+			path.dirname(new globalThis.URL(import.meta.url).pathname),
+			'../dist/mcp/harness-server.js'
+		)
+	)
+
+	logger.debug('Generated MCP config for harness server', { socketPath })
+
+	return [
+		{
+			mcpServers: {
+				harness: {
+					transport: 'stdio',
+					command: 'node',
+					args: [harnessServerJsPath],
+					env: { ILOOM_HARNESS_SOCKET: socketPath },
+				},
+			},
+		},
+	]
+}
+
+/**
  * Get the MCP configs directory path
  */
 export function getMcpConfigsDir(): string {
