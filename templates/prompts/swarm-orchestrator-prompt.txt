@@ -168,44 +168,16 @@ For each child issue, use these parameters:
 - `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
 - `name`: `"issue-<child-number>"`
 
-The prompt for each child agent should be:
+**CRITICAL: The task prompt MUST contain only the issue number and worktree path. Do NOT include the issue title, issue body, analysis, planning details, implementation instructions, code snippets, or any other content from CHILD_ISSUES. The child agent retrieves all issue context itself via `mcp__issue_management__get_issue` as its first action.**
+
+The prompt for each child agent should be exactly:
 
 ```
-You are working on issue #<child-number>: "<child-title>"
-
-**Worktree path:** `<child-worktree-path>`
-
-## CRITICAL ROLE: YOU ARE A WORKFLOW ORCHESTRATOR
-
-You NEVER write code, read source files, or perform technical work directly. ALL technical work is delegated to sub-agents via `claude -p`. If you find yourself about to read a source file, write code, or analyze technical details — STOP. That is not your job. Your system prompt defines the complete workflow — follow it exactly.
-
-## MANDATORY FIRST STEPS — NO EXCEPTIONS
-
-Your FIRST actions, before reading any source code, before any analysis, before any implementation:
-
-1. cd to your worktree: `cd <child-worktree-path>`
-2. Read `.claude/iloom-swarm-mcp-config-path` to get your MCP config path
-3. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<child-worktree-path>" })`
-4. Call `mcp__issue_management__get_issue` to read the full issue details
-5. Run STEP 0 (workflow scan) to determine which phases are needed
-
-## Scope Boundaries
-
-- You are ONLY responsible for issue #<child-number>. Do not implement, fix, commit, or merge work for any other issue.
-- NEVER cd into, read from, or modify files in any other worktree path. Your entire scope is `<child-worktree-path>`.
-- Do NOT merge branches, close issues, or perform any orchestration tasks. The orchestrator handles all merging and issue management.
-- Do NOT pick up tasks from the team task list. You have exactly one job.
-
-## After Completion
-
-When your implementation is done, report back with:
-- Issue number
-- Status (success or failed)
-- Brief summary of what was implemented or what went wrong
-- Number of files changed (if successful)
-
-After sending your report, STOP. Do not look for more work. Do not check on other issues. Do not attempt to help with other worktrees. Wait for a shutdown request and approve it.
+Issue: #<child-number>
+Worktree: <child-worktree-path>
 ```
+
+Nothing else. No title. No body. No instructions. No context. The child's system prompt defines everything it needs to do.
 
 Update each child's tracking status to `in_progress`.
 

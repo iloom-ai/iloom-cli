@@ -236,7 +236,7 @@ A sign that issues should be consolidated: several small issues share the same d
 | Breaking changes | None |
 | Database migrations | None |
 | Cross-cutting changes | None — avoid issues that pass parameters/config through 3+ architectural layers |
-| Architectural complexity signals | None — the "how" should be obvious from the "what" |
+| Architectural complexity signals | None — no deep architectural decisions required to implement it |
 | Risk level | Low or Medium |
 | File quality | All modified files < 500 LOC, or well-architected if larger |
 
@@ -261,9 +261,13 @@ Each child issue should include:
 1. **Summary**: One-sentence description of what this issue accomplishes
 2. **Context**: Why this issue exists (relationship to parent feature)
 3. **Acceptance Criteria**: Clear, testable conditions for "done"
-4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports)
+4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports). A contract is an interface boundary — what one issue exposes for another to consume. Example: `PlanCommand.execute()` gains an optional `autoSwarm?: boolean` 7th parameter. NOT an implementation: do not describe what happens internally when `autoSwarm` is true — that is implementation detail, not a contract.
 5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
 6. **Scope Boundaries**: What is explicitly NOT included
+
+**CRITICAL: Issue bodies must NOT contain implementation details.** A contract describes an interface boundary (what a function accepts and returns). Implementation detail describes HOW something works internally (conditional logic, specific APIs to call, code sequences, error handling patterns). Contracts belong in the issue body. Implementation detail does NOT — the implementing agent will discover the how through its own codebase research. Baking implementation instructions into the issue body causes agents to skip their research phase and treat your instructions as ground truth, which produces brittle implementations.
+
+**The test:** "Does this sentence tell the implementing agent *what* to build, or *how* to build it?" If it's how — remove it.
 
 ---
 
