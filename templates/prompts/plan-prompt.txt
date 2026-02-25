@@ -304,6 +304,13 @@ At the end of the planning session, you have MCP tools to create issues:
 - `mcp__issue_management__remove_dependency`: Remove a dependency between issues
   - Parameters: `blockingIssue`, `blockedIssue`
 
+{{#if AUTO_SWARM_MODE}}
+**Harness Signal Tool:**
+- `mcp__harness__signal`: Signal the auto-swarm harness when planning is complete
+  - Call this after all child issues and dependencies have been created
+  - Parameters: `type` ("done"), `data` (`{ "epicIssueNumber": "<parent issue number>", "childIssues": [<list of child issue numbers>] }`)
+{{/if}}
+
 **Validation Gate — Check Before Presenting Your Plan:**
 Before presenting the plan to the user, audit it against these questions:
 1. **For each blocking dependency:** "Can I replace this with a shared contract so both issues run in parallel?" If yes, rewrite the issues with an explicit contract and remove the dependency.
@@ -520,6 +527,19 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 
 After creating issues successfully, you MUST end with a clear next steps message.
 
+{{#if AUTO_SWARM_MODE}}
+## Auto-Swarm Completion
+
+After creating all child issues and setting up dependencies:
+
+1. **Signal the harness** by calling the `mcp__harness__signal` tool:
+   ```json
+   { "type": "done", "data": { "epicIssueNumber": "{{PARENT_ISSUE_NUMBER}}", "childIssues": [list of child issue numbers created] } }
+   ```
+2. **Relay the harness response** to the user — the harness will respond with an instruction or acknowledgment. Display the content of the response to the user.
+3. **Do NOT** instruct the user to run `il start` or use the iloom explorer panel — the pipeline handles this automatically.
+
+{{else}}
 Direct the user to **open the epic issue** - this is the parent issue that contains all the child issues you just created. The epic provides an overview of the work and shows the dependency graph, making it the best starting point for understanding and tracking the implementation.
 
 {{#if IS_VSCODE_MODE}}
@@ -531,3 +551,4 @@ End your summary with: "Review the epic and child issues at [EPIC_URL]. When rea
 {{/if}}
 
 Replace `[EPIC_URL]` and `[EPIC_NUMBER]` with actual values from the epic issue you created.
+{{/if}}
