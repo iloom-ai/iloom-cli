@@ -28,11 +28,17 @@ export async function getTerminalBackend(): Promise<TerminalBackend> {
 			return new WSLBackend()
 		}
 		case 'linux': {
-			// Try GUI terminals first
-			const { detectLinuxTerminal } = await import('./linux.js')
-			if (await detectLinuxTerminal()) {
-				const { LinuxBackend } = await import('./linux.js')
-				return new LinuxBackend()
+			// Only try GUI terminals if a display server is available.
+			// A terminal emulator like konsole may be installed but unusable
+			// without X11/Wayland (e.g., SSH, Docker, Code Server).
+			const hasDisplay = !!(process.env.DISPLAY ?? process.env.WAYLAND_DISPLAY)
+
+			if (hasDisplay) {
+				const { detectLinuxTerminal } = await import('./linux.js')
+				if (await detectLinuxTerminal()) {
+					const { LinuxBackend } = await import('./linux.js')
+					return new LinuxBackend()
+				}
 			}
 
 			// Fall back to tmux for headless environments
@@ -43,7 +49,7 @@ export async function getTerminalBackend(): Promise<TerminalBackend> {
 
 			throw new Error(
 				'No supported terminal found on Linux. ' +
-				'Install a GUI terminal (gnome-terminal, konsole, xterm) or tmux for headless environments.'
+				'Install tmux for headless environments, or set DISPLAY and install a GUI terminal (gnome-terminal, konsole, xterm).'
 			)
 		}
 		default:

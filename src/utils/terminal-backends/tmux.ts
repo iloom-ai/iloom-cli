@@ -64,7 +64,9 @@ export class TmuxBackend implements TerminalBackend {
 
 	async openSingle(options: TerminalWindowOptions): Promise<void> {
 		const shellCommand = (await buildCommandSequence(options)).trim()
-		const command = shellCommand || 'bash'
+		// Keep the shell alive after the command exits so users can see output
+		// and interact. Mirrors the `; exec bash` pattern in the Linux GUI backend.
+		const command = shellCommand ? `${shellCommand}; exec bash` : 'bash'
 
 		if (options.backgroundColor) {
 			logger.debug('Terminal background colors are not supported in tmux sessions.')
@@ -129,7 +131,8 @@ export class TmuxBackend implements TerminalBackend {
 		}
 
 		// Create the session with the first window
-		const firstCommand = (await buildCommandSequence(firstOptions)).trim() || 'bash'
+		const firstShellCommand = (await buildCommandSequence(firstOptions)).trim()
+		const firstCommand = firstShellCommand ? `${firstShellCommand}; exec bash` : 'bash'
 		const firstName = firstOptions.title
 			? sanitizeWindowName(firstOptions.title)
 			: 'window-1'
@@ -156,7 +159,8 @@ export class TmuxBackend implements TerminalBackend {
 				logger.debug('Terminal background colors are not supported in tmux sessions.')
 			}
 
-			const command = (await buildCommandSequence(options)).trim() || 'bash'
+			const shellCommand = (await buildCommandSequence(options)).trim()
+			const command = shellCommand ? `${shellCommand}; exec bash` : 'bash'
 			const windowName = options.title
 				? sanitizeWindowName(options.title)
 				: `window-${i + 1}`
