@@ -380,24 +380,21 @@ Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
 
 ### Step 5.3: Final Commit on Epic Branch
 
-If at least one child succeeded, **delegate the final commit to a subagent.**
+If at least one child succeeded, create the final "Fixes" commit — but only if it doesn't already exist (idempotency).
 
-Spawn a subagent using the `Task` tool:
-- `subagent_type`: `"general-purpose"`
-- Prompt:
-
+First, check whether the "Fixes" commit has already been created (this is a lightweight read, OK to do directly):
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git log --oneline --grep="^Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}$" -1
 ```
-Create the final commit on the epic branch that closes the epic issue.
+- If a matching commit is found, skip this step — the finalization commit already exists.
+
+If no "Fixes" commit exists, create it directly (no need to delegate — this is a trivial `--allow-empty` commit with no conflict risk):
 
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
 git add -A
 git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
-```
-
-NOTE: --allow-empty is used because the child branches have already been merged — there may be no additional staged changes, but we still need the commit message to trigger issue closure.
-
-Report back with status: "success" or "failed" and the commit hash if successful.
 ```
 
 {{#if DRAFT_PR_MODE}}

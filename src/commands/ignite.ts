@@ -955,12 +955,7 @@ export class IgniteCommand {
 			}
 		}
 
-		if (pendingChildIssues.length === 0) {
-			logger.success('All child issues are already complete. Nothing to do.')
-			return
-		}
-
-		// Run swarm setup: child worktrees, agents, worker agent
+		// Run swarm setup for any pending child issues (may be empty if all are done)
 		const swarmResult = await swarmSetup.setupSwarm(
 			epicIssueNumber,
 			epicBranch,

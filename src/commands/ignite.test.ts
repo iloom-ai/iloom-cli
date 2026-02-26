@@ -3369,7 +3369,7 @@ describe('IgniteCommand', () => {
 			expect(passedChildren[1]).toEqual(expect.objectContaining({ number: '#202' }))
 		})
 
-		it('should return early when all children are done', async () => {
+		it('should still launch orchestrator when all children are done (idempotent re-spin)', async () => {
 			const childIssues = [
 				{ number: '#201', title: 'Child 1', body: 'Body 1' },
 				{ number: '#202', title: 'Child 2', body: 'Body 2' },
@@ -3380,13 +3380,21 @@ describe('IgniteCommand', () => {
 				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
 			]
 
+			mockSetupSwarm.mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
 			await cmd.execute()
 
-			// setupSwarm should NOT have been called since all children are complete
-			expect(mockSetupSwarm).not.toHaveBeenCalled()
-			// launchClaude should NOT have been called (no orchestrator needed)
-			expect(launchClaudeSpy).not.toHaveBeenCalled()
+			// setupSwarm should be called with empty pending list — orchestrator handles finalization
+			expect(mockSetupSwarm).toHaveBeenCalled()
+			const passedChildren = mockSetupSwarm.mock.calls[0][3]
+			expect(passedChildren).toHaveLength(0)
 		})
 
 		it('should treat children without existing metadata as pending', async () => {
