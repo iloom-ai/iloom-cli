@@ -145,14 +145,17 @@ describe('openTerminalWindow', () => {
 		})
 	})
 
-	it('should throw error on non-macOS platforms', async () => {
+	it('should delegate to backend on non-macOS platforms', async () => {
 		Object.defineProperty(process, 'platform', {
 			value: 'linux',
 			writable: true,
 		})
 
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error
+		vi.mocked(execa).mockRejectedValue(new Error('not found'))
+
 		await expect(openTerminalWindow({})).rejects.toThrow(
-			'Terminal window launching not yet supported on linux'
+			'No supported terminal found on Linux'
 		)
 	})
 
@@ -459,18 +462,21 @@ describe('openDualTerminalWindow', () => {
 		})
 	})
 
-	it('should throw error on non-macOS platforms', async () => {
+	it('should delegate to backend on non-macOS platforms', async () => {
 		Object.defineProperty(process, 'platform', {
 			value: 'linux',
 			writable: true,
 		})
+
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error
+		vi.mocked(execa).mockRejectedValue(new Error('not found'))
 
 		await expect(
 			openDualTerminalWindow(
 				{ workspacePath: '/test/path1' },
 				{ workspacePath: '/test/path2' }
 			)
-		).rejects.toThrow('Terminal window launching not yet supported on linux')
+		).rejects.toThrow('No supported terminal found on Linux')
 	})
 
 	it('should use iTerm2 when available and create single window with two tabs', async () => {
