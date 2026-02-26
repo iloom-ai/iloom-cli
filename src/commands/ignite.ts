@@ -13,7 +13,7 @@ import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings, generateWorktreePath } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
@@ -916,12 +916,56 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
+		// Filter out children that are already done (finished looms may have metadata
+		// in the "looms/finished" directory, not just in active worktree metadata)
+		const finishedMetadata = await metadataManager.listFinishedMetadata()
+		const finishedByIssueNumber = new Map<string, LoomMetadata>()
+		for (const meta of finishedMetadata) {
+			for (const issueNum of meta.issue_numbers) {
+				// listFinishedMetadata returns newest first; preserve the newest entry
+				if (!finishedByIssueNumber.has(issueNum)) {
+					finishedByIssueNumber.set(issueNum, meta)
+				}
+			}
+		}
+
+		const pendingChildIssues: typeof metadata.childIssues = []
+		const skippedChildren: Array<{ number: string; state: string }> = []
+
+		for (const child of metadata.childIssues) {
+			const rawId = child.number.replace(/^#/, '')
+			const safeId = rawId.replace(/[^a-zA-Z0-9-_]/g, '-')
+			const childBranch = `issue/${safeId}`
+			const childWorktreePath = generateWorktreePath(childBranch, mainWorktreePath)
+
+			// Check active worktree metadata first, then fall back to finished metadata
+			const childMeta = await metadataManager.readMetadata(childWorktreePath)
+				?? finishedByIssueNumber.get(rawId) ?? null
+
+			if (childMeta?.state === 'done') {
+				skippedChildren.push({ number: child.number, state: childMeta.state })
+			} else {
+				pendingChildIssues.push(child)
+			}
+		}
+
+		if (skippedChildren.length > 0) {
+			for (const skipped of skippedChildren) {
+				logger.info(`Skipping child ${skipped.number} (state: ${skipped.state})`)
+			}
+		}
+
+		if (pendingChildIssues.length === 0) {
+			logger.success('All child issues are already complete. Nothing to do.')
+			return
+		}
+
 		// Run swarm setup: child worktrees, agents, worker agent
 		const swarmResult = await swarmSetup.setupSwarm(
 			epicIssueNumber,
 			epicBranch,
 			epicWorktreePath,
-			metadata.childIssues,
+			pendingChildIssues,
 			mainWorktreePath,
 			providerName,
 			settings,
@@ -931,7 +975,7 @@ export class IgniteCommand {
 		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
 		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
 
-		const childIssuesData = metadata.childIssues
+		const childIssuesData = pendingChildIssues
 			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
 			.map((ci) => {
 				const rawId = ci.number.replace(/^#/, '')

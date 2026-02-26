@@ -3149,7 +3149,9 @@ describe('IgniteCommand', () => {
 				dependencyMap: {},
 				sessionId: 'child-epic-session-id',
 			})
-			// Child metadata for telemetry
+			// Third call: child filtering reads metadata for child #301 (no existing worktree)
+			readMetadataMock.mockResolvedValueOnce(null)
+			// Fourth call: child metadata for telemetry
 			readMetadataMock.mockResolvedValueOnce({
 				state: 'done',
 				created_at: '2025-01-01T00:00:00Z',
@@ -3159,6 +3161,7 @@ describe('IgniteCommand', () => {
 				readMetadata: readMetadataMock,
 				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
 				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
 			}) as unknown as MetadataManager)
 
 			const cmd = new IgniteCommand(
@@ -3187,6 +3190,267 @@ describe('IgniteCommand', () => {
 
 			process.cwd = originalCwd
 			launchClaudeSpy.mockRestore()
+		})
+	})
+
+	describe('executeSwarmMode - child state filtering', () => {
+		let launchClaudeSpy: ReturnType<typeof vi.spyOn>
+		let findMainWorktreePathSpy: ReturnType<typeof vi.spyOn>
+		let originalCwd: typeof process.cwd
+		let mockSetupSwarm: ReturnType<typeof vi.fn>
+
+		beforeEach(async () => {
+			launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			findMainWorktreePathSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			mockSetupSwarm = vi.fn().mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: mockSetupSwarm,
+			}) as unknown as SwarmSetupService)
+		})
+
+		afterEach(() => {
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+			findMainWorktreePathSpy.mockRestore()
+		})
+
+		function createFilteringCommand(
+			childIssues: Array<{ number: string; title: string; body: string }>,
+			childFilterMetadata: Array<{ state: string; created_at: string } | null>,
+			finishedMetadata: Array<{ issue_numbers: string[]; state: string }> = [],
+		) {
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read in executeInternal (Step 2)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				sessionId: 'epic-session-id',
+			})
+			// Second call: fresh metadata re-read in executeInternal (Step 2.1.1)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				dependencyMap: {},
+				sessionId: 'epic-session-id',
+			})
+			// Child filtering calls: readMetadata for each child worktree
+			for (const meta of childFilterMetadata) {
+				readMetadataMock.mockResolvedValueOnce(meta)
+			}
+			// Additional calls for telemetry (return null for simplicity)
+			for (let i = 0; i < childIssues.length; i++) {
+				readMetadataMock.mockResolvedValueOnce(null)
+			}
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue(finishedMetadata),
+			}) as unknown as MetadataManager)
+
+			return new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-100__epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAgents: vi.fn().mockResolvedValue([]),
+					formatForCli: vi.fn().mockReturnValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+		}
+
+		it('should skip children in "done" state and only pass pending children to setupSwarm', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+				{ number: '#202', title: 'Child 2', body: 'Body 2' },
+				{ number: '#203', title: 'Child 3', body: 'Body 3' },
+			]
+			// Child #201 is done, #202 and #203 have no metadata (pending)
+			const childFilterMetadata: Array<{ state: string; created_at: string } | null> = [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				null,
+				null,
+			]
+
+			// Update setupSwarm to return results matching the pending children
+			mockSetupSwarm.mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [
+					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+					{ issueId: '203', worktreePath: '/path/to/child-203', branch: 'feat/issue-203', success: true },
+				],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
+			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
+			await cmd.execute()
+
+			// setupSwarm should have been called with only 2 pending children (not 3)
+			expect(mockSetupSwarm).toHaveBeenCalledWith(
+				'100',
+				expect.any(String),
+				expect.any(String),
+				expect.arrayContaining([
+					expect.objectContaining({ number: '#202' }),
+					expect.objectContaining({ number: '#203' }),
+				]),
+				expect.any(String),
+				expect.any(String),
+				expect.any(Object),
+			)
+			// Verify the done child was NOT passed
+			const passedChildren = mockSetupSwarm.mock.calls[0][3]
+			expect(passedChildren).toHaveLength(2)
+			expect(passedChildren.find((c: { number: string }) => c.number === '#201')).toBeUndefined()
+		})
+
+		it('should NOT skip children in "failed" state (failed children should be recreated)', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+				{ number: '#202', title: 'Child 2', body: 'Body 2' },
+			]
+			// Child #201 is failed, #202 has no metadata (pending) - both should be passed through
+			const childFilterMetadata: Array<{ state: string; created_at: string } | null> = [
+				{ state: 'failed', created_at: '2025-01-01T00:00:00Z' },
+				null,
+			]
+
+			mockSetupSwarm.mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [
+					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
+			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
+			await cmd.execute()
+
+			// Both children should be passed to setupSwarm (failed is NOT skipped)
+			const passedChildren = mockSetupSwarm.mock.calls[0][3]
+			expect(passedChildren).toHaveLength(2)
+			expect(passedChildren[0]).toEqual(expect.objectContaining({ number: '#201' }))
+			expect(passedChildren[1]).toEqual(expect.objectContaining({ number: '#202' }))
+		})
+
+		it('should return early when all children are done', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+				{ number: '#202', title: 'Child 2', body: 'Body 2' },
+			]
+			// Both children are done
+			const childFilterMetadata: Array<{ state: string; created_at: string } | null> = [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+			]
+
+			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
+			await cmd.execute()
+
+			// setupSwarm should NOT have been called since all children are complete
+			expect(mockSetupSwarm).not.toHaveBeenCalled()
+			// launchClaude should NOT have been called (no orchestrator needed)
+			expect(launchClaudeSpy).not.toHaveBeenCalled()
+		})
+
+		it('should treat children without existing metadata as pending', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+				{ number: '#202', title: 'Child 2', body: 'Body 2' },
+			]
+			// Both children have no existing metadata (readMetadata returns null)
+			const childFilterMetadata: Array<{ state: string; created_at: string } | null> = [
+				null,
+				null,
+			]
+
+			mockSetupSwarm.mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [
+					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
+			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
+			await cmd.execute()
+
+			// setupSwarm should be called with both children
+			const passedChildren = mockSetupSwarm.mock.calls[0][3]
+			expect(passedChildren).toHaveLength(2)
+		})
+
+		it('should find done state from finished metadata when active worktree metadata is null', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+				{ number: '#202', title: 'Child 2', body: 'Body 2' },
+			]
+			// Both children have no active worktree metadata (readMetadata returns null)
+			const childFilterMetadata: Array<{ state: string; created_at: string } | null> = [
+				null,
+				null,
+			]
+			// But child #201 has finished metadata with state 'done'
+			const finishedMeta = [
+				{ issue_numbers: ['201'], state: 'done' },
+			]
+
+			mockSetupSwarm.mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				childWorktrees: [
+					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				],
+				agentsRendered: [],
+				workerAgentRendered: true,
+			})
+
+			const cmd = createFilteringCommand(childIssues, childFilterMetadata, finishedMeta)
+			await cmd.execute()
+
+			// Only child #202 should be passed (child #201 is done via finished metadata)
+			const passedChildren = mockSetupSwarm.mock.calls[0][3]
+			expect(passedChildren).toHaveLength(1)
+			expect(passedChildren[0]).toEqual(expect.objectContaining({ number: '#202' }))
 		})
 	})
 
@@ -3226,6 +3490,10 @@ describe('IgniteCommand', () => {
 				dependencyMap: {},
 				sessionId: 'epic-session-id',
 			})
+			// Child filtering calls: readMetadata for each child worktree (no existing metadata)
+			for (let i = 0; i < 2; i++) {
+				readMetadataMock.mockResolvedValueOnce(null)
+			}
 			// Subsequent calls: child metadata reads for telemetry
 			for (const childMeta of childMetadataStates) {
 				readMetadataMock.mockResolvedValueOnce({
@@ -3238,6 +3506,7 @@ describe('IgniteCommand', () => {
 				readMetadata: readMetadataMock,
 				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
 				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
 			}) as unknown as MetadataManager)
 
 			const mockGitWorktreeManagerSwarm = {
@@ -3675,7 +3944,9 @@ describe('IgniteCommand', () => {
 				dependencyMap: {},
 				sessionId: 'child-epic-session-id',
 			})
-			// Child metadata for telemetry
+			// Third call: child filtering reads metadata for child #501 (no existing worktree)
+			readMetadataMock.mockResolvedValueOnce(null)
+			// Fourth call: child metadata for telemetry
 			readMetadataMock.mockResolvedValueOnce({
 				state: 'done',
 				created_at: '2025-01-01T00:00:00Z',
@@ -3685,6 +3956,7 @@ describe('IgniteCommand', () => {
 				readMetadata: readMetadataMock,
 				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
 				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
 			}) as unknown as MetadataManager)
 
 			const cmd = new IgniteCommand(
@@ -3786,6 +4058,7 @@ describe('IgniteCommand', () => {
 				readMetadata: vi.fn().mockResolvedValue(epicMetadata),
 				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/epic-metadata.json'),
 				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
 			}) as unknown as MetadataManager)
 
 			const localMockTemplateManager = {
