@@ -2,6 +2,7 @@ import type { Migration } from '../lib/VersionMigrationManager.js'
 import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
+import { resolveGlobalGitignorePath, ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Migration registry - add new migrations here in version order
 // Each migration must be idempotent (safe to run multiple times)
@@ -123,6 +124,45 @@ export const migrations: Migration[] = [
       const separator = content.endsWith('\n') || content === '' ? '' : '\n'
       const newContent = content + separator + '\n# Added by iloom CLI\n' + pattern + '\n'
       await fs.writeFile(globalIgnorePath, newContent, 'utf-8')
+    }
+  },
+  {
+    version: '0.10.4',
+    description: 'Remediate global gitignore path for users with custom core.excludesFile',
+    migrate: async (): Promise<void> => {
+      const resolvedPath = await resolveGlobalGitignorePath()
+      const xdgDefault = path.join(os.homedir(), '.config', 'git', 'ignore')
+
+      // If the resolved path matches the XDG default, previous migrations already
+      // wrote to the correct location - nothing to remediate
+      if (resolvedPath === xdgDefault) {
+        return
+      }
+
+      // Read the XDG default file to find iloom patterns that were written there
+      let xdgContent = ''
+      try {
+        xdgContent = await fs.readFile(xdgDefault, 'utf-8')
+      } catch (error: unknown) {
+        if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+          // XDG default file doesn't exist - nothing to copy
+          return
+        }
+        throw error
+      }
+
+      // Extract iloom patterns by content prefix
+      const lines = xdgContent.split('\n')
+      const iloomPatterns = lines.filter(
+        line => line.startsWith('**/.iloom/') || line.startsWith('**/.claude/')
+      )
+
+      if (iloomPatterns.length === 0) {
+        return
+      }
+
+      // Append missing iloom patterns to the correctly resolved path
+      await ensureGlobalGitignorePatterns(iloomPatterns)
     }
   },
 ]
