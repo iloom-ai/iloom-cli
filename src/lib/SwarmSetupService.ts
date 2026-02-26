@@ -9,7 +9,7 @@ import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { generateWorktreePath, computeReviewDiffCommand } from '../utils/git.js'
+import { generateWorktreePath } from '../utils/git.js'
 import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 
 /**
@@ -235,14 +235,8 @@ export class SwarmSetupService {
 
 		const settings = await this.settingsManager.loadSettings()
 
-		// Compute review diff command based on git state
-		const protectedBranches = await this.settingsManager.getProtectedBranches(epicWorktreePath)
-		const reviewDiff = await computeReviewDiffCommand(epicWorktreePath, protectedBranches)
-
 		const templateVariables: TemplateVariables = {
 			SWARM_MODE: true,
-			REVIEW_DIFF_CMD: reviewDiff.cmd,
-			REVIEW_DIFF_DESCRIPTION: reviewDiff.description,
 		}
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
@@ -314,7 +308,6 @@ export class SwarmSetupService {
 	async renderSwarmWorkerAgent(
 		epicWorktreePath: string,
 		agentMetadata?: SwarmAgentMetadata,
-		epicBranch?: string,
 	): Promise<boolean> {
 		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
 		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-worker.md')
@@ -331,25 +324,6 @@ export class SwarmSetupService {
 			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
 			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
 
-			// Compute review diff command for child workers (not the epic worktree itself).
-			// Child workers operate in their own worktrees branched off the epic branch.
-			// If epicBranch is provided, compute a diff command relative to the epic branch
-			// that works correctly when run from any child worktree at runtime.
-			let reviewDiff: { cmd: string; description: string }
-			if (epicBranch && /^[a-zA-Z0-9_\-./]+$/.test(epicBranch)) {
-				// Child workers branch off epicBranch, so diff against it.
-				// Cannot pre-compute merge-base SHA because the template is shared across
-				// multiple children with different HEADs; the subshell resolves at runtime.
-				reviewDiff = {
-					cmd: `git diff $(git merge-base HEAD ${epicBranch})`,
-					description: `changes since diverging from ${epicBranch}`,
-				}
-			} else {
-				// Fallback: compute from epic worktree (original behavior)
-				const protectedBranches = await this.settingsManager.getProtectedBranches(epicWorktreePath)
-				reviewDiff = await computeReviewDiffCommand(epicWorktreePath, protectedBranches)
-			}
-
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
@@ -357,8 +331,6 @@ export class SwarmSetupService {
 				EPIC_WORKTREE_PATH: epicWorktreePath,
 				ISSUE_PREFIX: issuePrefix,
 				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
-				REVIEW_DIFF_CMD: reviewDiff.cmd,
-				REVIEW_DIFF_DESCRIPTION: reviewDiff.description,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
@@ -458,12 +430,9 @@ export class SwarmSetupService {
 			await this.renderSwarmAgents(epicWorktreePath)
 
 		// 3. Render the swarm worker agent file with agent metadata
-		// Pass epicBranch so the worker agent can compute diffs relative to the epic branch
-		// (children branch off epicBranch, not the default branch)
 		const workerAgentRendered = await this.renderSwarmWorkerAgent(
 			epicWorktreePath,
 			agentMetadata,
-			epicBranch,
 		)
 
 		// 4. Copy .claude/agents/ from epic worktree to each child worktree

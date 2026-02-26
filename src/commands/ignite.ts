@@ -13,7 +13,7 @@ import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings, generateWorktreePath, computeReviewDiffCommand } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings, generateWorktreePath } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
@@ -278,7 +278,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
-			const variables = await this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -532,12 +532,12 @@ export class IgniteCommand {
 	/**
 	 * Build template variables from context
 	 */
-	private async buildTemplateVariables(
+	private buildTemplateVariables(
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
 		draftPrNumber?: number,
 		draftPrUrl?: string
-	): Promise<TemplateVariables> {
+	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
 		}
@@ -601,12 +601,6 @@ export class IgniteCommand {
 		// Detect VS Code mode
 		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
 		variables.IS_VSCODE_MODE = isVscodeMode
-
-		// Compute review diff command based on git state
-		const protectedBranches = await this.settingsManager.getProtectedBranches(context.workspacePath)
-		const reviewDiff = await computeReviewDiffCommand(context.workspacePath, protectedBranches)
-		variables.REVIEW_DIFF_CMD = reviewDiff.cmd
-		variables.REVIEW_DIFF_DESCRIPTION = reviewDiff.description
 
 		return variables
 	}

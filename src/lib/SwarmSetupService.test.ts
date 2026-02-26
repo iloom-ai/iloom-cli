@@ -7,19 +7,7 @@ import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager, IloomSettings } from './SettingsManager.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
 
-const { mockComputeReviewDiffCommand } = vi.hoisted(() => ({
-	mockComputeReviewDiffCommand: vi.fn().mockResolvedValue({ cmd: 'git diff', description: 'uncommitted changes' }),
-}))
-
 // Mock dependencies
-vi.mock('../utils/git.js', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('../utils/git.js')>()
-	return {
-		...actual,
-		computeReviewDiffCommand: mockComputeReviewDiffCommand,
-	}
-})
-
 vi.mock('../utils/package-manager.js', () => ({
 	installDependencies: vi.fn().mockResolvedValue(undefined),
 }))
@@ -127,7 +115,6 @@ describe('SwarmSetupService', () => {
 
 		mockSettingsManager = {
 			loadSettings: vi.fn().mockResolvedValue({}),
-			getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 		} as unknown as SettingsManager
 
 		mockTemplateManager = {
@@ -135,7 +122,6 @@ describe('SwarmSetupService', () => {
 		} as unknown as PromptTemplateManager
 
 		// Re-configure mocks after vitest's automatic mockReset
-		mockComputeReviewDiffCommand.mockResolvedValue({ cmd: 'git diff', description: 'uncommitted changes' })
 		mockGenerateAndWriteMcpConfigFile.mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json')
 		vi.mocked(fs.pathExists).mockResolvedValue(true as never)
 		vi.mocked(fs.copy).mockResolvedValue(undefined)
