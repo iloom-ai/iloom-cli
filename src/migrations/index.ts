@@ -139,29 +139,16 @@ export const migrations: Migration[] = [
         return
       }
 
-      // Read the XDG default file to find iloom patterns that were written there
-      let xdgContent = ''
-      try {
-        xdgContent = await fs.readFile(xdgDefault, 'utf-8')
-      } catch (error: unknown) {
-        if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-          // XDG default file doesn't exist - nothing to copy
-          return
-        }
-        throw error
-      }
+      // All iloom patterns from previous migrations - reapply them to the correct path
+      const iloomPatterns = [
+        '**/.iloom/settings.local.json',
+        '**/.iloom/package.iloom.local.json',
+        '**/.claude/agents/iloom-*',
+        '**/.claude/skills/iloom-*',
+        '**/.claude/iloom-swarm-mcp-config-path',
+        '**/.iloom/worktrees',
+      ]
 
-      // Extract iloom patterns by content prefix
-      const lines = xdgContent.split('\n')
-      const iloomPatterns = lines.filter(
-        line => line.startsWith('**/.iloom/') || line.startsWith('**/.claude/')
-      )
-
-      if (iloomPatterns.length === 0) {
-        return
-      }
-
-      // Append missing iloom patterns to the correctly resolved path
       await ensureGlobalGitignorePatterns(iloomPatterns)
     }
   },

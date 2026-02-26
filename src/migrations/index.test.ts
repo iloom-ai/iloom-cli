@@ -282,6 +282,15 @@ describe('migrations', () => {
     const xdgDefault = path.join(os.homedir(), '.config', 'git', 'ignore')
     const migration = migrations.find(m => m.version === '0.10.4')
 
+    const allIloomPatterns = [
+      '**/.iloom/settings.local.json',
+      '**/.iloom/package.iloom.local.json',
+      '**/.claude/agents/iloom-*',
+      '**/.claude/skills/iloom-*',
+      '**/.claude/iloom-swarm-mcp-config-path',
+      '**/.iloom/worktrees',
+    ]
+
     it('should exist with correct description', () => {
       expect(migration).toBeDefined()
       expect(migration?.description).toBe('Remediate global gitignore path for users with custom core.excludesFile')
@@ -292,90 +301,31 @@ describe('migrations', () => {
 
       await migration?.migrate()
 
-      expect(fs.readFile).not.toHaveBeenCalled()
       expect(ensureGlobalGitignorePatterns).not.toHaveBeenCalled()
     })
 
-    it('copies iloom patterns from XDG default to resolved path when they differ', async () => {
+    it('reapplies all iloom patterns to resolved path when it differs from XDG default', async () => {
       const customPath = path.join(os.homedir(), '.gitignore_global')
       vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const xdgContent = '# Added by iloom CLI\n**/.iloom/settings.local.json\n**/.iloom/package.iloom.local.json\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-*\n'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(xdgContent as any)
       vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
       await migration?.migrate()
 
-      expect(fs.readFile).toHaveBeenCalledWith(xdgDefault, 'utf-8')
-      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith([
-        '**/.iloom/settings.local.json',
-        '**/.iloom/package.iloom.local.json',
-        '**/.claude/agents/iloom-*',
-        '**/.claude/skills/iloom-*',
-      ])
-    })
-
-    it('only copies patterns matching **/.iloom/ and **/.claude/ prefixes', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const xdgContent = '# Added by iloom CLI\n**/.iloom/settings.local.json\n*.log\nnode_modules/\n**/.claude/agents/iloom-*\n# some comment\n'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(xdgContent as any)
-      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
-
-      await migration?.migrate()
-
-      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith([
-        '**/.iloom/settings.local.json',
-        '**/.claude/agents/iloom-*',
-      ])
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
 
     it('is idempotent - ensureGlobalGitignorePatterns handles deduplication', async () => {
       const customPath = path.join(os.homedir(), '.gitignore_global')
       vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const xdgContent = '**/.iloom/settings.local.json\n'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(xdgContent as any)
       vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
+      // Run twice
+      await migration?.migrate()
       await migration?.migrate()
 
-      // ensureGlobalGitignorePatterns is called with the patterns - it handles idempotency internally
-      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(['**/.iloom/settings.local.json'])
-    })
-
-    it('handles XDG default file not existing (nothing to copy)', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
-      vi.mocked(fs.readFile).mockRejectedValue(enoentError)
-
-      await migration?.migrate()
-
-      expect(ensureGlobalGitignorePatterns).not.toHaveBeenCalled()
-    })
-
-    it('re-throws non-ENOENT errors when reading XDG default file', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const permError = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
-      vi.mocked(fs.readFile).mockRejectedValue(permError)
-
-      await expect(migration?.migrate()).rejects.toThrow('EACCES: permission denied')
-      expect(ensureGlobalGitignorePatterns).not.toHaveBeenCalled()
-    })
-
-    it('handles XDG default file with no iloom patterns', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
-      const xdgContent = '*.log\nnode_modules/\n.env\n'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(xdgContent as any)
-
-      await migration?.migrate()
-
-      expect(ensureGlobalGitignorePatterns).not.toHaveBeenCalled()
+      // ensureGlobalGitignorePatterns handles idempotency internally
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledTimes(2)
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
   })
 
