@@ -140,13 +140,7 @@ vi.mock('../utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Mock gitignore utility
-const mockEnsureWorktreeGitignore = vi.fn().mockResolvedValue(undefined)
-vi.mock('../utils/gitignore.js', () => ({
-  ensureWorktreeGitignore: (...args: unknown[]) => mockEnsureWorktreeGitignore(...args),
-}))
-
-// Mock logger-context for capturing deprecation warnings
+// Mock logger-context
 const mockLoggerWarn = vi.fn()
 const mockLoggerInfo = vi.fn()
 const mockLoggerDebug = vi.fn()
@@ -227,7 +221,6 @@ describe('LoomManager', testOptions, () => {
     mockListAllMetadata.mockResolvedValue([])
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
     mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
-    mockEnsureWorktreeGitignore.mockResolvedValue(undefined)
   })
 
   describe('createIloom', () => {
@@ -3593,43 +3586,6 @@ describe('LoomManager', testOptions, () => {
 
       // Verify writeMetadata was NOT called (existing metadata preserved)
       expect(mockWriteMetadata).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('gitignore wiring', () => {
-    const baseInput: CreateLoomInput = {
-      type: 'issue',
-      identifier: 123,
-      originalInput: '123',
-    }
-
-    it('should call ensureWorktreeGitignore during loom creation', async () => {
-      // Mock settings
-      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
-
-      // Mock GitHub data fetch
-      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
-        number: 123,
-        title: 'Test Issue',
-        body: 'Test description',
-        state: 'open',
-        labels: [],
-        assignees: [],
-        url: 'https://github.com/owner/repo/issues/123',
-      })
-
-      // Mock worktree creation
-      const expectedPath = '/test/worktree-issue-123'
-      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
-      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
-
-      await manager.createIloom(baseInput)
-
-      // Verify ensureWorktreeGitignore was called with the working directory
-      expect(mockEnsureWorktreeGitignore).toHaveBeenCalledWith(
-        mockGitWorktree.workingDirectory
-      )
     })
   })
 

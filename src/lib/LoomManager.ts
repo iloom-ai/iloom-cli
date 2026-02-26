@@ -24,7 +24,6 @@ import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
 import { PRManager } from './PRManager.js'
-import { ensureWorktreeGitignore } from '../utils/gitignore.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -683,16 +682,6 @@ export class LoomManager {
       undefined,
       pathOptions
     )
-
-    // Ensure .iloom/worktrees/ is in the project's .gitignore
-    try {
-      await ensureWorktreeGitignore(this.gitWorktree.workingDirectory)
-    } catch (error) {
-      getLogger().warn(
-        `Could not update .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
-        'You may want to manually add ".iloom/worktrees/" to your .gitignore.'
-      )
-    }
 
     // Detect if this is a fork PR
     const isForkPR = input.type === 'pr' && issueData && 'isFork' in issueData && (issueData as PullRequest).isFork === true

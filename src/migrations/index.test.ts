@@ -216,4 +216,57 @@ describe('migrations', () => {
     })
   })
 
+  describe('v0.10.3 global gitignore migration for .iloom/worktrees', () => {
+    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
+    const pattern = '**/.iloom/worktrees'
+    const migration = migrations.find(m => m.version === '0.10.3')
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toBe('Add global gitignore for .iloom/worktrees directory')
+    })
+
+    it('should create ~/.config/git/ignore if not exists', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expectedPath,
+        '\n# Added by iloom CLI\n' + pattern + '\n',
+        'utf-8'
+      )
+    })
+
+    it('should append pattern if not already present', async () => {
+      const existingContent = '# Existing ignores\n*.log\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expectedPath,
+        existingContent + '\n# Added by iloom CLI\n' + pattern + '\n',
+        'utf-8'
+      )
+    })
+
+    it('should not duplicate if pattern exists', async () => {
+      const existingContent = '# Existing\n**/.iloom/worktrees\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+  })
+
 })

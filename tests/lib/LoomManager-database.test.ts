@@ -68,11 +68,6 @@ vi.mock('../../src/utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Mock gitignore utility
-vi.mock('../../src/utils/gitignore.js', () => ({
-  ensureWorktreeGitignore: vi.fn().mockResolvedValue(undefined),
-}))
-
 // Mock logger-context
 vi.mock('../../src/utils/logger-context.js', () => ({
   getLogger: () => ({
