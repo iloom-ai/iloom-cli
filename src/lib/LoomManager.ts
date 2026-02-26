@@ -669,29 +669,14 @@ export class LoomManager {
     getLogger().info('Ensuring repository has initial commit...')
     await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
 
-    // Load worktree prefix from settings
+    // Load settings (worktreePrefix is no longer used — all worktrees go under .iloom/worktrees/)
     const settingsData = await this.settings.loadSettings()
-    const worktreePrefix = settingsData.worktreePrefix
 
-    // Deprecation warning for worktreePrefix
-    if (worktreePrefix !== undefined) {
-      getLogger().warn(
-        'DEPRECATED: The "worktreePrefix" setting is deprecated and will be removed in a future release. ' +
-        'Worktrees are now created under .iloom/worktrees/ in the project root. ' +
-        'Remove "worktreePrefix" from your .iloom/settings.json to use the new default.'
-      )
-    }
-
-    // Build options object, only including prefix if it's defined
-    const pathOptions: { isPR?: boolean; prNumber?: number; prefix?: string } =
+    // Build options object
+    const pathOptions: { isPR?: boolean; prNumber?: number } =
       input.type === 'pr'
         ? { isPR: true, prNumber: input.identifier as number }
         : {}
-
-    // Only pass prefix if explicitly configured (deprecated behavior)
-    if (worktreePrefix !== undefined) {
-      pathOptions.prefix = worktreePrefix
-    }
 
     const worktreePath = this.gitWorktree.generateWorktreePath(
       branchName,
@@ -699,16 +684,14 @@ export class LoomManager {
       pathOptions
     )
 
-    // Ensure .iloom/worktrees/ is in the project's .gitignore (only when using new default path)
-    if (worktreePrefix === undefined) {
-      try {
-        await ensureWorktreeGitignore(this.gitWorktree.workingDirectory)
-      } catch (error) {
-        getLogger().warn(
-          `Could not update .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
-          'You may want to manually add ".iloom/worktrees/" to your .gitignore.'
-        )
-      }
+    // Ensure .iloom/worktrees/ is in the project's .gitignore
+    try {
+      await ensureWorktreeGitignore(this.gitWorktree.workingDirectory)
+    } catch (error) {
+      getLogger().warn(
+        `Could not update .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+        'You may want to manually add ".iloom/worktrees/" to your .gitignore.'
+      )
     }
 
     // Detect if this is a fork PR

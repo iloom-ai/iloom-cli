@@ -232,7 +232,7 @@ export function isWorktreePath(path: string): boolean {
 export function generateWorktreePath(
   branchName: string,
   rootDir: string = process.cwd(),
-  options?: { isPR?: boolean; prNumber?: number; prefix?: string }
+  options?: { isPR?: boolean; prNumber?: number }
 ): string {
   // Replace slashes with dashes (matches bash line 593)
   let sanitized = branchName.replace(/\//g, '-')
@@ -242,58 +242,8 @@ export function generateWorktreePath(
     sanitized = `${sanitized}_pr_${options.prNumber}`
   }
 
-  if (options?.prefix === undefined) {
-    // New default: .iloom/worktrees/ under rootDir
-    return path.join(rootDir, '.iloom', 'worktrees', sanitized)
-  }
-
-  // Legacy prefix modes (for backwards compatibility during deprecation)
-  const parentDir = path.dirname(rootDir)
-
-  if (options.prefix === '') {
-    // Empty string = no prefix mode
-    return path.join(parentDir, sanitized)
-  }
-
-  // Custom prefix provided
-  let prefix = options.prefix
-
-  // Check if prefix contains forward slashes (nested directory structure)
-  const hasNestedPath = prefix.includes('/')
-
-  if (hasNestedPath) {
-    // Check if it ends with a separator character (dash, underscore, or slash)
-    const endsWithSeparator = /[-_/]$/.test(prefix)
-
-    if (!endsWithSeparator) {
-      // Has nested path but no trailing separator: auto-append hyphen
-      // Example: "temp/looms" becomes "temp/looms-"
-      prefix = `${prefix}-`
-    }
-    // If it already ends with -, _, or /, keep as-is
-  } else {
-    // Single-level prefix: auto-append separator if it doesn't end with one
-    const endsWithSeparator = /[-_]$/.test(prefix)
-    if (!endsWithSeparator) {
-      prefix = `${prefix}-`
-    }
-  }
-
-  // Apply custom prefix
-  if (prefix.endsWith('/')) {
-    // Forward slash = nested directory, use path.join for proper handling
-    return path.join(parentDir, prefix, sanitized)
-  } else if (prefix.includes('/')) {
-    // Contains slash but doesn't end with slash = nested with separator (e.g., "looms/myprefix-")
-    // Split and handle: last part is prefix with separator, rest is directory path
-    const lastSlashIndex = prefix.lastIndexOf('/')
-    const dirPath = prefix.substring(0, lastSlashIndex)
-    const prefixWithSeparator = prefix.substring(lastSlashIndex + 1)
-    return path.join(parentDir, dirPath, `${prefixWithSeparator}${sanitized}`)
-  } else {
-    // Dash/underscore separator = single directory name
-    return path.join(parentDir, `${prefix}${sanitized}`)
-  }
+  // All worktrees go under .iloom/worktrees/ in the project root
+  return path.join(rootDir, '.iloom', 'worktrees', sanitized)
 }
 
 /**
