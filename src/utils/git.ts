@@ -1139,3 +1139,126 @@ export async function removePlaceholderCommitFromHistory(
     { cwd: worktreePath }
   )
 }
+
+/** Pattern for safe git ref names (branch names, remote refs, SHAs) */
+const SAFE_GIT_REF_PATTERN = /^[a-zA-Z0-9_\-./]+$/
+
+/**
+ * Validate that a git ref name matches a safe pattern to prevent shell injection.
+ * @param ref - The ref name to validate
+ * @returns true if the ref matches the safe pattern
+ */
+function isValidGitRef(ref: string): boolean {
+  return SAFE_GIT_REF_PATTERN.test(ref)
+}
+
+/**
+ * Compute the appropriate git diff command based on the current git state.
+ *
+ * Scenarios:
+ * 1. Detached HEAD or protected branch (main/master/develop): `git diff` (uncommitted changes)
+ * 2. Feature branch with remote tracking branch: `git diff <merge-base-hash>` (changes not yet on remote)
+ * 3. Feature branch without remote: `git diff <merge-base-hash>` (changes since diverging from default branch)
+ * 4. Any failure: falls back to `git diff` (uncommitted changes)
+ *
+ * Merge-base hashes are pre-computed in Node.js to avoid shell subshell expressions.
+ * All ref names are validated against a safe pattern before use.
+ *
+ * @param cwd - Working directory of the repository
+ * @param protectedBranches - List of protected branch names (e.g., ['main', 'master', 'develop'])
+ * @returns Object with `cmd` (the git diff command string) and `description` (human-readable explanation)
+ */
+export async function computeReviewDiffCommand(
+  cwd: string,
+  protectedBranches: string[]
+): Promise<{ cmd: string; description: string }> {
+  const fallback = { cmd: 'git diff', description: 'uncommitted changes' }
+
+  try {
+    // Get the current branch name
+    const branch = await getCurrentBranch(cwd)
+
+    // Detached HEAD or empty result -> fall back to uncommitted changes
+    if (!branch) {
+      return fallback
+    }
+
+    // Protected branch -> fall back to uncommitted changes
+    if (protectedBranches.includes(branch)) {
+      return fallback
+    }
+
+    // Feature branch: try to find upstream tracking branch
+    try {
+      const upstream = await executeGitCommand(
+        ['rev-parse', '--abbrev-ref', '@{upstream}'],
+        { cwd }
+      )
+      const upstreamRef = upstream.trim()
+      if (upstreamRef) {
+        if (!isValidGitRef(upstreamRef)) {
+          logger.warn(`Upstream ref contains unexpected characters: ${upstreamRef}, falling back to git diff`)
+          return fallback
+        }
+        // Pre-compute merge-base to get only the developer's changes (not reverse of upstream commits)
+        const mergeBase = await executeGitCommand(
+          ['merge-base', 'HEAD', upstreamRef],
+          { cwd }
+        )
+        const mergeBaseHash = mergeBase.trim()
+        return {
+          cmd: `git diff ${mergeBaseHash}`,
+          description: 'changes not yet on remote',
+        }
+      }
+    } catch (error) {
+      // Expected: no upstream tracking branch configured
+      const isExpected = error instanceof GitCommandError &&
+        (error.stderr.includes('no upstream configured') ||
+         error.stderr.includes('no such branch') ||
+         error.stderr.includes('does not point to a branch'))
+      if (!isExpected) {
+        logger.debug(`Unexpected error checking upstream: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+      // Fall through to default branch detection
+    }
+
+    // No remote tracking branch: diff since diverging from default branch
+    try {
+      const defaultBranch = await getDefaultBranch(cwd)
+      if (!isValidGitRef(defaultBranch)) {
+        logger.warn(`Default branch name contains unexpected characters: ${defaultBranch}, falling back to git diff`)
+        return fallback
+      }
+      // Pre-compute merge-base in Node.js to avoid shell subshell expressions
+      const mergeBase = await executeGitCommand(
+        ['merge-base', 'HEAD', defaultBranch],
+        { cwd }
+      )
+      const mergeBaseHash = mergeBase.trim()
+      return {
+        cmd: `git diff ${mergeBaseHash}`,
+        description: `changes since diverging from ${defaultBranch}`,
+      }
+    } catch (error) {
+      // Expected: default branch detection failed (e.g., not a symbolic ref, no remote)
+      const isExpected = error instanceof GitCommandError &&
+        (error.stderr.includes('not a symbolic ref') ||
+         error.stderr.includes('no such ref') ||
+         error.stderr.includes('Not a valid object name'))
+      if (!isExpected) {
+        logger.debug(`Unexpected error detecting default branch: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+      return fallback
+    }
+  } catch (error) {
+    // Expected: not a git repository or similar fundamental issue
+    const isExpected = error instanceof GitCommandError &&
+      (error.stderr.includes('not a git repository') ||
+       error.stderr.includes('not a valid'))
+    if (!isExpected) {
+      logger.debug(`Unexpected error in computeReviewDiffCommand: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+    return fallback
+  }
+}

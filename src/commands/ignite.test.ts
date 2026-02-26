@@ -1532,6 +1532,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -1588,6 +1589,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}), // Empty settings
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -1700,6 +1702,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -1768,6 +1771,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2563,6 +2567,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2626,6 +2631,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2689,6 +2695,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2749,6 +2756,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2809,6 +2817,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2866,6 +2875,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2923,6 +2933,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -2964,6 +2975,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const originalCwd = process.cwd
@@ -3000,6 +3012,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const originalCwd = process.cwd
@@ -3034,6 +3047,7 @@ describe('IgniteCommand', () => {
 					databaseProviders: {},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const originalCwd = process.cwd
@@ -3069,6 +3083,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const originalCwd = process.cwd
@@ -3528,6 +3543,7 @@ describe('IgniteCommand', () => {
 					issueTracker: { provider: 'github' },
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {
@@ -3665,6 +3681,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockGitWorktreeManagerWithMain = {
@@ -3712,6 +3729,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockGitWorktreeManagerWithFeature = {
@@ -4084,6 +4102,7 @@ describe('IgniteCommand', () => {
 					issueManagement: { provider: 'github' },
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 			}
 
 			const mockAgentManager = {

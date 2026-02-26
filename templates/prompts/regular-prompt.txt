@@ -713,7 +713,7 @@ Execute combined analyze-and-plan agent:
 
 ## STEP 5.5 - Review Phase
 
-This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
+This section is about reviewing code changes{{#if REVIEW_DIFF_DESCRIPTION}} ({{REVIEW_DIFF_DESCRIPTION}}){{/if}} for quality, security, and compliance issues.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
@@ -734,7 +734,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 - Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
-- The reviewer will analyze uncommitted changes and report findings
+- The reviewer will analyze {{#if REVIEW_DIFF_DESCRIPTION}}{{REVIEW_DIFF_DESCRIPTION}}{{else}}uncommitted changes{{/if}} and report findings
 
 **When issues are found:**
 - Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
@@ -742,7 +742,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 {{/unless}}
 
 **MANDATORY Claude Local Review**: If the reviewer returns "Instructions for Orchestrator: Claude Local Review", you MUST execute those instructions:
-1. Gather git diff (`git diff`) and CLAUDE.md content (using Glob/Read)
+1. Gather git diff (`{{#if REVIEW_DIFF_CMD}}{{REVIEW_DIFF_CMD}}{{else}}git diff{{/if}}`) and CLAUDE.md content (using Glob/Read)
 2. Launch the 5 parallel Task agents as specified in the instructions
 3. Collect results from all agents
 4. Present unified report as specified
