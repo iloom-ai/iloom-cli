@@ -2,7 +2,7 @@ import type { Migration } from '../lib/VersionMigrationManager.js'
 import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
-import { resolveGlobalGitignorePath, ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Migration registry - add new migrations here in version order
 // Each migration must be idempotent (safe to run multiple times)
@@ -99,48 +99,10 @@ export const migrations: Migration[] = [
   },
   {
     version: '0.10.3',
-    description: 'Add global gitignore for .iloom/worktrees directory',
+    description: 'Add global gitignore for .iloom/worktrees and remediate path for custom core.excludesFile',
     migrate: async (): Promise<void> => {
-      const globalIgnorePath = path.join(os.homedir(), '.config', 'git', 'ignore')
-      const pattern = '**/.iloom/worktrees'
-
-      // Ensure directory exists
-      await fs.ensureDir(path.dirname(globalIgnorePath))
-
-      // Read existing content or empty string
-      let content = ''
-      try {
-        content = await fs.readFile(globalIgnorePath, 'utf-8')
-      } catch {
-        // File doesn't exist - will create
-      }
-
-      // Check if pattern already exists (idempotent)
-      if (content.includes(pattern)) {
-        return
-      }
-
-      // Append pattern with comment
-      const separator = content.endsWith('\n') || content === '' ? '' : '\n'
-      const newContent = content + separator + '\n# Added by iloom CLI\n' + pattern + '\n'
-      await fs.writeFile(globalIgnorePath, newContent, 'utf-8')
-    }
-  },
-  {
-    version: '0.10.4',
-    description: 'Remediate global gitignore path for users with custom core.excludesFile',
-    migrate: async (): Promise<void> => {
-      const resolvedPath = await resolveGlobalGitignorePath()
-      const xdgDefault = path.join(os.homedir(), '.config', 'git', 'ignore')
-
-      // If the resolved path matches the XDG default, previous migrations already
-      // wrote to the correct location - nothing to remediate
-      if (resolvedPath === xdgDefault) {
-        return
-      }
-
-      // All iloom patterns from previous migrations - reapply them to the correct path
-      const iloomPatterns = [
+      // All iloom patterns from this and previous migrations
+      const allIloomPatterns = [
         '**/.iloom/settings.local.json',
         '**/.iloom/package.iloom.local.json',
         '**/.claude/agents/iloom-*',
@@ -149,7 +111,12 @@ export const migrations: Migration[] = [
         '**/.iloom/worktrees',
       ]
 
-      await ensureGlobalGitignorePatterns(iloomPatterns)
+      // Ensure all patterns exist at the correctly resolved global gitignore path.
+      // This both adds the new **/.iloom/worktrees pattern AND remediates previous
+      // migrations that hardcoded the XDG default (~/.config/git/ignore) — if the
+      // user has core.excludesFile set to a different path, this writes all iloom
+      // patterns to the correct location.
+      await ensureGlobalGitignorePatterns(allIloomPatterns)
     }
   },
 ]

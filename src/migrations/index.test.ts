@@ -3,14 +3,13 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { migrations } from './index.js'
-import { resolveGlobalGitignorePath, ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Mock fs-extra
 vi.mock('fs-extra')
 
-// Mock gitignore utilities used by the 0.10.4 migration
+// Mock gitignore utilities used by the 0.10.3 migration
 vi.mock('../utils/gitignore.js', () => ({
-  resolveGlobalGitignorePath: vi.fn(),
   ensureGlobalGitignorePatterns: vi.fn(),
   // Pass through ensureWorktreeGitignore as a no-op since it's not used by migrations
   ensureWorktreeGitignore: vi.fn(),
@@ -225,62 +224,8 @@ describe('migrations', () => {
     })
   })
 
-  describe('v0.10.3 global gitignore migration for .iloom/worktrees', () => {
-    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
-    const pattern = '**/.iloom/worktrees'
+  describe('v0.10.3 global gitignore migration for .iloom/worktrees and path remediation', () => {
     const migration = migrations.find(m => m.version === '0.10.3')
-
-    it('should exist with correct description', () => {
-      expect(migration).toBeDefined()
-      expect(migration?.description).toBe('Add global gitignore for .iloom/worktrees directory')
-    })
-
-    it('should create ~/.config/git/ignore if not exists', async () => {
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
-
-      await migration?.migrate()
-
-      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expectedPath,
-        '\n# Added by iloom CLI\n' + pattern + '\n',
-        'utf-8'
-      )
-    })
-
-    it('should append pattern if not already present', async () => {
-      const existingContent = '# Existing ignores\n*.log\n'
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
-
-      await migration?.migrate()
-
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expectedPath,
-        existingContent + '\n# Added by iloom CLI\n' + pattern + '\n',
-        'utf-8'
-      )
-    })
-
-    it('should not duplicate if pattern exists', async () => {
-      const existingContent = '# Existing\n**/.iloom/worktrees\n'
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
-
-      await migration?.migrate()
-
-      expect(fs.writeFile).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('v0.10.4 remediation migration for global gitignore path', () => {
-    const xdgDefault = path.join(os.homedir(), '.config', 'git', 'ignore')
-    const migration = migrations.find(m => m.version === '0.10.4')
 
     const allIloomPatterns = [
       '**/.iloom/settings.local.json',
@@ -293,20 +238,11 @@ describe('migrations', () => {
 
     it('should exist with correct description', () => {
       expect(migration).toBeDefined()
-      expect(migration?.description).toBe('Remediate global gitignore path for users with custom core.excludesFile')
+      expect(migration?.description).toContain('.iloom/worktrees')
+      expect(migration?.description).toContain('core.excludesFile')
     })
 
-    it('is a no-op when resolved path matches XDG default', async () => {
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(xdgDefault)
-
-      await migration?.migrate()
-
-      expect(ensureGlobalGitignorePatterns).not.toHaveBeenCalled()
-    })
-
-    it('reapplies all iloom patterns to resolved path when it differs from XDG default', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
+    it('calls ensureGlobalGitignorePatterns with all iloom patterns', async () => {
       vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -315,15 +251,11 @@ describe('migrations', () => {
     })
 
     it('is idempotent - ensureGlobalGitignorePatterns handles deduplication', async () => {
-      const customPath = path.join(os.homedir(), '.gitignore_global')
-      vi.mocked(resolveGlobalGitignorePath).mockResolvedValue(customPath)
       vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
-      // Run twice
       await migration?.migrate()
       await migration?.migrate()
 
-      // ensureGlobalGitignorePatterns handles idempotency internally
       expect(ensureGlobalGitignorePatterns).toHaveBeenCalledTimes(2)
       expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
