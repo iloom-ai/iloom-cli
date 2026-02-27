@@ -99,7 +99,7 @@ export const migrations: Migration[] = [
   },
   {
     version: '0.10.3',
-    description: 'Remediate global gitignore path for custom core.excludesFile',
+    description: 'Remediate global gitignore path for custom core.excludesFile and add E2BIG workaround patterns',
     migrate: async (): Promise<void> => {
       // All iloom patterns from this and previous migrations
       const allIloomPatterns = [
@@ -108,6 +108,8 @@ export const migrations: Migration[] = [
         '**/.claude/agents/iloom-*',
         '**/.claude/skills/iloom-*',
         '**/.claude/iloom-swarm-mcp-config-path',
+        '**/.claude/iloom-plugin',
+        '**/.claude/iloom-system-prompt.md',
       ]
 
       // Ensure all patterns exist at the correctly resolved global gitignore path.

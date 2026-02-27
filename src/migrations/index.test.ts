@@ -231,6 +231,8 @@ describe('migrations', () => {
       '**/.claude/agents/iloom-*',
       '**/.claude/skills/iloom-*',
       '**/.claude/iloom-swarm-mcp-config-path',
+      '**/.claude/iloom-plugin',
+      '**/.claude/iloom-system-prompt.md',
     ]
 
     it('should exist with correct description', () => {
