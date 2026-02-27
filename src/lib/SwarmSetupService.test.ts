@@ -315,32 +315,6 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('passes COMPLEXITY_OVERRIDE to template variables when epic metadata has complexity', async () => {
-			// Mock readMetadata to return metadata with complexity
-			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValueOnce({
-				...mockLoomMetadata,
-				complexity: 'simple',
-			})
-
-			await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
-				expect.anything(),
-				expect.objectContaining({
-					SWARM_MODE: true,
-					COMPLEXITY_OVERRIDE: 'simple',
-				}),
-			)
-		})
-
-		it('does not include COMPLEXITY_OVERRIDE when epic metadata has no complexity', async () => {
-			// Default mockLoomMetadata has no complexity field
-			await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-			const templateVars = vi.mocked(mockAgentManager.loadAgents).mock.calls[0]![1]
-			expect(templateVars).not.toHaveProperty('COMPLEXITY_OVERRIDE')
-		})
-
 		it('writes agent files WITHOUT frontmatter (prompt body only)', async () => {
 			await service.renderSwarmAgents('/Users/dev/project-epic-610')
 

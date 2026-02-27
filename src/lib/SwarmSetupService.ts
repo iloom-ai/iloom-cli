@@ -243,12 +243,8 @@ export class SwarmSetupService {
 
 		const settings = await this.settingsManager.loadSettings()
 
-		// Read epic metadata to check for complexity override
-		const epicMetadata = await this.metadataManager.readMetadata(epicWorktreePath)
-
 		const templateVariables: TemplateVariables = {
 			SWARM_MODE: true,
-			...(epicMetadata?.complexity && { COMPLEXITY_OVERRIDE: epicMetadata.complexity }),
 		}
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
@@ -336,9 +332,6 @@ export class SwarmSetupService {
 			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
 			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
 
-			// Read epic metadata to check for complexity override
-			const epicMetadata = await this.metadataManager.readMetadata(epicWorktreePath)
-
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
@@ -348,7 +341,6 @@ export class SwarmSetupService {
 				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
-				...(epicMetadata?.complexity && { COMPLEXITY_OVERRIDE: epicMetadata.complexity }),
 			}
 
 			// Render issue prompt template with swarm variables

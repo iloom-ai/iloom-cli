@@ -94,8 +94,6 @@ The override follows a two-level model:
 - **`il start --complexity`** - Persists the complexity value in loom metadata. All subsequent `il spin` sessions for this loom will use the stored complexity unless explicitly overridden.
 - **`il spin --complexity`** - Overrides the stored complexity for the current session only. The loom metadata is not modified, so the next `il spin` without `--complexity` reverts to the stored value (or runs the evaluator if none was stored).
 
-In swarm mode, the complexity override from the epic loom's metadata is automatically propagated to all child worker agents.
-
 **Workflow Phases:**
 
 The `il start` command orchestrates multiple AI agents:
