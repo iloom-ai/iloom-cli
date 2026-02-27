@@ -626,6 +626,28 @@ To disable automatic cleanup and keep all child worktrees after swarm completion
 il spin --skip-cleanup
 ```
 
+**Post-Swarm Code Review:**
+
+After all child agents complete and their work is merged into the epic branch, the orchestrator automatically runs a full code review using the `iloom-code-reviewer` agent. This catches cross-cutting issues that individual child agents miss because they each only see their own changes, not the integrated result.
+
+If the review finds any issues (confidence score 80+), a fix agent is spawned to address them before the final commit. The review is non-blocking -- if the reviewer or fix agent fails, the swarm continues to finalization without interruption. Only a single review-fix pass is performed (no re-review loops).
+
+Post-swarm review is enabled by default. To disable it, set `spin.postSwarmReview` to `false` in your settings:
+
+```json
+{
+  "spin": {
+    "postSwarmReview": false
+  }
+}
+```
+
+Or via CLI override:
+
+```bash
+il spin --set spin.postSwarmReview=false
+```
+
 **Examples:**
 
 ```bash

@@ -1042,6 +1042,9 @@ export class IgniteCommand {
 		// Determine issue prefix for commit message trailers
 		const issuePrefix = providerName === 'github' ? '#' : ''
 
+		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
+		const postSwarmReview = settings.spin?.postSwarmReview !== false
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
@@ -1050,6 +1053,7 @@ export class IgniteCommand {
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
+			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)

@@ -62,6 +62,10 @@ export const SpinAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
 		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
+	postSwarmReview: z
+		.boolean()
+		.default(true)
+		.describe('Run a full code review after swarm completion, auto-fixing issues with confidence 80+. Defaults to true.'),
 })
 
 /**
@@ -601,6 +605,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			postSwarmReview: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),

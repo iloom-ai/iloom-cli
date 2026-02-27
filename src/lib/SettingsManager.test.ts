@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, type IloomSettings } from './SettingsManager.js'
+import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -2950,6 +2950,48 @@ const error: { code?: string; message: string } = {
 			if (result.success) {
 				expect(result.data.model).toBe('opus')
 				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+	})
+
+	describe('postSwarmReview setting', () => {
+		it('defaults postSwarmReview to true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({})
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(true)
+			}
+		})
+
+		it('accepts postSwarmReview: true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', postSwarmReview: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(true)
+			}
+		})
+
+		it('accepts postSwarmReview: false on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', postSwarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(false)
+			}
+		})
+
+		it('accepts optional postSwarmReview on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: { postSwarmReview: false } })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.postSwarmReview).toBe(false)
+			}
+		})
+
+		it('allows omitting postSwarmReview on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: {} })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.postSwarmReview).toBeUndefined()
 			}
 		})
 	})

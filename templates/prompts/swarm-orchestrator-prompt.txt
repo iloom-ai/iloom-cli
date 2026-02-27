@@ -87,24 +87,43 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 8. Spawn agents for newly unblocked child issues (repeat as needed)
 9. Handle any failures (mark failed, continue with others)
 10. When all children are done or failed, finalize and clean up
+{{#if POST_SWARM_REVIEW}}
+11. Run post-swarm code review and auto-fix any findings
+12. Create final commit with Fixes trailer for epic issue
+13. Push epic branch to remote (final commit)
+14. Print final summary
+{{else}}
 11. Create final commit with Fixes trailer for epic issue
 12. Push epic branch to remote (final commit)
 13. Print final summary
-{{else}}
-6. Clean up completed child worktrees (if not --skip-cleanup)
-7. Spawn agents for newly unblocked child issues (repeat as needed)
-8. Handle any failures (mark failed, continue with others)
-9. When all children are done or failed, finalize and clean up
-10. Create final commit with Fixes trailer for epic issue
-11. Print final summary
 {{/if}}
 {{else}}
 6. Clean up completed child worktrees (if not --skip-cleanup)
 7. Spawn agents for newly unblocked child issues (repeat as needed)
 8. Handle any failures (mark failed, continue with others)
 9. When all children are done or failed, finalize and clean up
+{{#if POST_SWARM_REVIEW}}
+10. Run post-swarm code review and auto-fix any findings
+11. Create final commit with Fixes trailer for epic issue
+12. Print final summary
+{{else}}
 10. Create final commit with Fixes trailer for epic issue
 11. Print final summary
+{{/if}}
+{{/if}}
+{{else}}
+6. Clean up completed child worktrees (if not --skip-cleanup)
+7. Spawn agents for newly unblocked child issues (repeat as needed)
+8. Handle any failures (mark failed, continue with others)
+9. When all children are done or failed, finalize and clean up
+{{#if POST_SWARM_REVIEW}}
+10. Run post-swarm code review and auto-fix any findings
+11. Create final commit with Fixes trailer for epic issue
+12. Print final summary
+{{else}}
+10. Create final commit with Fixes trailer for epic issue
+11. Print final summary
+{{/if}}
 {{/if}}
 
 ---
@@ -378,6 +397,82 @@ Send `shutdown_request` to all teammates that are still active:
 
 Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
 
+{{#if POST_SWARM_REVIEW}}
+### Step 5.2.5: Post-Swarm Code Review and Auto-Fix
+
+If at least one child succeeded, run a full code review of the integrated epic branch and auto-fix any reported findings.
+
+First, check whether any children succeeded (this is a lightweight read, OK to do directly):
+```bash
+cd {{EPIC_WORKTREE_PATH}}
+git log --oneline -5
+```
+- If no children succeeded (only placeholder or temporary commits exist), skip this step entirely.
+
+#### Step 5.2.5a: Run Code Review
+
+**Delegate this to a subagent.** Spawn a Task subagent to invoke the code reviewer:
+
+- `subagent_type`: `"general-purpose"`
+- Prompt:
+
+```
+Run a full code review of the integrated epic branch.
+
+## Instructions
+
+You are in the epic worktree at `{{EPIC_WORKTREE_PATH}}`. All child agents' work has been merged into this branch.
+
+1. Execute: @agent-iloom-code-reviewer with prompt "Run code review."
+2. Wait for the review to complete.
+3. Report back with the full review results, including all findings with their confidence scores, file locations, and recommendations.
+   - If no issues found, report "No issues found."
+   - If issues found, include the full structured report (Critical issues 95-100, Warnings 80-94).
+```
+
+**Handle the subagent result:**
+- If the subagent reports **"No issues found"** or the review found no findings scoring 80+: skip to Step 5.3.
+- If the subagent reports findings: proceed to Step 5.2.5b.
+- If the subagent fails (timeout, crash, error): log the failure, skip to Step 5.3. The review is non-blocking -- a failed review must not prevent finalization.
+
+#### Step 5.2.5b: Auto-Fix Reported Issues
+
+If the review found issues (confidence 80+), spawn a fix agent to address them.
+
+**Delegate this to a subagent:**
+
+- `subagent_type`: `"general-purpose"`
+- Prompt:
+
+````
+Fix the following code review findings in the epic worktree at `{{EPIC_WORKTREE_PATH}}`.
+
+## Review Findings
+
+<paste the full review findings from Step 5.2.5a here>
+
+## Instructions
+
+1. Read each finding carefully (file, line, issue, recommendation)
+2. Implement the recommended fix for each finding
+3. After fixing all issues, stage and commit with:
+   ```bash
+   cd {{EPIC_WORKTREE_PATH}}
+   git add -A
+   git commit -m "fix(review): address post-swarm code review findings"
+   ```
+4. Report back with a summary of what was fixed.
+
+IMPORTANT: Only fix the specific issues identified in the review findings. Do NOT refactor, optimize, or make additional changes beyond what the review identified.
+````
+
+**Handle the subagent result:**
+- If the fix agent succeeds: log "Post-swarm review: N findings addressed, fix committed."
+- If the fix agent fails: log the failure and continue. Auto-fix failure is non-blocking.
+
+**Single pass only.** Do NOT re-review after fixing. This prevents infinite review-fix loops.
+
+{{/if}}
 ### Step 5.3: Final Commit on Epic Branch
 
 If at least one child succeeded, create the final "Fixes" commit — but only if it doesn't already exist (idempotency).
@@ -466,10 +561,22 @@ The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
+{{#if POST_SWARM_REVIEW}}
+Mark todo #10, #11, #12, #13, and #14 as completed.
+{{else}}
 Mark todo #10, #11, #12, and #13 as completed.
+{{/if}}
+{{else}}
+{{#if POST_SWARM_REVIEW}}
+Mark todo #9, #10, #11, and #12 as completed.
 {{else}}
 Mark todo #9, #10, and #11 as completed.
 {{/if}}
+{{/if}}
+{{else}}
+{{#if POST_SWARM_REVIEW}}
+Mark todo #9, #10, #11, and #12 as completed.
 {{else}}
 Mark todo #9, #10, and #11 as completed.
+{{/if}}
 {{/if}}
