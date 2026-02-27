@@ -1555,6 +1555,7 @@ describe('StartCommand', () => {
 				tracker: 'github',
 				is_child_loom: false,
 				one_shot_mode: 'default',
+				complexity_override: false,
 			})
 		})
 

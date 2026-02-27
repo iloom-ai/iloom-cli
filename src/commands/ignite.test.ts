@@ -4228,6 +4228,114 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('Complexity Override', () => {
+		it('should set COMPLEXITY_OVERRIDE template variable from metadata when present', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with complexity: 'simple'
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-500__complexity-test',
+					worktreePath: '/path/to/feat/issue-500__complexity-test',
+					issueType: 'issue',
+					issue_numbers: ['500'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					complexity: 'simple', // Stored in metadata
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}))
+
+			const commandWithComplexity = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-500__complexity-test')
+
+			try {
+				await commandWithComplexity.execute()
+
+				// Verify template manager was called with COMPLEXITY_OVERRIDE='simple'
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						COMPLEXITY_OVERRIDE: 'simple',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should prefer CLI complexity flag over metadata', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with complexity: 'simple'
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-500__complexity-test',
+					worktreePath: '/path/to/feat/issue-500__complexity-test',
+					issueType: 'issue',
+					issue_numbers: ['500'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					complexity: 'simple', // Stored in metadata
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}))
+
+			const commandWithComplexity = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-500__complexity-test')
+
+			try {
+				// Execute with CLI complexity='complex' (should override stored 'simple')
+				await commandWithComplexity.execute(undefined, undefined, undefined, undefined, 'complex')
+
+				// Verify template manager was called with COMPLEXITY_OVERRIDE='complex' (CLI wins)
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						COMPLEXITY_OVERRIDE: 'complex',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should not set COMPLEXITY_OVERRIDE when neither CLI nor metadata has it', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__no-complexity')
+
+			try {
+				// Execute without complexity (default metadata mock has no complexity field)
+				await command.execute()
+
+				// Verify template manager was called WITHOUT COMPLEXITY_OVERRIDE
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].COMPLEXITY_OVERRIDE).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('--skip-cleanup flag threading', () => {
 		// Epic metadata that triggers swarm mode: has issue_numbers, no parentLoom, and childIssues
 		const epicMetadata = {

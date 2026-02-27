@@ -17,7 +17,7 @@ import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePa
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode } from '../types/index.js'
+import type { OneShotMode, ComplexityOverride } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
@@ -134,6 +134,7 @@ export class IgniteCommand {
 	 * @param printOptions - Print mode options for headless/CI execution
 	 * @param skipCleanup - Skip cleanup after execution
 	 * @param workspacePath - Optional explicit workspace path for programmatic invocation (avoids process.chdir())
+	 * @param complexity - Override complexity evaluation (session-only, takes priority over metadata)
 	 */
 	async execute(oneShot?: OneShotMode, printOptions?: {
 		print?: boolean
@@ -141,23 +142,23 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity))
 		}
 
-		return this.executeInternal(oneShot, skipCleanup, workspacePath)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -224,6 +225,10 @@ export class IgniteCommand {
 			const isHeadlessForOneShot = this.printOptions?.print ?? false
 			const effectiveOneShot: OneShotMode = isHeadlessForOneShot ? 'noReview' : (oneShot ?? storedOneShot)
 
+			// Determine effective complexity override
+			// CLI flag takes priority over loom metadata
+			const effectiveComplexity = complexity ?? metadata?.complexity ?? undefined
+
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
 				const cliOverrides = extractSettingsOverrides()
@@ -279,7 +284,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl, effectiveComplexity)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -563,7 +568,8 @@ export class IgniteCommand {
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
 		draftPrNumber?: number,
-		draftPrUrl?: string
+		draftPrUrl?: string,
+		complexity?: ComplexityOverride
 	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
@@ -598,6 +604,11 @@ export class IgniteCommand {
 
 		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
 		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
+
+		// Set complexity override if provided (CLI flag or loom metadata)
+		if (complexity) {
+			variables.COMPLEXITY_OVERRIDE = complexity
+		}
 
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode

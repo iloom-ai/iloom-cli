@@ -3,7 +3,7 @@ import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
-import type { OneShotMode } from '../types/index.js'
+import type { ComplexityOverride, OneShotMode } from '../types/index.js'
 
 export type SwarmState = 'pending' | 'in_progress' | 'code_review' | 'done' | 'failed'
 
@@ -30,6 +30,7 @@ export interface MetadataFile {
   prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
+  complexity?: ComplexityOverride // Complexity override stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
   state?: SwarmState // Swarm mode lifecycle state
   childIssueNumbers?: string[] // Child issue numbers for epic looms
@@ -72,6 +73,7 @@ export interface WriteMetadataInput {
   prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
   oneShot?: OneShotMode // One-shot automation mode to persist
+  complexity?: ComplexityOverride // Complexity override to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   state?: SwarmState // Swarm mode lifecycle state
   childIssueNumbers?: string[] // Child issue numbers for epic looms
@@ -115,6 +117,7 @@ export interface LoomMetadata {
   prUrls: Record<string, string> // Map of PR number to URL ({} for legacy looms)
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
+  complexity: ComplexityOverride | null // Complexity override (null when not overridden)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   state: SwarmState | null // Swarm mode lifecycle state (null for non-swarm looms)
   childIssueNumbers: string[] // Child issue numbers for epic looms (empty for non-epic looms)
@@ -177,6 +180,7 @@ export class MetadataManager {
       prUrls: data.prUrls ?? {},
       draftPrNumber: data.draftPrNumber ?? null,
       oneShot: data.oneShot ?? null,
+      complexity: data.complexity ?? null,
       capabilities: data.capabilities ?? [],
       state: data.state ?? null,
       childIssueNumbers: data.childIssueNumbers ?? [],
@@ -262,6 +266,7 @@ export class MetadataManager {
         capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
+        ...(input.complexity && { complexity: input.complexity }),
         ...(input.state && { state: input.state }),
         ...(input.childIssueNumbers && input.childIssueNumbers.length > 0 && { childIssueNumbers: input.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),

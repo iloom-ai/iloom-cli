@@ -82,6 +82,7 @@ export interface TemplateVariables {
 	ANALYZE_AND_PLAN_REVIEW_ENABLED?: boolean       // True if analyze-and-plan artifacts should be reviewed
 	IMPLEMENTER_REVIEW_ENABLED?: boolean            // True if implementer artifacts should be reviewed
 	COMPLEXITY_REVIEW_ENABLED?: boolean             // True if complexity evaluator artifacts should be reviewed
+	COMPLEXITY_OVERRIDE?: 'trivial' | 'simple' | 'complex'  // Complexity override from CLI flag or loom metadata
 	// Planning mode variables - mutually exclusive
 	EXISTING_ISSUE_MODE?: boolean   // True when decomposing an existing issue (il plan 42)
 	FRESH_PLANNING_MODE?: boolean   // True when starting fresh planning session (il plan "feature idea")

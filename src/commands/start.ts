@@ -356,6 +356,7 @@ export class StartCommand {
 					enableDevServer,
 					enableTerminal,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
+					...(input.options.complexity && { complexity: input.options.complexity }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
 					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
@@ -377,6 +378,7 @@ export class StartCommand {
 					tracker: this.issueTracker.providerName,
 					is_child_loom: !!parentLoom,
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
+					complexity_override: !!input.options.complexity,
 				})
 			} catch (error: unknown) {
 				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)

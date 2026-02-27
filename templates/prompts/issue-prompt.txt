@@ -424,10 +424,14 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
 3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
+{{#if COMPLEXITY_OVERRIDE}}
+4. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and route directly based on the override value.
+{{else}}
 4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
+{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
 6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
@@ -461,6 +465,10 @@ You are orchestrating a set of agents through a development process, with human 
 3. Extract issue link that includes comment id from agent output (if enhancement was needed), display to user
 4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
    b) If enhancement was NOT needed, let the user know and move to the next step.
+{{#if COMPLEXITY_OVERRIDE}}
+5. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and proceed directly to routing.
+6. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
+{{else}}
 5. Run complexity evaluation for {{ISSUE_NUMBER}} using @agent-iloom-issue-complexity-evaluator
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
@@ -468,6 +476,7 @@ You are orchestrating a set of agents through a development process, with human 
 6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE, or COMPLEX)
+{{/if}}
 9. If SIMPLE: Run combined analysis and planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyze-and-plan
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
 9a. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
@@ -525,12 +534,17 @@ For the Enhancement Decision specifically: you check whether an existing comment
    - If skipping, log: "Issue #ISSUE_NUMBER is already thorough ([word count] words with clear structure), skipping enhancement"
 
    **Complexity Evaluation Decision:**
+{{#if COMPLEXITY_OVERRIDE}}
+   - Decision: SKIP_COMPLEXITY_EVAL (complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag)
+   - Log: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{else}}
    - Search ALL comments for existing complexity evaluation. Consider "already evaluated" if ANY comment has:
      * Header containing "Complexity Assessment" or "Complexity Evaluation"
      * Section with "**Classification**: [TRIVIAL / SIMPLE / COMPLEX]"
      * Metrics section with estimated files, LOC, breaking changes, DB migrations, and risk level
    - Decision: NEEDS_COMPLEXITY_EVAL or SKIP_COMPLEXITY_EVAL
    - If skipping, log: "Issue #ISSUE_NUMBER already has complexity evaluation by @[author] from [date] showing [TRIVIAL/SIMPLE/COMPLEX] classification, skipping evaluation"
+{{/if}}
 
    **Analysis Decision:**
    - Search ALL comments for existing analysis. Consider "already analyzed" if ANY comment has ALL:
@@ -679,6 +693,16 @@ If workflow plan determined SKIP_ENHANCEMENT:
 
 **STEP 1.5 - Complexity Evaluation Phase:**
 
+{{#if COMPLEXITY_OVERRIDE}}
+The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. Skip complexity evaluation entirely.
+1. Set confirmed complexity to {{COMPLEXITY_OVERRIDE}}
+{{#if SWARM_MODE}}
+2. Log: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{else}}
+2. Display to user: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{/if}}
+3. Proceed directly to ROUTING DECISION POINT with complexity = {{COMPLEXITY_OVERRIDE}}
+{{else}}
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
 1. Execute complexity evaluator agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
@@ -788,6 +812,7 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
    If complexity found: "Previous evaluation classified this as [TRIVIAL/SIMPLE/COMPLEX]. Proceeding with [TRIVIAL/SIMPLE/COMPLEX] workflow."
    If not found: "No complexity classification found - defaulting to COMPLEX workflow."
 4. Proceed to ROUTING DECISION POINT with extracted complexity (no confirmation needed)
+{{/if}}
 
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 

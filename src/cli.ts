@@ -431,6 +431,10 @@ program
       .default('default')
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
+  .addOption(
+    new Option('--complexity <level>', 'Override complexity evaluation (persists in loom metadata)')
+      .choices(['trivial', 'simple', 'complex'])
+  )
   .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -792,6 +796,10 @@ program
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .option('--set <key=value>', 'Override settings (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
   .option('--skip-cleanup', 'Skip automatic cleanup of child worktrees after they complete in swarm mode')
+  .addOption(
+    new Option('--complexity <level>', 'Override complexity evaluation (session-only)')
+      .choices(['trivial', 'simple', 'complex'])
+  )
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -801,6 +809,7 @@ program
     json?: boolean
     jsonStream?: boolean
     skipCleanup?: boolean
+    complexity?: 'trivial' | 'simple' | 'complex'
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -835,7 +844,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions, options.skipCleanup)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup, undefined, options.complexity)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

@@ -53,6 +53,7 @@ const mockReadMetadata = vi.fn().mockResolvedValue(null)
 const mockDeleteMetadata = vi.fn().mockResolvedValue(undefined)
 const mockSlugifyPath = vi.fn((path: string) => path.replace(/\//g, '___') + '.json')
 const mockListAllMetadata = vi.fn().mockResolvedValue([])
+const mockUpdateMetadata = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('./MetadataManager.js', () => ({
   MetadataManager: vi.fn(() => ({
@@ -61,6 +62,7 @@ vi.mock('./MetadataManager.js', () => ({
     deleteMetadata: mockDeleteMetadata,
     slugifyPath: mockSlugifyPath,
     listAllMetadata: mockListAllMetadata,
+    updateMetadata: mockUpdateMetadata,
   })),
 }))
 
@@ -222,6 +224,7 @@ describe('LoomManager', testOptions, () => {
     mockReadMetadata.mockResolvedValue(null)
     mockDeleteMetadata.mockResolvedValue(undefined)
     mockListAllMetadata.mockResolvedValue([])
+    mockUpdateMetadata.mockResolvedValue(undefined)
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
     mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
   })
@@ -3589,6 +3592,152 @@ describe('LoomManager', testOptions, () => {
 
       // Verify writeMetadata was NOT called (existing metadata preserved)
       expect(mockWriteMetadata).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('complexity metadata persistence', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 500,
+      originalInput: '500',
+    }
+
+    beforeEach(() => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 500,
+        title: 'Complexity Override Test',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/500',
+        labels: [],
+        assignees: [],
+      })
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true,
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-500')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-500')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3500)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+    })
+
+    it('should persist complexity in metadata when createIloom is called with complexity option', async () => {
+      const inputWithComplexity: CreateLoomInput = {
+        ...baseInput,
+        options: { complexity: 'simple' },
+      }
+
+      await manager.createIloom(inputWithComplexity)
+
+      // Verify writeMetadata was called with complexity: 'simple'
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.complexity).toBe('simple')
+    })
+
+    it('should NOT include complexity in metadata when not provided', async () => {
+      await manager.createIloom(baseInput)
+
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.complexity).toBeUndefined()
+    })
+
+    it('should call updateMetadata with complexity when reusing loom that already has metadata', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-500',
+        branch: 'issue-500-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // Existing metadata present (no complexity)
+      mockReadMetadata.mockResolvedValue({
+        description: 'Existing loom',
+        created_at: '2024-01-01T00:00:00Z',
+        branchName: 'issue-500-test',
+        worktreePath: '/test/worktree-issue-500',
+        issueType: 'issue',
+        issue_numbers: ['500'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'existing-session',
+        projectPath: '/main/workspace',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: 'default',
+        capabilities: [],
+        parentLoom: null,
+      })
+
+      const inputWithComplexity: CreateLoomInput = {
+        ...baseInput,
+        options: { complexity: 'complex' },
+      }
+
+      await manager.createIloom(inputWithComplexity)
+
+      // writeMetadata should NOT be called (existing metadata preserved)
+      expect(mockWriteMetadata).not.toHaveBeenCalled()
+
+      // updateMetadata SHOULD be called with complexity override
+      expect(mockUpdateMetadata).toHaveBeenCalledWith(
+        '/test/worktree-issue-500',
+        { complexity: 'complex' },
+      )
+    })
+
+    it('should NOT call updateMetadata when complexity is not provided on existing worktree', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-500',
+        branch: 'issue-500-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // Existing metadata present (no complexity)
+      mockReadMetadata.mockResolvedValue({
+        description: 'Existing loom',
+        created_at: '2024-01-01T00:00:00Z',
+        branchName: 'issue-500-test',
+        worktreePath: '/test/worktree-issue-500',
+        issueType: 'issue',
+        issue_numbers: ['500'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'existing-session',
+        projectPath: '/main/workspace',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: 'default',
+        capabilities: [],
+        parentLoom: null,
+      })
+
+      // No complexity in options
+      await manager.createIloom(baseInput)
+
+      // Neither writeMetadata nor updateMetadata should be called
+      expect(mockWriteMetadata).not.toHaveBeenCalled()
+      expect(mockUpdateMetadata).not.toHaveBeenCalled()
     })
   })
 

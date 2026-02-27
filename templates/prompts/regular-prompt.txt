@@ -205,6 +205,10 @@ You are orchestrating a set of agents through a development process, with human 
 {{/if}}{{/if}}
 3. Display enhanced specification to user
 4. WAIT for human confirmation of enhanced specification before proceeding
+{{#if COMPLEXITY_OVERRIDE}}
+5. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and proceed directly to routing.
+6. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
+{{else}}
 5. Run complexity evaluation using @agent-iloom-issue-complexity-evaluator (adapted for branch mode)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
@@ -212,6 +216,7 @@ You are orchestrating a set of agents through a development process, with human 
 6. Display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE or COMPLEX)
+{{/if}}
 9. If TRIVIAL: Skip to implementation directly (no analysis or planning needed)
 10. If SIMPLE: Run combined analysis and planning using @agent-iloom-issue-analyze-and-plan
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
@@ -330,7 +335,11 @@ You are orchestrating a set of agents through a development process, with human 
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. Does this specification accurately capture your requirements?"
    - Options:
+{{#if COMPLEXITY_OVERRIDE}}
+     - "Yes, proceed" (default)
+{{else}}
      - "Yes, proceed to complexity evaluation" (default)
+{{/if}}
      - "No, I have corrections or additions"
      - "Exit workflow"
    - multiSelect: false
@@ -343,6 +352,12 @@ You are orchestrating a set of agents through a development process, with human 
 
 **STEP 2 - Complexity Evaluation Phase:**
 
+{{#if COMPLEXITY_OVERRIDE}}
+The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. Skip complexity evaluation entirely.
+1. Set confirmed complexity to {{COMPLEXITY_OVERRIDE}}
+2. Display to user: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+3. Proceed directly to ROUTING DECISION POINT with complexity = {{COMPLEXITY_OVERRIDE}}
+{{else}}
 1. Execute: @agent-iloom-issue-complexity-evaluator with the following context:
    - **IMPORTANT**: This is branch mode - there is NO GitHub issue to fetch
    - Provide the enhanced specification directly to the agent: "This is branch mode - analyze complexity based on the following enhanced specification instead of fetching from GitHub: [ENHANCED_SPECIFICATION]"
@@ -425,6 +440,7 @@ You are orchestrating a set of agents through a development process, with human 
    - If user chooses "Exit workflow": End workflow gracefully
 6. Mark todos #7 and #8 as completed
 7. Proceed to ROUTING DECISION POINT with confirmed complexity
+{{/if}}
 
 ---
 
