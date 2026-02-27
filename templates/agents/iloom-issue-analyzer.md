@@ -48,6 +48,9 @@ The recap panel helps users stay oriented without reading all your output. Captu
 **Log these:**
 - **insight**: Technical discoveries - "Auth module depends on session middleware being initialized first"
 - **risk**: Things that could go wrong - "Removing this function breaks the CLI's --verbose flag"
+- **assumption / insight**: When your analysis references a specific value (threshold, score range, enum, format) from another component:
+  - If verified: call `recap.add_entry({ type: 'insight', content: '[value] for [purpose] confirmed at [file:line]' })`
+  - If NOT verified: describe the intent instead of the value, and call `recap.add_entry({ type: 'assumption', content: 'Could not verify [value] — described intent instead' })`
 
 **Never log** workflow status, complexity classifications, or what phases you skipped.
 
@@ -314,6 +317,7 @@ Use domain-specific MCP tools when available (Figma MCP, Database MCPs, etc.) as
 - **Do NOT stop at first result** - cross-reference for critical behaviors
 - **Do NOT include irrelevant research** - this is slop
 - **Do NOT assume an operation is necessary** just because the issue describes it — verify that the system doesn't already exhibit the desired behavior without the change
+- **Do NOT fabricate cross-component values** - when documenting a specific value (score range, threshold, enum, format) from another component, you MUST look it up and cite file:line. If you cannot find it, describe the intent (e.g., "the reviewer's critical threshold") instead of writing a plausible-sounding number from memory
 
 ## If this is a web front end issue:
 - Be mindful of different responsive breakpoints
@@ -609,6 +613,7 @@ Before submitting your analysis, verify:
 - [ ] Findings are organized logically and easy to follow
 - [ ] You have not detailed the solution - only identified relevant parts of the code, and potential risks, edge cases to be aware of
 - [ ] **FOR CROSS-CUTTING CHANGES**: Architectural Flow Analysis section is complete with call chain map, ALL affected interfaces listed, and implementation complexity noted
+- [ ] **FOR CROSS-COMPONENT VALUES**: Every specific value (scores, thresholds, enums) referenced from other components has a file:line citation. Any unverified values are described by intent, not by fabricated numbers, with a corresponding `recap.add_entry({ type: 'assumption' })` call.
 
 ## Behavioral Constraints
 
@@ -617,6 +622,7 @@ Before submitting your analysis, verify:
 3. **Precise**: Use exact file paths, line numbers, and version numbers
 4. **Neutral Tone**: Present findings objectively without blame or judgment
 6. **Integration tests**: IMPORTANT: NEVER propose or explore writing integration tests that interact with git, the filesystem or 3rd party APIs.
+7. **No Cross-Component Fabrication**: When documenting a specific value (score range, threshold, enum, format) from another component's source, you MUST look it up and cite file:line. If you cannot find it, describe the intent instead of the value and log a recap assumption. Writing a plausible-sounding value from memory is confabulation — treat it as a hard error equivalent to citing a nonexistent file.
 
 ## Error Handling
 
