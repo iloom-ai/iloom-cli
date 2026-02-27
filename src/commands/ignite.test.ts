@@ -1312,6 +1312,8 @@ describe('IgniteCommand', () => {
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
 
 			// Create command with mock agent manager
 			const commandWithAgents = new IgniteCommand(
@@ -1338,6 +1340,7 @@ describe('IgniteCommand', () => {
 					},
 				})
 			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 				getRepoInfoSpy.mockRestore()
@@ -1366,6 +1369,8 @@ describe('IgniteCommand', () => {
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__pr-456')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1382,6 +1387,7 @@ describe('IgniteCommand', () => {
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
 			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 				getRepoInfoSpy.mockRestore()
@@ -1406,6 +1412,8 @@ describe('IgniteCommand', () => {
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/some-other-branch')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1422,6 +1430,7 @@ describe('IgniteCommand', () => {
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
 			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 			}
@@ -1486,6 +1495,8 @@ describe('IgniteCommand', () => {
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99__combined')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
 
 			const commandWithAgents = new IgniteCommand(
 				mockTemplateManager,
@@ -1512,6 +1523,7 @@ describe('IgniteCommand', () => {
 					},
 				})
 			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 				getRepoInfoSpy.mockRestore()
@@ -1896,6 +1908,8 @@ describe('IgniteCommand', () => {
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
 
 			const commandWithSettings = new IgniteCommand(
 				mockTemplateManager,
@@ -1918,6 +1932,7 @@ describe('IgniteCommand', () => {
 					},
 				})
 			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 				getRepoInfoSpy.mockRestore()
