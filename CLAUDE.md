@@ -195,6 +195,19 @@ import { someFunction } from '../utils/helpers.js'
 vi.mock('../utils/helpers.js')
 ```
 
+- **Always mock `process.platform`**: Tests must never rely on the host OS. Code with platform-specific branches (`process.platform === 'darwin'`, etc.) will produce different results on macOS vs Linux/Windows CI. Always mock the platform explicitly in tests that exercise platform-gated code paths, and restore it in `finally`:
+
+```typescript
+// ✅ Correct: explicit platform mock
+const originalPlatform = process.platform
+Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+try {
+  // test code
+} finally {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+}
+```
+
 **Mock Factories Required**:
 
 ```typescript
