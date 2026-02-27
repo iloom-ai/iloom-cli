@@ -126,11 +126,11 @@ After reading the PR, check for unresolved inline review comments using `mcp__is
 Evaluate unresolved review comments using the same severity framework as the code review agent, then address automatically where appropriate:
 
 1. **Assess each comment** by severity and risk:
-   - **Critical/Warning** (would score 80-100 if from code review): Bugs, security issues, correctness problems, clear code quality issues — address these automatically
-   - **Suggestion** (would score below 80): Style preferences, optional improvements — address if low-effort, skip if subjective
+   - **Must fix**: Bugs, security issues, correctness problems, clear code quality issues — address these automatically
+   - **Nice to have**: Style preferences, optional improvements — address if low-effort, skip if subjective
    - **Complex/ambiguous**: Architectural concerns, large refactors, unclear intent, or requests that could lead to scope creep — do NOT attempt; note them in the summary
 2. **Summarize**: Post a PR comment summarizing all feedback, grouped by what was addressed vs deferred. For deferred items, explain why.
-3. **Address Critical/Warning items and low-effort Suggestions**: For each:
+3. **Address must-fix items and low-effort nice-to-haves**: For each:
    a. Make the code change
    b. Reply to the review thread explaining what was changed:
       ```bash
