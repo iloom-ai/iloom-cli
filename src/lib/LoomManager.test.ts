@@ -21,6 +21,9 @@ const testOptions: TestOptions = { timeout: 30_000 }
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
 vi.mock('./GitHubService.js')
+vi.mock('../utils/claude-trust.js', () => ({
+  preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('./BranchNamingService.js')
 vi.mock('./EnvironmentManager.js')
 vi.mock('./ClaudeContextManager.js')

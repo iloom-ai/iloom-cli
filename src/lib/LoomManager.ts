@@ -14,6 +14,7 @@ import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError, fetchOrigin } from '../utils/git.js'
 import { GitHubService } from './GitHubService.js'
 import { generateRandomSessionId } from '../utils/claude.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { detectDarkMode } from '../utils/terminal.js'
@@ -792,6 +793,13 @@ export class LoomManager {
           getLogger().warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
       }
+    }
+
+    // Pre-accept Claude Code trust for the new worktree path
+    try {
+      await preAcceptClaudeTrust(worktreePath)
+    } catch (error) {
+      getLogger().warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
     }
 
     return worktreePath

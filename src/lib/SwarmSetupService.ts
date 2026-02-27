@@ -8,6 +8,7 @@ import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVaria
 import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
 import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
@@ -116,6 +117,13 @@ export class SwarmSetupService {
 					createBranch: true,
 					baseBranch: epicBranch,
 				})
+
+				// Pre-accept Claude Code trust for child worktree
+				try {
+					await preAcceptClaudeTrust(childWorktreePath)
+				} catch (error) {
+					getLogger().warn(`Failed to pre-accept Claude trust for child worktree: ${error instanceof Error ? error.message : String(error)}`)
+				}
 
 				// Write metadata with state: 'pending' and parentLoom
 				const metadataInput: WriteMetadataInput = {

@@ -15,6 +15,9 @@ import { createMockDatabaseManager } from '../mocks/MockDatabaseProvider.js'
 // Mock all dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/GitHubService.js')
+vi.mock('../../src/utils/claude-trust.js', () => ({
+  preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../../src/lib/BranchNamingService.js')
 vi.mock('../../src/lib/EnvironmentManager.js')
 vi.mock('../../src/lib/ClaudeContextManager.js')
