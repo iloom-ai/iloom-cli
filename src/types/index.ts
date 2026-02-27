@@ -154,6 +154,8 @@ export interface StartOptions {
   childLoom?: boolean
   // Epic loom control flag (for issues with child issues)
   epic?: boolean
+  // Create-only mode: skip Claude, IDE, terminal, dev server, and epic
+  createOnly?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
   // Complexity override (skips complexity evaluation)

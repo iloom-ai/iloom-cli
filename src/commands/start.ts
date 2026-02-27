@@ -129,6 +129,15 @@ export class StartCommand {
 	public async execute(input: StartCommandInput): Promise<StartResult | void> {
 		const isJsonMode = input.options.json === true
 
+		// Handle --create-only flag: disable all launch components and epic
+		if (input.options.createOnly) {
+			input.options.claude = false
+			input.options.code = false
+			input.options.devServer = false
+			input.options.terminal = false
+			input.options.epic = false
+		}
+
 		try {
 			// Step 0: Load settings and get configured repo for GitHub operations
 			const initialSettings = await this.settingsManager.loadSettings()
@@ -392,6 +401,7 @@ export class StartCommand {
 					is_child_loom: !!parentLoom,
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
 					complexity_override: !!input.options.complexity,
+					create_only: !!input.options.createOnly,
 				})
 			} catch (error: unknown) {
 				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)
