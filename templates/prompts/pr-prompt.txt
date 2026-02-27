@@ -123,13 +123,16 @@ When working with libraries, frameworks, or APIs that you need documentation for
 After reading the PR, check for unresolved inline review comments using `mcp__issue_management__get_review_comments`. If there are unresolved review threads:
 
 {{#if ONE_SHOT_MODE}}
-Automatically address all unresolved review comments:
+Evaluate and summarize unresolved review comments, then address the straightforward ones:
 
-1. **Summarize feedback**: Group unresolved comments by file/topic. Log a brief summary.
-2. **Address each comment**: For each unresolved thread:
-   a. Read the reviewer's comment and understand what they're asking for
-   b. Make the requested code change (use subagents for non-trivial changes)
-   c. Reply to the review thread explaining what was changed using `gh api`:
+1. **Triage feedback**: For each unresolved comment, classify it:
+   - **Quick fix**: Typos, naming, style, small logic fixes — address these automatically
+   - **Moderate**: Requires thoughtful changes but scope is clear — address these automatically
+   - **Complex/risky**: Architectural concerns, large refactors, ambiguous requests — do NOT attempt these; note them in the summary
+2. **Summarize**: Post a PR comment summarizing all feedback, grouped by classification. For complex/risky items, explain why they were deferred.
+3. **Address quick fix and moderate items**: For each:
+   a. Make the code change
+   b. Reply to the review thread explaining what was changed:
       ```bash
       gh api \
         --method POST \
@@ -142,8 +145,8 @@ Automatically address all unresolved review comments:
       }
       EOF
       ```
-3. **Commit and push** changes after addressing all comments
-4. Proceed to code review (see "Code Review" section below)
+4. **Commit and push** changes after addressing comments
+5. Proceed to code review (see "Code Review" section below)
 {{else}}
 Present a summary of unresolved review feedback to the user:
 
