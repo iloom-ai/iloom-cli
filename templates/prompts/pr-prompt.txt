@@ -116,7 +116,59 @@ When working with libraries, frameworks, or APIs that you need documentation for
 - Working with unfamiliar APIs
 - When you need current documentation that may have changed since your training data
 
-After reading both the PR and any referenced issue, wait for the user to provide guidance on what they would like you to work on next.
+---
+
+## Addressing PR Review Feedback
+
+After reading the PR, check for unresolved inline review comments using `mcp__issue_management__get_review_comments`. If there are unresolved review threads:
+
+{{#if ONE_SHOT_MODE}}
+Automatically address all unresolved review comments:
+
+1. **Summarize feedback**: Group unresolved comments by file/topic. Log a brief summary.
+2. **Address each comment**: For each unresolved thread:
+   a. Read the reviewer's comment and understand what they're asking for
+   b. Make the requested code change (use subagents for non-trivial changes)
+   c. Reply to the review thread explaining what was changed using `gh api`:
+      ```bash
+      gh api \
+        --method POST \
+        -H "Accept: application/vnd.github+json" \
+        /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/comments \
+        --input - <<'EOF'
+      {
+        "body": "Fixed — [brief explanation of the change made]",
+        "in_reply_to": REVIEW_COMMENT_ID
+      }
+      EOF
+      ```
+3. **Commit and push** changes after addressing all comments
+4. Proceed to code review (see "Code Review" section below)
+{{else}}
+Present a summary of unresolved review feedback to the user:
+
+1. **Summarize feedback**: Group unresolved comments by file/topic. For each, show:
+   - File and line
+   - Reviewer's comment (abbreviated if long)
+   - Your assessment of what needs to change
+2. **Ask the user** how they'd like to proceed:
+   - "Address all comments" — work through them systematically
+   - "Address specific comments" — let the user pick which ones
+   - "Skip for now" — move on to other work
+3. **For each comment being addressed**:
+   a. Make the code change
+   b. Reply to the review thread explaining the fix (using `gh api` as shown above)
+4. After addressing comments, offer to run code review
+{{/if}}
+
+If there are no unresolved review comments:
+{{#if ONE_SHOT_MODE}}
+- Check the PR description and linked issue for remaining work. If there's work to do, proceed with it. Otherwise, run code review.
+{{else}}
+- Let the user know the PR has no unresolved feedback, and wait for guidance on what to work on next.
+{{/if}}
+
+---
 
 Remember to:
 - Follow the project's coding conventions and patterns
