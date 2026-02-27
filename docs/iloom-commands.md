@@ -530,11 +530,11 @@ il list --json
 # Active Looms:
 # ──────────────────────────────────────────────────────
 #  #25  feat-add-dark-mode
-#       ~/my-project/.iloom/worktrees/feat-issue-25-dark-mode/
+#       ~/my-project-looms/feat-issue-25-dark-mode/
 #       Port: 3025 | DB: br-issue-25
 #
 #  #42  fix-authentication-bug
-#       ~/my-project/.iloom/worktrees/fix-issue-42-auth/
+#       ~/my-project-looms/fix-issue-42-auth/
 #       Port: 3042 | DB: br-issue-42
 ```
 
@@ -798,7 +798,7 @@ il build
 il build 25
 
 # Run in specific loom workspace
-cd ~/my-project/.iloom/worktrees/feat-issue-42-feature/
+cd ~/my-project-looms/feat-issue-42-feature/
 il build
 ```
 
@@ -1890,7 +1890,7 @@ Swarm mode is designed to maximize throughput despite individual failures:
 During swarm mode, the following files are created:
 
 ```
-~/project/.iloom/worktrees/
+~/project-looms/
 ├── epic-issue-100/                    # Epic worktree
 │   └── .claude/
 │       └── agents/

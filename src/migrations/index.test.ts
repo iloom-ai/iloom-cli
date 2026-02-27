@@ -11,8 +11,6 @@ vi.mock('fs-extra')
 // Mock gitignore utilities used by the 0.10.3 migration
 vi.mock('../utils/gitignore.js', () => ({
   ensureGlobalGitignorePatterns: vi.fn(),
-  // Pass through ensureWorktreeGitignore as a no-op since it's not used by migrations
-  ensureWorktreeGitignore: vi.fn(),
 }))
 
 describe('migrations', () => {
@@ -224,7 +222,7 @@ describe('migrations', () => {
     })
   })
 
-  describe('v0.10.3 global gitignore migration for .iloom/worktrees and path remediation', () => {
+  describe('v0.10.3 global gitignore path remediation migration', () => {
     const migration = migrations.find(m => m.version === '0.10.3')
 
     const allIloomPatterns = [
@@ -233,12 +231,10 @@ describe('migrations', () => {
       '**/.claude/agents/iloom-*',
       '**/.claude/skills/iloom-*',
       '**/.claude/iloom-swarm-mcp-config-path',
-      '**/.iloom/worktrees',
     ]
 
     it('should exist with correct description', () => {
       expect(migration).toBeDefined()
-      expect(migration?.description).toContain('.iloom/worktrees')
       expect(migration?.description).toContain('core.excludesFile')
     })
 

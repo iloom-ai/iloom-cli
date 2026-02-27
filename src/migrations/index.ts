@@ -99,7 +99,7 @@ export const migrations: Migration[] = [
   },
   {
     version: '0.10.3',
-    description: 'Add global gitignore for .iloom/worktrees and remediate path for custom core.excludesFile',
+    description: 'Remediate global gitignore path for custom core.excludesFile',
     migrate: async (): Promise<void> => {
       // All iloom patterns from this and previous migrations
       const allIloomPatterns = [
@@ -108,14 +108,12 @@ export const migrations: Migration[] = [
         '**/.claude/agents/iloom-*',
         '**/.claude/skills/iloom-*',
         '**/.claude/iloom-swarm-mcp-config-path',
-        '**/.iloom/worktrees',
       ]
 
       // Ensure all patterns exist at the correctly resolved global gitignore path.
-      // This both adds the new **/.iloom/worktrees pattern AND remediates previous
-      // migrations that hardcoded the XDG default (~/.config/git/ignore) — if the
-      // user has core.excludesFile set to a different path, this writes all iloom
-      // patterns to the correct location.
+      // This remediates previous migrations that hardcoded the XDG default
+      // (~/.config/git/ignore) — if the user has core.excludesFile set to a
+      // different path, this writes all iloom patterns to the correct location.
       await ensureGlobalGitignorePatterns(allIloomPatterns)
     }
   },

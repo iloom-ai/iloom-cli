@@ -669,14 +669,29 @@ export class LoomManager {
     getLogger().info('Ensuring repository has initial commit...')
     await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
 
-    // Load settings (worktreePrefix is no longer used — all worktrees go under .iloom/worktrees/)
+    // Load worktree prefix from settings
     const settingsData = await this.settings.loadSettings()
+    let worktreePrefix = settingsData.worktreePrefix
 
-    // Build options object
-    const pathOptions: { isPR?: boolean; prNumber?: number } =
+    // If this is a child loom, compute dynamic prefix based on parent
+    if (input.parentLoom) {
+      // Sanitize branch name for directory use
+      const sanitizedBranchName = input.parentLoom.branchName
+        .replace(/\//g, '-')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+      worktreePrefix = `${sanitizedBranchName}-looms/`
+      getLogger().info(`Creating child loom with prefix: ${worktreePrefix}`)
+    }
+
+    // Build options object, only including prefix if it's defined
+    const pathOptions: { isPR?: boolean; prNumber?: number; prefix?: string } =
       input.type === 'pr'
         ? { isPR: true, prNumber: input.identifier as number }
         : {}
+
+    if (worktreePrefix !== undefined) {
+      pathOptions.prefix = worktreePrefix
+    }
 
     const worktreePath = this.gitWorktree.generateWorktreePath(
       branchName,
