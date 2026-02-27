@@ -46,10 +46,13 @@ Use these Recap MCP tools:
 - `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
 
 **NEVER log:**
+- What phases you skipped
+- Complexity classifications
 - Status updates ("PR reviewed", "tests pass")
 - Anything about your own workflow process
+- Meta-knowledge about the agent orchestration layer (iloom, MCP servers, worktree mechanics, prompt rendering, etc.) unless the tooling was a direct cause of a problem under investigation
 
-**Self-check before adding:** If your entry is about what YOU did rather than what the USER needs to know - don't add it.
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 ---
 
@@ -230,7 +233,7 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 
 ## Code Review
 
-Review uncommitted code changes for quality, security, and compliance issues.
+Review code changes for quality, security, and compliance issues.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: After addressing PR feedback or making code changes, review automatically executes. No manual trigger needed.
@@ -251,7 +254,7 @@ Review uncommitted code changes for quality, security, and compliance issues.
 - Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
-- The reviewer will analyze uncommitted changes and report findings
+- The reviewer will analyze code changes and report findings
 {{/unless}}
 
 **MANDATORY Claude Local Review**: If the reviewer returns "Instructions for Orchestrator: Claude Local Review", you MUST execute those instructions:

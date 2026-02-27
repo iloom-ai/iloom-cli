@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AgentManager, type AgentConfigs } from './AgentManager.js'
 import { readFile } from 'fs/promises'
 import fg from 'fast-glob'
+import fs from 'fs-extra'
+import path from 'path'
 
 vi.mock('fs/promises')
 vi.mock('fast-glob')
+vi.mock('fs-extra')
 vi.mock('../utils/logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -980,6 +983,169 @@ Prompt`
 			// loadAgents without templateVariables should not throw
 			const result = await manager.loadAgents(settings as never)
 			expect(result['test-agent']).toBeDefined()
+		})
+	})
+
+	describe('renderAgentsToDisk', () => {
+		const targetDir = '/workspace/.claude/agents'
+
+		beforeEach(() => {
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.remove).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+			// Default: no existing files to clean
+			vi.mocked(fg).mockResolvedValue([])
+		})
+
+		it('should write agent files with YAML frontmatter to target directory', async () => {
+			const agents: AgentConfigs = {
+				'iloom-issue-analyzer': {
+					description: 'Analyzer agent',
+					prompt: 'You are an analyzer',
+					tools: ['Read', 'Grep'],
+					model: 'sonnet',
+					color: 'pink',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				path.join(targetDir, 'iloom-issue-analyzer.md'),
+				[
+					'---',
+					'name: iloom-issue-analyzer',
+					'description: Analyzer agent',
+					'tools: Read, Grep',
+					'model: sonnet',
+					'color: pink',
+					'---',
+					'',
+					'You are an analyzer',
+					'',
+				].join('\n'),
+				'utf-8',
+			)
+		})
+
+		it('should handle agents without tools field (tools omitted from frontmatter)', async () => {
+			const agents: AgentConfigs = {
+				'iloom-no-tools': {
+					description: 'No tools agent',
+					prompt: 'Do stuff',
+					model: 'opus',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string
+			expect(writtenContent).not.toContain('tools:')
+			expect(writtenContent).toContain('name: iloom-no-tools')
+			expect(writtenContent).toContain('model: opus')
+		})
+
+		it('should handle agents without color field (color omitted from frontmatter)', async () => {
+			const agents: AgentConfigs = {
+				'iloom-no-color': {
+					description: 'No color agent',
+					prompt: 'Do stuff',
+					tools: ['Read'],
+					model: 'sonnet',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string
+			expect(writtenContent).not.toContain('color:')
+		})
+
+		it('should create target directory if it does not exist', async () => {
+			const agents: AgentConfigs = {
+				'iloom-test': {
+					description: 'Test',
+					prompt: 'Test prompt',
+					model: 'sonnet',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			expect(fs.ensureDir).toHaveBeenCalledWith(targetDir)
+		})
+
+		it('should clean existing iloom-* agent files before writing', async () => {
+			// Simulate existing stale files
+			vi.mocked(fg).mockResolvedValueOnce(['iloom-old-agent.md', 'iloom-stale.md'])
+
+			const agents: AgentConfigs = {
+				'iloom-new-agent': {
+					description: 'New',
+					prompt: 'New prompt',
+					model: 'sonnet',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			// Verify old files were removed
+			expect(fs.remove).toHaveBeenCalledWith(path.join(targetDir, 'iloom-old-agent.md'))
+			expect(fs.remove).toHaveBeenCalledWith(path.join(targetDir, 'iloom-stale.md'))
+
+			// Verify new file was written
+			expect(fs.writeFile).toHaveBeenCalledTimes(1)
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				path.join(targetDir, 'iloom-new-agent.md'),
+				expect.stringContaining('name: iloom-new-agent'),
+				'utf-8',
+			)
+		})
+
+		it('should return list of rendered filenames', async () => {
+			const agents: AgentConfigs = {
+				'iloom-issue-analyzer': {
+					description: 'Analyzer',
+					prompt: 'Analyze',
+					tools: ['Read'],
+					model: 'sonnet',
+				},
+				'iloom-issue-planner': {
+					description: 'Planner',
+					prompt: 'Plan',
+					tools: ['Write'],
+					model: 'sonnet',
+				},
+			}
+
+			const result = await manager.renderAgentsToDisk(agents, targetDir)
+
+			expect(result).toEqual(['iloom-issue-analyzer.md', 'iloom-issue-planner.md'])
+		})
+
+		it('should reconstruct tools as comma-separated string in frontmatter', async () => {
+			const agents: AgentConfigs = {
+				'iloom-tools-agent': {
+					description: 'Tools test',
+					prompt: 'Test',
+					tools: ['Read', 'Write', 'Edit'],
+					model: 'sonnet',
+				},
+			}
+
+			await manager.renderAgentsToDisk(agents, targetDir)
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string
+			expect(writtenContent).toContain('tools: Read, Write, Edit')
+		})
+
+		it('should handle empty agents object', async () => {
+			const agents: AgentConfigs = {}
+
+			const result = await manager.renderAgentsToDisk(agents, targetDir)
+
+			expect(result).toEqual([])
+			expect(fs.writeFile).not.toHaveBeenCalled()
 		})
 	})
 })

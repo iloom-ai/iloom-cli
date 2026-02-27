@@ -783,6 +783,105 @@ describe('claude utils', () => {
 			})
 		})
 
+
+
+		describe('pluginDir parameter', () => {
+			it('should use --plugin-dir when provided', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					pluginDir: '/path/to/plugin',
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--add-dir', '/tmp',
+						'--plugin-dir', '/path/to/plugin',
+					],
+					expect.any(Object)
+				)
+			})
+
+			it('should omit --plugin-dir when not provided', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = mockExeca().mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
+				expect(execaCall[1]).not.toContain('--plugin-dir')
+			})
+
+			it('should work with pluginDir in interactive mode', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: false,
+					pluginDir: '/path/to/plugin',
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', '/tmp', '--plugin-dir', '/path/to/plugin', '--', prompt],
+					expect.objectContaining({
+						stdio: ['inherit', 'inherit', 'pipe'],
+					})
+				)
+			})
+
+			it('should combine pluginDir with other options in correct order', async () => {
+				const prompt = 'Test prompt'
+				const agents = { 'test-agent': { description: 'Test', prompt: 'Test', tools: ['Read'], model: 'sonnet' } }
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					agents,
+					pluginDir: '/path/to/plugin',
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--model', 'opus',
+						'--add-dir', '/tmp',
+						'--agents', JSON.stringify(agents),
+						'--plugin-dir', '/path/to/plugin',
+					],
+					expect.any(Object)
+				)
+			})
+		})
+
 		describe('mcpConfig parameter', () => {
 			it('should add --mcp-config flags for each config in array', async () => {
 				const prompt = 'Test prompt'

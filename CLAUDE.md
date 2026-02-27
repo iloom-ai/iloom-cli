@@ -213,6 +213,12 @@ Each workspace gets a unique port calculated as `3000 + issue/PR number`. This p
 
 Uses Neon database branching to create isolated database copies per workspace. Each branch gets independent schema and data, preventing conflicts between features under development.
 
+## Migration Versioning
+
+Migrations live in `src/migrations/index.ts` and run automatically on CLI startup via `VersionMigrationManager`. Each migration has a `version` field that determines when it runs: it must be greater than `lastMigratedVersion` (stored in `~/.config/iloom-ai/migration-state.json`) and less than or equal to the current package version.
+
+**Versioning convention:** A new migration's version should be one patch version higher than the current `package.json` version. For example, if `package.json` is at `0.10.2`, the next migration should be `0.10.3`. If an unreleased migration already exists at that version (check `git tag` to confirm it hasn't been released), fold new migration logic into it rather than creating a separate entry.
+
 ## Agent Workflow Todo Lists
 
 The todo list in `templates/prompts/issue-prompt.txt` is critical for ensuring agents follow the implementation plan correctly.

@@ -466,6 +466,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to start workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -513,6 +514,7 @@ program
           const issueNumber = typeof result === 'object' ? result.id : result
           logger.success(`Issue #${issueNumber} created successfully`)
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to create issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -548,6 +550,7 @@ program
         options: feedbackOptions
       })
       logger.success(`Feedback submitted as issue #${issueNumber} in iloom-cli repository`)
+      await TelemetryService.getInstance().shutdown()
       process.exit(0)
     } catch (error) {
       logger.error(`Failed to submit feedback: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -586,6 +589,7 @@ program
           // Non-JSON mode: display human-readable success message
           logger.success(`Enhancement process completed for issue #${issueNumber}`)
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to enhance issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -641,6 +645,7 @@ program
         if (isAnyJsonMode && result) {
           console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (isAnyJsonMode) {
@@ -703,6 +708,7 @@ program
         if (isAnyJsonMode && result) {
           console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         // Handle UserAbortedCommitError with exit code 130
@@ -742,6 +748,7 @@ program
         if (options.jsonStream && result) {
           console.log(JSON.stringify(result))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options.jsonStream) {
@@ -1032,6 +1039,7 @@ program
         if (options?.json && result) {
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options?.json) {
@@ -2004,6 +2012,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options.json) {
@@ -2045,6 +2054,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options.json) {

@@ -81,8 +81,9 @@
     "jsonc-parser": "^3.3.1",
     "omelette": "^0.4.17",
     "ora": "^7.0.1",
-    "string-width": "^6.1.0",
     "posthog-node": "^4.0.0",
+    "proper-lockfile": "^4.1.2",
+    "string-width": "^6.1.0",
     "uuid": "^11.1.0",
     "zod": "^3.23.8"
   },
@@ -93,6 +94,7 @@
     "@types/handlebars": "^4.1.0",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.8.10",
+    "@types/proper-lockfile": "^4.1.4",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.43.0",
     "@typescript-eslint/parser": "^8.43.0",

@@ -177,7 +177,7 @@ All AI reasoning is posted as issue comments, creating a permanent record for yo
 Your loom is a fully isolated environment:
 
 ```
-~/your-project/.iloom/worktrees/feat-issue-25-dark-mode/
+~/your-project-looms/feat-issue-25-dark-mode/
 ```
 
 - **Unique port:** Web projects run on port `3000 + issue number` (e.g., 3025)
@@ -400,7 +400,7 @@ Sometimes you need to branch off from a branch. Child looms let you create works
 When you run `il start` from inside an existing loom, iloom prompts you to create a child loom:
 
 ```bash
-# Inside ~/your-project/.iloom/worktrees/feat-issue-25-auth/
+# Inside ~/your-project-looms/feat-issue-25-auth/
 il start 42
 # iloom asks: Create as child loom?
 ```
@@ -427,12 +427,13 @@ Child looms inherit from their parent, not from main:
 ### Directory Structure
 
 ```
-~/your-project/
-├── .iloom/
-│   └── worktrees/                    # All looms live here
-│       ├── feat-issue-25-auth/       # Parent Loom
-│       ├── fix-issue-42-bug/         # Child Loom (inherits from #25)
-│       └── feat-issue-43-subtask/    # Another Child Loom
+~/
+├── your-project/                     # Main project repo
+├── your-project-looms/               # Regular looms directory
+│   └── feat-issue-25-auth/           # Parent Loom
+└── feat-issue-25-auth-looms/         # Child looms directory (sibling)
+    ├── fix-issue-42-bug/             # Child Loom
+    └── feat-issue-43-subtask/        # Another Child Loom
 ```
 
 ---

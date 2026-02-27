@@ -3,9 +3,15 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { migrations } from './index.js'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Mock fs-extra
 vi.mock('fs-extra')
+
+// Mock gitignore utilities used by the 0.10.3 migration
+vi.mock('../utils/gitignore.js', () => ({
+  ensureGlobalGitignorePatterns: vi.fn(),
+}))
 
 describe('migrations', () => {
   describe('v0.6.1 global gitignore migration', () => {
@@ -216,56 +222,38 @@ describe('migrations', () => {
     })
   })
 
-  describe('v0.10.3 global gitignore migration for .iloom/worktrees', () => {
-    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
-    const pattern = '**/.iloom/worktrees'
+  describe('v0.10.3 global gitignore path remediation migration', () => {
     const migration = migrations.find(m => m.version === '0.10.3')
+
+    const allIloomPatterns = [
+      '**/.iloom/settings.local.json',
+      '**/.iloom/package.iloom.local.json',
+      '**/.claude/agents/iloom-*',
+      '**/.claude/skills/iloom-*',
+      '**/.claude/iloom-swarm-mcp-config-path',
+    ]
 
     it('should exist with correct description', () => {
       expect(migration).toBeDefined()
-      expect(migration?.description).toBe('Add global gitignore for .iloom/worktrees directory')
+      expect(migration?.description).toContain('core.excludesFile')
     })
 
-    it('should create ~/.config/git/ignore if not exists', async () => {
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+    it('calls ensureGlobalGitignorePatterns with all iloom patterns', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
       await migration?.migrate()
 
-      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expectedPath,
-        '\n# Added by iloom CLI\n' + pattern + '\n',
-        'utf-8'
-      )
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
 
-    it('should append pattern if not already present', async () => {
-      const existingContent = '# Existing ignores\n*.log\n'
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
-      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+    it('is idempotent - ensureGlobalGitignorePatterns handles deduplication', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
 
       await migration?.migrate()
-
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expectedPath,
-        existingContent + '\n# Added by iloom CLI\n' + pattern + '\n',
-        'utf-8'
-      )
-    })
-
-    it('should not duplicate if pattern exists', async () => {
-      const existingContent = '# Existing\n**/.iloom/worktrees\n'
-      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
-
       await migration?.migrate()
 
-      expect(fs.writeFile).not.toHaveBeenCalled()
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledTimes(2)
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
   })
 

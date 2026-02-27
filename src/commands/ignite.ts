@@ -24,6 +24,7 @@ import { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
+import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -451,11 +452,25 @@ export class IgniteCommand {
 					variables,
 					['*.md', '!iloom-framework-detector.md']
 				)
-				agents = this.agentManager.formatForCli(loadedAgents)
-				logger.debug('Loaded agent configurations', {
-					agentCount: Object.keys(agents).length,
-					agentNames: Object.keys(agents),
-				})
+
+				if (process.platform === 'darwin') {
+					// macOS: pass agents inline via --agents flag (unchanged behavior)
+					agents = this.agentManager.formatForCli(loadedAgents)
+					logger.debug('Loaded agent configurations for CLI', {
+						agentCount: Object.keys(agents).length,
+						agentNames: Object.keys(agents),
+					})
+				} else {
+					// Linux/Windows: render agents to .claude/agents/ for auto-discovery
+					const agentsDir = path.join(context.workspacePath, '.claude', 'agents')
+					const rendered = await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+					logger.debug('Rendered agent files to disk for auto-discovery', {
+						agentCount: rendered.length,
+						agentNames: rendered,
+						targetDir: agentsDir,
+					})
+					// agents remains undefined - not passed to launchClaude
+				}
 			} catch (error) {
 				// Log warning but continue without agents
 				logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -471,10 +486,20 @@ export class IgniteCommand {
 
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
+			// Prepare system prompt based on platform
+			const systemPromptConfig = await prepareSystemPromptForPlatform(
+				systemInstructions,
+				context.workspacePath,
+			)
+
+			// Determine the initial user prompt (Windows overrides with /clear)
+			const effectiveUserPrompt = systemPromptConfig.initialPromptOverride ?? userPrompt
+
 			// Step 5: Launch Claude with system instructions appended and user prompt
-			const claudeResult = await launchClaude(userPrompt, {
+			const claudeResult = await launchClaude(effectiveUserPrompt, {
 				...claudeOptions,
-				appendSystemPrompt: systemInstructions,
+				...(systemPromptConfig.appendSystemPrompt && { appendSystemPrompt: systemPromptConfig.appendSystemPrompt }),
+				...(systemPromptConfig.pluginDir && { pluginDir: systemPromptConfig.pluginDir }),
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
@@ -1055,7 +1080,13 @@ export class IgniteCommand {
 				variables,
 				['*.md', '!iloom-framework-detector.md']
 			)
-			agents = this.agentManager.formatForCli(loadedAgents)
+
+			if (process.platform === 'darwin') {
+				agents = this.agentManager.formatForCli(loadedAgents)
+			} else {
+				const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+				await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+			}
 		} catch (error) {
 			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
@@ -1071,25 +1102,32 @@ export class IgniteCommand {
 			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
 		}
 
-		await launchClaude(
-			`You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`,
-			{
-				model,
-				permissionMode: 'bypassPermissions',
-				addDir: epicWorktreePath,
-				headless: false,
-				...(metadata.sessionId && { sessionId: metadata.sessionId }),
-				appendSystemPrompt: orchestratorPrompt,
-				mcpConfig: mcpConfigs,
-				allowedTools,
-				...(agents && { agents }),
-				env: {
-					CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-					ILOOM_SWARM: '1',
-					ENABLE_TOOL_SEARCH: 'auto:30',
-				},
-			},
+		// Prepare orchestrator prompt based on platform
+		const orchestratorPromptConfig = await prepareSystemPromptForPlatform(
+			orchestratorPrompt,
+			epicWorktreePath,
 		)
+
+		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
+			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
+
+		await launchClaude(effectiveSwarmPrompt, {
+			model,
+			permissionMode: 'bypassPermissions',
+			addDir: epicWorktreePath,
+			headless: false,
+			...(metadata.sessionId && { sessionId: metadata.sessionId }),
+			...(orchestratorPromptConfig.appendSystemPrompt && { appendSystemPrompt: orchestratorPromptConfig.appendSystemPrompt }),
+			...(orchestratorPromptConfig.pluginDir && { pluginDir: orchestratorPromptConfig.pluginDir }),
+			mcpConfig: mcpConfigs,
+			allowedTools,
+			...(agents && { agents }),
+			env: {
+				CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+				ILOOM_SWARM: '1',
+				ENABLE_TOOL_SEARCH: 'auto:30',
+			},
+		})
 
 		// Track swarm child completions and overall completion
 		try {

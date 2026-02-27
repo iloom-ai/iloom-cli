@@ -66,6 +66,7 @@ export interface ClaudeCliOptions {
 	allowedTools?: string[] // Tools to allow via --allowed-tools flag
 	disallowedTools?: string[] // Tools to disallow via --disallowed-tools flag
 	agents?: Record<string, unknown> // Agent configurations for --agents flag
+	pluginDir?: string // Path to plugin directory for --plugin-dir flag
 	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
@@ -149,7 +150,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -182,7 +183,7 @@ export async function launchClaude(
 
 	args.push('--add-dir', '/tmp') //TODO: Won't work on Windows
 
-	// Add --append-system-prompt flag if provided
+	// Add system prompt flag
 	if (appendSystemPrompt) {
 		args.push('--append-system-prompt', appendSystemPrompt)
 	}
@@ -207,6 +208,11 @@ export async function launchClaude(
 	// Add --agents flag if provided
 	if (agents) {
 		args.push('--agents', JSON.stringify(agents))
+	}
+
+	// Add --plugin-dir flag if provided
+	if (pluginDir) {
+		args.push('--plugin-dir', pluginDir)
 	}
 
 	// Add --session-id flag if provided (enables Claude Code session resume)

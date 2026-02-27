@@ -21,6 +21,9 @@ const testOptions: TestOptions = { timeout: 30_000 }
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
 vi.mock('./GitHubService.js')
+vi.mock('../utils/claude-trust.js', () => ({
+  preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('./BranchNamingService.js')
 vi.mock('./EnvironmentManager.js')
 vi.mock('./ClaudeContextManager.js')
@@ -3636,7 +3639,7 @@ describe('LoomManager', testOptions, () => {
           type: 'issue',
           identifier: 100,
           branchName: parentBranch,
-          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
         },
       })
       const childMetadata2 = makeMetadata({
@@ -3645,7 +3648,7 @@ describe('LoomManager', testOptions, () => {
           type: 'issue',
           identifier: 100,
           branchName: parentBranch,
-          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
         },
       })
       const unrelatedMetadata = makeMetadata({
@@ -3654,16 +3657,16 @@ describe('LoomManager', testOptions, () => {
           type: 'issue',
           identifier: 999,
           branchName: 'feat/issue-999__other-epic',
-          worktreePath: '/project/.iloom/worktrees/feat-issue-999__other-epic',
+          worktreePath: '/project-looms/feat-issue-999__other-epic',
         },
       })
 
       mockListAllMetadata.mockResolvedValue([childMetadata1, childMetadata2, unrelatedMetadata])
 
       const worktrees = [
-        makeWorktree('feat/issue-101__child-one', '/project/.iloom/worktrees/feat-issue-101__child-one'),
-        makeWorktree('feat/issue-102__child-two', '/project/.iloom/worktrees/feat-issue-102__child-two'),
-        makeWorktree('feat/issue-200__unrelated', '/project/.iloom/worktrees/feat-issue-200__unrelated'),
+        makeWorktree('feat/issue-101__child-one', '/project-looms/feat-issue-101__child-one'),
+        makeWorktree('feat/issue-102__child-two', '/project-looms/feat-issue-102__child-two'),
+        makeWorktree('feat/issue-200__unrelated', '/project-looms/feat-issue-200__unrelated'),
         makeWorktree('main', '/project'),
       ]
 
@@ -3687,7 +3690,7 @@ describe('LoomManager', testOptions, () => {
       mockListAllMetadata.mockResolvedValue([unrelatedMetadata])
 
       const worktrees = [
-        makeWorktree('feat/issue-200__unrelated', '/project/.iloom/worktrees/feat-issue-200__unrelated'),
+        makeWorktree('feat/issue-200__unrelated', '/project-looms/feat-issue-200__unrelated'),
         makeWorktree('main', '/project'),
       ]
 
@@ -3706,7 +3709,7 @@ describe('LoomManager', testOptions, () => {
           type: 'issue',
           identifier: 100,
           branchName: parentBranch,
-          worktreePath: '/project/.iloom/worktrees/feat-issue-101__child-one',
+          worktreePath: '/project-looms/feat-issue-101__child-one',
         },
       })
 
@@ -3747,7 +3750,7 @@ describe('LoomManager', testOptions, () => {
           type: 'issue',
           identifier: 100,
           branchName: parentBranch,
-          worktreePath: '/project/.iloom/worktrees/feat-issue-100__epic-feature',
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
         },
       })
 

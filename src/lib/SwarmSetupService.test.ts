@@ -8,6 +8,9 @@ import type { SettingsManager, IloomSettings } from './SettingsManager.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
 
 // Mock dependencies
+vi.mock('../utils/claude-trust.js', () => ({
+	preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../utils/package-manager.js', () => ({
 	installDependencies: vi.fn().mockResolvedValue(undefined),
 }))

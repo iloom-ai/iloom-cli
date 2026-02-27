@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PostHog } from 'posthog-node'
 import { TelemetryService } from './TelemetryService.js'
 import { TelemetryManager } from './TelemetryManager.js'
@@ -25,6 +25,9 @@ function createMockManager(overrides: Partial<{ isEnabled: boolean; distinctId: 
 	} as unknown as TelemetryManager
 }
 
+// Save original console.error so we can restore it if a test leaves it patched
+const originalConsoleError = console.error
+
 describe('TelemetryService', () => {
 	beforeEach(() => {
 		TelemetryService.resetInstance()
@@ -34,6 +37,11 @@ describe('TelemetryService', () => {
 			capture: mockCapture,
 			shutdown: mockShutdown,
 		}) as unknown as PostHog)
+	})
+
+	afterEach(() => {
+		// Ensure console.error is always restored between tests
+		console.error = originalConsoleError
 	})
 
 	describe('getInstance', () => {
@@ -152,6 +160,89 @@ describe('TelemetryService', () => {
 			const service = new TelemetryService(createMockManager({ isEnabled: false }))
 			await expect(service.shutdown()).resolves.toBeUndefined()
 			expect(mockShutdown).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('PostHog constructor options', () => {
+		it('configures PostHog with fetchRetryCount: 0 and requestTimeout: 3000', () => {
+			new TelemetryService(createMockManager())
+			expect(PostHog).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					fetchRetryCount: 0,
+					requestTimeout: 3000,
+				}),
+			)
+		})
+	})
+
+	describe('PostHog console.error suppression', () => {
+		it('suppresses "Error while flushing PostHog" messages', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager())
+			console.error('Error while flushing PostHog', new Error('network'))
+			expect(spy).not.toHaveBeenCalled()
+		})
+
+		it('suppresses "Timed out while shutting down PostHog" messages', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager())
+			console.error('Timed out while shutting down PostHog')
+			expect(spy).not.toHaveBeenCalled()
+		})
+
+		it('passes through messages that mention PostHog but are not internal PostHog errors', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager())
+			console.error('Failed to initialize PostHog client')
+			expect(spy).toHaveBeenCalledWith('Failed to initialize PostHog client')
+		})
+
+		it('passes through console.error messages that do not contain "PostHog"', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager())
+			console.error('Something unrelated went wrong')
+			expect(spy).toHaveBeenCalledWith('Something unrelated went wrong')
+		})
+
+		it('passes through console.error when first arg is not a string (e.g., Error object)', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager())
+			const error = new Error('PostHog network failure')
+			console.error(error)
+			expect(spy).toHaveBeenCalledWith(error)
+		})
+
+		it('restores console.error after shutdown()', async () => {
+			const spy = vi.fn()
+			console.error = spy
+			const service = new TelemetryService(createMockManager())
+			await service.shutdown()
+			expect(console.error).toBe(spy)
+		})
+
+		it('does not restore console.error if another library patched after us', async () => {
+			const spy = vi.fn()
+			console.error = spy
+			const service = new TelemetryService(createMockManager())
+			// Another library patches console.error after TelemetryService
+			const thirdPartyPatch = vi.fn()
+			console.error = thirdPartyPatch
+			await service.shutdown()
+			// Should NOT have replaced the third party's patch with the stale original
+			expect(console.error).toBe(thirdPartyPatch)
+		})
+
+		it('does not patch console.error when telemetry is disabled', () => {
+			const spy = vi.fn()
+			console.error = spy
+			new TelemetryService(createMockManager({ isEnabled: false }))
+			expect(console.error).toBe(spy)
 		})
 	})
 })

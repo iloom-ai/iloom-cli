@@ -349,14 +349,15 @@ describe('InitCommand', () => {
       const mockReadmeContent = '# Test README\n\nThis is a test README.'
       const mockIloomReadmeContent = '# iloom Settings\n\nTest settings documentation.'
 
-      // Mock readFile to return README content when README.md is read
+      // Mock readFile to return README content when README.md is read.
+      // Check for .iloom/README.md suffix specifically
       vi.mocked(readFile).mockImplementation(async (filePath) => {
         const pathStr = filePath.toString()
-        if (pathStr.endsWith('README.md') && !pathStr.includes('.iloom')) {
-          return mockReadmeContent
-        }
-        if (pathStr.includes('.iloom') && pathStr.endsWith('README.md')) {
+        if (pathStr.endsWith('.iloom/README.md')) {
           return mockIloomReadmeContent
+        }
+        if (pathStr.endsWith('README.md')) {
+          return mockReadmeContent
         }
         return ''
       })
