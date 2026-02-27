@@ -116,7 +116,62 @@ When working with libraries, frameworks, or APIs that you need documentation for
 - Working with unfamiliar APIs
 - When you need current documentation that may have changed since your training data
 
-After reading both the PR and any referenced issue, wait for the user to provide guidance on what they would like you to work on next.
+---
+
+## Addressing PR Review Feedback
+
+After reading the PR, check for unresolved inline review comments using `mcp__issue_management__get_review_comments`. If there are unresolved review threads:
+
+{{#if ONE_SHOT_MODE}}
+Evaluate unresolved review comments using the same severity framework as the code review agent, then address automatically where appropriate:
+
+1. **Assess each comment** by severity and risk:
+   - **Must fix**: Bugs, security issues, correctness problems, clear code quality issues — address these automatically
+   - **Nice to have**: Style preferences, optional improvements — address if low-effort, skip if subjective
+   - **Complex/ambiguous**: Architectural concerns, large refactors, unclear intent, or requests that could lead to scope creep — do NOT attempt; note them in the summary
+2. **Summarize**: Post a PR comment summarizing all feedback, grouped by what was addressed vs deferred. For deferred items, explain why.
+3. **Address must-fix items and low-effort nice-to-haves**: For each:
+   a. Make the code change
+   b. Reply to the review thread explaining what was changed:
+      ```bash
+      gh api \
+        --method POST \
+        -H "Accept: application/vnd.github+json" \
+        /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/comments \
+        --input - <<'EOF'
+      {
+        "body": "Fixed — [brief explanation of the change made]",
+        "in_reply_to": REVIEW_COMMENT_ID
+      }
+      EOF
+      ```
+4. **Commit and push** changes after addressing comments
+5. Proceed to code review (see "Code Review" section below)
+{{else}}
+Present a summary of unresolved review feedback to the user:
+
+1. **Summarize feedback**: Group unresolved comments by file/topic. For each, show:
+   - File and line
+   - Reviewer's comment (abbreviated if long)
+   - Your assessment of what needs to change
+2. **Ask the user** how they'd like to proceed:
+   - "Address all comments" — work through them systematically
+   - "Address specific comments" — let the user pick which ones
+   - "Skip for now" — move on to other work
+3. **For each comment being addressed**:
+   a. Make the code change
+   b. Reply to the review thread explaining the fix (using `gh api` as shown above)
+4. After addressing comments, offer to run code review
+{{/if}}
+
+If there are no unresolved review comments:
+{{#if ONE_SHOT_MODE}}
+- Check the PR description and linked issue for remaining work. If there's work to do, proceed with it. Otherwise, run code review.
+{{else}}
+- Let the user know the PR has no unresolved feedback, and wait for guidance on what to work on next.
+{{/if}}
+
+---
 
 Remember to:
 - Follow the project's coding conventions and patterns
@@ -233,7 +288,7 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 
 ## Code Review
 
-Review code changes for quality, security, and compliance issues.
+Review code changes for quality, security, and compliance issues. After reviewing, post findings as a proper GitHub PR review with inline comments.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: After addressing PR feedback or making code changes, review automatically executes. No manual trigger needed.
@@ -247,6 +302,7 @@ Review code changes for quality, security, and compliance issues.
    - Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
    - Wait for user response before continuing
 {{/if}}
+4. **Post findings as a GitHub PR review** (see "Posting Review Findings" below)
 {{/if}}
 
 {{#unless ONE_SHOT_MODE}}
@@ -255,6 +311,7 @@ Review code changes for quality, security, and compliance issues.
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
 - The reviewer will analyze code changes and report findings
+- After review completes, **post findings as a GitHub PR review** (see below)
 {{/unless}}
 
 **MANDATORY Claude Local Review**: If the reviewer returns "Instructions for Orchestrator: Claude Local Review", you MUST execute those instructions:
@@ -263,8 +320,98 @@ Review code changes for quality, security, and compliance issues.
 3. Collect results from all agents
 4. Present unified report as specified
 5. If critical issues found, ask user before proceeding
+6. **Post findings as a GitHub PR review** (see below)
 
 This is NOT optional - if the reviewer requests Claude Local Review, it must be performed before continuing.
+
+---
+
+## Posting Review Findings to GitHub
+
+After code review completes and produces findings, **you MUST post them as a GitHub PR review with inline comments**. This applies to all review paths (auto-run, manual, and Claude Local Review).
+
+### Step 1: Map Findings to Inline Comments
+
+The code reviewer produces findings in `[FILE:LINE] (Score: XX) Description` format. Map each finding to a review comment object:
+- `path`: The file path from the finding (relative to repo root)
+- `line`: The line number from the finding
+- `body`: The finding description, including severity, score, and recommendation
+
+**Only include findings for lines that are part of the PR diff.** Use `gh pr diff {{PR_NUMBER}}` to check which lines are changed. Skip findings on unchanged lines — GitHub rejects review comments on lines outside the diff.
+
+### Step 2: Submit Batched Review
+
+Submit all findings as a single review using `gh api` with `--input` and a heredoc:
+
+```bash
+gh api \
+  --method POST \
+  -H "Accept: application/vnd.github+json" \
+  /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/reviews \
+  --input - <<'EOF'
+{
+  "body": "## Code Review Summary\n\n[Summary of findings from unified report]",
+  "event": "EVENT_VALUE",
+  "comments": [
+    {
+      "path": "src/example.ts",
+      "line": 42,
+      "body": "**[Bug]** (Score: 95) Issue description\nRecommendation: ..."
+    },
+    {
+      "path": "src/other.ts",
+      "line": 15,
+      "body": "**[Warning]** (Score: 85) Issue description\nRecommendation: ..."
+    }
+  ]
+}
+EOF
+```
+
+If the review is clean (no inline findings), submit a summary-only review with an empty `comments` array.
+
+**Valid `event` values:** `APPROVE`, `REQUEST_CHANGES`, `COMMENT`
+
+### Step 3: Choose Verdict
+
+{{#if ONE_SHOT_MODE}}
+Choose the verdict automatically based on the code reviewer's severity categories:
+- **`REQUEST_CHANGES`**: If any Critical (95-100) or Warning (80-94) findings exist
+- **`COMMENT`**: If only Suggestions (below 80) exist
+- **`APPROVE`**: If no issues are found (clean review)
+
+Submit the review automatically without asking.
+{{else}}
+Present the review findings summary and the reviewer's recommended verdict to the user. Ask which verdict to submit:
+- **`APPROVE`** -- No issues found
+- **`REQUEST_CHANGES`** -- Critical or Warning-level findings that should be addressed
+- **`COMMENT`** -- Only suggestions, no blocking issues
+
+Wait for user confirmation before submitting the review.
+{{/if}}
+
+---
+
+### One-off Review Comments (Ad-hoc)
+
+For individual findings discovered during conversation (outside the batched review flow), post them as standalone review comments:
+
+```bash
+gh api \
+  --method POST \
+  -H "Accept: application/vnd.github+json" \
+  /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/comments \
+  --input - <<'EOF'
+{
+  "body": "Issue description and recommendation",
+  "commit_id": "HEAD_COMMIT_SHA",
+  "path": "src/example.ts",
+  "line": 42
+}
+EOF
+```
+
+Get the latest commit SHA with: `gh pr view {{PR_NUMBER}} --json headRefOid -q '.headRefOid'`
 
 ---
 

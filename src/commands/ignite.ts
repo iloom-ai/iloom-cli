@@ -397,7 +397,9 @@ export class IgniteCommand {
 					allowedTools = context.type === 'pr'
 						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__issue_management__get_review_comments', 'mcp__recap__set_goal']
 						: baseTools
-					disallowedTools = ['Bash(gh api:*), Bash(gh issue comment:*)']
+					disallowedTools = context.type === 'pr'
+						? ['Bash(gh issue comment:*)']
+						: ['Bash(gh api:*)', 'Bash(gh issue comment:*)']
 
 					logger.debug('Configured tool filtering for issue/PR workflow', { allowedTools, disallowedTools })
 				} catch (error) {

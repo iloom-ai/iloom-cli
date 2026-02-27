@@ -545,43 +545,9 @@ This repository has multiple git remotes detected. iloom needs to know which rem
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
 
-### Phase 2.5: Color Synchronization Settings - ONLY IF USER HAS CHOSEN the vscode, cursor, windsurf, or antigravity IDE
+### Phase 2.5: Swarm Quality Preference
 
-After Phase 2, handle color settings based on gitignore status.
-
-Analyis of system: Is VSCode Settings ignore? {{VSCODE_SETTINGS_GITIGNORED}}
-
-**IMPORTANT DISTINCTION:**
-- Schema defaults are: terminal=true, vscode=false (for safety)
-- Your job in init is to RECOMMEND optimal settings based on the project
-- IMPORTANT: This is a per-project setting - recommend to save it in shared project settings (not globally). EVEN IF OTHER SETTINGS ARE SAVED ELSEHWERE
-
-**Terminal Color Recommendation:**
-- Always recommend `true` - terminal colors only affect macOS Terminal.app, no file changes
-
-**VSCode Color Recommendation:**
-
-**If "VSCODE_SETTINGS_GITIGNORED" == "true":**
-- Recommend `colors.vscode: true` (safe since file is gitignored)
-- Explain: "VSCode title bar coloring is safe to enable since .vscode/settings.json is gitignored"
-
-**If "VSCODE_SETTINGS_GITIGNORED" == "false":**
-- Warn user: "VSCode/Cursor title bar coloring modifies .vscode/settings.json which is tracked in git."
-- Ask user: "Would you like to:
-  1. Add .vscode/settings.json to .gitignore (recommended - enables color sync without git pollution)
-  2. Keep VSCode color sync disabled (default - keeps .vscode/settings.json in source control unchanged)
-  3. Enable anyway (Please don't do this - colors will appear in git diffs)"
-
-Based on the users answer:
-- Option 1: Add to .gitignore, set `colors.vscode: true`
-- Option 2: Set `colors.vscode: false` (matches safe default)
-- Option 3: Set `colors.vscode: true` (with warning noted)
-
-**Note:** Terminal colors default to `true` (always recommend unless user explicitly disables).
-
-### Phase 2.7: Swarm Quality Preference
-
-After tooling configuration (and color sync if applicable), ask the user how they want swarms to behave:
+After tooling configuration, ask the user how they want swarms to behave:
 
 ```
 Swarms are iloom's most powerful feature. Give them an epic and they'll decompose it into issues, spin up parallel AI agents — each in its own isolated workspace — and build the entire thing for you. They can ship whole features, modules, or even full products.
@@ -604,7 +570,7 @@ Include the user's choice in the Phase 3 summary under a "Swarm Mode" line.
 
 ### Phase 3: Configuration Summary
 
-After gathering all answers from Phase 1, Phase 2, and Phase 2.7, display a summary like this:
+After gathering all answers from Phase 1, Phase 2, and Phase 2.5, display a summary like this:
 
 ```
 Configuration Summary:
@@ -626,7 +592,7 @@ Tooling Configuration (Phase 2):
   Jira API Token: [configured/not configured] (only if issue tracker is Jira - never show actual token)
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)
-  Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.7)
+  Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.5)
 ```
 
 **Note**:
@@ -821,24 +787,9 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    ```
    Note: Valid modes are "local", "github-pr", and "github-draft-pr". Only include if not "local".
 
-7. **Add colors settings based on Phase 2.5 recommendations (if vscode or cursor IDE):**
-   ```json
-   {
-     "colors": {
-       "terminal": true,  // Always recommend true unless user explicitly disabled
-       "vscode": <based on gitignore status and user choice>
-     }
-   }
-   ```
-   - Default behavior: Only include if vscode differs from default (false) or terminal is disabled
-   - If "VSCODE_SETTINGS_GITIGNORED" == "true" (note: variable has been subsituted) and user accepted recommendation: `"vscode": true`
-   - If user chose to add .vscode/settings.json to .gitignore: `"vscode": true`
-   - If user chose to keep disabled or enable anyway: set accordingly
-   - Terminal should be true unless user explicitly disabled it
+7. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
 
-8. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
-
-9. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+8. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
 
 ### Phase 6: Write File
 
@@ -1034,6 +985,7 @@ Need more advanced configuration? I can help you set up:
   • Swarm Quality Mode - Control how deeply swarm agents reason vs how fast they move (also offered during initial setup)
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
+  • Color Synchronization - Tint IDE title bars and terminal tabs per-loom for visual distinction
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
   • Protected Branches - Prevent iloom from creating worktrees for certain branches
   • Custom Scripts - Override package.json scripts with custom commands
@@ -1102,7 +1054,7 @@ When configuring agents, use these model identifiers:
 
 2. **Swarm Quality Mode:**
 
-   This controls the trade-off between reasoning quality and speed/cost for swarm agents. The same choice is offered proactively in Phase 2.7. Users can also change it here after initial setup.
+   This controls the trade-off between reasoning quality and speed/cost for swarm agents. The same choice is offered proactively in Phase 2.5. Users can also change it here after initial setup.
 
    | Mode | Focus | Models used | Best for |
    |------|-------|-------------|----------|
@@ -1166,7 +1118,45 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-8. **Code Review with Multiple Providers:**
+8. **Color Synchronization (VSCode-compatible IDEs only):**
+
+   Color sync tints the IDE title bar and terminal tab per-loom so you can visually distinguish workspaces. It only applies to VSCode-compatible editors (vscode, cursor, windsurf, antigravity).
+
+   ```json
+   {
+     "colors": {
+       "terminal": true,
+       "vscode": true
+     }
+   }
+   ```
+
+   - **Terminal colors** (`colors.terminal`): Only affects macOS Terminal.app tab coloring. No file changes, always safe. Recommend `true`.
+   - **VSCode colors** (`colors.vscode`): Modifies `.vscode/settings.json` to set `workbench.colorCustomizations`. Requires checking gitignore status.
+
+   **VSCode color recommendation based on gitignore status:**
+
+   The template variable `{{VSCODE_SETTINGS_GITIGNORED}}` indicates whether `.vscode/settings.json` is gitignored.
+
+   **If `VSCODE_SETTINGS_GITIGNORED` is `true`:**
+   - Recommend `colors.vscode: true` (safe since file is gitignored)
+   - Explain: "VSCode title bar coloring is safe to enable since .vscode/settings.json is gitignored"
+
+   **If `VSCODE_SETTINGS_GITIGNORED` is `false`:**
+   - Warn user: "VSCode/Cursor title bar coloring modifies .vscode/settings.json which is tracked in git."
+   - Ask user: "Would you like to:
+     1. Add .vscode/settings.json to .gitignore (recommended - enables color sync without git pollution)
+     2. Keep VSCode color sync disabled (default - keeps .vscode/settings.json in source control unchanged)
+     3. Enable anyway (not recommended - colors will appear in git diffs)"
+
+   Based on the user's answer:
+   - Option 1: Add to .gitignore, set `colors.vscode: true`
+   - Option 2: Set `colors.vscode: false` (matches safe default)
+   - Option 3: Set `colors.vscode: true` (with warning noted)
+
+   **Note:** Only include the `colors` section if values differ from defaults (terminal: `true`, vscode: `false`).
+
+9. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -1180,7 +1170,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-9. **Custom Script Configuration (package.iloom.json):**
+10. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json
