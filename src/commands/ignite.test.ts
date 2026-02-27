@@ -1701,6 +1701,291 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('agent loading (linux)', () => {
+		it('should load agents for issue workflow via renderAgentsToDisk on linux', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+				renderAgentsToDisk: vi.fn().mockResolvedValue(['test-agent.md']),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+			const commandWithAgents = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+			)
+
+			try {
+				await commandWithAgents.execute()
+
+				// Verify renderAgentsToDisk was called instead of formatForCli
+				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
+				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
+					expect.objectContaining({ 'test-agent': expect.any(Object) }),
+					'/path/to/feat/issue-123__test/.claude/agents',
+				)
+				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+
+				// Verify agents is NOT passed to launchClaude (auto-discovered from disk)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].agents).toBeUndefined()
+			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should load agents for PR workflow via renderAgentsToDisk on linux', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'pr-agent': {
+						description: 'PR agent',
+						prompt: 'PR prompt',
+						tools: ['Read', 'Write'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+				renderAgentsToDisk: vi.fn().mockResolvedValue(['pr-agent.md']),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__pr-456')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+			const commandWithAgents = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+			)
+
+			try {
+				await commandWithAgents.execute()
+
+				// Verify renderAgentsToDisk was called instead of formatForCli
+				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
+				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
+					expect.objectContaining({ 'pr-agent': expect.any(Object) }),
+					'/path/to/feat/issue-123__pr-456/.claude/agents',
+				)
+				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+
+				// Verify agents is NOT passed to launchClaude
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].agents).toBeUndefined()
+			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should load agents for regular workflow via renderAgentsToDisk on linux', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'regular-agent': {
+						description: 'Regular agent',
+						prompt: 'Regular prompt',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+				renderAgentsToDisk: vi.fn().mockResolvedValue(['regular-agent.md']),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/some-other-branch')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+			const commandWithAgents = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+			)
+
+			try {
+				await commandWithAgents.execute()
+
+				// Verify renderAgentsToDisk was called instead of formatForCli
+				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
+				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
+					expect.objectContaining({ 'regular-agent': expect.any(Object) }),
+					'/path/to/some-other-branch/.claude/agents',
+				)
+				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+
+				// Verify agents is NOT passed to launchClaude
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].agents).toBeUndefined()
+			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should combine agents with existing MCP config and tool filtering via renderAgentsToDisk on linux', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'combined-agent': {
+						description: 'Combined test agent',
+						prompt: 'Combined prompt',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+				renderAgentsToDisk: vi.fn().mockResolvedValue(['combined-agent.md']),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-99__combined')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+			const commandWithAgents = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+			)
+
+			try {
+				await commandWithAgents.execute()
+
+				// Verify renderAgentsToDisk was called instead of formatForCli
+				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
+					expect.objectContaining({ 'combined-agent': expect.any(Object) }),
+					'/path/to/feat/issue-99__combined/.claude/agents',
+				)
+				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				// Verify MCP config and tool filtering are still present
+				expect(launchClaudeCall[1]).toHaveProperty('mcpConfig')
+				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
+				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
+				// But agents should NOT be in launchClaude options
+				expect(launchClaudeCall[1].agents).toBeUndefined()
+			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should pass merged agent configs via renderAgentsToDisk on linux', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettings = {
+				agents: {
+					'test-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'haiku', // Overridden by settings
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+				renderAgentsToDisk: vi.fn().mockResolvedValue(['test-agent.md']),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123__test')
+			const originalPlatform = process.platform
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				// Verify renderAgentsToDisk was called with the merged agents
+				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
+					{
+						'test-agent': {
+							description: 'Test agent',
+							prompt: 'Test prompt',
+							tools: ['Read'],
+							model: 'haiku',
+						},
+					},
+					'/path/to/feat/issue-123__test/.claude/agents',
+				)
+				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+
+				// Verify agents is NOT passed to launchClaude
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].agents).toBeUndefined()
+			} finally {
+				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('settings integration', () => {
 		it('should load settings and pass to AgentManager', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
