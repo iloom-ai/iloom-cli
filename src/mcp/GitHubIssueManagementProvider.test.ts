@@ -44,6 +44,14 @@ describe('extractNumericIdFromUrl', () => {
 		expect(extractNumericIdFromUrl(url)).toBe('9876543210')
 	})
 
+	it('returns undefined when URL is undefined', () => {
+		expect(extractNumericIdFromUrl(undefined)).toBeUndefined()
+	})
+
+	it('returns undefined when URL is null', () => {
+		expect(extractNumericIdFromUrl(null)).toBeUndefined()
+	})
+
 	it('throws error when URL has no issuecomment fragment', () => {
 		const url = 'https://github.com/owner/repo/issues/123'
 		expect(() => extractNumericIdFromUrl(url)).toThrow('Cannot extract comment ID from URL')
@@ -151,6 +159,79 @@ describe('GitHubIssueManagementProvider', () => {
 			await expect(provider.getIssue({ number: '123' })).rejects.toThrow(
 				'Cannot extract comment ID from URL'
 			)
+		})
+
+		it('falls back to comment.id when url is undefined (older gh CLI)', async () => {
+			const mockResponse = {
+				number: 123,
+				title: 'Test Issue',
+				body: 'Issue body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/issues/123',
+				author: { login: 'testuser' },
+				comments: [
+					{
+						id: 12345678,
+						author: { login: 'commenter1' },
+						body: 'Comment without url field',
+						createdAt: '2025-01-01T00:00:00Z',
+						// url is missing - simulates older gh CLI (e.g. v2.4.0)
+					},
+					{
+						id: 87654321,
+						author: { login: 'commenter2' },
+						body: 'Another comment without url',
+						createdAt: '2025-01-02T00:00:00Z',
+						// url is missing
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getIssue({ number: '123' })
+
+			expect(result.comments).toHaveLength(2)
+			// Falls back to stringified comment.id
+			expect(result.comments![0].id).toBe('12345678')
+			expect(result.comments![1].id).toBe('87654321')
+		})
+
+		it('uses url extraction for some comments and fallback for others', async () => {
+			const mockResponse = {
+				number: 123,
+				title: 'Test Issue',
+				body: 'Issue body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/issues/123',
+				author: { login: 'testuser' },
+				comments: [
+					{
+						id: 11111111,
+						author: { login: 'commenter1' },
+						body: 'Comment with url',
+						createdAt: '2025-01-01T00:00:00Z',
+						url: 'https://github.com/owner/repo/issues/123#issuecomment-99999999',
+					},
+					{
+						id: 22222222,
+						author: { login: 'commenter2' },
+						body: 'Comment without url',
+						createdAt: '2025-01-02T00:00:00Z',
+						// url is missing
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getIssue({ number: '123' })
+
+			expect(result.comments).toHaveLength(2)
+			// First comment: extracted from URL
+			expect(result.comments![0].id).toBe('99999999')
+			// Second comment: fallback to comment.id
+			expect(result.comments![1].id).toBe('22222222')
 		})
 
 		it('passes --repo flag when repo parameter is provided', async () => {
@@ -593,6 +674,37 @@ describe('GitHubIssueManagementProvider', () => {
 			expect(result.comments).toHaveLength(1)
 			expect(result.comments![0].id).toBe('123456789')
 			expect(result.comments![0].body).toBe('LGTM')
+		})
+
+		it('falls back to comment.id when url is undefined in PR comments (older gh CLI)', async () => {
+			const mockResponse = {
+				number: 42,
+				title: 'Test PR',
+				body: 'PR description',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/pull/42',
+				author: { login: 'testuser' },
+				headRefName: 'feature-branch',
+				baseRefName: 'main',
+				comments: [
+					{
+						id: 55555555,
+						author: { login: 'reviewer' },
+						body: 'Review comment without url',
+						createdAt: '2025-01-01T00:00:00Z',
+						// url is missing - simulates older gh CLI
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getPR({ number: '42' })
+
+			expect(result.comments).toHaveLength(1)
+			// Falls back to stringified comment.id
+			expect(result.comments![0].id).toBe('55555555')
+			expect(result.comments![0].body).toBe('Review comment without url')
 		})
 
 		it('handles PRs without comments', async () => {
