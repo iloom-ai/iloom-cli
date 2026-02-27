@@ -320,15 +320,15 @@ gh api \
 ### Verdict Handling
 
 {{#if ONE_SHOT_MODE}}
-Choose the verdict automatically based on findings:
-- **`REQUEST_CHANGES`**: If any high or critical issues (90-100 confidence) are found
-- **`COMMENT`**: If only warnings or suggestions (80-89 confidence) exist
+Choose the verdict automatically based on the code reviewer's findings:
+- **`REQUEST_CHANGES`**: If any Critical (95-100) or Warning (80-94) findings exist
+- **`COMMENT`**: If only Suggestions (below 80) exist
 - **`APPROVE`**: If no issues are found (clean review)
 {{else}}
 Present the review findings and the reviewer's recommended verdict to the user. Ask which verdict to submit:
-- **`APPROVE`** -- No issues or all are trivial
-- **`REQUEST_CHANGES`** -- High or critical issues that should be addressed
-- **`COMMENT`** -- Observations and suggestions without blocking
+- **`APPROVE`** -- No issues found
+- **`REQUEST_CHANGES`** -- Critical or Warning-level findings that should be addressed
+- **`COMMENT`** -- Only suggestions, no blocking issues
 
 Wait for user confirmation before submitting the review.
 {{/if}}
