@@ -430,6 +430,29 @@ describe('Git Utility Functions', () => {
       })
     })
 
+    it('should identify sibling worktree directory paths', () => {
+      const siblingWorktreePaths = [
+        '/Users/dev/project-worktrees/feature-branch',
+        '/Users/dev/my-app-worktrees/issue-42',
+        '/home/user/repo-worktrees/fix-bug',
+      ]
+
+      siblingWorktreePaths.forEach(path => {
+        expect(isWorktreePath(path)).toBe(true)
+      })
+    })
+
+    it('should identify old .iloom/worktrees/ paths', () => {
+      const oldWorktreePaths = [
+        '/Users/dev/project/.iloom/worktrees/feature-branch',
+        '/home/user/code/.iloom/worktrees/issue-42',
+      ]
+
+      oldWorktreePaths.forEach(path => {
+        expect(isWorktreePath(path)).toBe(true)
+      })
+    })
+
     it('should identify non-worktree paths correctly', () => {
       const normalPaths = [
         '/Users/dev/myproject',
@@ -445,22 +468,22 @@ describe('Git Utility Functions', () => {
   })
 
   describe('generateWorktreePath', () => {
-    it('should generate worktree paths under .iloom/worktrees/', () => {
+    it('should generate worktree paths as sibling directories', () => {
       const testCases = [
         {
           branch: 'feature-branch',
           root: '/Users/dev/project',
-          expected: '/Users/dev/project/.iloom/worktrees/feature-branch',
+          expected: '/Users/dev/project-worktrees/feature-branch',
         },
         {
           branch: 'pr/123',
           root: '/Users/dev/project',
-          expected: '/Users/dev/project/.iloom/worktrees/pr-123',
+          expected: '/Users/dev/project-worktrees/pr-123',
         },
         {
           branch: 'feature/complex-name',
           root: '/home/user/code',
-          expected: '/home/user/code/.iloom/worktrees/feature-complex-name',
+          expected: '/home/user/code-worktrees/feature-complex-name',
         },
       ]
 
@@ -474,17 +497,17 @@ describe('Git Utility Functions', () => {
         {
           branch: 'feature/with@special#characters',
           root: '/project',
-          expected: '/project/.iloom/worktrees/feature-with@special#characters',
+          expected: '/project-worktrees/feature-with@special#characters',
         },
         {
           branch: 'branch---with---dashes',
           root: '/project',
-          expected: '/project/.iloom/worktrees/branch---with---dashes',
+          expected: '/project-worktrees/branch---with---dashes',
         },
         {
           branch: '-leading-and-trailing-',
           root: '/project',
-          expected: '/project/.iloom/worktrees/-leading-and-trailing-',
+          expected: '/project-worktrees/-leading-and-trailing-',
         },
       ]
 
@@ -498,7 +521,7 @@ describe('Git Utility Functions', () => {
         isPR: true,
         prNumber: 123,
       })
-      expect(result).toBe('/project/.iloom/worktrees/feature-branch_pr_123')
+      expect(result).toBe('/project-worktrees/feature-branch_pr_123')
     })
 
     it('should not add PR suffix when isPR is false', () => {
@@ -506,24 +529,24 @@ describe('Git Utility Functions', () => {
         isPR: false,
         prNumber: 123,
       })
-      expect(result).toBe('/project/.iloom/worktrees/feature-branch')
+      expect(result).toBe('/project-worktrees/feature-branch')
     })
 
     it('should handle different root directories', () => {
       expect(generateWorktreePath('issue-123', '/Users/dev/my-awesome-project', {}))
-        .toBe('/Users/dev/my-awesome-project/.iloom/worktrees/issue-123')
+        .toBe('/Users/dev/my-awesome-project-worktrees/issue-123')
 
       expect(generateWorktreePath('issue-123', '/Users/dev/my-project'))
-        .toBe('/Users/dev/my-project/.iloom/worktrees/issue-123')
+        .toBe('/Users/dev/my-project-worktrees/issue-123')
 
       expect(generateWorktreePath('issue-123', '/Users/dev/my.project-v2'))
-        .toBe('/Users/dev/my.project-v2/.iloom/worktrees/issue-123')
+        .toBe('/Users/dev/my.project-v2-worktrees/issue-123')
 
       expect(generateWorktreePath('issue-123', '/Users/dev/p'))
-        .toBe('/Users/dev/p/.iloom/worktrees/issue-123')
+        .toBe('/Users/dev/p-worktrees/issue-123')
 
       expect(generateWorktreePath('issue-123', '/'))
-        .toBe('/.iloom/worktrees/issue-123')
+        .toBe('/-worktrees/issue-123')
     })
 
     it('should apply PR suffix correctly', () => {
@@ -531,12 +554,12 @@ describe('Git Utility Functions', () => {
         isPR: true,
         prNumber: 456,
       })
-      expect(result).toBe('/Users/dev/project/.iloom/worktrees/issue-123_pr_456')
+      expect(result).toBe('/Users/dev/project-worktrees/issue-123_pr_456')
     })
 
     it('should sanitize branch slashes in the path', () => {
       const result = generateWorktreePath('feature/add-login', '/Users/dev/project')
-      expect(result).toBe('/Users/dev/project/.iloom/worktrees/feature-add-login')
+      expect(result).toBe('/Users/dev/project-worktrees/feature-add-login')
     })
   })
 })

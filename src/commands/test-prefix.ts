@@ -10,7 +10,7 @@ export interface TestPrefixCommandInput {
 
 /**
  * Test command to preview worktree paths
- * Demonstrates how different branch names will be resolved under .iloom/worktrees/
+ * Demonstrates how different branch names will be resolved as sibling directories
  */
 export class TestPrefixCommand {
   /**
@@ -24,7 +24,7 @@ export class TestPrefixCommand {
       // Display the current working directory
       const rootDir = process.cwd()
       logger.info(`Repository: ${rootDir}`)
-      logger.info('Worktree location: .iloom/worktrees/ (under project root)')
+      logger.info('Worktree location: <project>-worktrees/ (sibling directory)')
       logger.info('')
       logger.info('Example Worktree Paths:\n')
 

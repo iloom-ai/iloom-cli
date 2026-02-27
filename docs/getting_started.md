@@ -177,7 +177,7 @@ All AI reasoning is posted as issue comments, creating a permanent record for yo
 Your loom is a fully isolated environment:
 
 ```
-~/your-project/.iloom/worktrees/feat-issue-25-dark-mode/
+~/your-project-worktrees/feat-issue-25-dark-mode/
 ```
 
 - **Unique port:** Web projects run on port `3000 + issue number` (e.g., 3025)
@@ -400,7 +400,7 @@ Sometimes you need to branch off from a branch. Child looms let you create works
 When you run `il start` from inside an existing loom, iloom prompts you to create a child loom:
 
 ```bash
-# Inside ~/your-project/.iloom/worktrees/feat-issue-25-auth/
+# Inside ~/your-project-worktrees/feat-issue-25-auth/
 il start 42
 # iloom asks: Create as child loom?
 ```

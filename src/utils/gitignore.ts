@@ -4,40 +4,6 @@ import os from 'os'
 import { getLogger } from './logger-context.js'
 import { executeGitCommand, GitCommandError } from './git.js'
 
-const WORKTREE_GITIGNORE_ENTRY = '.iloom/worktrees/'
-
-/**
- * Ensure .iloom/worktrees/ is in the project's .gitignore
- * Idempotent: safe to call multiple times
- * Creates .gitignore if it doesn't exist
- */
-export async function ensureWorktreeGitignore(projectRoot: string): Promise<void> {
-	const gitignorePath = path.join(projectRoot, '.gitignore')
-
-	let content = ''
-	try {
-		content = await fs.readFile(gitignorePath, 'utf-8')
-	} catch (error: unknown) {
-		if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-			// File doesn't exist -- will create
-		} else {
-			throw error
-		}
-	}
-
-	// Check if entry already exists (line-by-line to avoid partial matches)
-	const lines = content.split('\n')
-	if (lines.some(line => line.trim() === WORKTREE_GITIGNORE_ENTRY)) {
-		return
-	}
-
-	// Append entry with a section comment
-	const separator = content.endsWith('\n') || content === '' ? '' : '\n'
-	const newContent = content + separator + '\n# iloom worktree directory\n' + WORKTREE_GITIGNORE_ENTRY + '\n'
-	await fs.writeFile(gitignorePath, newContent, 'utf-8')
-	getLogger().debug(`Added ${WORKTREE_GITIGNORE_ENTRY} to .gitignore`)
-}
-
 /**
  * Resolve the absolute path to the global gitignore file.
  *
@@ -112,4 +78,71 @@ export async function ensureGlobalGitignorePatterns(patterns: string[]): Promise
 	const separator = content.endsWith('\n') || content === '' ? '' : '\n'
 	const newContent = content + separator + '\n# Added by iloom CLI\n' + missingPatterns.join('\n') + '\n'
 	await fs.writeFile(resolvedPath, newContent, 'utf-8')
+}
+
+/**
+ * Remove a specific pattern from the global gitignore file.
+ *
+ * - Resolves the correct global gitignore path via `resolveGlobalGitignorePath()`
+ * - Removes the line matching the pattern exactly (after trimming)
+ * - Also removes the "# Added by iloom CLI" comment line immediately before it,
+ *   if that comment is only associated with the removed pattern
+ * - No-op if the file doesn't exist or the pattern is not present
+ */
+export async function removeGlobalGitignorePattern(pattern: string): Promise<void> {
+	const resolvedPath = await resolveGlobalGitignorePath()
+
+	let content: string
+	try {
+		content = await fs.readFile(resolvedPath, 'utf-8')
+	} catch (error: unknown) {
+		if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+			return // File doesn't exist - nothing to remove
+		}
+		throw error
+	}
+
+	const lines = content.split('\n')
+	const patternIndex = lines.findIndex(line => line.trim() === pattern)
+	if (patternIndex === -1) {
+		return // Pattern not present
+	}
+
+	// Remove the pattern line
+	const indicesToRemove = new Set<number>([patternIndex])
+
+	// Check if the line immediately before is the "# Added by iloom CLI" comment
+	// and if removing the pattern would leave that comment orphaned (i.e., the comment
+	// is not followed by any other non-empty pattern lines besides the one being removed)
+	const prevLine = patternIndex > 0 ? lines[patternIndex - 1] : undefined
+	if (prevLine !== undefined && prevLine.trim() === '# Added by iloom CLI') {
+		const commentIndex = patternIndex - 1
+		// Check if any other non-empty, non-comment lines follow the comment
+		// (besides the line we're removing)
+		let hasOtherPatterns = false
+		for (let i = commentIndex + 1; i < lines.length; i++) {
+			if (indicesToRemove.has(i)) continue
+			const line = lines[i]
+			if (line === undefined) break
+			const trimmed = line.trim()
+			if (trimmed === '' || trimmed.startsWith('#')) break // End of this block
+			hasOtherPatterns = true
+			break
+		}
+		if (!hasOtherPatterns) {
+			indicesToRemove.add(commentIndex)
+			// Also remove the blank line before the comment if it exists
+			const lineBeforeComment = commentIndex > 0 ? lines[commentIndex - 1] : undefined
+			if (lineBeforeComment !== undefined && lineBeforeComment.trim() === '') {
+				indicesToRemove.add(commentIndex - 1)
+			}
+		}
+	}
+
+	const newLines = lines.filter((_, i) => !indicesToRemove.has(i))
+	const newContent = newLines.join('\n')
+
+	if (newContent !== content) {
+		await fs.writeFile(resolvedPath, newContent, 'utf-8')
+	}
 }

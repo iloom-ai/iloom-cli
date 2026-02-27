@@ -214,7 +214,7 @@ export function extractIssueNumber(branchName: string): string | null {
  */
 export function isWorktreePath(path: string): boolean {
   const worktreePatterns = [
-    /\/worktrees?\//i, // Contains /worktree/ or /worktrees/
+    /[-/]worktrees?\//i, // Contains /worktree/ or /worktrees/ or -worktrees/
     /\/workspace[-_]?\d+/i, // workspace123, workspace-123
     /\/issue[-_]?\d+/i, // issue123, issue-123
     /\/pr[-_]?\d+/i, // pr123, pr-123
@@ -242,8 +242,10 @@ export function generateWorktreePath(
     sanitized = `${sanitized}_pr_${options.prNumber}`
   }
 
-  // All worktrees go under .iloom/worktrees/ in the project root
-  return path.join(rootDir, '.iloom', 'worktrees', sanitized)
+  // Worktrees go in a sibling directory next to the project root
+  const parentDir = path.dirname(rootDir)
+  const baseName = path.basename(rootDir)
+  return path.join(parentDir, `${baseName}-worktrees`, sanitized)
 }
 
 /**

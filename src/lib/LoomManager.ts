@@ -669,7 +669,7 @@ export class LoomManager {
     getLogger().info('Ensuring repository has initial commit...')
     await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
 
-    // Load settings (worktreePrefix is no longer used — all worktrees go under .iloom/worktrees/)
+    // Load settings (worktreePrefix is no longer used — worktrees go under <project>-worktrees/ sibling directory)
     const settingsData = await this.settings.loadSettings()
 
     // Build options object
