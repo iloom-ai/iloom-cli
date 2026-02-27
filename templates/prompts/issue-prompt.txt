@@ -79,8 +79,9 @@ Use these Recap MCP tools:
 - Complexity classifications
 - Status updates ("implementation complete", "tests pass")
 - Anything about your own workflow process
+- Meta-knowledge about the agent orchestration layer (iloom, MCP servers, worktree mechanics, prompt rendering, etc.) unless the tooling was a direct cause of a problem under investigation
 
-**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 {{#if SWARM_MODE}}
 **Swarm Mode Recap**: When calling recap tools directly (not via sub-agents), you MUST pass `worktreePath: "{{WORKTREE_PATH}}"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Without it, entries default to the epic's recap file instead of this child's recap. Sub-agents spawned via `claude -p` with `--mcp-config` have their own MCP server and do NOT need worktreePath.

@@ -50,8 +50,9 @@ Use these Recap MCP tools:
 - Complexity classifications
 - Status updates ("implementation complete", "tests pass")
 - Anything about your own workflow process
+- Meta-knowledge about the agent orchestration layer (iloom, MCP servers, worktree mechanics, prompt rendering, etc.) unless the tooling was a direct cause of a problem under investigation
 
-**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 ---
 
