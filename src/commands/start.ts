@@ -27,6 +27,7 @@ import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setu
 import { isInteractiveEnvironment, promptConfirmation } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import type { LoomCreatedProperties } from '../types/telemetry.js'
+import { resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -366,6 +367,18 @@ export class StartCommand {
 			})
 
 			getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
+
+			// Set recap complexity if overridden via CLI flag
+			if (input.options.complexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(loom.path)
+					const recap = await readRecapFile(recapFilePath)
+					recap.complexity = { level: input.options.complexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+					await writeRecapFile(recapFilePath, recap)
+				} catch (error) {
+					getLogger().debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
 
 			// Track loom.created telemetry event
 			try {

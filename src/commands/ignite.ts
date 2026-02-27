@@ -6,7 +6,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -228,6 +228,20 @@ export class IgniteCommand {
 			// Determine effective complexity override
 			// CLI flag takes priority over loom metadata
 			const effectiveComplexity = complexity ?? metadata?.complexity ?? undefined
+
+			// Set recap complexity if overridden and not already set
+			if (effectiveComplexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(context.workspacePath)
+					const recap = await readRecapFile(recapFilePath)
+					if (!recap.complexity) {
+						recap.complexity = { level: effectiveComplexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+						await writeRecapFile(recapFilePath, recap)
+					}
+				} catch (error) {
+					logger.debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
 
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {

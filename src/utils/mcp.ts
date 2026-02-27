@@ -166,6 +166,37 @@ export function slugifyPath(loomPath: string): string {
 }
 
 /**
+ * Resolve recap file path for a given worktree path
+ */
+export function resolveRecapFilePath(worktreePath: string): string {
+	const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+	return path.join(recapsDir, slugifyPath(worktreePath))
+}
+
+/**
+ * Read recap file (returns empty object if not found or invalid)
+ */
+export async function readRecapFile(filePath: string): Promise<Record<string, unknown>> {
+	try {
+		if (await fs.pathExists(filePath)) {
+			const content = await fs.readFile(filePath, 'utf8')
+			return JSON.parse(content) as Record<string, unknown>
+		}
+	} catch {
+		// Ignore read errors - return empty recap
+	}
+	return {}
+}
+
+/**
+ * Write recap file (ensures parent directory exists)
+ */
+export async function writeRecapFile(filePath: string, recap: Record<string, unknown>): Promise<void> {
+	await fs.ensureDir(path.dirname(filePath), { mode: 0o755 })
+	await fs.writeFile(filePath, JSON.stringify(recap, null, 2), { mode: 0o644 })
+}
+
+/**
  * Generate MCP configuration for recap server
  *
  * The recap server captures session context (goal, decisions, insights, risks, assumptions)
