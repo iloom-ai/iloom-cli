@@ -233,7 +233,7 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 
 ## Code Review
 
-Review code changes for quality, security, and compliance issues.
+Review code changes for quality, security, and compliance issues. After reviewing, post findings as a proper GitHub PR review with inline comments.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: After addressing PR feedback or making code changes, review automatically executes. No manual trigger needed.
@@ -247,6 +247,7 @@ Review code changes for quality, security, and compliance issues.
    - Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
    - Wait for user response before continuing
 {{/if}}
+4. **Post findings as a GitHub PR review** (see "Posting Review Findings" below)
 {{/if}}
 
 {{#unless ONE_SHOT_MODE}}
@@ -255,6 +256,7 @@ Review code changes for quality, security, and compliance issues.
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
 - The reviewer will analyze code changes and report findings
+- After review completes, **post findings as a GitHub PR review** (see below)
 {{/unless}}
 
 **MANDATORY Claude Local Review**: If the reviewer returns "Instructions for Orchestrator: Claude Local Review", you MUST execute those instructions:
@@ -263,6 +265,7 @@ Review code changes for quality, security, and compliance issues.
 3. Collect results from all agents
 4. Present unified report as specified
 5. If critical issues found, ask user before proceeding
+6. **Post findings as a GitHub PR review** (see below)
 
 This is NOT optional - if the reviewer requests Claude Local Review, it must be performed before continuing.
 
@@ -270,21 +273,30 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 
 ## Posting Review Findings to GitHub
 
-After code review completes and produces findings, post them as a proper GitHub PR review with inline comments on the actual code.
+After code review completes and produces findings, **you MUST post them as a GitHub PR review with inline comments**. This applies to all review paths (auto-run, manual, and Claude Local Review).
 
-### Batched Review (Primary Flow)
+### Step 1: Map Findings to Inline Comments
 
-Submit all findings as a single review using `gh api` with `--input` and a heredoc. This is the recommended approach since it handles quoting and special characters safely:
+The code reviewer produces findings in `[FILE:LINE] (Score: XX) Description` format. Map each finding to a review comment object:
+- `path`: The file path from the finding (relative to repo root)
+- `line`: The line number from the finding
+- `body`: The finding description, including severity, score, and recommendation
+
+**Only include findings for lines that are part of the PR diff.** Use `gh pr diff {{PR_NUMBER}}` to check which lines are changed. Skip findings on unchanged lines — GitHub rejects review comments on lines outside the diff.
+
+### Step 2: Submit Batched Review
+
+Submit all findings as a single review using `gh api` with `--input` and a heredoc:
 
 ```bash
 gh api \
   --method POST \
   -H "Accept: application/vnd.github+json" \
-  /repos/{owner}/{repo}/pulls/{pull_number}/reviews \
+  /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/reviews \
   --input - <<'EOF'
 {
-  "body": "## Code Review Summary\n\n[Summary text]",
-  "event": "COMMENT",
+  "body": "## Code Review Summary\n\n[Summary of findings from unified report]",
+  "event": "EVENT_VALUE",
   "comments": [
     {
       "path": "src/example.ts",
@@ -301,31 +313,21 @@ gh api \
 EOF
 ```
 
-For a simple single-comment review, you can use the `-f` flag shorthand:
-
-```
-gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  /repos/{owner}/{repo}/pulls/{pull_number}/reviews \
-  -f body='Review summary' \
-  -f event='COMMENT' \
-  -f 'comments[][path]=src/example.ts' \
-  -f 'comments[][line]=42' \
-  -f 'comments[][body]=Issue description'
-```
+If the review is clean (no inline findings), submit a summary-only review with an empty `comments` array.
 
 **Valid `event` values:** `APPROVE`, `REQUEST_CHANGES`, `COMMENT`
 
-### Verdict Handling
+### Step 3: Choose Verdict
 
 {{#if ONE_SHOT_MODE}}
-Choose the verdict automatically based on the code reviewer's findings:
+Choose the verdict automatically based on the code reviewer's severity categories:
 - **`REQUEST_CHANGES`**: If any Critical (95-100) or Warning (80-94) findings exist
 - **`COMMENT`**: If only Suggestions (below 80) exist
 - **`APPROVE`**: If no issues are found (clean review)
+
+Submit the review automatically without asking.
 {{else}}
-Present the review findings and the reviewer's recommended verdict to the user. Ask which verdict to submit:
+Present the review findings summary and the reviewer's recommended verdict to the user. Ask which verdict to submit:
 - **`APPROVE`** -- No issues found
 - **`REQUEST_CHANGES`** -- Critical or Warning-level findings that should be addressed
 - **`COMMENT`** -- Only suggestions, no blocking issues
@@ -333,22 +335,28 @@ Present the review findings and the reviewer's recommended verdict to the user. 
 Wait for user confirmation before submitting the review.
 {{/if}}
 
+---
+
 ### One-off Review Comments (Ad-hoc)
 
-For individual findings discovered during conversation (outside the batched review), post them as standalone review comments:
+For individual findings discovered during conversation (outside the batched review flow), post them as standalone review comments:
 
-```
+```bash
 gh api \
   --method POST \
   -H "Accept: application/vnd.github+json" \
-  /repos/{owner}/{repo}/pulls/{pull_number}/comments \
-  -f body='Issue description and recommendation' \
-  -f commit_id='HEAD_COMMIT_SHA' \
-  -f path='src/example.ts' \
-  -f line=42
+  /repos/{owner}/{repo}/pulls/{{PR_NUMBER}}/comments \
+  --input - <<'EOF'
+{
+  "body": "Issue description and recommendation",
+  "commit_id": "HEAD_COMMIT_SHA",
+  "path": "src/example.ts",
+  "line": 42
+}
+EOF
 ```
 
-Get the latest commit SHA with: `gh pr view {pull_number} --json headRefOid -q '.headRefOid'`
+Get the latest commit SHA with: `gh pr view {{PR_NUMBER}} --json headRefOid -q '.headRefOid'`
 
 ---
 
