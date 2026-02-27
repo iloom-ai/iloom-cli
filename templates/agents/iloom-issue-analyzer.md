@@ -52,6 +52,13 @@ The recap panel helps users stay oriented without reading all your output. Captu
   - If verified: call `recap.add_entry({ type: 'insight', content: '[value] for [purpose] confirmed at [file:line]' })`
   - If NOT verified: describe the intent instead of the value, and call `recap.add_entry({ type: 'assumption', content: 'Could not verify [value] — described intent instead' })`
 
+**CRITICAL: Assumption quality rules:**
+- **NEVER restate information from the issue title or description as an assumption.** If the issue already states something, logging it as an "assumption" adds zero value.
+- Assumptions must be about genuinely **unknown or ambiguous** technical details that you're inferring from evidence.
+- Good assumption: "Assuming the dropdown uses CSS position:relative based on the described layout shift behavior" - infers something NOT stated.
+- Bad assumption: "Assuming the issue affects components X and Y" when the issue explicitly mentions both.
+- If you have no genuine assumptions to log, **don't log any**.
+
 **Never log** workflow status, complexity classifications, or what phases you skipped.
 
 ## Core Workflow
