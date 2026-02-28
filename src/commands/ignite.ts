@@ -515,20 +515,16 @@ export class IgniteCommand {
 
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
-			// Prepare system prompt based on platform
+			// Prepare system prompt by writing to file
 			const systemPromptConfig = await prepareSystemPromptForPlatform(
 				systemInstructions,
 				context.workspacePath,
 			)
 
-			// Determine the initial user prompt (Windows overrides with /clear)
-			const effectiveUserPrompt = systemPromptConfig.initialPromptOverride ?? userPrompt
-
-			// Step 5: Launch Claude with system instructions appended and user prompt
-			const claudeResult = await launchClaude(effectiveUserPrompt, {
+			// Step 5: Launch Claude with system instructions file and user prompt
+			const claudeResult = await launchClaude(userPrompt, {
 				...claudeOptions,
-				...(systemPromptConfig.appendSystemPrompt && { appendSystemPrompt: systemPromptConfig.appendSystemPrompt }),
-				...(systemPromptConfig.pluginDir && { pluginDir: systemPromptConfig.pluginDir }),
+				appendSystemPromptFile: systemPromptConfig.appendSystemPromptFile,
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
@@ -1141,14 +1137,13 @@ export class IgniteCommand {
 			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
 		}
 
-		// Prepare orchestrator prompt based on platform
+		// Prepare orchestrator prompt by writing to file
 		const orchestratorPromptConfig = await prepareSystemPromptForPlatform(
 			orchestratorPrompt,
 			epicWorktreePath,
 		)
 
-		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
-			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
+		const swarmUserPrompt = `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
 
 		// Set env vars directly on process.env so they propagate to Claude Code
 		// and its child processes (execa's env option doesn't reliably pass them)
@@ -1160,14 +1155,13 @@ export class IgniteCommand {
 		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
 		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
 
-		await launchClaude(effectiveSwarmPrompt, {
+		await launchClaude(swarmUserPrompt, {
 			model,
 			permissionMode: 'bypassPermissions',
 			addDir: epicWorktreePath,
 			headless: false,
 			...(metadata.sessionId && { sessionId: metadata.sessionId }),
-			...(orchestratorPromptConfig.appendSystemPrompt && { appendSystemPrompt: orchestratorPromptConfig.appendSystemPrompt }),
-			...(orchestratorPromptConfig.pluginDir && { pluginDir: orchestratorPromptConfig.pluginDir }),
+			appendSystemPromptFile: orchestratorPromptConfig.appendSystemPromptFile,
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),

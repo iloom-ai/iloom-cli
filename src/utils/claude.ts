@@ -62,6 +62,7 @@ export interface ClaudeCliOptions {
 	port?: number // Optional port for terminal window export
 	timeout?: number // Timeout in milliseconds
 	appendSystemPrompt?: string // System instructions to append to system prompt
+	appendSystemPromptFile?: string // Path to file containing system instructions
 	mcpConfig?: Record<string, unknown>[] // Array of MCP server configurations
 	allowedTools?: string[] // Tools to allow via --allowed-tools flag
 	disallowedTools?: string[] // Tools to disallow via --disallowed-tools flag
@@ -150,7 +151,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -186,6 +187,11 @@ export async function launchClaude(
 	// Add system prompt flag
 	if (appendSystemPrompt) {
 		args.push('--append-system-prompt', appendSystemPrompt)
+	}
+
+	// Add system prompt file flag
+	if (appendSystemPromptFile) {
+		args.push('--append-system-prompt-file', appendSystemPromptFile)
 	}
 
 	// Add --mcp-config flags for each MCP server configuration

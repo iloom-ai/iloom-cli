@@ -13,6 +13,17 @@ import { TelemetryService } from '../lib/TelemetryService.js'
 import * as languageDetector from '../utils/language-detector.js'
 import * as systemPromptWriter from '../utils/system-prompt-writer.js'
 
+// Mock system-prompt-writer to avoid filesystem writes in tests
+vi.mock('../utils/system-prompt-writer.js', async (importOriginal) => {
+	const original = await importOriginal<typeof systemPromptWriter>()
+	return {
+		...original,
+		prepareSystemPromptForPlatform: vi.fn(async (_systemPrompt: string, workspacePath: string) => ({
+			appendSystemPromptFile: path.join(workspacePath, '.claude', 'iloom-system-prompt.md'),
+		})),
+	}
+})
+
 // Mock TelemetryService
 vi.mock('../lib/TelemetryService.js', () => {
 	const mockTrack = vi.fn()
@@ -817,8 +828,8 @@ describe('IgniteCommand', () => {
 		})
 	})
 
-	describe('appendSystemPrompt usage in il ignite', () => {
-		it('should pass template content as appendSystemPrompt for issue workflows', async () => {
+	describe('appendSystemPromptFile usage in il ignite', () => {
+		it('should pass appendSystemPromptFile for issue workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -830,14 +841,14 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute()
 
-				// Verify launchClaude was called with appendSystemPrompt
+				// Verify launchClaude was called with appendSystemPromptFile
 				expect(launchClaudeSpy).toHaveBeenCalledWith(
 					'Guide the user through the iloom workflow!', // User prompt
 					expect.objectContaining({
 						headless: false,
 						model: 'opus',
 						permissionMode: 'acceptEdits',
-						appendSystemPrompt: 'System instructions for issue workflow',
+						appendSystemPromptFile: '/path/to/feat/issue-82__test/.claude/iloom-system-prompt.md',
 					})
 				)
 			} finally {
@@ -846,7 +857,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should pass template content as appendSystemPrompt for PR workflows', async () => {
+		it('should pass appendSystemPromptFile for PR workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -861,7 +872,7 @@ describe('IgniteCommand', () => {
 					'Guide the user through the iloom workflow!',
 					expect.objectContaining({
 						headless: false,
-						appendSystemPrompt: 'System instructions for PR workflow',
+						appendSystemPromptFile: '/path/to/feature_pr_123/.claude/iloom-system-prompt.md',
 					})
 				)
 			} finally {
@@ -870,7 +881,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should pass template content as appendSystemPrompt for regular workflows', async () => {
+		it('should pass appendSystemPromptFile for regular workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -889,7 +900,7 @@ describe('IgniteCommand', () => {
 					'Guide the user through the iloom workflow!',
 					expect.objectContaining({
 						headless: false,
-						appendSystemPrompt: 'System instructions for regular workflow',
+						appendSystemPromptFile: '/path/to/main/.claude/iloom-system-prompt.md',
 					})
 				)
 			} finally {
@@ -1580,8 +1591,8 @@ describe('IgniteCommand', () => {
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1].agents).toBeUndefined()
 
-				// Verify system prompt is still passed inline (Linux uses appendSystemPrompt)
-				expect(launchClaudeCall[1].appendSystemPrompt).toBeDefined()
+				// Verify system prompt is passed via file
+				expect(launchClaudeCall[1].appendSystemPromptFile).toBeDefined()
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
@@ -1590,17 +1601,11 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should use plugin-dir and /clear prompt on Windows', async () => {
+		it('should use appendSystemPromptFile on all platforms (no plugin-dir workaround)', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
 				owner: 'testowner',
 				name: 'testrepo',
-			})
-
-			// Mock prepareSystemPromptForPlatform to return Windows-style config
-			const prepareSystemPromptSpy = vi.spyOn(systemPromptWriter, 'prepareSystemPromptForPlatform').mockResolvedValue({
-				pluginDir: '/path/to/feat/issue-123__test/.claude/iloom-plugin',
-				initialPromptOverride: '/clear',
 			})
 
 			const mockAgentManager = {
@@ -1635,10 +1640,11 @@ describe('IgniteCommand', () => {
 				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalled()
 				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
 
-				// Verify launchClaude uses plugin-dir and /clear prompt
+				// Verify launchClaude uses appendSystemPromptFile (not plugin-dir or /clear)
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
-				expect(launchClaudeCall[0]).toBe('/clear') // initial prompt override
-				expect(launchClaudeCall[1].pluginDir).toBe('/path/to/feat/issue-123__test/.claude/iloom-plugin')
+				expect(launchClaudeCall[0]).not.toBe('/clear') // No initial prompt override
+				expect(launchClaudeCall[1].appendSystemPromptFile).toBeDefined()
+				expect(launchClaudeCall[1].pluginDir).toBeUndefined()
 				expect(launchClaudeCall[1].appendSystemPrompt).toBeUndefined()
 				expect(launchClaudeCall[1].agents).toBeUndefined()
 			} finally {
@@ -1646,7 +1652,6 @@ describe('IgniteCommand', () => {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 				getRepoInfoSpy.mockRestore()
-				prepareSystemPromptSpy.mockRestore()
 			}
 		})
 
@@ -1693,7 +1698,7 @@ describe('IgniteCommand', () => {
 				// Verify agents ARE passed to launchClaude
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1].agents).toBeDefined()
-				expect(launchClaudeCall[1].appendSystemPrompt).toBeDefined()
+				expect(launchClaudeCall[1].appendSystemPromptFile).toBeDefined()
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
@@ -2128,9 +2133,9 @@ describe('IgniteCommand', () => {
 					})
 				)
 
-				// Verify answer table instructions are included in appendSystemPrompt
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify answer table instructions are passed to prepareSystemPromptForPlatform
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2158,9 +2163,9 @@ describe('IgniteCommand', () => {
 					})
 				)
 
-				// Verify answer table instructions are included in appendSystemPrompt
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify answer table instructions are passed to prepareSystemPromptForPlatform
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2184,9 +2189,9 @@ describe('IgniteCommand', () => {
 				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
 				expect(templateCall[1].ONE_SHOT_MODE).toBeUndefined()
 
-				// Verify answer table instructions are STILL included in appendSystemPrompt (proving unconditional behavior)
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify answer table instructions are STILL passed to prepareSystemPromptForPlatform (proving unconditional behavior)
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2415,9 +2420,9 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute('default')
 
-				// Verify appendSystemPrompt contains answer table instruction text
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify prompt content with answer table instructions was passed to prepareSystemPromptForPlatform
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2437,9 +2442,9 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute('noReview')
 
-				// Verify appendSystemPrompt contains answer table instruction text
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify prompt content with answer table instructions was passed to prepareSystemPromptForPlatform
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2459,9 +2464,9 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute('bypassPermissions')
 
-				// Verify appendSystemPrompt contains answer table instruction text
-				const callOptions = launchClaudeSpy.mock.calls[0][1]
-				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+				// Verify prompt content with answer table instructions was passed to prepareSystemPromptForPlatform
+				const prepareCall = vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mock.calls[0]
+				expect(prepareCall[0]).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()

@@ -882,6 +882,106 @@ describe('claude utils', () => {
 			})
 		})
 
+		describe('appendSystemPromptFile parameter', () => {
+			it('should use --append-system-prompt-file flag when provided in interactive mode', async () => {
+				const promptFilePath = '/workspace/.claude/iloom-system-prompt.md'
+				const userPrompt = 'Go!'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				})
+
+				await launchClaude(userPrompt, {
+					headless: false,
+					appendSystemPromptFile: promptFilePath,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', '/tmp', '--append-system-prompt-file', promptFilePath, '--', userPrompt],
+					expect.objectContaining({
+						stdio: ['inherit', 'inherit', 'pipe'],
+						timeout: 0,
+					})
+				)
+			})
+
+			it('should use --append-system-prompt-file flag in headless mode', async () => {
+				const promptFilePath = '/workspace/.claude/iloom-system-prompt.md'
+				const userPrompt = 'Execute plan'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'done',
+					exitCode: 0,
+				})
+
+				const result = await launchClaude(userPrompt, {
+					headless: true,
+					appendSystemPromptFile: promptFilePath,
+				})
+
+				expect(result).toBe('done')
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--add-dir', '/tmp',
+						'--append-system-prompt-file', promptFilePath,
+					],
+					expect.objectContaining({
+						input: userPrompt,
+						timeout: 0,
+					})
+				)
+			})
+
+			it('should be combinable with appendSystemPrompt (inline)', async () => {
+				const promptFilePath = '/workspace/.claude/iloom-system-prompt.md'
+				const inlinePrompt = 'Additional inline instructions'
+				const userPrompt = 'Go!'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				})
+
+				await launchClaude(userPrompt, {
+					headless: false,
+					appendSystemPrompt: inlinePrompt,
+					appendSystemPromptFile: promptFilePath,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'--add-dir', '/tmp',
+						'--append-system-prompt', inlinePrompt,
+						'--append-system-prompt-file', promptFilePath,
+						'--', userPrompt,
+					],
+					expect.any(Object)
+				)
+			})
+
+			it('should omit --append-system-prompt-file when not provided', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = mockExeca().mock.calls[0] as unknown as [string, string[], Record<string, unknown>]
+				expect(execaCall[1]).not.toContain('--append-system-prompt-file')
+			})
+		})
+
 		describe('mcpConfig parameter', () => {
 			it('should add --mcp-config flags for each config in array', async () => {
 				const prompt = 'Test prompt'
