@@ -477,19 +477,21 @@ IMPORTANT: Only fix the specific issues identified in the review findings. Do NO
 
 If at least one child succeeded, create the final "Fixes" commit — but only if it doesn't already exist (idempotency).
 
-First, check whether the "Fixes" commit has already been created (this is a lightweight read, OK to do directly):
+First, check whether the final commit has already been created (this is a lightweight read, OK to do directly):
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
-git log --oneline --grep="^Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}$" -1
+git log --oneline --grep="feat(epic-{{EPIC_ISSUE_NUMBER}}):" -1
 ```
 - If a matching commit is found, skip this step — the finalization commit already exists.
 
-If no "Fixes" commit exists, create it directly (no need to delegate — this is a trivial `--allow-empty` commit with no conflict risk):
+If no final commit exists, create it directly (no need to delegate — this is a trivial `--allow-empty` commit with no conflict risk). The commit message MUST have a descriptive first line summarizing what the epic accomplished, with the `Fixes` trailer in the body:
 
 ```bash
 cd {{EPIC_WORKTREE_PATH}}
 git add -A
-git commit --allow-empty -m "Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
+git commit --allow-empty -m "feat(epic-{{EPIC_ISSUE_NUMBER}}): [summary of what was accomplished across child issues]
+
+Fixes {{ISSUE_PREFIX}}{{EPIC_ISSUE_NUMBER}}"
 ```
 
 {{#if DRAFT_PR_MODE}}

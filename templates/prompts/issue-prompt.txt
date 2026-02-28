@@ -464,7 +464,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{/if}}{{/if}}
 8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via headless claude -p process (code reviewer agent)
 9. If critical/high issues found, auto-fix and optionally re-review
-10. Stage and commit all changes: `git add -A && git commit -m "fixes {{ISSUE_PREFIX}}<issue-number>"`
+10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
 {{else}}
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
@@ -1418,7 +1418,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 ---
 
 {{#if SWARM_MODE}}
-**MANDATORY CHECKPOINT: You MUST complete the code review before committing. After review, stage and commit all changes with `git add -A && git commit -m "fixes {{ISSUE_PREFIX}}<issue-number>"` (using your issue number from invocation arguments). Then set state to `done` and report results.**
+**MANDATORY CHECKPOINT: You MUST complete the code review before committing. After review, stage and commit all changes with `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary]"` (using your issue number from invocation arguments). The commit message MUST describe what was implemented — do NOT use generic "fixes #NNN" messages. Then set state to `done` and report results.**
 {{else}}
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
