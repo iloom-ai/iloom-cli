@@ -384,7 +384,7 @@ Each `claude -p` call redirects its stream-json output to a temp file, then the 
 ```bash
 PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX.jsonl)
 env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
-  --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
+  --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
