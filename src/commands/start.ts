@@ -129,13 +129,12 @@ export class StartCommand {
 	public async execute(input: StartCommandInput): Promise<StartResult | void> {
 		const isJsonMode = input.options.json === true
 
-		// Handle --create-only flag: disable all launch components and epic
+		// Handle --create-only flag: disable all launch components
 		if (input.options.createOnly) {
 			input.options.claude = false
 			input.options.code = false
 			input.options.devServer = false
 			input.options.terminal = false
-			input.options.epic = false
 		}
 
 		try {

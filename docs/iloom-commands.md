@@ -76,7 +76,7 @@ il start "<issue-description>"
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
 | `--terminal` / `--no-terminal` | - | Enable/disable terminal without dev server (default: disabled) |
-| `--create-only` | - | Create workspace only: skip Claude, IDE, terminal, dev server, and epic (shorthand for `--no-claude --no-code --no-terminal --no-dev-server --no-epic`) |
+| `--create-only` | - | Create workspace only: skip Claude, IDE, terminal, dev server (shorthand for `--no-claude --no-code --no-terminal --no-dev-server`) |
 | `--body` | `<text>` | Body text for issue (skips AI enhancement) |
 
 **One-Shot Modes:**

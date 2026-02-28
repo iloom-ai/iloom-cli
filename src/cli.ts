@@ -435,7 +435,7 @@ program
     new Option('--complexity <level>', 'Override complexity evaluation (persists in loom metadata)')
       .choices(['trivial', 'simple', 'complex'])
   )
-  .option('--create-only', 'Create workspace only (skip Claude, IDE, terminal, dev server, epic)')
+  .option('--create-only', 'Create workspace only (skip Claude, IDE, terminal, dev server)')
   .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {

@@ -702,44 +702,7 @@ describe('StartCommand', () => {
 				)
 			})
 
-			it('should not create as epic when createOnly is true even if issue has children', async () => {
-				const mockIssue = {
-					number: 123,
-					title: 'Test Issue',
-					body: '',
-					state: 'open' as const,
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				}
-
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
-				vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
-				vi.mocked(fetchChildIssues).mockResolvedValue([
-					{ id: '456', title: 'Child Issue', url: 'https://github.com/test/repo/issues/456' },
-				])
-
-				await command.execute({
-					identifier: '123',
-					options: {
-						createOnly: true,
-					},
-				})
-
-				// With epic: false (from --create-only expansion), it should create as normal issue, not epic
-				const loomManagerInstance = vi.mocked(LoomManager).mock.results[0].value
-				expect(loomManagerInstance.createIloom).toHaveBeenCalledWith(
-					expect.objectContaining({
-						type: 'issue',
-					})
-				)
 			})
-		})
 
 		describe('GitHub detection', () => {
 			it('should detect PR when number is a PR', async () => {
