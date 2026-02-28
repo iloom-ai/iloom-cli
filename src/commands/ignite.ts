@@ -1157,6 +1157,11 @@ export class IgniteCommand {
 				CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
 				ILOOM_SWARM: '1',
 				ENABLE_TOOL_SEARCH: 'auto:30',
+				// Performance: reduce per-agent overhead
+				CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING: '1',
+				CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+				CLAUDE_CODE_EFFORT_LEVEL: 'medium',
 			},
 		})
 

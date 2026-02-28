@@ -378,15 +378,19 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 **MCP Config:** Read the file `.claude/iloom-swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
 
 **Command template:**
+
+Each `claude -p` call redirects its stream-json output to a temp file, then the result is extracted from that file. This keeps the worker's context window lean -- it only sees the extracted result text, not the full agent narrative.
+
 ```bash
+PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX.jsonl)
 env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
   --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
-  --output-format text \
+  --output-format stream-json \
   --max-turns 50 \
-  "<prompt for the phase>"
+  "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
 ```
 
 **Bash tool timeout:** When invoking the command above via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` (milliseconds). This prevents sub-agent invocations from hanging indefinitely.
@@ -404,8 +408,31 @@ For each agent, use:
 - `--allowedTools` from the `tools` array in the metadata above (comma-separated, only if the `tools` field exists)
 - The agent file is at `{{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-key>.md` where `<agent-key>` matches the key in the JSON above
 
-**Output parsing:**
-The `--output-format text` produces plain text output. The Bash tool output IS the agent's response -- no JSON parsing is needed.
+**Output parsing (stream-json temp file):**
+
+The `--output-format stream-json` produces newline-delimited JSON (JSONL) in the temp file. Each line is a JSON object. To extract the agent's final result text, run:
+
+```bash
+grep -E '"type"\s*:\s*"result"' "$PHASE_OUTPUT_FILE" | tail -1 | python3 -c "import sys,json; d=sys.stdin.read().strip(); print(json.loads(d).get('result','') if d else '')"
+```
+
+If `python3` is not available, use this `jq` alternative:
+
+```bash
+grep -E '"type"\s*:\s*"result"' "$PHASE_OUTPUT_FILE" | tail -1 | jq -r '.result // empty'
+```
+
+Use the extracted result text as the agent's response. Do NOT read the full temp file into your context -- only the extracted result line.
+
+If the extracted result is empty, check the stderr log for errors:
+```bash
+cat "${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
+```
+
+After extracting the result, clean up the temp files:
+```bash
+rm -f "$PHASE_OUTPUT_FILE" "${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
+```
 
 **Working directory:**
 Each `claude -p` process inherits the current working directory. Ensure you are in the child worktree before invoking phase agents.
@@ -416,6 +443,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - The agent `.md` files are pre-rendered and available at the paths above
 - Always include `env -u CLAUDECODE` prefix -- this is mandatory
 - The `.claude/iloom-swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
+- Output is redirected to a temp file to keep your context window lean -- never pipe the full stream into your context
 
 **Todo List:**
 1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
