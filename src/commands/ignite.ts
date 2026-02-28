@@ -25,6 +25,7 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
 import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -504,6 +505,13 @@ export class IgniteCommand {
 				workspacePath: context.workspacePath,
 				hasMcpConfig: !!mcpConfig,
 			})
+
+			// Pre-accept Claude Code trust for this worktree path
+			try {
+				await preAcceptClaudeTrust(context.workspacePath)
+			} catch (error) {
+				logger.warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
+			}
 
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
