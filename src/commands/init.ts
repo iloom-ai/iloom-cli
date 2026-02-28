@@ -439,7 +439,7 @@ export class InitCommand {
       ]
 
       const claudeOptions = {
-        model: 'opus',
+        model: 'sonnet',
         headless: false,
         appendSystemPrompt: prompt,
         addDir: process.cwd(),
