@@ -1,7 +1,8 @@
 import { execa } from 'execa'
-import { existsSync } from 'node:fs'
 import type { Platform } from '../types/index.js'
 import { getTerminalBackend } from './terminal-backends/index.js'
+import { detectITerm2 as darwinDetectITerm2 } from './terminal-backends/darwin.js'
+import { detectTerminalEnvironment } from './platform-detect.js'
 
 export interface TerminalWindowOptions {
 	workspacePath?: string
@@ -14,14 +15,15 @@ export interface TerminalWindowOptions {
 }
 
 /**
- * Detect current platform
+ * Detect current platform.
+ *
+ * Delegates to detectTerminalEnvironment() from platform-detect.ts,
+ * mapping 'wsl' back to 'linux' to preserve the Platform return type.
  */
 export function detectPlatform(): Platform {
-	const platform = process.platform
-	if (platform === 'darwin') return 'darwin'
-	if (platform === 'linux') return 'linux'
-	if (platform === 'win32') return 'win32'
-	return 'unsupported'
+	const env = detectTerminalEnvironment()
+	if (env === 'wsl') return 'linux'
+	return env
 }
 
 /**
@@ -53,14 +55,14 @@ export async function detectDarkMode(): Promise<ThemeMode> {
 }
 
 /**
- * Detect if iTerm2 is installed on macOS
- * Returns false on non-macOS platforms
+ * Detect if iTerm2 is installed on macOS.
+ * Returns false on non-macOS platforms.
+ *
+ * Delegates to the canonical implementation in darwin.ts.
  */
 export async function detectITerm2(): Promise<boolean> {
-	const platform = detectPlatform()
-	if (platform !== 'darwin') return false
-
-	return existsSync('/Applications/iTerm.app')
+	if (detectPlatform() !== 'darwin') return false
+	return darwinDetectITerm2()
 }
 
 /**

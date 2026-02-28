@@ -2,8 +2,7 @@ import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import type { TerminalWindowOptions } from '../terminal.js'
 import type { TerminalBackend } from './types.js'
-import { buildCommandSequence, escapeSingleQuotes } from './command-builder.js'
-import { buildEnvSourceCommands } from '../env.js'
+import { buildCommandSequence } from './command-builder.js'
 
 /**
  * Detect if iTerm2 is installed on macOS.
@@ -24,50 +23,17 @@ function escapeForAppleScript(command: string): string {
 /**
  * Build AppleScript for macOS Terminal.app (single tab).
  *
- * Note: Terminal.app builds its own command sequence instead of using the shared
- * buildCommandSequence because AppleScript requires different escaping for paths
- * inside `do script` vs shell strings.
+ * Delegates to the shared buildCommandSequence for command construction,
+ * then wraps the result with AppleScript escaping for `do script "..."`.
  */
 async function buildTerminalAppScript(options: TerminalWindowOptions): Promise<string> {
-	const {
-		workspacePath,
-		command,
-		backgroundColor,
-		port,
-		includeEnvSetup,
-		includePortExport,
-	} = options
-
-	const commands: string[] = []
-
-	if (workspacePath) {
-		commands.push(`cd '${escapeSingleQuotes(workspacePath)}'`)
-	}
-
-	if (includeEnvSetup && workspacePath) {
-		const sourceCommands = await buildEnvSourceCommands(
-			workspacePath,
-			async (p) => existsSync(p)
-		)
-		commands.push(...sourceCommands)
-	}
-
-	if (includePortExport && port !== undefined) {
-		commands.push(`export PORT=${port}`)
-	}
-
-	if (command) {
-		commands.push(command)
-	}
-
-	const fullCommand = commands.join(' && ')
-	const historyFreeCommand = ` ${fullCommand}`
+	const command = await buildCommandSequence(options)
 
 	let script = `tell application "Terminal"\n`
-	script += `  set newTab to do script "${escapeForAppleScript(historyFreeCommand)}"\n`
+	script += `  set newTab to do script "${escapeForAppleScript(command)}"\n`
 
-	if (backgroundColor) {
-		const { r, g, b } = backgroundColor
+	if (options.backgroundColor) {
+		const { r, g, b } = options.backgroundColor
 		script += `  set background color of newTab to {${Math.round(r * 257)}, ${Math.round(g * 257)}, ${Math.round(b * 257)}}\n`
 	}
 
