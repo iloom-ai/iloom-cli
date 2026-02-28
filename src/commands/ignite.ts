@@ -1142,6 +1142,16 @@ export class IgniteCommand {
 		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
 			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
 
+		// Set env vars directly on process.env so they propagate to Claude Code
+		// and its child processes (execa's env option doesn't reliably pass them)
+		process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'
+		process.env.ILOOM_SWARM = '1'
+		process.env.ENABLE_TOOL_SEARCH = 'auto:30'
+		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
+		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
+		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
+
 		await launchClaude(effectiveSwarmPrompt, {
 			model,
 			permissionMode: 'bypassPermissions',
@@ -1153,16 +1163,6 @@ export class IgniteCommand {
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
-			env: {
-				CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-				ILOOM_SWARM: '1',
-				ENABLE_TOOL_SEARCH: 'auto:30',
-				// Performance: reduce per-agent overhead
-				CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING: '1',
-				CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
-				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-				CLAUDE_CODE_EFFORT_LEVEL: 'medium',
-			},
 		})
 
 		// Track swarm child completions and overall completion

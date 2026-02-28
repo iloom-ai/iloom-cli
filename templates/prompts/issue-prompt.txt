@@ -383,7 +383,13 @@ Each `claude -p` call redirects its stream-json output to a temp file, then the 
 
 ```bash
 PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX)
-env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
+env -u CLAUDECODE \
+  ENABLE_TOOL_SEARCH=auto:30 \
+  CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING=1 \
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+  CLAUDE_CODE_EFFORT_LEVEL=medium \
+  claude -p \
   --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
