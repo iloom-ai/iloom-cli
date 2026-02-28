@@ -382,15 +382,16 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 Each `claude -p` call redirects its stream-json output to a temp file, then the result is extracted from that file. This keeps the worker's context window lean -- it only sees the extracted result text, not the full agent narrative.
 
 ```bash
-PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX.jsonl)
+PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX)
 env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
   --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
   --output-format stream-json \
+  --verbose \
   --max-turns 50 \
-  "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
+  "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE}.stderr"
 ```
 
 **Bash tool timeout:** When invoking the command above via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` (milliseconds). This prevents sub-agent invocations from hanging indefinitely.
@@ -410,29 +411,13 @@ For each agent, use:
 
 **Output parsing (stream-json temp file):**
 
-The `--output-format stream-json` produces newline-delimited JSON (JSONL) in the temp file. Each line is a JSON object. To extract the agent's final result text, run:
+The `--output-format stream-json` produces newline-delimited JSON (JSONL) in the temp file. Each line is a JSON object. The last line with `"type":"result"` contains the agent's final result in the `result` field. Read the temp file, extract the result text, and clean up:
 
 ```bash
-grep -E '"type"\s*:\s*"result"' "$PHASE_OUTPUT_FILE" | tail -1 | python3 -c "import sys,json; d=sys.stdin.read().strip(); print(json.loads(d).get('result','') if d else '')"
+rm -f "$PHASE_OUTPUT_FILE" "${PHASE_OUTPUT_FILE}.stderr"
 ```
 
-If `python3` is not available, use this `jq` alternative:
-
-```bash
-grep -E '"type"\s*:\s*"result"' "$PHASE_OUTPUT_FILE" | tail -1 | jq -r '.result // empty'
-```
-
-Use the extracted result text as the agent's response. Do NOT read the full temp file into your context -- only the extracted result line.
-
-If the extracted result is empty, check the stderr log for errors:
-```bash
-cat "${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
-```
-
-After extracting the result, clean up the temp files:
-```bash
-rm -f "$PHASE_OUTPUT_FILE" "${PHASE_OUTPUT_FILE%.jsonl}.stderr.log"
-```
+You can also tail the temp file to check on the agent's progress while it's running. Do NOT read the full temp file into your context — only extract the final result text.
 
 **Working directory:**
 Each `claude -p` process inherits the current working directory. Ensure you are in the child worktree before invoking phase agents.
