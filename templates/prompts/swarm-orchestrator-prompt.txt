@@ -446,9 +446,9 @@ env -u CLAUDECODE \
   CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
   claude -p \
-  --system-prompt-file "{{EPIC_WORKTREE_PATH}}/.claude/agents/iloom-wave-verifier.md" \
+  --system-prompt-file "{{EPIC_WORKTREE_PATH}}/.claude/agents/iloom-swarm-wave-verifier.md" \
   --mcp-config "$MCP_CONFIG" \
-  --model claude-sonnet-4-5 \
+  --model claude-opus-4-5 \
   --permission-mode bypassPermissions \
   --output-format stream-json \
   --max-turns 50 \

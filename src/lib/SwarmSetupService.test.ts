@@ -306,12 +306,29 @@ describe('SwarmSetupService', () => {
 			expect(result.renderedFiles[0]).toBe('iloom-swarm-issue-implementer.md')
 		})
 
-		it('loads agents with SWARM_MODE=true', async () => {
+		it('loads agents with SWARM_MODE, EPIC_WORKTREE_PATH, and SWARM_SUB_AGENT_TIMEOUT_MS', async () => {
 			await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
 				expect.anything(),
-				expect.objectContaining({ SWARM_MODE: true }),
+				expect.objectContaining({
+					SWARM_MODE: true,
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+					SWARM_SUB_AGENT_TIMEOUT_MS: 600000,
+				}),
+			)
+		})
+
+		it('computes SWARM_SUB_AGENT_TIMEOUT_MS from configured subAgentTimeout', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: { 'iloom-swarm-worker': { subAgentTimeout: 20 } },
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ SWARM_SUB_AGENT_TIMEOUT_MS: 1200000 }),
 			)
 		})
 
