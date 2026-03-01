@@ -32,6 +32,10 @@ export const BaseAgentSettingsSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
+	swarmReview: z
+		.boolean()
+		.optional()
+		.describe('Whether artifacts from this agent should be reviewed in swarm mode. Overrides the base review flag when running inside swarm workers. Falls back to review if not set.'),
 })
 
 /**

@@ -108,7 +108,7 @@ export class AgentManager {
 		// Apply template variable substitution to agent prompts if variables provided
 		if (templateVariables) {
 			// Extract review config from settings and add to template variables
-			Object.assign(templateVariables, buildReviewTemplateVariables(settings?.agents))
+			Object.assign(templateVariables, buildReviewTemplateVariables(!!templateVariables.SWARM_MODE, settings?.agents))
 
 			for (const [agentName, agentConfig] of Object.entries(agents)) {
 				agents[agentName] = {

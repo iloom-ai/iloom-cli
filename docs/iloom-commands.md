@@ -1820,6 +1820,39 @@ il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
 il spin --set spin.swarmModel=sonnet
 ```
 
+**Per-Agent Artifact Review Override (Swarm Mode):**
+
+Each agent supports a `swarmReview` field to control whether artifact review runs in swarm mode, independent of the base `review` setting:
+
+```json
+{
+  "agents": {
+    "iloom-issue-planner": { "review": true, "swarmReview": false },
+    "iloom-issue-analyze-and-plan": { "review": true, "swarmReview": false }
+  }
+}
+```
+
+If `swarmReview` is set, it overrides the agent's `review` flag in swarm mode. If `swarmReview` is not set, the base `review` value is used as fallback. This lets you enable artifact review for single-issue looms (where a human reviews before proceeding) while disabling it in swarm mode (where autonomous parallel execution makes review a source of latency without benefit).
+
+With the configuration above:
+
+| Agent | Non-swarm mode | Swarm mode |
+|-------|---------------|------------|
+| `iloom-issue-planner` | review enabled (`review: true`) | review disabled (`swarmReview: false`) |
+| `iloom-issue-analyze-and-plan` | review enabled (`review: true`) | review disabled (`swarmReview: false`) |
+| `iloom-issue-analyzer` | review disabled (default) | review disabled (default) |
+
+**Example using the `--set` flag:**
+
+```bash
+# Disable planner review in swarm mode
+il spin --set agents.iloom-issue-planner.swarmReview=false
+
+# Enable planner review in swarm mode (when base review is disabled)
+il spin --set agents.iloom-issue-planner.swarmReview=true
+```
+
 **Swarm Quality Mode:**
 
 During `il init`, you'll be asked to choose a swarm quality mode that tunes the trade-off between reasoning quality and speed/cost:

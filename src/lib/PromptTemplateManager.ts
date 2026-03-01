@@ -124,7 +124,7 @@ export interface TemplateVariables {
  * Build review-related template variables from settings.
  * Used by both the ignite command (for prompt templates) and AgentManager (for agent prompts).
  */
-export function buildReviewTemplateVariables(agents?: Record<string, AgentSettings> | null): Partial<TemplateVariables> {
+export function buildReviewTemplateVariables(isSwarmMode: boolean, agents?: Record<string, AgentSettings> | null): Partial<TemplateVariables> {
 	const variables: Partial<TemplateVariables> = {}
 
 	// Code reviewer configuration
@@ -176,12 +176,19 @@ export function buildReviewTemplateVariables(agents?: Record<string, AgentSettin
 	}
 
 	// Per-agent review flags (defaults to false for each)
-	variables.ENHANCER_REVIEW_ENABLED = agents?.['iloom-issue-enhancer']?.review === true
-	variables.ANALYZER_REVIEW_ENABLED = agents?.['iloom-issue-analyzer']?.review === true
-	variables.PLANNER_REVIEW_ENABLED = agents?.['iloom-issue-planner']?.review === true
-	variables.ANALYZE_AND_PLAN_REVIEW_ENABLED = agents?.['iloom-issue-analyze-and-plan']?.review === true
-	variables.IMPLEMENTER_REVIEW_ENABLED = agents?.['iloom-issue-implementer']?.review === true
-	variables.COMPLEXITY_REVIEW_ENABLED = agents?.['iloom-issue-complexity-evaluator']?.review === true
+	// In swarm mode, swarmReview overrides review (falling back to review if swarmReview is not set)
+	const resolveReview = (agent: AgentSettings | undefined): boolean => {
+		if (isSwarmMode) {
+			return agent?.swarmReview ?? (agent?.review === true)
+		}
+		return agent?.review === true
+	}
+	variables.ENHANCER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-enhancer'])
+	variables.ANALYZER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-analyzer'])
+	variables.PLANNER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-planner'])
+	variables.ANALYZE_AND_PLAN_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-analyze-and-plan'])
+	variables.IMPLEMENTER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-implementer'])
+	variables.COMPLEXITY_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-complexity-evaluator'])
 
 	return variables
 }

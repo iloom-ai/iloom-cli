@@ -2954,6 +2954,46 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('swarmReview schema validation', () => {
+		it('accepts swarmReview: true on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBe(true)
+			}
+		})
+
+		it('accepts swarmReview: false on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBe(false)
+			}
+		})
+
+		it('rejects invalid swarmReview value on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: 'yes' })
+			expect(result.success).toBe(false)
+		})
+
+		it('accepts BaseAgentSettingsSchema with both review and swarmReview', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ review: true, swarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.review).toBe(true)
+				expect(result.data.swarmReview).toBe(false)
+			}
+		})
+
+		it('accepts BaseAgentSettingsSchema without swarmReview (optional)', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ review: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBeUndefined()
+			}
+		})
+	})
+
 	describe('postSwarmReview setting', () => {
 		it('defaults postSwarmReview to true on SpinAgentSettingsSchema', () => {
 			const result = SpinAgentSettingsSchema.safeParse({})

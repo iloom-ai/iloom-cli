@@ -540,13 +540,13 @@ const obj = { key: "value" }
 describe('buildReviewTemplateVariables', () => {
 	describe('code reviewer', () => {
 		it('should default REVIEW_ENABLED to true when no iloom-code-reviewer settings', () => {
-			const result = buildReviewTemplateVariables({})
+			const result = buildReviewTemplateVariables(false, {})
 
 			expect(result.REVIEW_ENABLED).toBe(true)
 		})
 
 		it('should set REVIEW_ENABLED to false when iloom-code-reviewer is disabled', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-code-reviewer': { enabled: false },
 			})
 
@@ -554,7 +554,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should not set provider flags when review is disabled', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-code-reviewer': { enabled: false },
 			})
 
@@ -565,7 +565,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should default to Claude with sonnet model when no providers specified', () => {
-			const result = buildReviewTemplateVariables({})
+			const result = buildReviewTemplateVariables(false, {})
 
 			expect(result.HAS_REVIEW_CLAUDE).toBe(true)
 			expect(result.REVIEW_CLAUDE_MODEL).toBe('sonnet')
@@ -574,7 +574,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should set provider flags based on configured providers', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-code-reviewer': {
 					providers: {
 						claude: 'opus',
@@ -592,7 +592,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should not default to Claude when other providers are specified without claude', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-code-reviewer': {
 					providers: {
 						gemini: 'gemini-3-flash',
@@ -607,7 +607,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should set codex provider flags when configured', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-code-reviewer': {
 					providers: {
 						codex: 'gpt-5.1-codex',
@@ -623,13 +623,13 @@ describe('buildReviewTemplateVariables', () => {
 
 	describe('artifact reviewer', () => {
 		it('should default ARTIFACT_REVIEW_ENABLED to true when no iloom-artifact-reviewer settings', () => {
-			const result = buildReviewTemplateVariables({})
+			const result = buildReviewTemplateVariables(false, {})
 
 			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
 		})
 
 		it('should set ARTIFACT_REVIEW_ENABLED to false when disabled', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-artifact-reviewer': { enabled: false },
 			})
 
@@ -637,7 +637,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should not set artifact provider flags when disabled', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-artifact-reviewer': { enabled: false },
 			})
 
@@ -647,7 +647,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should default to Claude with sonnet model when no providers specified', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-artifact-reviewer': { enabled: true },
 			})
 
@@ -658,7 +658,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should set artifact provider flags based on configured providers', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-artifact-reviewer': {
 					enabled: true,
 					providers: {
@@ -676,7 +676,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should not default to Claude when other providers are specified without claude', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-artifact-reviewer': {
 					providers: {
 						codex: 'gpt-5.1-codex',
@@ -693,7 +693,7 @@ describe('buildReviewTemplateVariables', () => {
 
 	describe('per-agent review flags', () => {
 		it('should set per-agent review flags when review is true', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-issue-enhancer': { review: true },
 				'iloom-issue-analyzer': { review: true },
 				'iloom-issue-planner': { review: true },
@@ -711,7 +711,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should default per-agent review flags to false when not configured', () => {
-			const result = buildReviewTemplateVariables({})
+			const result = buildReviewTemplateVariables(false, {})
 
 			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
 			expect(result.ANALYZER_REVIEW_ENABLED).toBe(false)
@@ -722,7 +722,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should set individual per-agent flags independently', () => {
-			const result = buildReviewTemplateVariables({
+			const result = buildReviewTemplateVariables(false, {
 				'iloom-issue-enhancer': { review: true },
 				'iloom-issue-planner': { review: true },
 				'iloom-issue-analyzer': { review: false },
@@ -735,9 +735,71 @@ describe('buildReviewTemplateVariables', () => {
 		})
 	})
 
+	describe('swarm mode review overrides', () => {
+		it('should use swarmReview instead of review when isSwarmMode is true', () => {
+			const result = buildReviewTemplateVariables(true, {
+				'iloom-issue-planner': { review: true, swarmReview: false },
+			})
+
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should enable review via swarmReview when review is false and isSwarmMode is true', () => {
+			const result = buildReviewTemplateVariables(true, {
+				'iloom-issue-planner': { review: false, swarmReview: true },
+			})
+
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should fall back to review when swarmReview is not set and isSwarmMode is true', () => {
+			const result = buildReviewTemplateVariables(true, {
+				'iloom-issue-planner': { review: true },
+			})
+
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should ignore swarmReview when isSwarmMode is false', () => {
+			const result = buildReviewTemplateVariables(false, {
+				'iloom-issue-planner': { review: true, swarmReview: false },
+			})
+
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+		})
+
+		it('should handle all agents with swarmReview overrides in swarm mode', () => {
+			const result = buildReviewTemplateVariables(true, {
+				'iloom-issue-enhancer': { review: true, swarmReview: false },
+				'iloom-issue-analyzer': { review: true, swarmReview: false },
+				'iloom-issue-planner': { review: true, swarmReview: false },
+				'iloom-issue-analyze-and-plan': { review: true, swarmReview: false },
+				'iloom-issue-implementer': { review: true, swarmReview: false },
+				'iloom-issue-complexity-evaluator': { review: true, swarmReview: false },
+			})
+
+			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(false)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZE_AND_PLAN_REVIEW_ENABLED).toBe(false)
+			expect(result.IMPLEMENTER_REVIEW_ENABLED).toBe(false)
+			expect(result.COMPLEXITY_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should handle mixed swarmReview across agents in swarm mode', () => {
+			const result = buildReviewTemplateVariables(true, {
+				'iloom-issue-planner': { review: true, swarmReview: false },
+				'iloom-issue-analyzer': { review: true },
+			})
+
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
+			expect(result.ANALYZER_REVIEW_ENABLED).toBe(true)
+		})
+	})
+
 	describe('null and undefined agents', () => {
 		it('should handle null agents parameter', () => {
-			const result = buildReviewTemplateVariables(null)
+			const result = buildReviewTemplateVariables(false, null)
 
 			expect(result.REVIEW_ENABLED).toBe(true)
 			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
@@ -749,7 +811,7 @@ describe('buildReviewTemplateVariables', () => {
 		})
 
 		it('should handle undefined agents parameter', () => {
-			const result = buildReviewTemplateVariables(undefined)
+			const result = buildReviewTemplateVariables(false, undefined)
 
 			expect(result.REVIEW_ENABLED).toBe(true)
 			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)
@@ -758,8 +820,8 @@ describe('buildReviewTemplateVariables', () => {
 			expect(result.ENHANCER_REVIEW_ENABLED).toBe(false)
 		})
 
-		it('should handle calling with no arguments', () => {
-			const result = buildReviewTemplateVariables()
+		it('should handle calling with no agents argument', () => {
+			const result = buildReviewTemplateVariables(false)
 
 			expect(result.REVIEW_ENABLED).toBe(true)
 			expect(result.ARTIFACT_REVIEW_ENABLED).toBe(true)

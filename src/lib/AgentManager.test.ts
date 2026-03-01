@@ -984,6 +984,60 @@ Prompt`
 			const result = await manager.loadAgents(settings as never)
 			expect(result['test-agent']).toBeDefined()
 		})
+
+		it('should pass SWARM_MODE to buildReviewTemplateVariables when present in templateVariables', async () => {
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'iloom-issue-planner': { review: true, swarmReview: false },
+				},
+			}
+
+			const templateVariables = { SWARM_MODE: true } as Record<string, unknown>
+			await manager.loadAgents(settings as never, templateVariables)
+
+			// When SWARM_MODE is true, swarmReview: false should override review: true
+			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(false)
+		})
+
+		it('should pass false for isSwarmMode when SWARM_MODE is not in templateVariables', async () => {
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'iloom-issue-planner': { review: true, swarmReview: false },
+				},
+			}
+
+			const templateVariables = {} as Record<string, unknown>
+			await manager.loadAgents(settings as never, templateVariables)
+
+			// When SWARM_MODE is not set, review: true should be used (swarmReview ignored)
+			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(true)
+		})
 	})
 
 	describe('renderAgentsToDisk', () => {

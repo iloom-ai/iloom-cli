@@ -661,6 +661,27 @@ describe('SwarmSetupService', () => {
 			expect(result).toBe(false)
 		})
 
+		it('should pass review template variables computed with swarm context', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-issue-planner': { review: true, swarmReview: false },
+					'iloom-issue-analyzer': { review: true },
+				},
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			// swarmReview: false should override review: true for planner in swarm mode
+			// analyzer has no swarmReview, so it should fall back to review: true
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'issue',
+				expect.objectContaining({
+					PLANNER_REVIEW_ENABLED: false,
+					ANALYZER_REVIEW_ENABLED: true,
+				}),
+			)
+		})
+
 		describe('sub-agent timeout', () => {
 			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 600000 (10 minutes) when not configured', async () => {
 				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')

@@ -625,7 +625,7 @@ export class IgniteCommand {
 		}
 
 		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
-		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
+		Object.assign(variables, buildReviewTemplateVariables(false, this.settings?.agents))
 
 		// Set complexity override if provided (CLI flag or loom metadata)
 		if (complexity) {

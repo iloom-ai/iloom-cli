@@ -340,7 +340,7 @@ export class SwarmSetupService {
 				ISSUE_PREFIX: issuePrefix,
 				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
-				...buildReviewTemplateVariables(settings?.agents),
+				...buildReviewTemplateVariables(true, settings?.agents),
 			}
 
 			// Render issue prompt template with swarm variables
