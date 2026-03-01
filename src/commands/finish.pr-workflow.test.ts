@@ -538,7 +538,7 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 		// Mock SettingsManager to return github-pr mode
 		const mockSettingsManager = {
 			loadSettings: vi.fn().mockResolvedValue({
-				mergeBehavior: { mode: 'github-pr' },
+				mergeBehavior: { mode: 'pr' },
 			}),
 		}
 

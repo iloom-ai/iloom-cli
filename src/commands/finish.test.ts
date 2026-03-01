@@ -3567,19 +3567,19 @@ describe('FinishCommand', () => {
 			})
 
 			it('should succeed with Linear provider and github-pr merge mode', async () => {
-				// Mock settings with github-pr mode
+				// Mock settings with pr mode
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
 					mergeBehavior: {
-						mode: 'github-pr',
+						mode: 'pr',
 					},
 				})
 
-				// Mock the executeGitHubPRWorkflow method to verify it's called
-				// (Issue #464: Linear + github-pr should work since PRs go through GitHub CLI)
-				const executeGitHubPRWorkflowSpy = vi
-					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+				// Mock the executeVCSPRWorkflow method to verify it's called
+				// (Issue #464: Linear + pr mode should work since PRs go through GitHub CLI)
+				const executeVCSPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeVCSPRWorkflow: () => Promise<void> }, 'executeVCSPRWorkflow')
 					.mockResolvedValue()
 
 				await command.execute({
@@ -3589,27 +3589,27 @@ describe('FinishCommand', () => {
 
 				// Rebase runs before PR workflow
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
-				// The github-pr workflow should be executed (not the local merge)
-				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// The pr workflow should be executed (not the local merge)
+				expect(executeVCSPRWorkflowSpy).toHaveBeenCalled()
 				// Local merge should NOT be performed (PR workflow handles merging)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
 
 			it('should succeed with Linear provider and github-draft-pr merge mode', async () => {
-				// Mock settings with github-draft-pr mode
+				// Mock settings with draft-pr mode
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 					},
 				})
 
-				// Mock the executeGitHubPRWorkflow as fallback handler
-				// When no draftPrNumber in metadata, github-draft-pr falls back to github-pr workflow
-				// (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
-				const executeGitHubPRWorkflowSpy = vi
-					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+				// Mock the executeVCSPRWorkflow as fallback handler
+				// When no draftPrNumber in metadata, draft-pr falls back to pr workflow
+				// (Issue #464: Linear + draft-pr mode should work since PRs go through GitHub CLI)
+				const executeVCSPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeVCSPRWorkflow: () => Promise<void> }, 'executeVCSPRWorkflow')
 					.mockResolvedValue()
 
 				await command.execute({
@@ -3619,8 +3619,8 @@ describe('FinishCommand', () => {
 
 				// Rebase runs before PR workflow
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
-				// For github-draft-pr without existing draft PR, it falls back to executeGitHubPRWorkflow
-				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// For draft-pr without existing draft PR, it falls back to executeVCSPRWorkflow
+				expect(executeVCSPRWorkflowSpy).toHaveBeenCalled()
 				// Local merge should NOT be performed (PR workflow handles merging)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
@@ -3718,7 +3718,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-draft-pr' },
+					mergeBehavior: { mode: 'draft-pr' },
 				})
 				// Spy on handlePRCleanupPrompt to avoid user prompts
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
@@ -3734,7 +3734,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-draft-pr', openBrowserOnFinish: false },
+					mergeBehavior: { mode: 'draft-pr', openBrowserOnFinish: false },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
@@ -3749,7 +3749,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-draft-pr' },
+					mergeBehavior: { mode: 'draft-pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
@@ -3764,7 +3764,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-draft-pr' },
+					mergeBehavior: { mode: 'draft-pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
@@ -3779,12 +3779,12 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-draft-pr' },
+					mergeBehavior: { mode: 'draft-pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
 
-				// JSON mode with github-draft-pr requires --cleanup or --no-cleanup
+				// JSON mode with draft-pr requires --cleanup or --no-cleanup
 				await command.execute({ identifier: '42', options: { json: true, cleanup: false } })
 
 				expect(PRManager.prototype.markPRReady).toHaveBeenCalled()
@@ -3797,7 +3797,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-pr', openBrowserOnFinish: false },
+					mergeBehavior: { mode: 'pr', openBrowserOnFinish: false },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
@@ -3814,7 +3814,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-pr' },
+					mergeBehavior: { mode: 'pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
@@ -3831,12 +3831,12 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-pr' },
+					mergeBehavior: { mode: 'pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
 
-				// JSON mode with github-pr requires --cleanup or --no-cleanup
+				// JSON mode with pr requires --cleanup or --no-cleanup
 				await command.execute({ identifier: '42', options: { json: true, cleanup: false } })
 
 				// Verify openInBrowser (6th arg) is false in json mode
@@ -3849,7 +3849,7 @@ describe('FinishCommand', () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
 					worktreeDir: '/test/worktrees',
-					mergeBehavior: { mode: 'github-pr' },
+					mergeBehavior: { mode: 'pr' },
 				})
 				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
 				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)

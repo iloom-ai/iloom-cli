@@ -30,6 +30,8 @@ import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
+import { VCSProviderFactory } from '../lib/VCSProviderFactory.js'
+import type { VersionControlProvider } from '../lib/VersionControlProvider.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -207,9 +209,10 @@ export class FinishCommand {
 		// JSON mode validation - require explicit flags for interactive prompts
 		if (isJsonMode) {
 			const settings = await this.settingsManager.loadSettings()
-			// In github-pr mode, require explicit --cleanup or --no-cleanup
-			if ((settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr') && input.options.cleanup === undefined) {
-				throw new Error('JSON mode with "github-pr"/"github-draft-pr" workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
+			// In pr/draft-pr mode, require explicit --cleanup or --no-cleanup
+			const jsonModeCheckMode = settings.mergeBehavior?.mode as string | undefined
+			if ((jsonModeCheckMode === 'pr' || jsonModeCheckMode === 'draft-pr') && input.options.cleanup === undefined) {
+				throw new Error('JSON mode with "pr"/"draft-pr" workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
 			}
 		}
 
@@ -219,11 +222,14 @@ export class FinishCommand {
 		let repo: string | undefined
 
 		// We need repo info if:
-		// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
+		// 1. Merge mode is a PR mode AND VCSProviderFactory returns null (GitHub/legacy PRManager path)
 		// 2. Provider is GitHub (for GitHub issue operations)
-		// Note: bitbucket-pr mode handles repo detection internally via BitBucketVCSProvider
+		// Note: VCS providers (e.g., BitBucket) handle repo detection internally via VersionControlProvider
+		const rawRepoMode = settings.mergeBehavior?.mode as string | undefined
+		const isPRMode = rawRepoMode === 'pr' || rawRepoMode === 'draft-pr'
+			|| rawRepoMode === 'github-pr' || rawRepoMode === 'github-draft-pr' || rawRepoMode === 'bitbucket-pr'
 		const needsRepo =
-			settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr' || this.issueTracker.providerName === 'github'
+			(isPRMode && VCSProviderFactory.create(settings) === null) || this.issueTracker.providerName === 'github'
 		if (needsRepo && (await hasMultipleRemotes())) {
 			repo = await getConfiguredRepoFromSettings(settings)
 			getLogger().info(`Using GitHub repository: ${repo}`)
@@ -287,8 +293,12 @@ export class FinishCommand {
 			const durationMinutes = preFinishCreatedAt
 				? Math.round((Date.now() - new Date(preFinishCreatedAt).getTime()) / 60000)
 				: 0
+			const telemetryModeMap: Record<string, 'local' | 'pr' | 'draft-pr'> = {
+				'local': 'local', 'pr': 'pr', 'draft-pr': 'draft-pr',
+				'github-pr': 'pr', 'github-draft-pr': 'draft-pr', 'bitbucket-pr': 'pr',
+			}
 			TelemetryService.getInstance().track('loom.finished', {
-				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr') ?? 'local',
+				merge_behavior: telemetryModeMap[settings.mergeBehavior?.mode ?? 'local'] ?? 'local',
 				duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
 			})
 		} catch (error: unknown) {
@@ -776,24 +786,43 @@ export class FinishCommand {
 		const settings = await this.settingsManager.loadSettings(worktree.path)
 		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
 
-		if (mergeBehavior.mode === 'github-pr') {
-			// Execute github-pr workflow instead of local merge
-			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+		// Normalize merge mode: support both legacy values (github-pr, github-draft-pr, bitbucket-pr)
+		// and new generic values (pr, draft-pr) — schema migration handled by Issue #850
+		const rawMode = mergeBehavior.mode as string
+		const mergeMode = rawMode === 'github-pr' || rawMode === 'bitbucket-pr'
+			? 'pr'
+			: rawMode === 'github-draft-pr'
+				? 'draft-pr'
+				: rawMode
+
+		const vcsProvider = VCSProviderFactory.create(settings)
+
+		if (mergeMode === 'pr') {
+			// Unified PR workflow — route to appropriate provider via VCSProviderFactory
+			await this.executeVCSPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
 			return
 		}
 
-		if (mergeBehavior.mode === 'github-draft-pr') {
+		if (mergeMode === 'draft-pr') {
+
+			if (vcsProvider !== null && !vcsProvider.supportsDraftPRs) {
+				// Provider doesn't support draft PRs — warn and downgrade to a regular PR
+				getLogger().warn(`${vcsProvider.providerName} does not support draft PRs. Creating a regular PR instead.`)
+				await this.executeVCSPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
+				return
+			}
+
+			// GitHub legacy path (vcsProvider === null) or VCS provider that supports drafts
 			// Read metadata to get draft PR number
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
 			const metadataManager = new MetadataManager()
 			const metadata = await metadataManager.readMetadata(worktree.path)
 
 			getLogger().debug(`Draft PR mode: worktree=${worktree.path}, draftPrNumber=${metadata?.draftPrNumber ?? 'none'}`)
 
 			if (!metadata?.draftPrNumber) {
-				// Fallback: no draft PR exists, treat like github-pr mode
+				// Fallback: no draft PR exists, treat like pr mode
 				getLogger().warn('No draft PR found in metadata, creating new PR...')
-				await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+				await this.executeVCSPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
 				return
 			}
 
@@ -929,7 +958,6 @@ export class FinishCommand {
 		await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
 
 		// Step 5.8: Archive metadata BEFORE cleanup decision (ensures it runs even with --no-cleanup)
-		const { MetadataManager } = await import('../lib/MetadataManager.js')
 		const metadataManager = new MetadataManager()
 		if (!options.dryRun) {
 			await metadataManager.archiveMetadata(worktree.path)
@@ -1072,14 +1100,20 @@ export class FinishCommand {
 	}
 
 	/**
-	 * Execute workflow for GitHub PR creation (github-pr merge mode)
+	 * Execute unified VCS PR workflow (pr/draft-pr merge mode)
+	 * Routes to the appropriate VCS provider or falls back to the legacy GitHub PRManager path.
+	 *
+	 * If vcsProvider is null (GitHub/legacy), uses PRManager.createOrOpenPR.
+	 * If vcsProvider is non-null, delegates to VersionControlProvider.createPR.
+	 *
 	 * Validates → Commits → Pushes → Creates PR → Prompts for cleanup
 	 */
-	private async executeGitHubPRWorkflow(
+	private async executeVCSPRWorkflow(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
 		settings: import('../lib/SettingsManager.js').IloomSettings,
+		vcsProvider: VersionControlProvider | null,
 		finishResult: FinishResult
 	): Promise<void> {
 		// Step 1: Push branch to origin
@@ -1091,7 +1125,7 @@ export class FinishCommand {
 			getLogger().success('Branch pushed successfully')
 		}
 
-		// Step 2: Initialize PRManager with settings
+		// Step 2: Initialize PRManager with settings (used by GitHub/legacy path)
 		const prManager = new PRManager(settings)
 
 		// Step 3: Generate PR title from issue if available
@@ -1109,7 +1143,54 @@ export class FinishCommand {
 		// Step 4: Get base branch (respects parent loom metadata for child looms)
 		const baseBranch = await getMergeTargetBranch(worktree.path)
 
-		// Step 5: Create or open PR
+		// Step 5: Create or open PR — route to VCS provider or legacy PRManager
+		if (vcsProvider !== null) {
+			// VCS provider path (e.g., BitBucket from PR #609)
+			const openInBrowser = !options.noBrowser
+				&& !options.json
+				&& settings.mergeBehavior?.openBrowserOnFinish !== false
+
+			if (options.dryRun) {
+				getLogger().info(`[DRY RUN] Would create ${vcsProvider.providerName} PR`)
+				getLogger().info(`  Title: ${prTitle}`)
+				getLogger().info(`  Base: ${baseBranch}`)
+				finishResult.operations.push({
+					type: 'pr-creation',
+					message: `Would create ${vcsProvider.providerName} PR (dry-run)`,
+					success: true,
+				})
+				return
+			}
+
+			const createPROptions: Parameters<typeof vcsProvider.createPR>[0] = {
+				branch: worktree.branch,
+				title: prTitle,
+				baseBranch,
+				worktreePath: worktree.path,
+				openInBrowser,
+			}
+			if (parsed.type === 'issue' && parsed.number) {
+				createPROptions.issueNumber = parsed.number
+			}
+			const prResult = await vcsProvider.createPR(createPROptions)
+
+			getLogger().success(`Pull request created: ${prResult.url}`)
+			finishResult.operations.push({
+				type: 'pr-creation',
+				message: prResult.wasExisting ? 'Found existing pull request' : 'Pull request created',
+				success: true,
+			})
+			finishResult.prUrl = prResult.url
+
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options, prResult.number)
+
+			const metadataManager = new MetadataManager()
+			await metadataManager.archiveMetadata(worktree.path)
+
+			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
+			return
+		}
+
 		if (options.dryRun) {
 			getLogger().info('[DRY RUN] Would create GitHub PR')
 			getLogger().info(`  Title: ${prTitle}`)
