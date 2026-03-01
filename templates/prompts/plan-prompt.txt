@@ -277,6 +277,18 @@ Each child issue should include ONLY these sections:
 4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports). A contract is an interface boundary — what one issue exposes for another to consume. Example: `PlanCommand.execute()` gains an optional `autoSwarm?: boolean` 7th parameter. NOT an implementation: do not describe what happens internally when `autoSwarm` is true — that is implementation detail, not a contract.
 5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
 6. **Scope Boundaries**: What is explicitly NOT included
+7. **Must-Haves**: Concrete verification criteria that describe the expected outcome of this issue. These are NOT implementation instructions — they describe what should exist after the work is done, not how to build it. Include at least one must-have per child issue. Each must-have uses one of three check types:
+   - `exists: <file-path>` — the file was created
+   - `substantive: <file-path> — <what it should contain or export>` — the file has expected content, exports, or structure
+   - `wired: <file-path> — <how it should be integrated>` — the code is properly connected to the rest of the system (e.g., registered in a router, imported by a parent module, called from an entry point)
+
+   Example:
+   ```
+   ## Must-Haves
+   - exists: src/lib/WaveVerifier.ts
+   - substantive: src/lib/WaveVerifier.ts — exports a WaveVerifier class with a verify() method
+   - wired: src/lib/WaveVerifier.ts — imported and invoked in src/commands/finish.ts
+   ```
 
 Do NOT add "Implementation Details", "Technical Approach", or similar sections — these violate the rule above.
 
