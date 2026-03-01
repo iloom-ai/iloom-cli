@@ -1,5 +1,7 @@
 import { realpathSync } from 'fs'
 import { extractIssueNumber } from './git.js'
+import { logger } from './logger.js'
+import { resolveRecapFilePath, readRecapFile } from './mcp.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata, SwarmState } from '../lib/MetadataManager.js'
 import type { ProjectCapability } from '../types/loom.js'
@@ -68,6 +70,15 @@ export interface ChildrenJson {
 }
 
 /**
+ * Complexity data for a swarm issue, sourced from recap files.
+ * Intentionally excludes timestamp from RecapComplexity.
+ */
+export interface SwarmComplexity {
+  level: string
+  reason?: string
+}
+
+/**
  * Swarm issue data for epic loom JSON output
  * Each child issue enriched with state and worktreePath from its loom metadata
  */
@@ -77,6 +88,38 @@ export interface SwarmIssue {
   url: string
   state: SwarmState | null
   worktreePath: string | null
+  complexity: SwarmComplexity | null
+}
+
+/**
+ * Load complexity data from recap files for a set of worktree paths.
+ * Returns a Map<worktreePath, SwarmComplexity> for efficient lookup.
+ * Reads recap files in parallel with graceful degradation (missing/invalid files are skipped).
+ */
+export async function loadComplexityMap(
+  worktreePaths: string[],
+): Promise<Map<string, SwarmComplexity>> {
+  const map = new Map<string, SwarmComplexity>()
+  const uniquePaths = [...new Set(worktreePaths.filter(Boolean))]
+
+  const results = await Promise.allSettled(
+    uniquePaths.map(async (wp) => {
+      const filePath = resolveRecapFilePath(wp)
+      const recap = await readRecapFile(filePath)
+      const comp = recap.complexity
+      if (comp && typeof comp === 'object' && !Array.isArray(comp) && typeof (comp as Record<string, unknown>).level === 'string') {
+        const typed = comp as { level: string; reason?: string }
+        map.set(wp, { level: typed.level, ...(typed.reason && { reason: typed.reason }) })
+      }
+    }),
+  )
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      logger.debug('Failed to load complexity from recap file', { error: result.reason })
+    }
+  }
+
+  return map
 }
 
 /**
@@ -189,6 +232,7 @@ export function enrichSwarmIssues(
   allMetadata: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
   projectPath?: string | null,
+  complexityMap?: Map<string, SwarmComplexity>,
 ): SwarmIssue[] {
   // When projectPath is provided, filter metadata to only entries from the same project.
   // This prevents cross-project collisions where different projects share issue numbers.
@@ -233,6 +277,7 @@ export function enrichSwarmIssues(
       url: child.url,
       state: childMeta?.state ?? null,
       worktreePath: childMeta?.worktreePath ?? null,
+      complexity: (childMeta?.worktreePath ? complexityMap?.get(childMeta.worktreePath) : undefined) ?? null,
     }
   })
 }
@@ -254,6 +299,7 @@ export function formatLoomForJson(
   metadata?: LoomMetadata | null,
   allMetadata?: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
+  complexityMap?: Map<string, SwarmComplexity>,
 ): LoomJsonOutput {
   // Use metadata values when available, otherwise derive from worktree
   const loomType = metadata?.issueType ?? determineLoomType(worktree)
@@ -283,7 +329,7 @@ export function formatLoomForJson(
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata?.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata?.projectPath)
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata?.projectPath, complexityMap)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata?.dependencyMap && Object.keys(metadata.dependencyMap).length > 0
@@ -330,12 +376,13 @@ export function formatLoomsForJson(
   metadata?: Map<string, LoomMetadata | null>,
   allMetadata?: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
+  complexityMap?: Map<string, SwarmComplexity>,
 ): LoomJsonOutput[] {
   // If allMetadata not provided, derive from metadata map values
   const resolvedAllMetadata = allMetadata ?? (metadata
     ? Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
     : [])
-  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path), resolvedAllMetadata, finishedMetadata))
+  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path), resolvedAllMetadata, finishedMetadata, complexityMap))
 }
 
 /**
@@ -347,14 +394,14 @@ export function formatLoomsForJson(
  * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  * @param finishedMetadata - Optional finished/archived metadata for fallback swarm issue enrichment
  */
-export function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: LoomMetadata[], finishedMetadata?: LoomMetadata[]): LoomJsonOutput {
+export function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: LoomMetadata[], finishedMetadata?: LoomMetadata[], complexityMap?: Map<string, SwarmComplexity>): LoomJsonOutput {
   // Use metadata values for type, default to 'branch' if not set
   const loomType = metadata.issueType ?? 'branch'
 
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata.projectPath)
+    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata.projectPath, complexityMap)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata.dependencyMap && Object.keys(metadata.dependencyMap).length > 0

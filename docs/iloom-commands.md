@@ -529,6 +529,7 @@ Each entry in `swarmIssues` has:
 | `url` | `string` | Issue URL |
 | `state` | `string \| null` | Current lifecycle state (`pending`, `in_progress`, `code_review`, `done`, `failed`) or `null` |
 | `worktreePath` | `string \| null` | Path to the child's worktree, or `null` if not yet created |
+| `complexity` | `object \| null` | Complexity assessment (`{ level, reason }`) from recap, or `null` if not available |
 
 **Examples:**
 

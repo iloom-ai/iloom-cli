@@ -1,12 +1,20 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   formatLoomForJson,
   formatLoomsForJson,
   formatFinishedLoomForJson,
   enrichSwarmIssues,
+  loadComplexityMap,
+  type SwarmComplexity,
 } from './loom-formatter.js'
+import { readRecapFile } from './mcp.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+
+vi.mock('./mcp.js', () => ({
+  resolveRecapFilePath: (wp: string) => `/mock/recaps/${wp.replace(/\//g, '___')}.json`,
+  readRecapFile: vi.fn().mockResolvedValue({}),
+}))
 
 describe('formatLoomForJson', () => {
   /**
@@ -1631,6 +1639,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://github.com/org/repo/issues/101',
         state: 'in_progress',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+        complexity: null,
       },
       {
         number: '#102',
@@ -1638,6 +1647,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://github.com/org/repo/issues/102',
         state: 'done',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+        complexity: null,
       },
     ])
   })
@@ -1657,6 +1667,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://github.com/org/repo/issues/101',
         state: null,
         worktreePath: null,
+        complexity: null,
       },
     ])
   })
@@ -1678,6 +1689,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://linear.app/org/issue/ENG-123',
         state: 'code_review',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-ENG-123__task',
+        complexity: null,
       },
     ])
   })
@@ -1695,8 +1707,10 @@ describe('enrichSwarmIssues', () => {
 
     expect(result[0]?.state).toBe('pending')
     expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__child')
+    expect(result[0]?.complexity).toBeNull()
     expect(result[1]?.state).toBeNull()
     expect(result[1]?.worktreePath).toBeNull()
+    expect(result[1]?.complexity).toBeNull()
   })
 
   it('should return empty array for empty childIssues', () => {
@@ -1731,6 +1745,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://github.com/org/repo/issues/101',
         state: 'done',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+        complexity: null,
       },
       {
         number: '#102',
@@ -1738,6 +1753,7 @@ describe('enrichSwarmIssues', () => {
         url: 'https://github.com/org/repo/issues/102',
         state: 'in_progress',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+        complexity: null,
       },
     ])
   })
@@ -1885,6 +1901,144 @@ describe('enrichSwarmIssues', () => {
       expect(result[0]?.worktreePath).toBeNull()
     })
   })
+
+  describe('complexity enrichment', () => {
+    it('should include complexity from complexityMap when worktreePath matches', () => {
+      const childIssues = [
+        { number: '#101', title: 'First task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+        { number: '#102', title: 'Second task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+      ]
+      const allMetadata = [
+        createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+        createChildLoomMetadata('102', 'done', '/Users/dev/projects/myapp-looms/issue-102__child'),
+      ]
+      const complexityMap = new Map<string, SwarmComplexity>([
+        ['/Users/dev/projects/myapp-looms/issue-101__child', { level: 'simple', reason: 'Single file change' }],
+      ])
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+
+      expect(result[0]?.complexity).toEqual({ level: 'simple', reason: 'Single file change' })
+      expect(result[1]?.complexity).toBeNull()
+    })
+
+    it('should set complexity to null when no complexityMap is provided', () => {
+      const childIssues = [
+        { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ]
+      const allMetadata = [
+        createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      ]
+
+      const result = enrichSwarmIssues(childIssues, allMetadata)
+
+      expect(result[0]?.complexity).toBeNull()
+    })
+
+    it('should set complexity to null when child has no worktreePath', () => {
+      const childIssues = [
+        { number: '#101', title: 'Task without loom', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ]
+      const allMetadata: LoomMetadata[] = []
+      const complexityMap = new Map<string, SwarmComplexity>([
+        ['/some/path', { level: 'complex', reason: 'Many files' }],
+      ])
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+
+      expect(result[0]?.complexity).toBeNull()
+    })
+
+    it('should include complexity with only level when reason is not provided', () => {
+      const childIssues = [
+        { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ]
+      const allMetadata = [
+        createChildLoomMetadata('101', 'pending', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      ]
+      const complexityMap = new Map<string, SwarmComplexity>([
+        ['/Users/dev/projects/myapp-looms/issue-101__child', { level: 'trivial' }],
+      ])
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+
+      expect(result[0]?.complexity).toEqual({ level: 'trivial' })
+    })
+  })
+})
+
+describe('loadComplexityMap', () => {
+  it('should return empty map when no worktree paths provided', async () => {
+    const result = await loadComplexityMap([])
+    expect(result.size).toBe(0)
+  })
+
+  it('should return empty map when recap files have no complexity', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({})
+
+    const result = await loadComplexityMap(['/path/to/worktree'])
+    expect(result.size).toBe(0)
+  })
+
+  it('should extract complexity from recap files', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({
+      complexity: { level: 'simple', reason: 'Single file', timestamp: '2024-01-01T00:00:00Z' },
+    })
+
+    const result = await loadComplexityMap(['/path/to/worktree'])
+
+    expect(result.size).toBe(1)
+    expect(result.get('/path/to/worktree')).toEqual({ level: 'simple', reason: 'Single file' })
+  })
+
+  it('should exclude timestamp from complexity data', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({
+      complexity: { level: 'complex', reason: 'Many changes', timestamp: '2024-01-01T00:00:00Z' },
+    })
+
+    const result = await loadComplexityMap(['/path/to/worktree'])
+    const complexity = result.get('/path/to/worktree')
+
+    expect(complexity).toEqual({ level: 'complex', reason: 'Many changes' })
+    expect(complexity).not.toHaveProperty('timestamp')
+  })
+
+  it('should deduplicate worktree paths', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({
+      complexity: { level: 'trivial', timestamp: '2024-01-01T00:00:00Z' },
+    })
+
+    await loadComplexityMap(['/path/a', '/path/a', '/path/a'])
+
+    expect(readRecapFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('should filter out falsy paths', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({})
+
+    await loadComplexityMap(['', '/valid/path'])
+
+    expect(readRecapFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('should gracefully handle read errors', async () => {
+    vi.mocked(readRecapFile).mockRejectedValue(new Error('File read error'))
+
+    const result = await loadComplexityMap(['/path/to/worktree'])
+
+    expect(result.size).toBe(0)
+  })
+
+  it('should omit reason when not present in recap', async () => {
+    vi.mocked(readRecapFile).mockResolvedValue({
+      complexity: { level: 'trivial', timestamp: '2024-01-01T00:00:00Z' },
+    })
+
+    const result = await loadComplexityMap(['/path/to/worktree'])
+
+    expect(result.get('/path/to/worktree')).toEqual({ level: 'trivial' })
+    expect(result.get('/path/to/worktree')).not.toHaveProperty('reason')
+  })
 })
 
 describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () => {
@@ -1979,6 +2133,7 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
         url: 'https://github.com/org/repo/issues/101',
         state: 'in_progress',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+        complexity: null,
       },
       {
         number: '#102',
@@ -1986,6 +2141,7 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
         url: 'https://github.com/org/repo/issues/102',
         state: 'pending',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+        complexity: null,
       },
     ])
     expect(result.dependencyMap).toEqual({ '#102': ['#101'] })
@@ -2118,6 +2274,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
         url: 'https://github.com/org/repo/issues/201',
         state: 'done',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-201__child',
+        complexity: null,
       },
     ])
     expect(result.dependencyMap).toEqual({})
@@ -2245,6 +2402,7 @@ describe('formatLoomsForJson - swarm issues propagation', () => {
         url: 'https://github.com/org/repo/issues/101',
         state: 'in_progress',
         worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+        complexity: null,
       },
     ])
   })
