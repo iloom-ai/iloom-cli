@@ -5,6 +5,14 @@ import { z } from 'zod'
 import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
+// Merge mode: canonical values + legacy aliases accepted at parse time
+export const mergeModeValues = ['local', 'pr', 'draft-pr', 'github-pr', 'github-draft-pr', 'bitbucket-pr'] as const
+export type MergeMode = 'local' | 'pr' | 'draft-pr'
+const mergeModeTransform = (val: string): MergeMode => {
+	const map: Record<string, MergeMode> = { 'github-pr': 'pr', 'github-draft-pr': 'draft-pr', 'bitbucket-pr': 'pr' }
+	return (map[val] ?? val) as MergeMode
+}
+
 /**
  * Zod schema for base agent settings (without nested agents)
  */
@@ -450,23 +458,23 @@ export const IloomSettingsSchema = z.object({
 	mergeBehavior: z
 		.object({
 			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
+			mode: z.enum(mergeModeValues).default('local').transform(mergeModeTransform),
 			remote: z.string().optional(),
 			autoCommitPush: z
 				.boolean()
 				.optional()
 				.describe(
-					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is draft-pr.'
 				),
 			openBrowserOnFinish: z
 				.boolean()
 				.default(true)
 				.describe(
-					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
+					'Open the PR in the default browser after finishing in pr or draft-pr mode. Use --no-browser flag to override.'
 				),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), pr (create PR), or draft-pr (create draft PR at start, mark ready on finish)'),
 	ide: z
 		.object({
 			// SYNC: If this default changes, update displayDefaultsBox() in src/utils/first-run-setup.ts
@@ -706,23 +714,23 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Issue management configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).optional(),
+			mode: z.enum(mergeModeValues).transform(mergeModeTransform).optional(),
 			remote: z.string().optional(),
 			autoCommitPush: z
 				.boolean()
 				.optional()
 				.describe(
-					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is draft-pr.'
 				),
 			openBrowserOnFinish: z
 				.boolean()
 				.optional()
 				.describe(
-					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
+					'Open the PR in the default browser after finishing in pr or draft-pr mode. Use --no-browser flag to override.'
 				),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), pr (create PR), or draft-pr (create draft PR at start, mark ready on finish)'),
 	ide: z
 		.object({
 			type: z

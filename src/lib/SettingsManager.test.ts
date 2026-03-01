@@ -3073,7 +3073,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					autoCommitPush: true,
 				},
 			}
@@ -3095,7 +3095,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					autoCommitPush: false,
 				},
 			}
@@ -3117,7 +3117,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					// autoCommitPush intentionally omitted
 				},
 			}
@@ -3133,6 +3133,32 @@ const error: { code?: string; message: string } = {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.mergeBehavior?.autoCommitPush).toBeUndefined()
+		})
+	})
+
+	describe('mergeBehavior.mode backwards compatibility transform', () => {
+		it.each([
+			['github-pr', 'pr'],
+			['github-draft-pr', 'draft-pr'],
+			['bitbucket-pr', 'pr'],
+			['local', 'local'],
+			['pr', 'pr'],
+			['draft-pr', 'draft-pr'],
+		])('should transform "%s" to "%s"', async (input, expected) => {
+			const projectRoot = '/test/project'
+			const settings = { mergeBehavior: { mode: input } }
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mergeBehavior?.mode).toBe(expected)
 		})
 	})
 

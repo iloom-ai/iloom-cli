@@ -32,7 +32,7 @@ export interface LoomCreatedProperties {
 }
 
 export interface LoomFinishedProperties {
-  merge_behavior: 'local' | 'github-pr' | 'github-draft-pr'
+  merge_behavior: 'local' | 'pr' | 'draft-pr'
   duration_minutes: number
 }
 
