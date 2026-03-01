@@ -39,12 +39,9 @@ export const BaseAgentSettingsSchema = z.object({
 })
 
 /**
- * Zod schema for agent settings, extends base with sub-agent timeout and nested agents record.
+ * Zod schema for agent settings, extends base with sub-agent timeout.
  */
 export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
-	agents: z.record(z.string(), BaseAgentSettingsSchema)
-		.optional()
-		.describe('Nested per-agent settings under iloom-swarm-worker. Allows overriding phase agent settings (model, swarmModel, review, swarmReview, enabled, providers) specifically for swarm execution.'),
 	subAgentTimeout: z
 		.number()
 		.min(1, 'Sub-agent timeout must be at least 1 minute')
