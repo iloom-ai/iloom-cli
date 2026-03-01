@@ -174,11 +174,13 @@ NOTE: If no issue number has been provided, use the current branch name to look 
 Before implementing, extract and validate the implementation plan:
 1. **Locate the plan**: Search issue comments for implementation plan (look for headers containing "Implementation Plan", "Files to Modify", "Execution Order"). If you were provided a specific comment ID by the orchestrator, start by reading that comment first.
 2. **Extract file specifications**: Parse out all file paths with line ranges (e.g., `/src/lib/Foo.ts:10-25`, `src/utils/bar.ts:42`)
+{{#unless SWARM_MODE}}
 3. **Validate file existence**: For each specified file path, verify the file exists using Read tool
 4. **Log validation results**: Display extracted file list and validation status to user
 5. **Handle extraction/validation failures**: If file extraction fails or plan specifies files that don't exist, immediately update your issue comment to notify the user of the issue but continue with implementation anyway. Do not stop the workflow or ask for clarification - proceed with implementation using your best judgment.
+{{/unless}}
 
-**CRITICAL**: This step prevents wasted time searching for files when the plan already provides exact locations.
+**CRITICAL**: Do not waste turns searching for files — the plan already provides exact locations. Use them directly when implementing.
 
 ### Step 1.6: Apply Step Filter (Multi-Step Execution)
 
