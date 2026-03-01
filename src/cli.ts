@@ -218,7 +218,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
   // Commands that ALWAYS require gh CLI regardless of configuration
   const alwaysRequireGh = ['feedback', 'contribute']
 
-  // Commands that require gh CLI when GitHub provider or github-pr merge mode
+  // Commands that require gh CLI when GitHub provider or pr/draft-pr merge mode with GitHub VCS
   const conditionallyRequireGh = ['start', 'finish', 'enhance', 'add-issue', 'ignite', 'spin']
 
   // Commands that only warn if gh CLI is missing (secondary/utility commands)
@@ -244,7 +244,8 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
       const provider = IssueTrackerFactory.getProviderName(settings)
       const mergeBehaviorMode = settings.mergeBehavior?.mode
 
-      needsGhCli = provider === 'github' || mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr'
+      const isPrMode = (mergeBehaviorMode as string) === 'pr' || (mergeBehaviorMode as string) === 'draft-pr'
+      needsGhCli = provider === 'github' || isPrMode
     } catch {
       // If we can't load settings, assume we might need gh CLI
       needsGhCli = true
@@ -257,7 +258,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
       // ERROR: gh CLI is required for this command
       const errorMessage = alwaysRequireGh.includes(commandName)
         ? `The "${commandName}" command requires GitHub CLI (gh) to be installed.`
-        : `GitHub CLI (gh) is required when using GitHub as the issue tracker or "github-pr"/"github-draft-pr" merge mode.`
+        : `GitHub CLI (gh) is required when using GitHub as the issue tracker or "pr"/"draft-pr" merge mode with GitHub.`
 
       logger.error(errorMessage)
       logger.info('')
@@ -277,11 +278,12 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
 
         const provider = IssueTrackerFactory.getProviderName(settings)
         const mergeBehaviorMode = settings.mergeBehavior?.mode
+        const isPrMode = (mergeBehaviorMode as string) === 'pr' || (mergeBehaviorMode as string) === 'draft-pr'
 
-        if (provider === 'github' || mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr') {
+        if (provider === 'github' || isPrMode) {
           logger.warn('GitHub CLI (gh) is not installed.')
           logger.warn(
-            'Some features may not work correctly with your current configuration (GitHub provider or "github-pr"/"github-draft-pr" merge mode).'
+            'Some features may not work correctly with your current configuration (GitHub provider or PR merge mode).'
           )
           logger.info('To install: brew install gh (macOS) or see https://github.com/cli/cli#installation')
           logger.info('')
@@ -620,7 +622,7 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
-  .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
+  .option('--no-browser', 'Skip opening PR in browser (pr and draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--review', 'Review commit message before committing (default: auto-commit without review)')

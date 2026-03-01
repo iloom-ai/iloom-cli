@@ -414,7 +414,7 @@ export class ContributeCommand {
 		// Create .iloom directory
 		await mkdir(iloomDir, { recursive: true })
 
-		// Create settings.json with upstream remote configuration and github-pr mode
+		// Create settings.json with upstream remote configuration and draft-pr mode
 		const settings = {
 			issueManagement: {
 				github: {
@@ -422,7 +422,7 @@ export class ContributeCommand {
 				},
 			},
 			mergeBehavior: {
-				mode: 'github-draft-pr',
+				mode: 'draft-pr',
 			},
 		}
 

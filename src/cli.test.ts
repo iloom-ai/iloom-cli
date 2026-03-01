@@ -79,12 +79,12 @@ describe('GitHub CLI validation', () => {
         expect(mockExit).toHaveBeenCalledWith(1)
       })
 
-      it('should exit when gh CLI missing and merge mode is github-pr', async () => {
+      it('should exit when gh CLI missing and merge mode is pr', async () => {
         commandName = 'finish'
         mockIsCliAvailable.mockReturnValue(false)
         mockLoadSettings.mockResolvedValue({
           issueManagement: { provider: 'linear' },
-          mergeBehavior: { mode: 'github-pr' },
+          mergeBehavior: { mode: 'pr' },
         })
 
         await validateGhCliForCommand(createMockCommand())
@@ -92,12 +92,12 @@ describe('GitHub CLI validation', () => {
         expect(mockExit).toHaveBeenCalledWith(1)
       })
 
-      it('should exit when gh CLI missing and merge mode is github-draft-pr', async () => {
+      it('should exit when gh CLI missing and merge mode is draft-pr', async () => {
         commandName = 'finish'
         mockIsCliAvailable.mockReturnValue(false)
         mockLoadSettings.mockResolvedValue({
           issueManagement: { provider: 'linear' },
-          mergeBehavior: { mode: 'github-draft-pr' },
+          mergeBehavior: { mode: 'draft-pr' },
         })
 
         await validateGhCliForCommand(createMockCommand())

@@ -561,13 +561,13 @@ describe('SummaryCommand', () => {
 	})
 
 	describe('postSummary PR routing', () => {
-		it('should post to PR when mergeMode is github-draft-pr and draftPrNumber exists', async () => {
+		it('should post to PR when mergeMode is draft-pr and draftPrNumber exists', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-			// Configure github-draft-pr mode with draftPrNumber in metadata
+			// Configure draft-pr mode with draftPrNumber in metadata
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
 				...defaultSettings,
-				mergeBehavior: { mode: 'github-draft-pr' },
+				mergeBehavior: { mode: 'draft-pr' },
 			})
 			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
 				...defaultMetadata,
@@ -592,13 +592,13 @@ describe('SummaryCommand', () => {
 			consoleSpy.mockRestore()
 		})
 
-		it('should post to PR when mergeMode is github-pr and PR exists for branch', async () => {
+		it('should post to PR when mergeMode is pr and PR exists for branch', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-			// Configure github-pr mode
+			// Configure pr mode
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
 				...defaultSettings,
-				mergeBehavior: { mode: 'github-pr' },
+				mergeBehavior: { mode: 'pr' },
 			})
 
 			// Mock PRManager to return an existing PR
@@ -625,13 +625,13 @@ describe('SummaryCommand', () => {
 			consoleSpy.mockRestore()
 		})
 
-		it('should fall back to issue when github-pr mode but no PR found', async () => {
+		it('should fall back to issue when pr mode but no PR found', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-			// Configure github-pr mode
+			// Configure pr mode
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
 				...defaultSettings,
-				mergeBehavior: { mode: 'github-pr' },
+				mergeBehavior: { mode: 'pr' },
 			})
 
 			// Mock PRManager to return no existing PR

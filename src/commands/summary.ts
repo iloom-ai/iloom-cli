@@ -61,12 +61,12 @@ export class SummaryCommand {
 		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const mergeMode = settings.mergeBehavior?.mode ?? 'local'
 
-		if (mergeMode === 'github-draft-pr') {
+		if ((mergeMode as string) === 'draft-pr') {
 			const metadata = await this.metadataManager.readMetadata(worktreePath)
 			return metadata?.draftPrNumber ?? undefined
 		}
 
-		if (mergeMode === 'github-pr') {
+		if ((mergeMode as string) === 'pr') {
 			const prManager = new PRManager(settings)
 			const existingPR = await prManager.checkForExistingPR(branchName, worktreePath)
 			return existingPR?.number
