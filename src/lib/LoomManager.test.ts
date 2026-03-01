@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, type TestOptions } from 'vitest'
 import { LoomManager } from './LoomManager.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'
@@ -14,9 +14,16 @@ import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrig
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
+// Increase per-test timeout for this large suite (98 tests with heavy mock setup)
+// Under parallel execution, the default 10s can be exceeded due to CPU contention
+const testOptions: TestOptions = { timeout: 30_000 }
+
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
 vi.mock('./GitHubService.js')
+vi.mock('../utils/claude-trust.js', () => ({
+  preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('./BranchNamingService.js')
 vi.mock('./EnvironmentManager.js')
 vi.mock('./ClaudeContextManager.js')
@@ -46,6 +53,7 @@ const mockReadMetadata = vi.fn().mockResolvedValue(null)
 const mockDeleteMetadata = vi.fn().mockResolvedValue(undefined)
 const mockSlugifyPath = vi.fn((path: string) => path.replace(/\//g, '___') + '.json')
 const mockListAllMetadata = vi.fn().mockResolvedValue([])
+const mockUpdateMetadata = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('./MetadataManager.js', () => ({
   MetadataManager: vi.fn(() => ({
@@ -54,6 +62,7 @@ vi.mock('./MetadataManager.js', () => ({
     deleteMetadata: mockDeleteMetadata,
     slugifyPath: mockSlugifyPath,
     listAllMetadata: mockListAllMetadata,
+    updateMetadata: mockUpdateMetadata,
   })),
 }))
 
@@ -167,7 +176,23 @@ vi.mock('../utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
-describe('LoomManager', () => {
+// Mock logger-context
+const mockLoggerWarn = vi.fn()
+const mockLoggerInfo = vi.fn()
+const mockLoggerDebug = vi.fn()
+const mockLoggerError = vi.fn()
+const mockLoggerSuccess = vi.fn()
+vi.mock('../utils/logger-context.js', () => ({
+  getLogger: () => ({
+    warn: mockLoggerWarn,
+    info: mockLoggerInfo,
+    debug: mockLoggerDebug,
+    error: mockLoggerError,
+    success: mockLoggerSuccess,
+  }),
+}))
+
+describe('LoomManager', testOptions, () => {
   let manager: LoomManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
   let mockGitHub: vi.Mocked<GitHubService>
@@ -230,6 +255,7 @@ describe('LoomManager', () => {
     mockReadMetadata.mockResolvedValue(null)
     mockDeleteMetadata.mockResolvedValue(undefined)
     mockListAllMetadata.mockResolvedValue([])
+    mockUpdateMetadata.mockResolvedValue(undefined)
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
     mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
   })
@@ -1002,8 +1028,10 @@ describe('LoomManager', () => {
           identifier: 456,
           originalInput: '456',
           parentLoom: {
+            type: 'issue',
+            identifier: 456,
             branchName: 'feat/parent-branch',
-            path: '/test/worktree-parent',
+            worktreePath: '/test/worktree-parent',
           },
         }
 
@@ -3595,6 +3623,328 @@ describe('LoomManager', () => {
 
       // Verify writeMetadata was NOT called (existing metadata preserved)
       expect(mockWriteMetadata).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('complexity metadata persistence', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 500,
+      originalInput: '500',
+    }
+
+    beforeEach(() => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 500,
+        title: 'Complexity Override Test',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/500',
+        labels: [],
+        assignees: [],
+      })
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true,
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-500')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-500')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3500)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+    })
+
+    it('should persist complexity in metadata when createIloom is called with complexity option', async () => {
+      const inputWithComplexity: CreateLoomInput = {
+        ...baseInput,
+        options: { complexity: 'simple' },
+      }
+
+      await manager.createIloom(inputWithComplexity)
+
+      // Verify writeMetadata was called with complexity: 'simple'
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.complexity).toBe('simple')
+    })
+
+    it('should NOT include complexity in metadata when not provided', async () => {
+      await manager.createIloom(baseInput)
+
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.complexity).toBeUndefined()
+    })
+
+    it('should call updateMetadata with complexity when reusing loom that already has metadata', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-500',
+        branch: 'issue-500-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // Existing metadata present (no complexity)
+      mockReadMetadata.mockResolvedValue({
+        description: 'Existing loom',
+        created_at: '2024-01-01T00:00:00Z',
+        branchName: 'issue-500-test',
+        worktreePath: '/test/worktree-issue-500',
+        issueType: 'issue',
+        issue_numbers: ['500'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'existing-session',
+        projectPath: '/main/workspace',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: 'default',
+        capabilities: [],
+        parentLoom: null,
+      })
+
+      const inputWithComplexity: CreateLoomInput = {
+        ...baseInput,
+        options: { complexity: 'complex' },
+      }
+
+      await manager.createIloom(inputWithComplexity)
+
+      // writeMetadata should NOT be called (existing metadata preserved)
+      expect(mockWriteMetadata).not.toHaveBeenCalled()
+
+      // updateMetadata SHOULD be called with complexity override
+      expect(mockUpdateMetadata).toHaveBeenCalledWith(
+        '/test/worktree-issue-500',
+        { complexity: 'complex' },
+      )
+    })
+
+    it('should NOT call updateMetadata when complexity is not provided on existing worktree', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-500',
+        branch: 'issue-500-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // Existing metadata present (no complexity)
+      mockReadMetadata.mockResolvedValue({
+        description: 'Existing loom',
+        created_at: '2024-01-01T00:00:00Z',
+        branchName: 'issue-500-test',
+        worktreePath: '/test/worktree-issue-500',
+        issueType: 'issue',
+        issue_numbers: ['500'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'existing-session',
+        projectPath: '/main/workspace',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: 'default',
+        capabilities: [],
+        parentLoom: null,
+      })
+
+      // No complexity in options
+      await manager.createIloom(baseInput)
+
+      // Neither writeMetadata nor updateMetadata should be called
+      expect(mockWriteMetadata).not.toHaveBeenCalled()
+      expect(mockUpdateMetadata).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('findChildLooms', () => {
+    const parentBranch = 'feat/issue-100__epic-feature'
+
+    const makeMetadata = (overrides: Partial<{
+      branchName: string | null
+      parentLoom: { type: 'issue' | 'pr' | 'branch' | 'epic'; identifier: string | number; branchName: string; worktreePath: string } | null
+    }>) => ({
+      description: 'test',
+      created_at: null,
+      branchName: overrides.branchName ?? null,
+      worktreePath: null,
+      issueType: null as const,
+      issueKey: null,
+      issue_numbers: [],
+      pr_numbers: [],
+      issueTracker: null,
+      colorHex: null,
+      sessionId: null,
+      projectPath: null,
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: null,
+      childIssueNumbers: [],
+      parentLoom: overrides.parentLoom ?? null,
+      childIssues: [],
+      dependencyMap: {},
+      mcpConfigPath: null,
+    })
+
+    const makeWorktree = (branch: string, wtPath: string) => ({
+      path: wtPath,
+      branch,
+      commit: 'abc123',
+      bare: false,
+      detached: false,
+    })
+
+    it('should return worktrees whose metadata has matching parentLoom.branchName', async () => {
+      const childMetadata1 = makeMetadata({
+        branchName: 'feat/issue-101__child-one',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
+        },
+      })
+      const childMetadata2 = makeMetadata({
+        branchName: 'feat/issue-102__child-two',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
+        },
+      })
+      const unrelatedMetadata = makeMetadata({
+        branchName: 'feat/issue-200__unrelated',
+        parentLoom: {
+          type: 'issue',
+          identifier: 999,
+          branchName: 'feat/issue-999__other-epic',
+          worktreePath: '/project-looms/feat-issue-999__other-epic',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([childMetadata1, childMetadata2, unrelatedMetadata])
+
+      const worktrees = [
+        makeWorktree('feat/issue-101__child-one', '/project-looms/feat-issue-101__child-one'),
+        makeWorktree('feat/issue-102__child-two', '/project-looms/feat-issue-102__child-two'),
+        makeWorktree('feat/issue-200__unrelated', '/project-looms/feat-issue-200__unrelated'),
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(2)
+      expect(result.map(wt => wt.branch)).toEqual([
+        'feat/issue-101__child-one',
+        'feat/issue-102__child-two',
+      ])
+    })
+
+    it('should return empty array when no metadata matches', async () => {
+      const unrelatedMetadata = makeMetadata({
+        branchName: 'feat/issue-200__unrelated',
+        parentLoom: null,
+      })
+
+      mockListAllMetadata.mockResolvedValue([unrelatedMetadata])
+
+      const worktrees = [
+        makeWorktree('feat/issue-200__unrelated', '/project-looms/feat-issue-200__unrelated'),
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should return empty array when metadata exists but worktree does not (pruned)', async () => {
+      // Metadata says a child exists, but the worktree has been pruned/removed
+      const childMetadata = makeMetadata({
+        branchName: 'feat/issue-101__child-one',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project-looms/feat-issue-101__child-one',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([childMetadata])
+
+      // Only main worktree exists -- child was pruned
+      const worktrees = [
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should return empty array when listWorktrees returns null', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(null as unknown as [])
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should handle errors gracefully and return empty array', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockRejectedValue(new Error('git failed'))
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should skip metadata entries with null branchName', async () => {
+      const nullBranchMetadata = makeMetadata({
+        branchName: null,
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: parentBranch,
+          worktreePath: '/project-looms/feat-issue-100__epic-feature',
+        },
+      })
+
+      mockListAllMetadata.mockResolvedValue([nullBranchMetadata])
+
+      const worktrees = [
+        makeWorktree('main', '/project'),
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(worktrees)
+
+      const result = await manager.findChildLooms(parentBranch)
+
+      expect(result).toHaveLength(0)
     })
   })
 })

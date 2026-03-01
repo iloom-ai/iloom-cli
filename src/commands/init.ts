@@ -13,6 +13,7 @@ import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { getRepoRoot, isFileGitignored } from '../utils/git.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 /**
  * Initialize iloom configuration
@@ -36,13 +37,15 @@ export class InitCommand {
   /**
    * Main entry point for the init command
    * @param customInitialMessage Optional custom initial message to send to Claude (defaults to "Help me configure iloom settings.")
+   * @param acceptDefaults If true, skip interactive prompts and mark project as configured with defaults
    */
-  public async execute(customInitialMessage?: string): Promise<void> {
+  public async execute(customInitialMessage?: string, acceptDefaults?: boolean): Promise<void> {
     try {
       logger.debug('InitCommand.execute() starting', {
         cwd: process.cwd(),
         nodeVersion: process.version,
-        hasCustomInitialMessage: !!customInitialMessage
+        hasCustomInitialMessage: !!customInitialMessage,
+        acceptDefaults: !!acceptDefaults
       })
 
       logger.info(chalk.bold('Welcome to iloom setup'))
@@ -52,20 +55,38 @@ export class InitCommand {
 
       await this.setupProjectConfiguration()
 
+      // Determine mode for telemetry
+      const mode = acceptDefaults ? 'accept-defaults' as const : customInitialMessage ? 'guided-custom-prompt' as const : 'guided' as const
+
+      try {
+        TelemetryService.getInstance().track('init.started', { mode })
+      } catch (e) {
+        logger.debug('Telemetry tracking failed', { error: e })
+      }
+
+      // If accept-defaults mode, mark project as configured and return early
+      if (acceptDefaults) {
+        await this.markProjectConfigured()
+        try {
+          TelemetryService.getInstance().track('init.completed', { mode })
+        } catch (e) {
+          logger.debug('Telemetry tracking failed', { error: e })
+        }
+        logger.info(chalk.green('Setup complete! Enjoy using iloom CLI.'))
+        return
+      }
+
       // Launch guided Claude configuration if available
       const guidedInitSucceeded = await this.launchGuidedInit(customInitialMessage)
 
       // Only mark project as configured if guided init succeeded and not already marked
       // This enables VSCode extension detection and ensures project appears in `il projects` list
       if (guidedInitSucceeded) {
-        const projectRoot = await getRepoRoot() ?? process.cwd()
-        const firstRunManager = new FirstRunManager()
-        const alreadyConfigured = await firstRunManager.isProjectConfigured(projectRoot)
+        const alreadyConfigured = await this.isProjectConfigured()
         if (!alreadyConfigured) {
-          await firstRunManager.markProjectAsConfigured(projectRoot)
-          logger.debug('Project marked as configured', { projectRoot })
+          await this.markProjectConfigured()
         } else {
-          logger.debug('Project already marked as configured, skipping', { projectRoot })
+          logger.debug('Project already marked as configured, skipping')
         }
       } else {
         logger.debug('Skipping project marker - guided init did not complete successfully')
@@ -418,7 +439,7 @@ export class InitCommand {
       ]
 
       const claudeOptions = {
-        model: 'opus',
+        model: 'sonnet',
         headless: false,
         appendSystemPrompt: prompt,
         addDir: process.cwd(),
@@ -449,6 +470,26 @@ export class InitCommand {
       logger.info('You can manually edit .iloom/settings.json to configure iloom.')
       return false
     }
+  }
+
+  /**
+   * Check if the project is already marked as configured.
+   */
+  private async isProjectConfigured(): Promise<boolean> {
+    const projectRoot = await getRepoRoot() ?? process.cwd()
+    const firstRunManager = new FirstRunManager()
+    return firstRunManager.isProjectConfigured(projectRoot)
+  }
+
+  /**
+   * Mark the project as configured.
+   * Used by both accept-defaults mode and after guided init succeeds.
+   */
+  private async markProjectConfigured(): Promise<void> {
+    const projectRoot = await getRepoRoot() ?? process.cwd()
+    const firstRunManager = new FirstRunManager()
+    await firstRunManager.markProjectAsConfigured(projectRoot)
+    logger.debug('Project marked as configured', { projectRoot })
   }
 
   /**

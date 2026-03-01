@@ -6,12 +6,6 @@ import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
 /**
- * Valid project capability values for Zod enum validation.
- * When updating this constant, also update ProjectCapability type in src/types/loom.ts
- */
-const PROJECT_CAPABILITIES = ['cli', 'web'] as const
-
-/**
  * Zod schema for base agent settings (without nested agents)
  */
 export const BaseAgentSettingsSchema = z.object({
@@ -19,6 +13,10 @@ export const BaseAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
 		.describe('Claude model shorthand: sonnet, opus, or haiku'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
 	enabled: z
 		.boolean()
 		.optional()
@@ -37,13 +35,18 @@ export const BaseAgentSettingsSchema = z.object({
 })
 
 /**
- * Zod schema for agent settings, extends base with optional nested agents sub-record.
- * The nested agents field is used for swarm-specific per-agent overrides under iloom-swarm-worker.
+ * Zod schema for agent settings, extends base with sub-agent timeout and nested agents record.
  */
 export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
 	agents: z.record(z.string(), BaseAgentSettingsSchema)
 		.optional()
-		.describe('Nested per-agent model overrides for swarm mode. Configure under agents.iloom-swarm-worker.agents.<agent-name>.model to set a different model for phase agents when running inside swarm workers. Fallback chain: swarm-specific agent model > explicit swarm worker model > base agent model. Only meaningful under the iloom-swarm-worker agent entry.'),
+		.describe('Nested per-agent settings. Only meaningful under the iloom-swarm-worker agent entry for sub-agent timeout configuration.'),
+	subAgentTimeout: z
+		.number()
+		.min(1, 'Sub-agent timeout must be at least 1 minute')
+		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
+		.default(10)
+		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 10 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
@@ -55,6 +58,14 @@ export const SpinAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.default('opus')
 		.describe('Claude model shorthand for spin orchestrator'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
+	postSwarmReview: z
+		.boolean()
+		.default(true)
+		.describe('Run a full code review after swarm completion, auto-fixing issues with confidence 80+. Defaults to true.'),
 })
 
 /**
@@ -183,10 +194,6 @@ export const WorkflowsSettingsSchemaNoDefaults = z
  */
 export const CapabilitiesSettingsSchema = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -196,7 +203,8 @@ export const CapabilitiesSettingsSchema = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -216,10 +224,6 @@ export const CapabilitiesSettingsSchema = z
  */
 export const CapabilitiesSettingsSchemaNoDefaults = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -229,7 +233,8 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -348,7 +353,7 @@ export const IloomSettingsSchema = z.object({
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
 				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
-				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -625,11 +630,13 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
 				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
-				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: z
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			postSwarmReview: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),
@@ -1186,7 +1193,14 @@ export class SettingsManager {
 	 * @param settings - Pre-loaded settings object
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
-	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): 'sonnet' | 'opus' | 'haiku' {
+		if (mode === 'swarm') {
+			if (settings?.spin?.swarmModel) {
+				return settings.spin.swarmModel
+			}
+			// Default to opus for swarm orchestrator ("Balanced" mode)
+			return 'opus'
+		}
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
 	}
 

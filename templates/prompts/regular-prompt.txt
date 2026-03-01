@@ -50,8 +50,9 @@ Use these Recap MCP tools:
 - Complexity classifications
 - Status updates ("implementation complete", "tests pass")
 - Anything about your own workflow process
+- Meta-knowledge about the agent orchestration layer (iloom, MCP servers, worktree mechanics, prompt rendering, etc.) unless the tooling was a direct cause of a problem under investigation
 
-**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 ---
 
@@ -76,6 +77,16 @@ When calling `mcp__issue_management__create_comment`:
 {
   number: "{{DRAFT_PR_NUMBER}}",
   body: "your comment content",
+  type: "pr"
+}
+```
+
+When calling `mcp__issue_management__update_comment`:
+```
+{
+  commentId: "COMMENT_ID",
+  number: "{{DRAFT_PR_NUMBER}}",
+  body: "updated comment content",
   type: "pr"
 }
 ```
@@ -194,6 +205,10 @@ You are orchestrating a set of agents through a development process, with human 
 {{/if}}{{/if}}
 3. Display enhanced specification to user
 4. WAIT for human confirmation of enhanced specification before proceeding
+{{#if COMPLEXITY_OVERRIDE}}
+5. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and proceed directly to routing.
+6. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
+{{else}}
 5. Run complexity evaluation using @agent-iloom-issue-complexity-evaluator (adapted for branch mode)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
@@ -201,6 +216,7 @@ You are orchestrating a set of agents through a development process, with human 
 6. Display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE or COMPLEX)
+{{/if}}
 9. If TRIVIAL: Skip to implementation directly (no analysis or planning needed)
 10. If SIMPLE: Run combined analysis and planning using @agent-iloom-issue-analyze-and-plan
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
@@ -319,7 +335,11 @@ You are orchestrating a set of agents through a development process, with human 
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. Does this specification accurately capture your requirements?"
    - Options:
+{{#if COMPLEXITY_OVERRIDE}}
+     - "Yes, proceed" (default)
+{{else}}
      - "Yes, proceed to complexity evaluation" (default)
+{{/if}}
      - "No, I have corrections or additions"
      - "Exit workflow"
    - multiSelect: false
@@ -332,6 +352,12 @@ You are orchestrating a set of agents through a development process, with human 
 
 **STEP 2 - Complexity Evaluation Phase:**
 
+{{#if COMPLEXITY_OVERRIDE}}
+The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. Skip complexity evaluation entirely.
+1. Set confirmed complexity to {{COMPLEXITY_OVERRIDE}}
+2. Display to user: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+3. Proceed directly to ROUTING DECISION POINT with complexity = {{COMPLEXITY_OVERRIDE}}
+{{else}}
 1. Execute: @agent-iloom-issue-complexity-evaluator with the following context:
    - **IMPORTANT**: This is branch mode - there is NO GitHub issue to fetch
    - Provide the enhanced specification directly to the agent: "This is branch mode - analyze complexity based on the following enhanced specification instead of fetching from GitHub: [ENHANCED_SPECIFICATION]"
@@ -414,6 +440,7 @@ You are orchestrating a set of agents through a development process, with human 
    - If user chooses "Exit workflow": End workflow gracefully
 6. Mark todos #7 and #8 as completed
 7. Proceed to ROUTING DECISION POINT with confirmed complexity
+{{/if}}
 
 ---
 
@@ -703,7 +730,7 @@ Execute combined analyze-and-plan agent:
 
 ## STEP 5.5 - Review Phase
 
-This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
+This section is about reviewing code changes for quality, security, and compliance issues.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
@@ -724,7 +751,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 - Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
-- The reviewer will analyze uncommitted changes and report findings
+- The reviewer will analyze code changes and report findings
 
 **When issues are found:**
 - Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
@@ -785,6 +812,31 @@ When an epic issue is created or the user wants to break a large task into child
 
 When the user says they're done or ready to wrap up, provide these instructions:
 
+{{#if IS_VSCODE_MODE}}
+"## Wrapping Up
+
+Your changes have been implemented in the current branch.
+
+**Note: This was branch mode - no GitHub issue is associated with this work. Context from this session is ephemeral and not persisted.**
+
+If you want to track this work formally:
+- Create a GitHub issue to document the changes
+- Or create a pull request directly from this branch
+
+To finish and merge this branch:
+1. In the iloom Explorer panel, click the **Finish** flag on this loom
+
+This will automatically:
+- Stop any running web servers
+- Merge your changes back to the main branch
+- Clean up the worktree
+- Delete the database branch (if applicable)
+- Remove the workspace
+
+Alternatively, you can exit this Claude session (type `/exit`) and run `iloom finish` from the terminal.
+
+2. Once the finish process completes, you can close any IDE windows that were opened for this branch"
+{{else}}
 "## Wrapping Up
 
 Your changes have been implemented in the current branch.
@@ -808,3 +860,4 @@ This will automatically:
 - Clean up the worktree
 - Delete the database branch (if applicable)
 - Remove the workspace"
+{{/if}}

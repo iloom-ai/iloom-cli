@@ -145,14 +145,19 @@ describe('openTerminalWindow', () => {
 		})
 	})
 
-	it('should throw error on non-macOS platforms', async () => {
+	it('should delegate to backend on non-macOS platforms', async () => {
 		Object.defineProperty(process, 'platform', {
 			value: 'linux',
 			writable: true,
 		})
 
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error.
+		// Simulate execa's behavior: `which` exits with code 1 when command not found.
+		const notFoundError = Object.assign(new Error('not found'), { exitCode: 1 })
+		vi.mocked(execa).mockRejectedValue(notFoundError)
+
 		await expect(openTerminalWindow({})).rejects.toThrow(
-			'Terminal window launching not yet supported on linux'
+			'No supported terminal found on Linux'
 		)
 	})
 
@@ -459,18 +464,23 @@ describe('openDualTerminalWindow', () => {
 		})
 	})
 
-	it('should throw error on non-macOS platforms', async () => {
+	it('should delegate to backend on non-macOS platforms', async () => {
 		Object.defineProperty(process, 'platform', {
 			value: 'linux',
 			writable: true,
 		})
+
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error.
+		// Simulate execa's behavior: `which` exits with code 1 when command not found.
+		const notFoundError = Object.assign(new Error('not found'), { exitCode: 1 })
+		vi.mocked(execa).mockRejectedValue(notFoundError)
 
 		await expect(
 			openDualTerminalWindow(
 				{ workspacePath: '/test/path1' },
 				{ workspacePath: '/test/path2' }
 			)
-		).rejects.toThrow('Terminal window launching not yet supported on linux')
+		).rejects.toThrow('No supported terminal found on Linux')
 	})
 
 	it('should use iTerm2 when available and create single window with two tabs', async () => {

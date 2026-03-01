@@ -94,6 +94,10 @@ export class ClaudeService {
 				variables.PORT = port
 			}
 
+			// Detect VS Code mode
+			const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+			variables.IS_VSCODE_MODE = isVscodeMode
+
 			// Get the prompt from template manager
 			const prompt = await this.templateManager.getPrompt(type, variables)
 

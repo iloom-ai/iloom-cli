@@ -1,5 +1,6 @@
 import fs from 'fs-extra'
 import path from 'path'
+import { z } from 'zod'
 import { getLogger } from './logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
 
@@ -9,6 +10,24 @@ import type { ProjectCapability } from '../types/loom.js'
  */
 export const ILOOM_PACKAGE_PATH = '.iloom/package.iloom.json'
 export const ILOOM_PACKAGE_LOCAL_PATH = '.iloom/package.iloom.local.json'
+
+/**
+ * Zod schema for package.iloom.json / package.iloom.local.json
+ * Defines project capabilities and custom shell commands for non-Node.js projects
+ */
+export const PackageIloomSchema = z.object({
+  capabilities: z.array(z.enum(['cli', 'web'])).optional()
+    .describe('Project capabilities - "cli" for command-line tools (enables CLI isolation), "web" for web applications (enables port assignment and dev server)'),
+  scripts: z.object({
+    install: z.string().optional().describe('Install command (e.g., "bundle install", "poetry install")'),
+    build: z.string().optional().describe('Build/compile command'),
+    test: z.string().optional().describe('Test suite command'),
+    dev: z.string().optional().describe('Dev server command'),
+    lint: z.string().optional().describe('Linting command'),
+    typecheck: z.string().optional().describe('Type checking command'),
+    compile: z.string().optional().describe('Compilation command (preferred over typecheck if both exist)'),
+  }).optional().describe('Custom shell commands for project operations. These are raw shell commands, not npm script names.'),
+})
 
 export interface PackageJson {
   name: string

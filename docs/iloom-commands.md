@@ -20,6 +20,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il lint](#il-lint)
   - [il test](#il-test)
   - [il compile](#il-compile)
+  - [il install-deps](#il-install-deps)
   - [il summary](#il-summary)
   - [il shell](#il-shell)
 - [Planning Commands](#planning-commands)
@@ -66,6 +67,7 @@ il start "<issue-description>"
 |------|--------|-------------|
 | `--one-shot` | `default`, `noReview`, `bypassPermissions` | Automation level for Claude CLI workflow |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (persists in loom metadata) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
 | `--epic` | - | Force create as epic loom with child issues (skip prompt; ignored if no children) |
@@ -74,12 +76,24 @@ il start "<issue-description>"
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
 | `--terminal` / `--no-terminal` | - | Enable/disable terminal without dev server (default: disabled) |
+| `--create-only` | - | Create workspace only: skip Claude, IDE, terminal, dev server (shorthand for `--no-claude --no-code --no-terminal --no-dev-server`) |
 | `--body` | `<text>` | Body text for issue (skips AI enhancement) |
 
 **One-Shot Modes:**
 - `default` - Standard behavior with approval prompts at each phase
 - `noReview` - Skip phase approval prompts, but respect permission settings
 - `bypassPermissions` - Full automation, skip all permission and approval prompts (use with caution!)
+
+**Complexity Override:**
+
+The `--complexity` flag skips the complexity evaluation agent entirely and routes the workflow directly based on the specified value:
+- `trivial` - Simplest workflow path, minimal analysis
+- `simple` - Combined analysis and planning in a single step
+- `complex` - Full multi-step analysis, planning, and review phases
+
+The override follows a two-level model:
+- **`il start --complexity`** - Persists the complexity value in loom metadata. All subsequent `il spin` sessions for this loom will use the stored complexity unless explicitly overridden.
+- **`il spin --complexity`** - Overrides the stored complexity for the current session only. The loom metadata is not modified, so the next `il spin` without `--complexity` reverts to the stored value (or runs the evaluator if none was stored).
 
 **Workflow Phases:**
 
@@ -128,6 +142,12 @@ il start 100 --epic
 
 # Force normal loom even if issue has children
 il start 100 --no-epic
+
+# Skip complexity evaluation and treat as simple
+il start 25 --complexity=simple
+
+# Skip complexity evaluation and run full automation
+il start 25 --complexity=complex --yolo
 ```
 
 **Notes:**
@@ -161,6 +181,7 @@ il commit [options]
 | `--fixes` | Use "Fixes #N" trailer instead of "Refs #N" (closes the issue) |
 | `--no-review` | Skip commit message review prompt |
 | `--json` | Output result as JSON (implies `--no-review`) |
+| `--json-stream` | Stream JSONL output; runs Claude headless for validation fixes (implies `--no-review`, mutually exclusive with `--json`) |
 
 **Behavior:**
 
@@ -555,6 +576,7 @@ il spin [options]
 |------|--------|-------------|
 | `--one-shot` | `noReview`, `bypassPermissions` | Automation level (same as `il start`) |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (session-only, does not persist) |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
@@ -583,7 +605,8 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
 3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
 4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
-5. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+5. **Copies agents to child worktrees** - Copies `.claude/agents/` from the epic worktree to each child worktree so workers can resolve agent files locally
+6. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
@@ -601,6 +624,28 @@ To disable automatic cleanup and keep all child worktrees after swarm completion
 
 ```bash
 il spin --skip-cleanup
+```
+
+**Post-Swarm Code Review:**
+
+After all child agents complete and their work is merged into the epic branch, the orchestrator automatically runs a full code review using the `iloom-code-reviewer` agent. This catches cross-cutting issues that individual child agents miss because they each only see their own changes, not the integrated result.
+
+If the review finds any issues (confidence score 80+), a fix agent is spawned to address them before the final commit. The review is non-blocking -- if the reviewer or fix agent fails, the swarm continues to finalization without interruption. Only a single review-fix pass is performed (no re-review loops).
+
+Post-swarm review is enabled by default. To disable it, set `spin.postSwarmReview` to `false` in your settings:
+
+```json
+{
+  "spin": {
+    "postSwarmReview": false
+  }
+}
+```
+
+Or via CLI override:
+
+```bash
+il spin --set spin.postSwarmReview=false
 ```
 
 **Examples:**
@@ -623,6 +668,12 @@ il spin --print --output-format=json
 
 # Keep child worktrees after swarm mode completes
 il spin --skip-cleanup
+
+# Override complexity for this session only
+il spin --complexity=trivial
+
+# Override complexity with full automation
+il spin --complexity=complex --yolo
 ```
 
 ---
@@ -1004,6 +1055,67 @@ il typecheck feat/my-feature
 
 ---
 
+### il install-deps
+
+Install dependencies for a workspace.
+
+**Usage:**
+```bash
+il install-deps [identifier]
+il install-deps [identifier] --no-frozen
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, installs for current loom
+- If omitted outside a loom, prompts for selection
+
+**Options:**
+- `--no-frozen` - Allow lockfile updates (by default uses frozen/locked lockfiles)
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Checks for install scripts in order of precedence:
+   - `.iloom/package.iloom.local.json` `scripts.install` (highest priority)
+   - `.iloom/package.iloom.json` `scripts.install`
+   - `package.json` `scripts.install`
+3. If no install script found, falls back to Node.js lockfile detection:
+   - `pnpm-lock.yaml` → `pnpm install --frozen-lockfile`
+   - `package-lock.json` → `npm ci`
+   - `yarn.lock` → `yarn install --frozen-lockfile`
+4. Silently skips if no install mechanism is found
+
+**Examples:**
+```bash
+# Install deps for current loom (auto-detected)
+il install-deps
+
+# Install deps for a specific issue
+il install-deps 42
+
+# Install deps allowing lockfile updates
+il install-deps --no-frozen
+```
+
+**Supported Languages:**
+
+| Language | Typical Command | Configuration |
+|----------|-----------------|---------------|
+| Node.js | `pnpm install`, `npm ci`, `yarn install` | Auto-detected from lockfiles |
+| Ruby | `bundle install` | `.iloom/package.iloom.json` |
+| Python | `poetry install`, `pip install -r requirements.txt` | `.iloom/package.iloom.json` |
+| Rust | `cargo fetch` | `.iloom/package.iloom.json` |
+| Go | `go mod download` | `.iloom/package.iloom.json` |
+
+**Notes:**
+- By default uses frozen lockfiles to prevent unintended dependency changes
+- Use `--no-frozen` when you intentionally want to update the lockfile
+- Non-Node.js projects should define an install script in `.iloom/package.iloom.json`
+- Install failures exit with non-zero code for CI/CD integration
+
+---
+
 ### il summary
 
 Generate a summary of the Claude Code session for the current or specified loom.
@@ -1175,6 +1287,7 @@ il plan <issue-number> [options]
 |------|--------|-------------|
 | `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
 | `--yolo` | - | Autonomous mode: skip permission prompts and proceed automatically |
+| `--auto-swarm` | - | Fully autonomous pipeline: plan → start --epic → spin (implies `--yolo`) |
 | `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
@@ -1249,6 +1362,33 @@ il plan --yolo 42
 
 **Warning:** Autonomous mode will create issues and dependencies without confirmation. Use with caution - it can make irreversible changes to your issue tracker.
 
+### `--auto-swarm`
+
+Enables fully autonomous execution: decompose an issue into child tasks, create an epic workspace, and launch swarm mode — all in one command with no manual intervention.
+
+**Usage:**
+```bash
+# Decompose existing issue and auto-start swarm
+il plan --auto-swarm 42
+
+# Fresh planning with auto-swarm
+il plan --auto-swarm "Build user authentication system"
+```
+
+**Behavior:**
+- Implies `--yolo` (autonomous mode, no confirmation prompts)
+- Both plan and spin phases run with `bypassPermissions`
+- Pipeline: plan → start --epic → spin (swarm mode)
+- If no child issues are created, falls back to a normal autonomous loom
+
+**Environment Variables:**
+- `ILOOM_HARNESS_SOCKET`: Optional. Path to an external harness socket (e.g., provided by VS Code extension). If not set, the CLI creates its own harness server.
+
+**Error Handling:**
+- If the plan phase fails or exits without signaling completion, the pipeline aborts
+- If `il start` fails, the pipeline aborts with an error
+- Spin phase uses standard swarm error handling
+
 **Available MCP Tools in Session:**
 
 | Category | Tools |
@@ -1310,6 +1450,12 @@ il plan --print "Add feature X"
 
 # Headless mode with JSON output format
 il plan --print --output-format=json 42
+
+# Auto-swarm - fully autonomous pipeline from planning to swarm
+il plan --auto-swarm 42
+
+# Auto-swarm - fresh planning with auto-swarm
+il plan --auto-swarm "Build user authentication system"
 ```
 
 **Notes:**
@@ -1612,66 +1758,158 @@ The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature,
 
 **Worker Model Configuration:**
 
-The swarm worker agent defaults to `sonnet`. To override, configure it via `.iloom/settings.json`:
+The swarm worker agent defaults to `opus`. To override, configure it via `.iloom/settings.json`:
 
 ```json
 {
   "agents": {
     "iloom-swarm-worker": {
-      "model": "opus"
+      "model": "haiku"
     }
   }
 }
 ```
 
-This follows the same per-agent override pattern used for phase agents (e.g., `iloom-issue-implementer`, `iloom-issue-planner`).
+You can also set a different model for the spin orchestrator when running in swarm mode using `swarmModel`:
+
+```json
+{
+  "spin": {
+    "model": "sonnet",
+    "swarmModel": "opus"
+  }
+}
+```
+
+In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `opus` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
 
 **Phase Agent Model Overrides (Swarm Mode):**
 
 You can configure different models for individual phase agents when they run inside swarm workers. This is useful for cost optimization (e.g., using a lighter model for enhancement but a heavier model for implementation).
 
+Each agent supports a `swarmModel` field for a clean, per-agent swarm model override:
+
 ```json
 {
   "agents": {
-    "iloom-issue-implementer": { "model": "opus" },
-    "iloom-issue-planner": { "model": "opus" },
+    "iloom-issue-implementer": { "model": "opus", "swarmModel": "sonnet" },
+    "iloom-issue-complexity-evaluator": { "model": "haiku", "swarmModel": "haiku" }
+  }
+}
+```
+
+If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see below) — not the agent's base `model`. This separation is intentional: swarms run many agents in parallel and costs scale quickly, so swarm model choices should always be explicit.
+
+**Important:** Changing an agent's `model` only affects non-swarm mode (single-issue looms via `il start`). To change an agent's model in swarm mode, use `swarmModel` or choose a different Swarm Quality Mode.
+
+With the configuration above:
+
+| Agent | Non-swarm mode | Swarm mode |
+|-------|---------------|------------|
+| `iloom-issue-implementer` | `opus` | `sonnet` (swarmModel) |
+| `iloom-issue-complexity-evaluator` | `haiku` | `haiku` (swarmModel) |
+| `iloom-issue-analyzer` | `.md` default | `opus` (Balanced mode default) |
+
+**Example using the `--set` flag:**
+
+```bash
+# Set per-agent swarmModel
+il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
+
+# Set spin orchestrator model for swarm mode
+il spin --set spin.swarmModel=sonnet
+```
+
+**Swarm Quality Mode:**
+
+During `il init`, you'll be asked to choose a swarm quality mode that tunes the trade-off between reasoning quality and speed/cost:
+
+| Mode | Focus | Models used | Best for |
+|------|-------|-------------|----------|
+| **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (complexity evaluator stays Haiku) | Complex epics, critical features |
+| **Balanced** (default) | Opus for orchestration, analysis, and workers; Sonnet for phase agents | Opus: orchestrator, worker, analyzer, analyze-and-plan. Sonnet: planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+| **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
+
+The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
+
+Example settings for each mode:
+
+**Maximum Quality:**
+```json
+{
+  "spin": { "swarmModel": "opus" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "opus" },
+    "iloom-issue-analyzer": { "swarmModel": "opus" },
+    "iloom-issue-planner": { "swarmModel": "opus" },
+    "iloom-issue-implementer": { "swarmModel": "opus" },
+    "iloom-issue-enhancer": { "swarmModel": "opus" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "opus" },
+    "iloom-code-reviewer": { "swarmModel": "opus" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Balanced (recommended default):**
+```json
+{
+  "spin": { "swarmModel": "opus" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "opus" },
+    "iloom-issue-analyzer": { "swarmModel": "opus" },
+    "iloom-issue-planner": { "swarmModel": "sonnet" },
+    "iloom-issue-implementer": { "swarmModel": "sonnet" },
+    "iloom-issue-enhancer": { "swarmModel": "sonnet" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "opus" },
+    "iloom-code-reviewer": { "swarmModel": "sonnet" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Fast & Cheap:**
+```json
+{
+  "spin": { "swarmModel": "haiku" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "haiku" },
+    "iloom-issue-analyzer": { "swarmModel": "haiku" },
+    "iloom-issue-planner": { "swarmModel": "haiku" },
+    "iloom-issue-implementer": { "swarmModel": "haiku" },
+    "iloom-issue-enhancer": { "swarmModel": "haiku" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "haiku" },
+    "iloom-code-reviewer": { "swarmModel": "haiku" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
+
+To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
+
+**Sub-Agent Timeout:**
+
+When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
+
+- **Default:** 20 minutes
+- **Setting:** `agents.iloom-swarm-worker.subAgentTimeout` (in minutes)
+- **Range:** 1 to 120 minutes
+
+```json
+{
+  "agents": {
     "iloom-swarm-worker": {
-      "model": "sonnet",
-      "agents": {
-        "iloom-issue-implementer": { "model": "haiku" }
-      }
+      "subAgentTimeout": 30
     }
   }
 }
 ```
 
-**Fallback chain** for phase agent models in swarm mode (highest priority first):
-
-1. `agents.iloom-swarm-worker.agents.<agent-name>.model` -- Swarm-specific per-agent override
-2. `agents.iloom-swarm-worker.model` -- Blanket swarm worker model
-3. `agents.<agent-name>.model` -- Base per-agent override (also used in non-swarm mode)
-4. Agent default from `.md` file
-
-With the configuration above, the resolved models are:
-
-| Agent | Non-swarm mode | Swarm mode | Why |
-|-------|---------------|------------|-----|
-| `iloom-issue-implementer` | `opus` (base per-agent) | `haiku` (swarm-specific override) | Fallback step 1 |
-| `iloom-issue-planner` | `opus` (base per-agent) | `sonnet` (blanket swarm model) | Fallback step 2 |
-| `iloom-issue-analyzer` | `.md` default | `sonnet` (blanket swarm model) | Fallback step 2 |
-
-> **Important:** The blanket swarm model (step 2) overrides the base per-agent model (step 3). In the example above, `iloom-issue-planner` uses `opus` in non-swarm mode (from the base config) but `sonnet` in swarm mode (from the blanket swarm worker model). If you want a specific agent to use a different model than the blanket in swarm mode, use a swarm-specific per-agent override (step 1) as shown for `iloom-issue-implementer` above.
-
-> **Note:** The blanket override only activates when `agents.iloom-swarm-worker.model` is explicitly set in your configuration. If it is not configured, phase agents in swarm mode use their base per-agent model or `.md` default -- the worker agent's implicit `sonnet` default does not propagate to phase agents.
-
-**Example using the `--set` flag:**
-
 ```bash
-# Override a specific phase agent's model in swarm mode
-il spin --set agents.iloom-swarm-worker.agents.iloom-issue-implementer.model=sonnet
-
-# Override ALL phase agent models in swarm mode
-il spin --set agents.iloom-swarm-worker.model=sonnet
+# Override via CLI flag
+il spin --set agents.iloom-swarm-worker.subAgentTimeout=30
 ```
 
 ### Merge Strategy
@@ -1708,13 +1946,18 @@ During swarm mode, the following files are created:
 │           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
 │           └── ...
 ├── issue-101/                         # Child worktree (branched off epic)
+│   ├── .claude/
+│   │   └── agents/                    # Copied from epic worktree during setup (not committed)
+│   │       ├── iloom-swarm-worker.md
+│   │       ├── iloom-swarm-issue-implementer.md
+│   │       └── ...
 │   └── iloom-metadata.json            # state: pending -> in_progress -> done
 ├── issue-102/                         # Another child worktree
 │   └── iloom-metadata.json
 └── ...
 ```
 
-Swarm agent files are automatically added to `.gitignore` by iloom migrations.
+Swarm agent files are not committed to the repository.
 
 ---
 

@@ -26,7 +26,7 @@ export class TestPrefixCommand {
    */
   public async execute(): Promise<void> {
     try {
-      logger.info('🧪 Testing Worktree Prefix Configuration\n')
+      logger.info('Testing Worktree Prefix Configuration\n')
 
       // Display the current working directory
       const rootDir = process.cwd()
@@ -45,7 +45,7 @@ export class TestPrefixCommand {
       }
 
       logger.info('')
-      logger.info('📍 Example Worktree Paths:\n')
+      logger.info('Example Worktree Paths:\n')
 
       // Test examples
       const examples = [
@@ -59,7 +59,7 @@ export class TestPrefixCommand {
           ? { ...example.options, prefix: settings.worktreePrefix }
           : example.options
 
-        const path = generateWorktreePath(
+        const worktreePath = generateWorktreePath(
           example.branch,
           rootDir,
           options
@@ -67,11 +67,11 @@ export class TestPrefixCommand {
 
         const suffix = example.options.isPR ? ' (PR)' : ''
         logger.info(`  ${example.label}${suffix}: ${example.branch}`)
-        logger.success(`  → ${path}`)
+        logger.success(`  -> ${worktreePath}`)
         logger.info('')
       }
 
-      logger.info('💡 Tip: Edit .iloom/settings.json to change the worktreePrefix\n')
+      logger.info('Tip: Edit .iloom/settings.json to change the worktreePrefix\n')
       logger.success('Test completed!')
 
     } catch (error) {

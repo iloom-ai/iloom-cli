@@ -54,7 +54,14 @@ recap.set_complexity({ complexity: 'simple', reason: 'Few files, low risk' })
 **Log these with add_entry:**
 - **insight**: Complexity factor discoveries - "Change requires coordinating updates across 5 TypeScript interfaces"
 - **risk**: Implementation concerns - "Large god-object file (2000+ LOC) will make changes error-prone"
-- **assumption**: Scope estimates - "Assuming existing test patterns can be followed without new test infrastructure"
+- **assumption**: Genuinely unknown information you're inferring that affects complexity - "Assuming existing test patterns can be followed without new test infrastructure"
+
+**CRITICAL: Assumption quality rules:**
+- **NEVER restate information from the issue title or description as an assumption.** If the issue says "search results push content down in Create New Loom and Child Loom modals", logging "Assuming the issue affects both modals" is worthless - the issue already says that.
+- Assumptions must be about genuinely **unknown or ambiguous** aspects that you are choosing to interpret a certain way for your assessment.
+- Good assumption: "Assuming the dropdown uses CSS position:relative (not absolute) based on the described layout shift behavior" - this infers something NOT stated in the issue.
+- Bad assumption: "Assuming this affects component X and component Y" when the issue explicitly mentions both X and Y.
+- If you have no genuine assumptions to log, **don't log any** - zero assumptions is better than low-quality ones.
 
 **Never log** workflow status or routine metric observations.
 

@@ -17,6 +17,7 @@ export interface CommitCommandInput {
 	fixes?: boolean | undefined         // Use "Fixes #N" trailer instead of "Refs #N"
 	noReview?: boolean | undefined      // Skip commit message review prompt
 	json?: boolean | undefined          // Output result as JSON
+	jsonStream?: boolean | undefined    // Stream JSONL output; runs Claude headless for validation fixes
 	wipCommit?: boolean | undefined     // Quick WIP commit: skip validations and pre-commit hooks
 }
 
@@ -72,6 +73,7 @@ export class CommitCommand {
 	 */
 	async execute(input: CommitCommandInput): Promise<CommitResult | void> {
 		const logger = getLogger()
+		const isJsonMode = input.json === true || input.jsonStream === true
 
 		// Set ILOOM=1 so hooks know this is an iloom session
 		process.env.ILOOM = '1'
@@ -107,7 +109,7 @@ export class CommitCommand {
 		const status = await this.commitManager.detectUncommittedChanges(worktreePath)
 		if (!status.hasUncommittedChanges) {
 			logger.info('No uncommitted changes to commit')
-			if (input.json) {
+			if (isJsonMode) {
 				return {
 					success: true,
 					trailerType,
@@ -123,6 +125,7 @@ export class CommitCommand {
 			logger.info('Running pre-commit validations...')
 			const validationResult = await this.validationRunner.runValidations(worktreePath, {
 				dryRun: false,
+				...(input.jsonStream !== undefined && { jsonStream: input.jsonStream }),
 			})
 			if (!validationResult.success) {
 				throw new Error('Validation failed. Fix errors before committing.')
@@ -170,7 +173,7 @@ export class CommitCommand {
 		logger.success('Changes committed successfully')
 
 		// Step 10: Return result in JSON mode
-		if (input.json) {
+		if (isJsonMode) {
 			return {
 				success: true,
 				trailerType,

@@ -674,6 +674,48 @@ describe('StartCommand', () => {
 			})
 		})
 
+		describe('--create-only flag', () => {
+			it('should set all enable flags to false when createOnly is true', async () => {
+				const mockIssue = {
+					number: 123,
+					title: 'Test Issue',
+					body: '',
+					state: 'open' as const,
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+				await command.execute({
+					identifier: '123',
+					options: {
+						createOnly: true,
+					},
+				})
+
+				const loomManagerInstance = vi.mocked(LoomManager).mock.results[0].value
+				expect(loomManagerInstance.createIloom).toHaveBeenCalledWith(
+					expect.objectContaining({
+						options: expect.objectContaining({
+							enableClaude: false,
+							enableCode: false,
+							enableDevServer: false,
+							enableTerminal: false,
+						}),
+					})
+				)
+			})
+
+			})
+
 		describe('GitHub detection', () => {
 			it('should detect PR when number is a PR', async () => {
 				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
@@ -1568,6 +1610,8 @@ describe('StartCommand', () => {
 				vcs_provider: 'github',
 				is_child_loom: false,
 				one_shot_mode: 'default',
+				complexity_override: false,
+				create_only: false,
 			})
 		})
 

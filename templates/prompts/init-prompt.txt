@@ -309,7 +309,12 @@ The agent will:
 4. Create `.iloom/package.iloom.json` with the detected configuration
 5. Detect and set project capabilities (cli, web) based on the framework
 
-**File Format:**
+**package.iloom.json Schema:**
+```json
+{{{{raw}}}}{{PACKAGE_ILOOM_SCHEMA}}{{{{/raw}}}}
+```
+
+**File Format Example:**
 ```json
 {
   "capabilities": ["cli"],
@@ -350,7 +355,16 @@ If the framework detector did not set capabilities, or if you need to ask the us
   - "web" - Web application with dev server
   - "both" - Both CLI and web capabilities
   - "neither" - Library or other project type
-- Update `.iloom/package.iloom.json` with the appropriate `capabilities` array.
+
+**Choose where to save package.iloom configuration:**
+
+After determining the configuration, ask the user where to save it:
+- **Project** (`package.iloom.json`) - Shared with team, committed to git
+- **Local** (`package.iloom.local.json`) - Local only, gitignored, never committed
+
+Default to **Local** if fork was detected (origin + upstream remotes). Otherwise default to **Project**.
+
+Write the capabilities and scripts to the chosen file.
 
 **When to infer capabilities:**
 - Flask/Django/FastAPI/Rails/Actix/Rocket detected -> include "web"
@@ -593,43 +607,32 @@ After selecting BitBucket as the VCS provider, gather BitBucket credentials:
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
 
-### Phase 2.5: Color Synchronization Settings - ONLY IF USER HAS CHOSEN the vscode, cursor, windsurf, or antigravity IDE
+### Phase 2.5: Swarm Quality Preference
 
-After Phase 2, handle color settings based on gitignore status.
+After tooling configuration, ask the user how they want swarms to behave:
 
-Analyis of system: Is VSCode Settings ignore? {{VSCODE_SETTINGS_GITIGNORED}}
+```
+Swarms are iloom's most powerful feature. Give them an epic and they'll decompose it into issues, spin up parallel AI agents — each in its own isolated workspace — and build the entire thing for you. They can ship whole features, modules, or even full products.
 
-**IMPORTANT DISTINCTION:**
-- Schema defaults are: terminal=true, vscode=false (for safety)
-- Your job in init is to RECOMMEND optimal settings based on the project
-- IMPORTANT: This is a per-project setting - recommend to save it in shared project settings (not globally). EVEN IF OTHER SETTINGS ARE SAVED ELSEHWERE
+You can tune how swarms balance thinking depth versus speed:
 
-**Terminal Color Recommendation:**
-- Always recommend `true` - terminal colors only affect macOS Terminal.app, no file changes
+  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most. Uses Opus for all agents, which is significantly more expensive.
+  ⚖️  Balanced (recommended) — Strong reasoning at a practical pace. The sweet spot for most work.
+  ⚡ Fast & Cheap — Agents move quickly through issues with lighter analysis. Great for rapid prototyping or if you're on a budget.
+```
 
-**VSCode Color Recommendation:**
+Ask: "Which swarm mode would you prefer?"
 
-**If "VSCODE_SETTINGS_GITIGNORED" == "true":**
-- Recommend `colors.vscode: true` (safe since file is gitignored)
-- Explain: "VSCode title bar coloring is safe to enable since .vscode/settings.json is gitignored"
+- If the user picks **Maximum Quality**: apply the Maximum Quality rules (see Swarm Quality Mode in Phase 9 advanced config, item 2)
+- If the user picks **Balanced**: this is the default — no settings changes needed unless the user wants to be explicit
+- If the user picks **Fast & Cheap**: apply the Fast & Cheap rules
+- If the user says they don't use swarms or want to skip: move on without changes
 
-**If "VSCODE_SETTINGS_GITIGNORED" == "false":**
-- Warn user: "VSCode/Cursor title bar coloring modifies .vscode/settings.json which is tracked in git."
-- Ask user: "Would you like to:
-  1. Add .vscode/settings.json to .gitignore (recommended - enables color sync without git pollution)
-  2. Keep VSCode color sync disabled (default - keeps .vscode/settings.json in source control unchanged)
-  3. Enable anyway (Please don't do this - colors will appear in git diffs)"
-
-Based on the users answer:
-- Option 1: Add to .gitignore, set `colors.vscode: true`
-- Option 2: Set `colors.vscode: false` (matches safe default)
-- Option 3: Set `colors.vscode: true` (with warning noted)
-
-**Note:** Terminal colors default to `true` (always recommend unless user explicitly disables).
+Include the user's choice in the Phase 3 summary under a "Swarm Mode" line.
 
 ### Phase 3: Configuration Summary
 
-After gathering all answers from Phase 1 and Phase 2, display a summary like this:
+After gathering all answers from Phase 1, Phase 2, and Phase 2.5, display a summary like this:
 
 ```
 Configuration Summary:
@@ -655,6 +658,7 @@ Tooling Configuration (Phase 2):
   BitBucket Workspace: [value or "auto-detect"] (only if VCS provider is BitBucket)
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)
+  Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.5)
 ```
 
 **Note**:
@@ -1013,16 +1017,16 @@ Would you like to commit these changes?
   - Yes - Commit iloom configuration changes (strongly recommended)
   - No - Skip committing (not recommended)
 
-⚠️  WARNING: If you don't commit settings.json, iloom will not work correctly in new looms.
+⚠️  WARNING: If you don't commit settings.json and package.iloom.json, iloom will not work correctly in new looms.
     Looms are created from committed code, so your configuration won't be available.
-    (Local files like settings.local.json and .env are copied automatically - but settings.json must be committed.)
+    (Local files like settings.local.json, package.iloom.local.json, and .env are copied automatically - but shared files must be committed.)
 ```
 
 **CRITICAL RULES:**
-- **ONLY commit iloom-related files**: .iloom/settings.json, .gitignore
+- **ONLY commit iloom-related files**: .iloom/settings.json, .iloom/package.iloom.json, .gitignore
 - **NEVER stage or commit unrelated files** - even if they appear in `git status`
 - **If the commit fails, you must then subsequently request to use --no-verify flag** to bypass pre-commit hooks that might fail due to unrelated codebase state
-- **Do NOT commit settings.local.json** - it should be gitignored, not committed
+- **Do NOT commit local-only files** - settings.local.json and package.iloom.local.json should be gitignored, not committed
 - **YOU MAY NEED TO EDIT/UPDATE MORE THAN ONE FILE if the user is changing something like API Keys (local only), permissionsMode (local only), IDE (recommened global) as well as shared settings.
 
 **Step 3: If user says yes, commit the changes**
@@ -1031,10 +1035,10 @@ VERIFY YOU'RE NOT BUNDLING ALL CHANGES IN ONE FILE DESPITE GUIDANCE TO SPLIT ACC
 
 Stage ONLY the iloom-related files that should be committed:
 ```bash
-git add .iloom/settings.json .gitignore 2>/dev/null || true
+git add .iloom/settings.json .iloom/package.iloom.json .gitignore 2>/dev/null || true
 ```
 
-Note: Do NOT add .iloom/settings.local.json - it's meant to be local-only.
+Note: Do NOT add local-only files (.iloom/settings.local.json, .iloom/package.iloom.local.json) - they should be gitignored, not committed.
 
 Then commit:
 
@@ -1104,8 +1108,10 @@ Need more advanced configuration? I can help you set up:
   • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
   • Swarm Agent Models - Configure different models for agents when running in swarm mode
+  • Swarm Quality Mode - Control how deeply swarm agents reason vs how fast they move (also offered during initial setup)
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
+  • Color Synchronization - Tint IDE title bars and terminal tabs per-loom for visual distinction
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
   • Protected Branches - Prevent iloom from creating worktrees for certain branches
   • Custom Scripts - Override package.json scripts with custom commands
@@ -1124,6 +1130,8 @@ You can ask me questions like:
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
   "How do I use different models for swarm workers vs normal mode?"
+  "How do I change the swarm quality mode?"
+  "What's the difference between maximum quality and fast & cheap swarms?"
   "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
@@ -1155,34 +1163,22 @@ When configuring agents, use these model identifiers:
    }
    ```
 
+   **Important: Non-swarm and swarm models are independent.** Changing an agent's `model` here only affects non-swarm mode (single-issue looms via `il start`). Swarm mode has its own model configuration via `swarmModel` and the Swarm Quality Mode presets (see item 2 below). This separation is intentional — swarms run many agents in parallel and costs scale quickly, so swarm models should be an explicit choice.
+
    **Swarm-Specific Phase Agent Models:**
 
-   In swarm mode, you can configure different models for phase agents (analyzer, planner, implementer, etc.) than in normal mode:
+   To override a specific agent's model in swarm mode, use `swarmModel`:
 
    ```json
    "agents": {
      "iloom-issue-implementer": {
-       "model": "opus"
-     },
-     "iloom-swarm-worker": {
        "model": "opus",
-       "agents": {
-         "iloom-issue-implementer": {
-           "model": "sonnet"
-         },
-         "iloom-issue-planner": {
-           "model": "haiku"
-         }
-       }
+       "swarmModel": "sonnet"
      }
    }
    ```
 
-   Fallback chain in swarm mode:
-   1. `agents.iloom-swarm-worker.agents.<agent>.model` (swarm-specific per-agent)
-   2. `agents.iloom-swarm-worker.model` (blanket swarm worker model)
-   3. `agents.<agent>.model` (base per-agent model)
-   4. Agent default from its definition file
+   In this example, the implementer uses Opus in non-swarm mode but Sonnet in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see item 2 below) — not the agent's base `model`.
 
 2. **BitBucket VCS Configuration:**
 
@@ -1261,7 +1257,33 @@ When configuring agents, use these model identifiers:
 
    This configuration allows iloom to read issues from Jira and create pull requests in BitBucket when you run `il finish`.
 
-4. **Database Environment Variable:**
+4. **Swarm Quality Mode:**
+
+   This controls the trade-off between reasoning quality and speed/cost for swarm agents. The same choice is offered proactively in Phase 2.5. Users can also change it here after initial setup.
+
+   | Mode | Focus | Models used | Best for |
+   |------|-------|-------------|----------|
+   | **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (except complexity evaluator stays Haiku) | Complex epics, critical features |
+   | **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+   | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
+
+   Note: The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
+
+   **Rules for generating settings JSON:**
+
+   When the user selects a mode, **merge** the model values into their existing settings. Only set the `swarmModel` (or `model` for the worker) field on each agent — do not overwrite or remove other agent settings.
+
+   - **Maximum Quality:** Set `spin.swarmModel` to `"opus"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Balanced (default):** Set `spin.swarmModel` to `"sonnet"`. Set `agents.iloom-swarm-worker.model` to `"sonnet"`. Set `swarmModel` to `"opus"` on analysis agents (`iloom-issue-analyzer`, `iloom-issue-analyze-and-plan`). Set `swarmModel` to `"sonnet"` on all other phase agents (`iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Fast & Cheap:** Set `spin.swarmModel` to `"haiku"`. Set `agents.iloom-swarm-worker.model` to `"haiku"`. Set `swarmModel` to `"haiku"` on all phase agents and `iloom-issue-complexity-evaluator`.
+
+   **Important notes:**
+   - These set `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used.
+   - Only merge into existing agent settings — never replace the entire agent object.
+   - If the user has already configured per-agent models, the mode values take precedence for swarm-related model fields only.
+   - If the user is unsure, recommend **Balanced**.
+
+5. **Database Environment Variable:**
    ```json
    "capabilities": {
      "database": {
@@ -1301,7 +1323,45 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-10. **Code Review with Multiple Providers:**
+10. **Color Synchronization (VSCode-compatible IDEs only):**
+
+   Color sync tints the IDE title bar and terminal tab per-loom so you can visually distinguish workspaces. It only applies to VSCode-compatible editors (vscode, cursor, windsurf, antigravity).
+
+   ```json
+   {
+     "colors": {
+       "terminal": true,
+       "vscode": true
+     }
+   }
+   ```
+
+   - **Terminal colors** (`colors.terminal`): Only affects macOS Terminal.app tab coloring. No file changes, always safe. Recommend `true`.
+   - **VSCode colors** (`colors.vscode`): Modifies `.vscode/settings.json` to set `workbench.colorCustomizations`. Requires checking gitignore status.
+
+   **VSCode color recommendation based on gitignore status:**
+
+   The template variable `{{VSCODE_SETTINGS_GITIGNORED}}` indicates whether `.vscode/settings.json` is gitignored.
+
+   **If `VSCODE_SETTINGS_GITIGNORED` is `true`:**
+   - Recommend `colors.vscode: true` (safe since file is gitignored)
+   - Explain: "VSCode title bar coloring is safe to enable since .vscode/settings.json is gitignored"
+
+   **If `VSCODE_SETTINGS_GITIGNORED` is `false`:**
+   - Warn user: "VSCode/Cursor title bar coloring modifies .vscode/settings.json which is tracked in git."
+   - Ask user: "Would you like to:
+     1. Add .vscode/settings.json to .gitignore (recommended - enables color sync without git pollution)
+     2. Keep VSCode color sync disabled (default - keeps .vscode/settings.json in source control unchanged)
+     3. Enable anyway (not recommended - colors will appear in git diffs)"
+
+   Based on the user's answer:
+   - Option 1: Add to .gitignore, set `colors.vscode: true`
+   - Option 2: Set `colors.vscode: false` (matches safe default)
+   - Option 3: Set `colors.vscode: true` (with warning noted)
+
+   **Note:** Only include the `colors` section if values differ from defaults (terminal: `true`, vscode: `false`).
+
+11. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -1315,7 +1375,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-11. **Custom Script Configuration (package.iloom.json):**
+12. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json
@@ -1399,3 +1459,5 @@ iloom collects anonymous usage data to improve the product. If the user asks abo
 - **CRITICAL: PREVENT DUPLICATION** - When writing settings.local.json, ONLY include settings that differ from settings.json. If a setting has the same value in both files, it MUST be removed from the local file. Local should only contain overrides, never duplicates.
 - **Deep comparison required** - When comparing settings for duplication, compare nested objects deeply (e.g., capabilities.web.basePort), not just top-level keys
 - **Empty local is OK** - If all local settings match shared settings after deduplication, an empty settings.local.json file is perfectly valid (or the user may choose not to create it at all)
+- **ALWAYS ask where to save package.iloom configuration** - When creating or modifying package.iloom.json outside of the guided wizard flow, always ask the user whether to save to `package.iloom.json` (shared, committed) or `package.iloom.local.json` (local, gitignored) before writing. Apply the same fork detection logic — if origin + upstream remotes are detected, default to the local variant.
+- **ALWAYS offer to commit after writing shared files** - Whenever you create or modify a committable file (settings.json, package.iloom.json, .gitignore), offer to commit it — even outside the guided wizard flow. Looms are created from committed code, so uncommitted shared configuration won't be available in new looms. Follow the same commit rules from Phase 7: only stage iloom-related files, never stage local-only files.

@@ -195,6 +195,19 @@ import { someFunction } from '../utils/helpers.js'
 vi.mock('../utils/helpers.js')
 ```
 
+- **Always mock `process.platform`**: Tests must never rely on the host OS. Code with platform-specific branches (`process.platform === 'darwin'`, etc.) will produce different results on macOS vs Linux/Windows CI. Always mock the platform explicitly in tests that exercise platform-gated code paths, and restore it in `finally`:
+
+```typescript
+// ✅ Correct: explicit platform mock
+const originalPlatform = process.platform
+Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+try {
+  // test code
+} finally {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+}
+```
+
 **Mock Factories Required**:
 
 ```typescript
@@ -212,6 +225,12 @@ Each workspace gets a unique port calculated as `3000 + issue/PR number`. This p
 ## Database Branch Isolation
 
 Uses Neon database branching to create isolated database copies per workspace. Each branch gets independent schema and data, preventing conflicts between features under development.
+
+## Migration Versioning
+
+Migrations live in `src/migrations/index.ts` and run automatically on CLI startup via `VersionMigrationManager`. Each migration has a `version` field that determines when it runs: it must be greater than `lastMigratedVersion` (stored in `~/.config/iloom-ai/migration-state.json`) and less than or equal to the current package version.
+
+**Versioning convention:** A new migration's version should be one patch version higher than the current `package.json` version. For example, if `package.json` is at `0.10.2`, the next migration should be `0.10.3`. If an unreleased migration already exists at that version (check `git tag` to confirm it hasn't been released), fold new migration logic into it rather than creating a separate entry.
 
 ## Agent Workflow Todo Lists
 

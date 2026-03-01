@@ -6,24 +6,26 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings, generateWorktreePath } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode } from '../types/index.js'
+import type { OneShotMode, ComplexityOverride } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
+import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -77,10 +79,11 @@ export class IgniteCommand {
 
 	/**
 	 * Validate that we're not running from the main worktree
+	 * @param workspacePath - Optional explicit workspace path; defaults to process.cwd()
 	 * @throws WorktreeValidationError if running from main worktree
 	 */
-	private async validateNotMainWorktree(): Promise<void> {
-		const currentDir = process.cwd()
+	private async validateNotMainWorktree(workspacePath?: string): Promise<void> {
+		const currentDir = workspacePath ?? process.cwd()
 
 		// Step 1: Check if we're in a git repository at all
 		const isGitRepo = await isValidGitRepo(currentDir)
@@ -130,6 +133,9 @@ export class IgniteCommand {
 	 * Main entry point for spin command
 	 * @param oneShot - One-shot automation mode
 	 * @param printOptions - Print mode options for headless/CI execution
+	 * @param skipCleanup - Skip cleanup after execution
+	 * @param workspacePath - Optional explicit workspace path for programmatic invocation (avoids process.chdir())
+	 * @param complexity - Override complexity evaluation (session-only, takes priority over metadata)
 	 */
 	async execute(oneShot?: OneShotMode, printOptions?: {
 		print?: boolean
@@ -137,30 +143,30 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}, skipCleanup?: boolean): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity))
 		}
 
-		return this.executeInternal(oneShot, skipCleanup)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
 
 		// Validate we're not in the main worktree first
 		try {
-			await this.validateNotMainWorktree()
+			await this.validateNotMainWorktree(workspacePath)
 		} catch (error) {
 			if (error instanceof WorktreeValidationError) {
 				logger.error(error.message)
@@ -183,7 +189,7 @@ export class IgniteCommand {
 			await this.hookManager.installHooks()
 
 			// Step 1: Auto-detect workspace context
-			const context = await this.detectWorkspaceContext()
+			const context = await this.detectWorkspaceContext(workspacePath)
 
 			logger.debug('Auto-detected workspace context', { context })
 
@@ -201,6 +207,16 @@ export class IgniteCommand {
 				? metadata.prUrls[String(draftPrNumber)]
 				: undefined
 
+			// Step 2.0.3: Prevent il spin in child worktrees of epic looms
+			// Child issues managed by a swarm orchestrator must not launch independent agents.
+			// Exception: child epics (issueType === 'epic') need il spin for their own swarm.
+			if (metadata?.parentLoom?.type === 'epic' && metadata.issueType !== 'epic') {
+				throw new WorktreeValidationError(
+					'Cannot run il spin in a child worktree of an epic loom. The swarm orchestrator manages agent execution for these issues.',
+					'Run il spin from the parent epic worktree instead to launch the swarm orchestrator.'
+				)
+			}
+
 			// Step 2.0.4: Determine effective oneShot mode
 			// If print mode is enabled, force noReview to skip interactive reviews
 			// If oneShot is provided (any value including 'default'), use it
@@ -209,6 +225,24 @@ export class IgniteCommand {
 			const storedOneShot = metadata?.oneShot ?? 'default'
 			const isHeadlessForOneShot = this.printOptions?.print ?? false
 			const effectiveOneShot: OneShotMode = isHeadlessForOneShot ? 'noReview' : (oneShot ?? storedOneShot)
+
+			// Determine effective complexity override
+			// CLI flag takes priority over loom metadata
+			const effectiveComplexity = complexity ?? metadata?.complexity ?? undefined
+
+			// Set recap complexity if overridden and not already set
+			if (effectiveComplexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(context.workspacePath)
+					const recap = await readRecapFile(recapFilePath)
+					if (!recap.complexity) {
+						recap.complexity = { level: effectiveComplexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+						await writeRecapFile(recapFilePath, recap)
+					}
+				} catch (error) {
+					logger.debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
 
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
@@ -265,7 +299,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl, effectiveComplexity)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -381,9 +415,11 @@ export class IgniteCommand {
 						'mcp__recap__get_loom_state'
 					]
 					allowedTools = context.type === 'pr'
-						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__recap__set_goal']
+						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__issue_management__get_review_comments', 'mcp__recap__set_goal']
 						: baseTools
-					disallowedTools = ['Bash(gh api:*), Bash(gh issue comment:*)']
+					disallowedTools = context.type === 'pr'
+						? ['Bash(gh issue comment:*)']
+						: ['Bash(gh api:*)', 'Bash(gh issue comment:*)']
 
 					logger.debug('Configured tool filtering for issue/PR workflow', { allowedTools, disallowedTools })
 				} catch (error) {
@@ -438,11 +474,25 @@ export class IgniteCommand {
 					variables,
 					['*.md', '!iloom-framework-detector.md']
 				)
-				agents = this.agentManager.formatForCli(loadedAgents)
-				logger.debug('Loaded agent configurations', {
-					agentCount: Object.keys(agents).length,
-					agentNames: Object.keys(agents),
-				})
+
+				if (process.platform === 'darwin') {
+					// macOS: pass agents inline via --agents flag (unchanged behavior)
+					agents = this.agentManager.formatForCli(loadedAgents)
+					logger.debug('Loaded agent configurations for CLI', {
+						agentCount: Object.keys(agents).length,
+						agentNames: Object.keys(agents),
+					})
+				} else {
+					// Linux/Windows: render agents to .claude/agents/ for auto-discovery
+					const agentsDir = path.join(context.workspacePath, '.claude', 'agents')
+					const rendered = await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+					logger.debug('Rendered agent files to disk for auto-discovery', {
+						agentCount: rendered.length,
+						agentNames: rendered,
+						targetDir: agentsDir,
+					})
+					// agents remains undefined - not passed to launchClaude
+				}
 			} catch (error) {
 				// Log warning but continue without agents
 				logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -456,12 +506,29 @@ export class IgniteCommand {
 				hasMcpConfig: !!mcpConfig,
 			})
 
+			// Pre-accept Claude Code trust for this worktree path
+			try {
+				await preAcceptClaudeTrust(context.workspacePath)
+			} catch (error) {
+				logger.warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
+			}
+
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
+			// Prepare system prompt based on platform
+			const systemPromptConfig = await prepareSystemPromptForPlatform(
+				systemInstructions,
+				context.workspacePath,
+			)
+
+			// Determine the initial user prompt (Windows overrides with /clear)
+			const effectiveUserPrompt = systemPromptConfig.initialPromptOverride ?? userPrompt
+
 			// Step 5: Launch Claude with system instructions appended and user prompt
-			const claudeResult = await launchClaude(userPrompt, {
+			const claudeResult = await launchClaude(effectiveUserPrompt, {
 				...claudeOptions,
-				appendSystemPrompt: systemInstructions,
+				...(systemPromptConfig.appendSystemPrompt && { appendSystemPrompt: systemPromptConfig.appendSystemPrompt }),
+				...(systemPromptConfig.pluginDir && { pluginDir: systemPromptConfig.pluginDir }),
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
@@ -490,8 +557,6 @@ export class IgniteCommand {
 					success: false,
 					error: errorMessage
 				}))
-			} else {
-				logger.error(`Failed to launch Claude: ${errorMessage}`)
 			}
 			throw error
 		}
@@ -525,7 +590,8 @@ export class IgniteCommand {
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
 		draftPrNumber?: number,
-		draftPrUrl?: string
+		draftPrUrl?: string,
+		complexity?: ComplexityOverride
 	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
@@ -566,6 +632,11 @@ export class IgniteCommand {
 		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
 		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
 
+		// Set complexity override if provided (CLI flag or loom metadata)
+		if (complexity) {
+			variables.COMPLEXITY_OVERRIDE = complexity
+		}
+
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode
 		if (draftPrNumber !== undefined) {
@@ -591,6 +662,10 @@ export class IgniteCommand {
 			// Issue/PR mode without draft PR
 			variables.STANDARD_ISSUE_MODE = true
 		}
+
+		// Detect VS Code mode
+		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+		variables.IS_VSCODE_MODE = isVscodeMode
 
 		return variables
 	}
@@ -634,9 +709,9 @@ export class IgniteCommand {
 	 *
 	 * This leverages the same logic as FinishCommand.autoDetectFromCurrentDirectory()
 	 */
-	private async detectWorkspaceContext(): Promise<ClaudeWorkflowOptions> {
-		const workspacePath = process.cwd()
-		const currentDir = path.basename(workspacePath)
+	private async detectWorkspaceContext(workspacePath?: string): Promise<ClaudeWorkflowOptions> {
+		const workspacePath_ = workspacePath ?? process.cwd()
+		const currentDir = path.basename(workspacePath_)
 
 		// Check for PR worktree pattern: _pr_N suffix
 		// Pattern: /.*_pr_(\d+)$/
@@ -647,7 +722,7 @@ export class IgniteCommand {
 			const prNumber = parseInt(prMatch[1], 10)
 			logger.debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForPR(prNumber, workspacePath)
+			return this.buildContextForPR(prNumber, workspacePath_)
 		}
 
 		// Check for issue pattern in directory name
@@ -656,7 +731,7 @@ export class IgniteCommand {
 		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForIssue(issueNumber, workspacePath)
+			return this.buildContextForIssue(issueNumber, workspacePath_)
 		}
 
 		// Fallback: Try to extract from git branch name
@@ -670,7 +745,7 @@ export class IgniteCommand {
 				if (branchIssueNumber !== null) {
 					logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
 
-					return this.buildContextForIssue(branchIssueNumber, workspacePath, currentBranch)
+					return this.buildContextForIssue(branchIssueNumber, workspacePath_, currentBranch)
 				}
 			}
 		} catch (error) {
@@ -680,7 +755,7 @@ export class IgniteCommand {
 
 		// Last resort: use regular workflow
 		logger.debug('No specific context detected, using regular workflow')
-		return this.buildContextForRegular(workspacePath)
+		return this.buildContextForRegular(workspacePath_)
 	}
 
 	/**
@@ -906,12 +981,51 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
-		// Run swarm setup: child worktrees, agents, worker agent
+		// Filter out children that are already done (finished looms may have metadata
+		// in the "looms/finished" directory, not just in active worktree metadata)
+		const finishedMetadata = await metadataManager.listFinishedMetadata()
+		const finishedByIssueNumber = new Map<string, LoomMetadata>()
+		for (const meta of finishedMetadata) {
+			for (const issueNum of meta.issue_numbers) {
+				// listFinishedMetadata returns newest first; preserve the newest entry
+				if (!finishedByIssueNumber.has(issueNum)) {
+					finishedByIssueNumber.set(issueNum, meta)
+				}
+			}
+		}
+
+		const pendingChildIssues: typeof metadata.childIssues = []
+		const skippedChildren: Array<{ number: string; state: string }> = []
+
+		for (const child of metadata.childIssues) {
+			const rawId = child.number.replace(/^#/, '')
+			const safeId = rawId.replace(/[^a-zA-Z0-9-_]/g, '-')
+			const childBranch = `issue/${safeId}`
+			const childWorktreePath = generateWorktreePath(childBranch, mainWorktreePath)
+
+			// Check active worktree metadata first, then fall back to finished metadata
+			const childMeta = await metadataManager.readMetadata(childWorktreePath)
+				?? finishedByIssueNumber.get(rawId) ?? null
+
+			if (childMeta?.state === 'done') {
+				skippedChildren.push({ number: child.number, state: childMeta.state })
+			} else {
+				pendingChildIssues.push(child)
+			}
+		}
+
+		if (skippedChildren.length > 0) {
+			for (const skipped of skippedChildren) {
+				logger.info(`Skipping child ${skipped.number} (state: ${skipped.state})`)
+			}
+		}
+
+		// Run swarm setup for any pending child issues (may be empty if all are done)
 		const swarmResult = await swarmSetup.setupSwarm(
 			epicIssueNumber,
 			epicBranch,
 			epicWorktreePath,
-			metadata.childIssues,
+			pendingChildIssues,
 			mainWorktreePath,
 			providerName,
 			settings,
@@ -921,7 +1035,7 @@ export class IgniteCommand {
 		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
 		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
 
-		const childIssuesData = metadata.childIssues
+		const childIssuesData = pendingChildIssues
 			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
 			.map((ci) => {
 				const rawId = ci.number.replace(/^#/, '')
@@ -941,6 +1055,9 @@ export class IgniteCommand {
 		// Determine issue prefix for commit message trailers
 		const issuePrefix = providerName === 'github' ? '#' : ''
 
+		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
+		const postSwarmReview = settings.spin?.postSwarmReview !== false
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
@@ -949,6 +1066,7 @@ export class IgniteCommand {
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
+			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
@@ -990,7 +1108,7 @@ export class IgniteCommand {
 		]
 
 		// Launch Claude with agent teams enabled
-		const model = this.settingsManager.getSpinModel(settings)
+		const model = this.settingsManager.getSpinModel(settings, 'swarm')
 
 		logger.info('Launching swarm orchestrator...')
 		logger.info(`   Model: ${model ?? 'default'}`)
@@ -1006,7 +1124,13 @@ export class IgniteCommand {
 				variables,
 				['*.md', '!iloom-framework-detector.md']
 			)
-			agents = this.agentManager.formatForCli(loadedAgents)
+
+			if (process.platform === 'darwin') {
+				agents = this.agentManager.formatForCli(loadedAgents)
+			} else {
+				const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+				await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+			}
 		} catch (error) {
 			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
@@ -1022,25 +1146,37 @@ export class IgniteCommand {
 			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
 		}
 
-		await launchClaude(
-			`You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`,
-			{
-				model,
-				permissionMode: 'bypassPermissions',
-				addDir: epicWorktreePath,
-				headless: false,
-				...(metadata.sessionId && { sessionId: metadata.sessionId }),
-				appendSystemPrompt: orchestratorPrompt,
-				mcpConfig: mcpConfigs,
-				allowedTools,
-				...(agents && { agents }),
-				env: {
-					CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-					ILOOM_SWARM: '1',
-					ENABLE_TOOL_SEARCH: 'auto:30',
-				},
-			},
+		// Prepare orchestrator prompt based on platform
+		const orchestratorPromptConfig = await prepareSystemPromptForPlatform(
+			orchestratorPrompt,
+			epicWorktreePath,
 		)
+
+		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
+			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
+
+		// Set env vars directly on process.env so they propagate to Claude Code
+		// and its child processes (execa's env option doesn't reliably pass them)
+		process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'
+		process.env.ILOOM_SWARM = '1'
+		process.env.ENABLE_TOOL_SEARCH = 'auto:30'
+		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
+		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
+		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
+
+		await launchClaude(effectiveSwarmPrompt, {
+			model,
+			permissionMode: 'bypassPermissions',
+			addDir: epicWorktreePath,
+			headless: false,
+			...(metadata.sessionId && { sessionId: metadata.sessionId }),
+			...(orchestratorPromptConfig.appendSystemPrompt && { appendSystemPrompt: orchestratorPromptConfig.appendSystemPrompt }),
+			...(orchestratorPromptConfig.pluginDir && { pluginDir: orchestratorPromptConfig.pluginDir }),
+			mcpConfig: mcpConfigs,
+			allowedTools,
+			...(agents && { agents }),
+		})
 
 		// Track swarm child completions and overall completion
 		try {

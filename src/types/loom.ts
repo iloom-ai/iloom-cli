@@ -1,4 +1,3 @@
-// When updating this type, also update PROJECT_CAPABILITIES in src/lib/SettingsManager.ts
 export type ProjectCapability = 'cli' | 'web'
 export type Capability = ProjectCapability
 
@@ -48,6 +47,8 @@ export interface CreateLoomInput {
     enableTerminal?: boolean
     // One-shot automation mode
     oneShot?: import('./index.js').OneShotMode
+    // Complexity override (skips complexity evaluation)
+    complexity?: import('./index.js').ComplexityOverride
     // Raw --set arguments to forward to spin
     setArguments?: string[]
     // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
