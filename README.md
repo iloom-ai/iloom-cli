@@ -668,7 +668,7 @@ This is an early-stage product.
 
 **Requirements:**
 
-*   ✅ **OS:** macOS (fully supported), Linux (GUI terminals + tmux for headless), WSL (Windows Terminal). ⚠️ Native Windows is unsupported.
+*   ✅ **OS:** macOS (fully supported), Linux (GUI terminals + tmux for headless), WSL (Windows Terminal via [setup guide](docs/windows-wsl-guide.md)). ⚠️ Native Windows is unsupported.
     
 *   ✅ **Runtime:** Node.js 16+, Git 2.5+.
     
