@@ -67,6 +67,10 @@ export const SpinAgentSettingsSchema = z.object({
 		.boolean()
 		.default(true)
 		.describe('Run a full code review after swarm completion, auto-fixing issues with confidence 80+. Defaults to true.'),
+	waveVerification: z
+		.boolean()
+		.default(true)
+		.describe('Enable wave verification during swarm execution — a verifier agent checks each wave\'s output before proceeding. Defaults to true.'),
 })
 
 /**
@@ -607,6 +611,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 			postSwarmReview: z.boolean().optional(),
+			waveVerification: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),

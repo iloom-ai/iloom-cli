@@ -3036,6 +3036,48 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('waveVerification setting', () => {
+		it('defaults waveVerification to true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({})
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.waveVerification).toBe(true)
+			}
+		})
+
+		it('accepts waveVerification: true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', waveVerification: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.waveVerification).toBe(true)
+			}
+		})
+
+		it('accepts waveVerification: false on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', waveVerification: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.waveVerification).toBe(false)
+			}
+		})
+
+		it('accepts optional waveVerification on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: { waveVerification: false } })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.waveVerification).toBe(false)
+			}
+		})
+
+		it('allows omitting waveVerification on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: {} })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.waveVerification).toBeUndefined()
+			}
+		})
+	})
+
 	describe('getPlanPlanner', () => {
 		it('should return claude by default when plan not configured', () => {
 			const settings = { sourceEnvOnStart: false }
