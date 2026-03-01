@@ -194,7 +194,7 @@ export class FinishCommand {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		process.env.ILOOM = '1'
 
-		const isJsonMode = input.options.json === true
+		const isJsonMode = input.options.json === true || input.options.jsonStream === true
 
 		// Initialize result object for JSON mode
 		const result: FinishResult = {
@@ -654,6 +654,7 @@ export class FinishCommand {
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
+			jsonStream: options.jsonStream ?? false,
 		}
 
 		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)
@@ -694,6 +695,7 @@ export class FinishCommand {
 
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
+					jsonStream: options.jsonStream ?? false,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({

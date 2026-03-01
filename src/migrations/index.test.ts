@@ -3,9 +3,15 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { migrations } from './index.js'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Mock fs-extra
 vi.mock('fs-extra')
+
+// Mock gitignore utilities used by the 0.10.3 migration
+vi.mock('../utils/gitignore.js', () => ({
+  ensureGlobalGitignorePatterns: vi.fn(),
+}))
 
 describe('migrations', () => {
   describe('v0.6.1 global gitignore migration', () => {
@@ -213,6 +219,41 @@ describe('migrations', () => {
 
       const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
       expect(writtenContent).toMatch(/^\*\.log\n/)
+    })
+  })
+
+  describe('v0.10.3 global gitignore path remediation migration', () => {
+    const migration = migrations.find(m => m.version === '0.10.3')
+
+    const allIloomPatterns = [
+      '**/.iloom/settings.local.json',
+      '**/.iloom/package.iloom.local.json',
+      '**/.claude/agents/iloom-*',
+      '**/.claude/skills/iloom-*',
+      '**/.claude/iloom-swarm-mcp-config-path',
+    ]
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toContain('core.excludesFile')
+    })
+
+    it('calls ensureGlobalGitignorePatterns with all iloom patterns', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
+    })
+
+    it('is idempotent - ensureGlobalGitignorePatterns handles deduplication', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+      await migration?.migrate()
+
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledTimes(2)
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
     })
   })
 

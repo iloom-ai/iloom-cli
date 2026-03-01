@@ -31,10 +31,11 @@ function createMockManager(overrides: Partial<{
   }
 }
 
-function createMockTelemetryService() {
+function createMockTelemetryService(manager?: ReturnType<typeof createMockManager>) {
   return {
     track: vi.fn(),
     shutdown: vi.fn().mockResolvedValue(undefined),
+    getManager: vi.fn().mockReturnValue(manager),
   }
 }
 
@@ -93,15 +94,15 @@ describe('handleTelemetryLifecycle', () => {
 
   beforeEach(() => {
     mockManager = createMockManager()
-    mockService = createMockTelemetryService()
-    vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+    mockService = createMockTelemetryService(mockManager)
     vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
   })
 
   describe('first-run disclosure', () => {
     it('calls markDisclosed and fires cli.installed when not previously disclosed', () => {
       mockManager = createMockManager({ disclosed: false })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -115,7 +116,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('skips disclosure and cli.installed when already disclosed', () => {
       mockManager = createMockManager({ disclosed: true })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -125,7 +127,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('still marks disclosed in json mode (but does not print)', () => {
       mockManager = createMockManager({ disclosed: false })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', true)
 
@@ -134,10 +137,24 @@ describe('handleTelemetryLifecycle', () => {
     })
   })
 
+  describe('shared TelemetryManager instance', () => {
+    it('uses the TelemetryService manager instead of creating a separate instance', () => {
+      mockManager = createMockManager({ disclosed: false })
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
+
+      handleTelemetryLifecycle('1.0.0', false)
+
+      // Should not construct any TelemetryManager directly — uses the one from TelemetryService
+      expect(TelemetryManager).toHaveBeenCalledTimes(0)
+    })
+  })
+
   describe('upgrade detection', () => {
     it('fires cli.upgraded when version differs from lastVersion', () => {
       mockManager = createMockManager({ disclosed: true, lastVersion: '0.9.0' })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -150,7 +167,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('updates lastVersion after detecting upgrade', () => {
       mockManager = createMockManager({ disclosed: true, lastVersion: '0.9.0' })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -159,7 +177,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('skips upgrade event on first run (no lastVersion)', () => {
       mockManager = createMockManager({ disclosed: false, lastVersion: null })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -168,7 +187,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('does not fire upgrade when version is same', () => {
       mockManager = createMockManager({ disclosed: true, lastVersion: '1.0.0' })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 
@@ -177,7 +197,8 @@ describe('handleTelemetryLifecycle', () => {
 
     it('always calls setLastVersion', () => {
       mockManager = createMockManager({ disclosed: true, lastVersion: '1.0.0' })
-      vi.mocked(TelemetryManager).mockImplementation(() => mockManager as unknown as TelemetryManager)
+      mockService = createMockTelemetryService(mockManager)
+      vi.mocked(TelemetryService.getInstance).mockReturnValue(mockService as unknown as TelemetryService)
 
       handleTelemetryLifecycle('1.0.0', false)
 

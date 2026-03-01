@@ -626,6 +626,7 @@ describe('FinishCommand', () => {
 					{
 						dryRun: true,
 						force: true,
+						jsonStream: false,
 					}
 				)
 
@@ -636,8 +637,54 @@ describe('FinishCommand', () => {
 					{
 						dryRun: true,
 						force: true,
+						jsonStream: false,
 					}
 				)
+			})
+
+			it('should pass jsonStream through mergeOptions to rebaseOnMain', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				// Verify rebaseOnMain received jsonStream: true in mergeOptions
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+					mockWorktree.path,
+					expect.objectContaining({
+						jsonStream: true,
+					})
+				)
+			})
+
+			it('should return FinishResult when jsonStream is true', async () => {
+				const result = await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				expect(result).toBeDefined()
+				expect(result).toEqual(expect.objectContaining({
+					success: true,
+					type: 'issue',
+				}))
+			})
+
+			it('should work with jsonStream without json flag', async () => {
+				const result = await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				// jsonStream alone should return result (like json mode)
+				expect(result).toBeDefined()
+				expect(result!.success).toBe(true)
 			})
 
 			it('should handle rebase conflicts and stop workflow', async () => {

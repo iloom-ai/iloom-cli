@@ -7,6 +7,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
+import { removeClaudeTrust } from '../utils/claude-trust.js'
 import { calculatePortFromIdentifier } from '../utils/port.js'
 import { archiveRecap } from '../utils/recap-archiver.js'
 
@@ -525,6 +526,35 @@ export class ResourceCleanup {
 					})
 				}
 			}
+		}
+
+		// Step 7.5: Remove Claude trust entry for the worktree
+		if (worktree && !options.dryRun) {
+			try {
+				await removeClaudeTrust(worktree.path)
+				getLogger().debug(`Claude trust entry removed for worktree: ${worktree.path}`)
+				operations.push({
+					type: 'trust',
+					success: true,
+					message: 'Claude trust entry removed',
+				})
+			} catch (error) {
+				// Non-fatal: trust removal failure should not block cleanup
+				const err = error instanceof Error ? error : new Error(String(error))
+				getLogger().warn(`Claude trust removal failed (non-fatal): ${err.message}`)
+				operations.push({
+					type: 'trust',
+					success: false,
+					message: 'Claude trust removal failed (non-fatal)',
+					error: err.message,
+				})
+			}
+		} else if (worktree && options.dryRun) {
+			operations.push({
+				type: 'trust',
+				success: true,
+				message: `[DRY RUN] Would remove Claude trust entry for: ${worktree.path}`,
+			})
 		}
 
 		// Calculate overall success

@@ -15,6 +15,9 @@ import { createMockDatabaseManager } from '../mocks/MockDatabaseProvider.js'
 // Mock all dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/GitHubService.js')
+vi.mock('../../src/utils/claude-trust.js', () => ({
+  preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../../src/lib/BranchNamingService.js')
 vi.mock('../../src/lib/EnvironmentManager.js')
 vi.mock('../../src/lib/ClaudeContextManager.js')
@@ -66,6 +69,17 @@ vi.mock('../../src/lib/LoomLauncher.js', () => ({
 // Mock vscode utils (dynamically imported)
 vi.mock('../../src/utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock logger-context
+vi.mock('../../src/utils/logger-context.js', () => ({
+  getLogger: () => ({
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
 }))
 
 describe('LoomManager - Database Integration', () => {

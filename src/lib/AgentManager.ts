@@ -3,6 +3,7 @@ import { accessSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fg from 'fast-glob'
+import fs from 'fs-extra'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
 import type { IloomSettings } from './SettingsManager.js'
@@ -232,5 +233,40 @@ export class AgentManager {
 		// The agents object is already in the correct format
 		// Just return it - launchClaude will JSON.stringify it
 		return agents as Record<string, unknown>
+	}
+
+	/**
+	 * Render loaded agents to disk as markdown files with YAML frontmatter.
+	 * Claude Code auto-discovers agents from .claude/agents/ directory.
+	 *
+	 * @param agents - Loaded agent configs (from loadAgents())
+	 * @param targetDir - Absolute path to target directory (e.g., <worktree>/.claude/agents/)
+	 * @returns Array of rendered filenames
+	 */
+	async renderAgentsToDisk(agents: AgentConfigs, targetDir: string): Promise<string[]> {
+		await fs.ensureDir(targetDir)
+
+		// Clean existing iloom agent files to avoid stale agents from previous runs
+		const existingFiles = await fg('iloom-*.md', { cwd: targetDir, onlyFiles: true })
+		for (const file of existingFiles) {
+			await fs.remove(path.join(targetDir, file))
+		}
+
+		const renderedFiles: string[] = []
+		for (const [agentName, config] of Object.entries(agents)) {
+			const safeName = path.basename(agentName)
+			const filename = `${safeName}.md`
+			// Build YAML frontmatter
+			const frontmatterLines = ['---', `name: ${agentName}`, `description: ${config.description}`]
+			if (config.tools) frontmatterLines.push(`tools: ${config.tools.join(', ')}`)
+			frontmatterLines.push(`model: ${config.model}`)
+			if (config.color) frontmatterLines.push(`color: ${config.color}`)
+			frontmatterLines.push('---')
+
+			const content = frontmatterLines.join('\n') + '\n\n' + config.prompt + '\n'
+			await fs.writeFile(path.join(targetDir, filename), content, 'utf-8')
+			renderedFiles.push(filename)
+		}
+		return renderedFiles
 	}
 }

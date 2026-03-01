@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
+import { JiraWikiSanitizer } from '../utils/jira-wiki-sanitizer.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import { BitBucketVCSProvider } from '../lib/providers/bitbucket/BitBucketVCSProvider.js'
@@ -31,6 +32,7 @@ import type {
 	EditIssueInput,
 	PRResult,
 	CommentResult,
+	GetReviewCommentsInput,
 } from './types.js'
 
 // Module-level settings loaded at startup
@@ -309,6 +311,77 @@ server.registerTool(
 	}
 )
 
+// Register get_review_comments tool
+// Note: Review comments only exist on GitHub PRs, so this tool always uses the GitHub provider
+
+server.registerTool(
+	'get_review_comments',
+	{
+		title: 'Get PR Review Comments',
+		description:
+			'Fetch inline code review comments on a pull request (comments on specific files and lines). ' +
+			'Returns comments with file path, line number, diff side, author, and reply threading. ' +
+			'Optionally filter by review ID. PRs only exist on GitHub, so this tool always uses GitHub.',
+		inputSchema: {
+			number: z.string().describe('The PR number'),
+			reviewId: z
+				.string()
+				.optional()
+				.describe('Optional review ID to filter comments by a specific review'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository.'
+				),
+		},
+		outputSchema: {
+			comments: z.array(
+				z.object({
+					id: z.string().describe('Review comment ID'),
+					body: z.string().describe('Comment body content'),
+					path: z.string().describe('File path the comment is on'),
+					line: z.number().nullable().describe('Line number in the diff'),
+					side: z.string().nullable().describe('Side of the diff (LEFT or RIGHT)'),
+					author: flexibleAuthorSchema.nullable().describe('Comment author'),
+					createdAt: z.string().describe('Comment creation timestamp'),
+					updatedAt: z.string().nullable().describe('Comment last updated timestamp'),
+					inReplyToId: z.string().nullable().describe('ID of the comment this replies to'),
+					pullRequestReviewId: z.number().nullable().describe('The review this comment belongs to'),
+				})
+			).describe('Inline review comments on the PR'),
+		},
+	},
+	async ({ number, reviewId, repo }: GetReviewCommentsInput) => {
+		console.error(`Fetching review comments for PR ${number}${reviewId ? ` (review ${reviewId})` : ''}${repo ? ` from ${repo}` : ''}`)
+
+		try {
+			// Review comments always use GitHub provider regardless of configured issue tracker
+			const provider = new GitHubIssueManagementProvider()
+			const comments = await provider.getReviewComments({ number, reviewId, repo })
+
+			console.error(`Review comments fetched successfully: ${comments.length} comments`)
+
+			const result = { comments }
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to fetch review comments: ${errorMessage}`)
+			throw new Error(`Failed to fetch review comments: ${errorMessage}`)
+		}
+	}
+)
+
 // Register get_comment tool
 server.registerTool(
 	'get_comment',
@@ -380,6 +453,7 @@ server.registerTool(
 			type: z
 				.enum(['issue', 'pr'])
 				.describe('Type of entity to comment on (issue or pr)'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -391,6 +465,7 @@ server.registerTool(
 		console.error(`Creating ${type} comment on ${number}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			let result: CommentResult
 
 			if (type === 'pr' && bitBucketVCSProvider) {
@@ -400,7 +475,7 @@ server.registerTool(
 					throw new Error(`Invalid PR number: ${number}. PR IDs must be numeric.`)
 				}
 				console.error(`Creating BitBucket PR comment on PR #${prNumber}`)
-				await bitBucketVCSProvider.createPRComment(prNumber, body)
+				await bitBucketVCSProvider.createPRComment(prNumber, sanitizedBody)
 				// BitBucket addPRComment returns void; construct a minimal CommentResult
 				result = {
 					id: `bitbucket-pr-${prNumber}-comment`,
@@ -410,7 +485,7 @@ server.registerTool(
 				// Route to issue provider (GitHub for 'pr' type when not BitBucket, configured provider for 'issue' type)
 				const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 				const provider = IssueManagementProviderFactory.create(providerType, settings)
-				result = await provider.createComment({ number, body, type })
+				result = await provider.createComment({ number, body: sanitizedBody, type })
 			}
 
 			console.error(
@@ -449,6 +524,7 @@ server.registerTool(
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
 			body: z.string().describe('The updated comment body (markdown supported)'),
 			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments through the configured VCS provider'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -468,10 +544,11 @@ server.registerTool(
 				)
 			}
 
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			// Route to issue provider (GitHub for 'pr' type when not BitBucket, configured provider for 'issue' type)
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.updateComment({ commentId, number, body })
+			const result = await provider.updateComment({ commentId, number, body: sanitizedBody })
 
 			console.error(
 				`Comment updated successfully: ${result.id} at ${result.url}`
@@ -516,6 +593,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -527,11 +605,12 @@ server.registerTool(
 		console.error(`Creating issue: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createIssue({ title, body, labels, teamKey, repo })
+			const result = await provider.createIssue({ title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Issue created successfully: ${result.id} at ${result.url}`)
 
@@ -576,6 +655,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -587,11 +667,12 @@ server.registerTool(
 		console.error(`Creating child issue for parent ${parentId}: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey, repo })
+			const result = await provider.createChildIssue({ parentId, title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Child issue created successfully: ${result.id} at ${result.url}`)
 
@@ -970,6 +1051,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').optional().describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			success: z.boolean().describe('Whether the issue was edited successfully'),
@@ -979,11 +1061,12 @@ server.registerTool(
 		console.error(`Editing issue ${number}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = body ? JiraWikiSanitizer.sanitize(body) : undefined
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			await provider.editIssue({ number, title, body, state, labels, repo })
+			await provider.editIssue({ number, title, body: sanitizedBody, state, labels, repo })
 
 			console.error(`Issue edited successfully: ${number}`)
 

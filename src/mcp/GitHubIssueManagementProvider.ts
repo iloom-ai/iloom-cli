@@ -8,6 +8,7 @@ import type {
 	IssueManagementProvider,
 	GetIssueInput,
 	GetPRInput,
+	GetReviewCommentsInput,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
@@ -23,6 +24,7 @@ import type {
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
+	ReviewCommentResult,
 	CommentDetailResult,
 	CommentResult,
 	DependenciesResult,
@@ -76,8 +78,14 @@ function normalizeAuthor(author: GitHubAuthor | null | undefined): FlexibleAutho
 /**
  * Extract numeric comment ID from GitHub comment URL
  * URL format: https://github.com/owner/repo/issues/123#issuecomment-3615239386
+ *
+ * Returns undefined if URL is null/undefined (older gh CLI versions don't include url).
+ * Throws if URL is present but has no valid issuecomment fragment.
  */
-export function extractNumericIdFromUrl(url: string): string {
+export function extractNumericIdFromUrl(url: string | null | undefined): string | undefined {
+	if (url == null) {
+		return undefined
+	}
 	const match = url.match(/#issuecomment-(\d+)$/)
 	if (!match?.[1]) {
 		throw new Error(`Cannot extract comment ID from URL: ${url}`)
@@ -127,7 +135,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				body: string
 				createdAt: string
 				updatedAt?: string
-				url: string
+				url?: string // Optional: older gh CLI versions (e.g. v2.4.0) don't include url
 			}>
 		}
 
@@ -176,9 +184,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		// Handle comments with normalized authors
 		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
 		// (GitHub CLI returns GraphQL node IDs in the id field, but REST API expects numeric IDs)
+		// Fallback: older gh CLI versions (e.g. v2.4.0) don't include url, so use comment.id directly
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
-				id: extractNumericIdFromUrl(comment.url),
+				id: extractNumericIdFromUrl(comment.url) ?? String(comment.id),
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.author),
@@ -242,7 +251,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				body: string
 				createdAt: string
 				updatedAt?: string
-				url: string
+				url?: string // Optional: older gh CLI versions (e.g. v2.4.0) don't include url
 			}>
 		}
 
@@ -302,9 +311,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 
 		// Handle comments with normalized authors
 		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
+		// Fallback: older gh CLI versions (e.g. v2.4.0) don't include url, so use comment.id directly
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
-				id: extractNumericIdFromUrl(comment.url),
+				id: extractNumericIdFromUrl(comment.url) ?? String(comment.id),
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.author),
@@ -321,6 +331,85 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		return result
+	}
+
+	/**
+	 * Fetch PR review comments (inline code comments on specific files/lines)
+	 * Uses gh api with --paginate to handle PRs with many review comments
+	 * Optionally filters by review ID
+	 */
+	async getReviewComments(input: GetReviewCommentsInput): Promise<ReviewCommentResult[]> {
+		const { number, reviewId, repo } = input
+
+		// Convert string ID to number for GitHub API
+		const prNumber = parseInt(number, 10)
+		if (isNaN(prNumber)) {
+			throw new Error(`Invalid GitHub PR number: ${number}. GitHub PR IDs must be numeric.`)
+		}
+
+		// Validate reviewId early to avoid unnecessary API call
+		let numericReviewId: number | undefined
+		if (reviewId) {
+			numericReviewId = parseInt(reviewId, 10)
+			if (isNaN(numericReviewId)) {
+				throw new Error(`Invalid review ID: ${reviewId}. Review IDs must be numeric.`)
+			}
+		}
+
+		// GitHub API response structure for review comments
+		interface GitHubReviewComment {
+			id: number
+			body: string
+			path: string
+			line: number | null
+			side: string | null
+			user: GitHubAuthor | null
+			created_at: string
+			updated_at: string | null
+			in_reply_to_id: number | null
+			pull_request_review_id: number | null
+		}
+
+		// Use explicit repo path if provided, otherwise use :owner/:repo placeholder
+		const apiPath = repo
+			? `repos/${repo}/pulls/${prNumber}/comments`
+			: `repos/:owner/:repo/pulls/${prNumber}/comments`
+
+		const args = [
+			'api',
+			apiPath,
+			'--paginate',
+			'--jq',
+			'[.[] | {id: .id, body: .body, path: .path, line: .line, side: .side, user: .user, created_at: .created_at, updated_at: .updated_at, in_reply_to_id: .in_reply_to_id, pull_request_review_id: .pull_request_review_id}]',
+		]
+
+		const raw = await executeGhCommand<GitHubReviewComment[]>(args)
+
+		// Filter by reviewId if provided (already validated above)
+		let comments = raw
+		if (numericReviewId !== undefined) {
+			comments = comments.filter(c => c.pull_request_review_id === numericReviewId)
+		}
+
+		// Normalize and process each comment
+		const results: ReviewCommentResult[] = []
+		for (const comment of comments) {
+			const processedBody = await processMarkdownImages(comment.body, 'github')
+			results.push({
+				id: String(comment.id),
+				body: processedBody,
+				path: comment.path,
+				line: comment.line,
+				side: comment.side,
+				author: normalizeAuthor(comment.user),
+				createdAt: comment.created_at,
+				updatedAt: comment.updated_at ?? null,
+				inReplyToId: comment.in_reply_to_id ? String(comment.in_reply_to_id) : null,
+				pullRequestReviewId: comment.pull_request_review_id,
+			})
+		}
+
+		return results
 	}
 
 	/**

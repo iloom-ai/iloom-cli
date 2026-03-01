@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
-import { archiveRecap, slugifyPath, RECAPS_DIR, ARCHIVED_DIR } from './recap-archiver.js'
+import { archiveRecap, findArchivedRecap, slugifyPath, RECAPS_DIR, ARCHIVED_DIR } from './recap-archiver.js'
 
 // Mock fs-extra
 vi.mock('fs-extra', () => ({
@@ -24,6 +24,19 @@ vi.mock('./logger-context.js', () => ({
 		error: vi.fn(),
 	}),
 }))
+
+// Mock MetadataManager
+vi.mock('../lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(),
+}))
+
+// Mock findMainWorktreePathWithSettings
+vi.mock('./git.js', () => ({
+	findMainWorktreePathWithSettings: vi.fn(),
+}))
+
+import { MetadataManager } from '../lib/MetadataManager.js'
+import { findMainWorktreePathWithSettings } from './git.js'
 
 describe('RecapArchiver', () => {
 	describe('slugifyPath', () => {
@@ -140,6 +153,174 @@ describe('RecapArchiver', () => {
 
 			// Should throw - caller (ResourceCleanup.ts) handles errors as non-fatal
 			await expect(archiveRecap(worktreePath)).rejects.toThrow('Permission denied')
+		})
+	})
+
+	describe('findArchivedRecap', () => {
+		const currentProjectPath = '/Users/test/projects/my-repo'
+		const worktreePath = '/Users/test/projects/my-repo-issue-42__fix'
+
+		function setupMetadataMock(finishedLooms: unknown[]) {
+			const mockListFinishedMetadata = vi.fn().mockResolvedValue(finishedLooms)
+			vi.mocked(MetadataManager).mockImplementation(() => ({
+				listFinishedMetadata: mockListFinishedMetadata,
+			}) as unknown as MetadataManager)
+			return mockListFinishedMetadata
+		}
+
+		it('should find archived recap by issue number using finished metadata', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('issue', 42)
+
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(worktreePath)))
+		})
+
+		it('should find archived recap by PR number using finished metadata', async () => {
+			const prWorktreePath = '/Users/test/projects/my-repo-feat__pr_123'
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath: prWorktreePath,
+					issue_numbers: [],
+					pr_numbers: ['123'],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('pr', 123)
+
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(prWorktreePath)))
+		})
+
+		it('should filter by projectPath to avoid cross-project false positives', async () => {
+			const otherProjectWorktree = '/Users/test/projects/other-repo-issue-42__fix'
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: '/Users/test/projects/other-repo',
+					worktreePath: otherProjectWorktree,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+				{
+					projectPath: currentProjectPath,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('issue', 42)
+
+			// Should return the match for the current project, not the other one
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(worktreePath)))
+		})
+
+		it('should return null when no matching finished metadata exists', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+
+			const result = await findArchivedRecap('issue', 999)
+
+			expect(result).toBeNull()
+		})
+
+		it('should return null when archived recap file does not exist on disk', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const result = await findArchivedRecap('issue', 42)
+
+			expect(result).toBeNull()
+		})
+
+		it('should return most recent match when multiple finished looms match', async () => {
+			const newerWorktreePath = '/Users/test/projects/my-repo-issue-42__fix-v2'
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			// listFinishedMetadata is pre-sorted by finishedAt desc, so first match is most recent
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath: newerWorktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+				{
+					projectPath: currentProjectPath,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('issue', 42)
+
+			// Should return the first (most recent) match
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(newerWorktreePath)))
+		})
+
+		it('should skip metadata entries without projectPath (legacy looms)', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: null,
+					worktreePath,
+					issue_numbers: ['42'],
+					pr_numbers: [],
+				},
+			])
+
+			const result = await findArchivedRecap('issue', 42)
+
+			expect(result).toBeNull()
+		})
+
+		it('should handle errors from MetadataManager gracefully', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			const mockListFinishedMetadata = vi.fn().mockRejectedValue(new Error('File system error'))
+			vi.mocked(MetadataManager).mockImplementation(() => ({
+				listFinishedMetadata: mockListFinishedMetadata,
+			}) as unknown as MetadataManager)
+
+			const result = await findArchivedRecap('issue', 42)
+
+			expect(result).toBeNull()
+		})
+
+		it('should handle errors from findMainWorktreePathWithSettings gracefully', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockRejectedValue(new Error('Not a git repo'))
+
+			const result = await findArchivedRecap('issue', 42)
+
+			expect(result).toBeNull()
 		})
 	})
 

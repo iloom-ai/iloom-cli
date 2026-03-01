@@ -461,6 +461,39 @@ describe('LoomLauncher', () => {
 		})
 	})
 
+	describe('complexity forwarding', () => {
+			it('should append --complexity flag to spin command when set', async () => {
+				await launcher.launchLoom({
+					...baseOptions,
+					enableClaude: true,
+					enableCode: false,
+					enableDevServer: true,
+					enableTerminal: false,
+					complexity: 'simple',
+				} as LaunchLoomOptions)
+
+				const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
+				const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
+				expect(claudeTab).toBeDefined()
+				expect(claudeTab?.command).toContain('--complexity=simple')
+			})
+
+			it('should not append --complexity flag when not set', async () => {
+				await launcher.launchLoom({
+					...baseOptions,
+					enableClaude: true,
+					enableCode: false,
+					enableDevServer: true,
+					enableTerminal: false,
+				})
+
+				const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
+				const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
+				expect(claudeTab).toBeDefined()
+				expect(claudeTab?.command).not.toContain('--complexity')
+			})
+		})
+
 	describe('sourceEnvOnStart option', () => {
 		beforeEach(async () => {
 			// Reset existsSync mock to default (true)

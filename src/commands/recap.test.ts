@@ -26,9 +26,15 @@ vi.mock('../utils/IdentifierParser.js', () => ({
 	})),
 }))
 
+// Mock recap-archiver
+vi.mock('../utils/recap-archiver.js', () => ({
+	findArchivedRecap: vi.fn().mockResolvedValue(null),
+}))
+
 import fs from 'fs-extra'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { findArchivedRecap } from '../utils/recap-archiver.js'
 
 describe('RecapCommand', () => {
 	let command: RecapCommand
@@ -343,10 +349,10 @@ describe('RecapCommand', () => {
 
 			const input: RecapCommandInput = { identifier: '999', json: true }
 
-			await expect(command.execute(input)).rejects.toThrow("Could not resolve identifier '999': No worktree found for identifier: 999")
+			await expect(command.execute(input)).rejects.toThrow("No worktree or archived recap found for #999")
 		})
 
-		it('should throw error when PR identifier has no matching worktree', async () => {
+		it('should throw error when PR identifier has no matching worktree or archived recap', async () => {
 			const mockGitWorktreeManager = {
 				findWorktreeForIssue: vi.fn(),
 				findWorktreeForPR: vi.fn().mockResolvedValue(null),
@@ -355,10 +361,135 @@ describe('RecapCommand', () => {
 			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
 
 			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+			vi.mocked(findArchivedRecap).mockResolvedValue(null)
 
 			const input: RecapCommandInput = { identifier: 'pr/456', json: true }
 
-			await expect(command.execute(input)).rejects.toThrow('No worktree found for PR #456')
+			await expect(command.execute(input)).rejects.toThrow('No worktree or archived recap found for PR #456')
+		})
+	})
+
+	describe('execute with identifier - archived fallback', () => {
+		it('should fall back to archived recap when issue worktree not found', async () => {
+			const archivedPath = '/mock/recaps/archived/___Users___test___worktrees___feat-issue-42__fix.json'
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn().mockResolvedValue(null),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			const mockIdentifierParser = {
+				parseForPatternDetection: vi.fn().mockResolvedValue({
+					type: 'issue',
+					number: 42,
+					originalInput: '42',
+				}),
+			}
+			vi.mocked(IdentifierParser).mockImplementation(() => mockIdentifierParser as unknown as IdentifierParser)
+
+			vi.mocked(findArchivedRecap).mockResolvedValue(archivedPath)
+
+			// Mock fs.pathExists to return true for the archived path
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+				goal: 'Archived goal',
+				entries: [],
+				artifacts: [],
+			}) as never)
+
+			const input: RecapCommandInput = { identifier: '42', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			expect(result).toBeDefined()
+			expect(result.filePath).toBe(archivedPath)
+			expect(result.goal).toBe('Archived goal')
+			expect(findArchivedRecap).toHaveBeenCalledWith('issue', 42)
+		})
+
+		it('should fall back to archived recap when PR worktree not found (pr/ prefix)', async () => {
+			const archivedPath = '/mock/recaps/archived/___Users___test___worktrees___feat__pr_123.json'
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn(),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			vi.mocked(findArchivedRecap).mockResolvedValue(archivedPath)
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+				goal: 'Archived PR goal',
+				entries: [],
+				artifacts: [],
+			}) as never)
+
+			const input: RecapCommandInput = { identifier: 'pr/123', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			expect(result).toBeDefined()
+			expect(result.filePath).toBe(archivedPath)
+			expect(result.goal).toBe('Archived PR goal')
+			expect(findArchivedRecap).toHaveBeenCalledWith('pr', 123)
+		})
+
+		it('should still throw when neither worktree nor archived recap exists for issue', async () => {
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn().mockResolvedValue(null),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			const mockIdentifierParser = {
+				parseForPatternDetection: vi.fn().mockResolvedValue({
+					type: 'issue',
+					number: 999,
+					originalInput: '999',
+				}),
+			}
+			vi.mocked(IdentifierParser).mockImplementation(() => mockIdentifierParser as unknown as IdentifierParser)
+
+			vi.mocked(findArchivedRecap).mockResolvedValue(null)
+
+			const input: RecapCommandInput = { identifier: '999', json: true }
+
+			await expect(command.execute(input)).rejects.toThrow('No worktree or archived recap found for issue #999')
+		})
+
+		it('should handle string number from IdentifierParser for issue lookup', async () => {
+			const archivedPath = '/mock/recaps/archived/___Users___test___worktrees___feat-issue-55__fix.json'
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn().mockResolvedValue(null),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			const mockIdentifierParser = {
+				parseForPatternDetection: vi.fn().mockResolvedValue({
+					type: 'issue',
+					number: '55', // string type from IdentifierParser
+					originalInput: 'ENG-55',
+				}),
+			}
+			vi.mocked(IdentifierParser).mockImplementation(() => mockIdentifierParser as unknown as IdentifierParser)
+
+			vi.mocked(findArchivedRecap).mockResolvedValue(archivedPath)
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+				goal: 'Archived issue',
+				entries: [],
+				artifacts: [],
+			}) as never)
+
+			const input: RecapCommandInput = { identifier: 'ENG-55', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			expect(result).toBeDefined()
+			expect(result.filePath).toBe(archivedPath)
+			// parseInt('55') = 55
+			expect(findArchivedRecap).toHaveBeenCalledWith('issue', 55)
 		})
 	})
 })

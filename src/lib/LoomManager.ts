@@ -16,6 +16,7 @@ import { GitHubService } from './GitHubService.js'
 import { VCSProviderFactory } from './VCSProviderFactory.js'
 import type { VersionControlProvider } from './VersionControlProvider.js'
 import { generateRandomSessionId } from '../utils/claude.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { detectDarkMode } from '../utils/terminal.js'
@@ -377,6 +378,7 @@ export class LoomManager {
     const enableDevServer = input.options?.enableDevServer !== false
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
+    const complexity = input.options?.complexity
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
@@ -402,6 +404,7 @@ export class LoomManager {
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
+        ...(complexity && { complexity }),
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
@@ -472,6 +475,7 @@ export class LoomManager {
       capabilities,
       ...(draftPrNumber && { draftPrNumber }),
       ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
+      ...(input.options?.complexity && { complexity: input.options.complexity }),
       ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
       ...(input.options?.childIssues && input.options.childIssues.length > 0 && { childIssues: input.options.childIssues }),
       ...(input.options?.dependencyMap && Object.keys(input.options.dependencyMap).length > 0 && { dependencyMap: input.options.dependencyMap }),
@@ -559,15 +563,16 @@ export class LoomManager {
         return []
       }
 
-      // Sanitize parent branch name the same way as in createWorktreeOnly (lines 361-363)
-      const sanitizedBranchName = parentBranchName
-        .replace(/\//g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '-')
+      // Use metadata-based detection: find all looms whose parentLoom.branchName matches
+      const allMetadata = await this.metadataManager.listAllMetadata()
+      const childBranches = new Set(
+        allMetadata
+          .filter(m => m.parentLoom?.branchName === parentBranchName)
+          .map(m => m.branchName)
+          .filter((b): b is string => b != null),
+      )
 
-      // Child looms are in directory: {sanitizedBranchName}-looms/
-      const pattern = `${sanitizedBranchName}-looms/`
-
-      return worktrees.filter(wt => wt.path.includes(pattern))
+      return worktrees.filter(wt => childBranches.has(wt.branch))
     } catch (error) {
       getLogger().debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return []
@@ -834,6 +839,13 @@ export class LoomManager {
           getLogger().warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
       }
+    }
+
+    // Pre-accept Claude Code trust for the new worktree path
+    try {
+      await preAcceptClaudeTrust(worktreePath)
+    } catch (error) {
+      getLogger().warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
     }
 
     return worktreePath
@@ -1364,6 +1376,7 @@ export class LoomManager {
     const enableDevServer = input.options?.enableDevServer !== false
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
+    const complexity = input.options?.complexity
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
@@ -1389,6 +1402,7 @@ export class LoomManager {
         identifier: input.identifier,
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
+        ...(complexity && { complexity }),
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
@@ -1449,10 +1463,16 @@ export class LoomManager {
         prUrls,
         capabilities,
         ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
+        ...(input.options?.complexity && { complexity: input.options.complexity }),
         ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+    } else if (input.options?.complexity) {
+      // Update existing metadata with complexity override
+      await this.metadataManager.updateMetadata(worktreePath, {
+        complexity: input.options.complexity,
+      })
     }
 
     // 9. Return loom metadata

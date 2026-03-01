@@ -1763,6 +1763,128 @@ describe('enrichSwarmIssues', () => {
     expect(result[0]?.state).toBe('in_progress')
     expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__active')
   })
+
+  describe('project-scoped filtering', () => {
+    const createMetaForProject = (
+      issueNumber: string,
+      state: LoomMetadata['state'],
+      worktreePath: string,
+      projectPath: string,
+    ): LoomMetadata => ({
+      ...createChildLoomMetadata(issueNumber, state, worktreePath),
+      projectPath,
+    })
+
+    it('should only match metadata from the same project, preventing cross-project collisions', () => {
+      const childIssues = [
+        { number: '#2', title: 'Resume builder task', body: 'body', url: 'https://github.com/org/resume-builder/issues/2' },
+      ]
+      // Same issue number (#2) exists in both projects
+      const allMetadata = [
+        createMetaForProject('2', 'in_progress', '/projects/resume-builder-looms/issue-2__task', '/projects/resume-builder'),
+        createMetaForProject('2', 'done', '/projects/real-estate-looms/issue-2__task', '/projects/real-estate'),
+      ]
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/resume-builder')
+
+      expect(result[0]?.state).toBe('in_progress')
+      expect(result[0]?.worktreePath).toBe('/projects/resume-builder-looms/issue-2__task')
+    })
+
+    it('should scope finished metadata by project too', () => {
+      const childIssues = [
+        { number: '#3', title: 'Task three', body: 'body', url: 'https://github.com/org/project-a/issues/3' },
+      ]
+      // No active metadata for project-a issue #3
+      const activeMetadata = [
+        createMetaForProject('3', 'in_progress', '/projects/project-b-looms/issue-3__work', '/projects/project-b'),
+      ]
+      // But finished metadata has both projects
+      const finishedMetadata: LoomMetadata[] = [
+        {
+          ...createMetaForProject('3', 'done', '/projects/project-a-looms/issue-3__done', '/projects/project-a'),
+          status: 'finished',
+          finishedAt: '2024-01-20T00:00:00.000Z',
+        },
+        {
+          ...createMetaForProject('3', 'failed', '/projects/project-b-looms/issue-3__failed', '/projects/project-b'),
+          status: 'finished',
+          finishedAt: '2024-01-21T00:00:00.000Z',
+        },
+      ]
+
+      const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata, '/projects/project-a')
+
+      // Should fall back to project-a's finished metadata, not project-b's active or finished
+      expect(result[0]?.state).toBe('done')
+      expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-3__done')
+    })
+
+    it('should fall back to unscoped behavior when projectPath is null', () => {
+      const childIssues = [
+        { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
+      ]
+      const allMetadata = [
+        createMetaForProject('5', 'pending', '/projects/some-project-looms/issue-5__work', '/projects/some-project'),
+      ]
+
+      // null projectPath => no filtering, matches any project
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, null)
+
+      expect(result[0]?.state).toBe('pending')
+      expect(result[0]?.worktreePath).toBe('/projects/some-project-looms/issue-5__work')
+    })
+
+    it('should fall back to unscoped behavior when projectPath is undefined', () => {
+      const childIssues = [
+        { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
+      ]
+      const allMetadata = [
+        createMetaForProject('5', 'pending', '/projects/some-project-looms/issue-5__work', '/projects/some-project'),
+      ]
+
+      // undefined projectPath => no filtering
+      const result = enrichSwarmIssues(childIssues, allMetadata)
+
+      expect(result[0]?.state).toBe('pending')
+    })
+
+    it('should handle realpathSync errors gracefully (falls back to original path)', () => {
+      // When realpathSync throws (e.g., path doesn't exist), resolvePathSafe falls back to original.
+      // This means paths that differ only in symlinks but don't resolve will still compare by string.
+      const childIssues = [
+        { number: '#7', title: 'Test', body: 'body', url: 'https://github.com/org/repo/issues/7' },
+      ]
+      const allMetadata = [
+        createMetaForProject('7', 'in_progress', '/projects/project-a-looms/issue-7__work', '/projects/project-a'),
+      ]
+
+      // Same string path => matches even if realpathSync can't resolve
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/project-a')
+
+      expect(result[0]?.state).toBe('in_progress')
+      expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-7__work')
+    })
+
+    it('should exclude metadata entries with null projectPath when scoping is active', () => {
+      const childIssues = [
+        { number: '#10', title: 'Test', body: 'body', url: 'https://github.com/org/repo/issues/10' },
+      ]
+      // Metadata with null projectPath (legacy) should be excluded when scoping is active
+      const allMetadata: LoomMetadata[] = [
+        {
+          ...createChildLoomMetadata('10', 'in_progress', '/projects/legacy-looms/issue-10__work'),
+          projectPath: null,
+        },
+      ]
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/my-project')
+
+      // Legacy entry (null projectPath) should NOT match when we're scoping
+      expect(result[0]?.state).toBeNull()
+      expect(result[0]?.worktreePath).toBeNull()
+    })
+  })
 })
 
 describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () => {

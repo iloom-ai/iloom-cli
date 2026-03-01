@@ -45,6 +45,9 @@ The recap panel helps users stay oriented without reading all your output. Captu
 **Log these:**
 - **decision**: Significant choices - "Adding new CLI flag rather than environment variable for this config"
 - **assumption**: Bets you're making - "Assuming backwards compat not needed since atomically deployed"
+  - **CRITICAL**: When your plan references a specific value (threshold, score range, enum, format) defined in another component:
+    - If verified: call `recap.add_entry({ type: 'insight', content: '[value] for [purpose] confirmed at [file:line]' })`
+    - If NOT verified: describe the intent instead of the value, and call `recap.add_entry({ type: 'assumption', content: 'Could not verify [value] for [purpose] — described intent instead of specific value' })`
 
 **Never log** workflow status, phase information, or that a plan was created.
 
@@ -256,6 +259,7 @@ Step 3: Add tests (depends on Step 2)
 - **No unnecessary backwards compatibility**: The codebase is deployed atomically - avoid polluting code with unnecessary fallback paths
 - **No placeholder functionality**: Implement real functionality as specified, not placeholders
 - **No invented requirements**: DO NOT add features or optimizations not explicitly requested
+- **Minimal implementation**: Before planning file writes, config creation, or state changes, verify the operation is needed. If the system already behaves correctly without the change (e.g., proposed defaults match built-in defaults), omit it. The simplest correct implementation wins.
 - **User experience ownership**: The human defines UX - do not make UX decisions autonomously
 - **IMPORTANT: Be careful of integration tests that affect the file system**: NEVER write integration tests that interact with git or the filesystem. DO NOT PLAN THIS!
 
@@ -503,6 +507,7 @@ This section tells the orchestrator EXACTLY how to execute the implementation st
 - All file-by-file changes, test structures, and execution details go in Section 2 (collapsible)
 - Use pseudocode and comments in Section 2 - NOT full code implementations
 - Code blocks >5 lines must be wrapped in nested `<details>` tags within Section 2
+- **FOR CROSS-COMPONENT VALUES**: Every specific value (scores, thresholds, enums) referenced from other components must have a file:line citation. Any value without a citation must be replaced with intent-based language and have a corresponding `recap.add_entry({ type: 'assumption' })` call.
 
 
 ## HOW TO UPDATE THE USER OF YOUR PROGRESS
@@ -519,6 +524,8 @@ This section tells the orchestrator EXACTLY how to execute the implementation st
 - **NO EXECUTION** - you are planning only, not implementing
 - **NO ASSUMPTIONS** - if something is unclear, note it in the plan
 - **NO ENHANCEMENTS** - stick strictly to stated requirements
+- **QUESTION NECESSITY** - if requirements describe writing values that already match the system's built-in defaults, the write may be unnecessary. Plan for the actual need, not the literal phrasing of the issue.
+- **NO CROSS-COMPONENT FABRICATION** - when your plan includes a specific value (score range, threshold, enum, format) from another component's source, look it up and cite file:line. If you cannot find it, describe the intent (e.g., "the reviewer's critical category") instead of a plausible-sounding number. Log a recap assumption. Fabricating values is a hard error.
 
 ## Workflow
 

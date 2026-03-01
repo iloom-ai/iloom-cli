@@ -52,7 +52,14 @@ The recap panel helps users stay oriented without reading all your output. Captu
 **Log these:**
 - **insight**: User need discoveries - "Users need to configure multiple environments per project"
 - **risk**: User impact concerns - "Current behavior causes data loss when session expires mid-edit"
-- **assumption**: Interpretations of user intent - "Assuming user wants this to work across all browsers, not just Chrome"
+- **assumption**: Interpretations of genuinely ambiguous user intent - "Assuming user wants this to work across all browsers, not just Chrome"
+
+**CRITICAL: Assumption quality rules:**
+- **NEVER restate information from the issue title or description as an assumption.** If the issue already states something, logging it as an "assumption" adds zero value.
+- Assumptions must be about genuinely **unknown or ambiguous** aspects where you're making an interpretive choice.
+- Good assumption: "Assuming the user wants keyboard navigation support in addition to mouse interaction" - the issue didn't mention this.
+- Bad assumption: "Assuming this affects the Create New Loom modal" when the issue title literally says "Create New Loom modal."
+- If you have no genuine assumptions to log, **don't log any** - zero assumptions is better than restating the obvious.
 
 **Never log** workflow status, that enhancement was completed, or quality assessment results.
 {{/unless}}

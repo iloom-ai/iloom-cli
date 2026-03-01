@@ -38,7 +38,8 @@ const packageJson = getPackageInfo(__filename)
  * Extracted for testability.
  */
 export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boolean): void {
-  const telemetryManager = new TelemetryManager()
+  const service = TelemetryService.getInstance()
+  const telemetryManager = service.getManager()
 
   // First-run disclosure
   if (!telemetryManager.hasBeenDisclosed()) {
@@ -51,7 +52,7 @@ export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boole
       logger.info('')
     }
     telemetryManager.markDisclosed()
-    TelemetryService.getInstance().track('cli.installed', {
+    service.track('cli.installed', {
       version: currentVersion,
       os: process.platform,
       node_version: process.version,
@@ -61,7 +62,7 @@ export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boole
   // Upgrade detection
   const lastVersion = telemetryManager.getLastVersion()
   if (lastVersion && lastVersion !== currentVersion) {
-    TelemetryService.getInstance().track('cli.upgraded', {
+    service.track('cli.upgraded', {
       version: currentVersion,
       previous_version: lastVersion,
       os: process.platform,
@@ -430,6 +431,11 @@ program
       .default('default')
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
+  .addOption(
+    new Option('--complexity <level>', 'Override complexity evaluation (persists in loom metadata)')
+      .choices(['trivial', 'simple', 'complex'])
+  )
+  .option('--create-only', 'Create workspace only (skip Claude, IDE, terminal, dev server)')
   .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -465,6 +471,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to start workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -512,6 +519,7 @@ program
           const issueNumber = typeof result === 'object' ? result.id : result
           logger.success(`Issue #${issueNumber} created successfully`)
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to create issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -547,6 +555,7 @@ program
         options: feedbackOptions
       })
       logger.success(`Feedback submitted as issue #${issueNumber} in iloom-cli repository`)
+      await TelemetryService.getInstance().shutdown()
       process.exit(0)
     } catch (error) {
       logger.error(`Failed to submit feedback: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -585,6 +594,7 @@ program
           // Non-JSON mode: display human-readable success message
           logger.success(`Enhancement process completed for issue #${issueNumber}`)
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         logger.error(`Failed to enhance issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -616,11 +626,21 @@ program
   .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--review', 'Review commit message before committing (default: auto-commit without review)')
   .option('--json', 'Output result as JSON')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
   .action(async (identifier: string | undefined, options: FinishOptions & { browser?: boolean }) => {
     // Commander.js --no-browser creates browser:false, map to noBrowser for FinishOptions
     if (options.browser === false) {
       options.noBrowser = true
     }
+
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const settingsManager = new SettingsManager()
@@ -628,13 +648,15 @@ program
         const issueTracker = IssueTrackerFactory.create(settings)
         const command = new FinishCommand(issueTracker)
         const result = await command.execute({ identifier, options })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
@@ -647,8 +669,8 @@ program
       }
     }
 
-    // Wrap execution in logger context for JSON mode
-    if (options.json) {
+    // Wrap execution in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -664,40 +686,52 @@ program
   .option('--fixes', 'Use "Fixes #N" trailer instead of "Refs #N" (closes issue)')
   .option('--no-review', 'Skip commit message review prompt')
   .option('--json', 'Output result as JSON (implies --no-review)')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for validation fixes')
   .option('--wip-commit', 'Quick WIP commit: skip validations and pre-commit hooks')
-  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; wipCommit?: boolean }) => {
+  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; jsonStream?: boolean; wipCommit?: boolean }) => {
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const { CommitCommand } = await import('./commands/commit.js')
         const command = new CommitCommand()
-        // --json implies --no-review
-        const noReview = options.review === false || options.json === true
+        // --json and --json-stream imply --no-review
+        const noReview = options.review === false || options.json === true || options.jsonStream === true
         const result = await command.execute({
           message: options.message,
           fixes: options.fixes ?? false,
           noReview,
           json: options.json ?? false,
+          jsonStream: options.jsonStream ?? false,
           wipCommit: options.wipCommit ?? false,
         })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         // Handle UserAbortedCommitError with exit code 130
         if (error instanceof UserAbortedCommitError) {
           process.exit(130)
         }
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
         process.exit(1)
       }
     }
-    // Wrap in logger context for JSON mode
-    if (options.json) {
+    // Wrap in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -710,14 +744,38 @@ program
   .description('Rebase current branch on main with Claude-assisted conflict resolution')
   .option('-f, --force', 'Skip confirmation prompts')
   .option('-n, --dry-run', 'Preview actions without executing')
-  .action(async (options: { force?: boolean; dryRun?: boolean }) => {
-    try {
-      const { RebaseCommand } = await import('./commands/rebase.js')
-      const command = new RebaseCommand()
-      await command.execute(options)
-    } catch (error) {
-      logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      process.exit(1)
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
+  .action(async (options: { force?: boolean; dryRun?: boolean; jsonStream?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RebaseCommand } = await import('./commands/rebase.js')
+        const command = new RebaseCommand()
+        const result = await command.execute(options)
+        if (options.jsonStream && result) {
+          console.log(JSON.stringify(result))
+        }
+        await TelemetryService.getInstance().shutdown()
+        process.exit(0)
+      } catch (error) {
+        if (options.jsonStream) {
+          console.log(JSON.stringify({
+            success: false,
+            conflictsDetected: false,
+            claudeLaunched: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }))
+        } else {
+          logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    if (options.jsonStream) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 
@@ -740,6 +798,10 @@ program
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .option('--set <key=value>', 'Override settings (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
   .option('--skip-cleanup', 'Skip automatic cleanup of child worktrees after they complete in swarm mode')
+  .addOption(
+    new Option('--complexity <level>', 'Override complexity evaluation (session-only)')
+      .choices(['trivial', 'simple', 'complex'])
+  )
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -749,6 +811,7 @@ program
     json?: boolean
     jsonStream?: boolean
     skipCleanup?: boolean
+    complexity?: 'trivial' | 'simple' | 'complex'
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -783,7 +846,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions, options.skipCleanup)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup, undefined, options.complexity)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -940,6 +1003,25 @@ program
   })
 
 program
+  .command('install-deps')
+  .description('Install dependencies for a workspace')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('--no-frozen', 'Allow lockfile updates (default: frozen/locked)')
+  .action(async (identifier?: string, options?: { frozen?: boolean }) => {
+    try {
+      const { InstallDepsCommand } = await import('./commands/install-deps.js')
+      const cmd = new InstallDepsCommand()
+      const input: Record<string, unknown> = {}
+      if (identifier) input.identifier = identifier
+      if (options?.frozen === false) input.frozen = false
+      await cmd.execute(input)
+    } catch (error) {
+      logger.error(`Install failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .alias('remove')
   .alias('clean')
@@ -968,6 +1050,7 @@ program
         if (options?.json && result) {
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options?.json) {
@@ -1139,7 +1222,7 @@ program
             activeJson = globalActiveLooms.map(loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms)
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
@@ -1464,14 +1547,15 @@ program
   .alias('config')
   .description('Initialize iloom configuration')
   .argument('[prompt]', 'Custom initial message to send to Claude (defaults to "Help me configure iloom settings.")')
-  .action(async (prompt?: string) => {
+  .addOption(new Option('--accept-defaults').hideHelp())
+  .action(async (prompt?: string, options?: { acceptDefaults?: boolean }) => {
     try {
       const { InitCommand } = await import('./commands/init.js')
       const command = new InitCommand()
       // Pass custom prompt if provided and non-empty
       const trimmedPrompt = prompt?.trim()
       const customPrompt = trimmedPrompt && trimmedPrompt.length > 0 ? trimmedPrompt : undefined
-      await command.execute(customPrompt)
+      await command.execute(customPrompt, options?.acceptDefaults)
     } catch (error) {
       logger.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1494,6 +1578,7 @@ program
   .option('--verbose', 'Enable verbose output (requires --print)')
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .option('--auto-swarm', 'Enable auto-swarm: plan, start epic, and spin automatically')
   .action(async (prompt?: string, options?: {
     model?: string
     yolo?: boolean
@@ -1504,6 +1589,7 @@ program
     verbose?: boolean
     json?: boolean
     jsonStream?: boolean
+    autoSwarm?: boolean
   }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
@@ -1534,7 +1620,7 @@ program
             ...(options?.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions)
+      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions, options?.autoSwarm)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1904,7 +1990,7 @@ program
 // Test command for worktree prefix configuration
 program
   .command('test-prefix')
-  .description('Test worktree prefix configuration - preview worktree paths (reads .iloom/settings.json)')
+  .description('[DEPRECATED] Test worktree prefix configuration - preview worktree paths')
   .action(async () => {
     try {
       const { TestPrefixCommand } = await import('./commands/test-prefix.js')
@@ -1937,6 +2023,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options.json) {
@@ -1978,6 +2065,7 @@ program
           // JSON mode: output structured result and exit
           console.log(JSON.stringify(result, null, 2))
         }
+        await TelemetryService.getInstance().shutdown()
         process.exit(0)
       } catch (error) {
         if (options.json) {

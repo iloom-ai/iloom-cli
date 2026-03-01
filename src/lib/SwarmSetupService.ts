@@ -8,6 +8,7 @@ import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVaria
 import { IssueTrackerFactory } from './IssueTrackerFactory.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
 import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
@@ -91,9 +92,7 @@ export class SwarmSetupService {
 		issueTrackerName: string,
 		settings?: IloomSettings,
 	): Promise<SwarmSetupResult['childWorktrees']> {
-		const results: SwarmSetupResult['childWorktrees'] = []
-
-		for (const child of childIssues) {
+		return Promise.all(childIssues.map(async (child) => {
 			try {
 				// Strip prefix from child number (e.g., "#123" -> "123", "ENG-123" stays as-is for branch naming)
 				const rawId = child.number.replace(/^#/, '')
@@ -118,6 +117,13 @@ export class SwarmSetupService {
 					createBranch: true,
 					baseBranch: epicBranch,
 				})
+
+				// Pre-accept Claude Code trust for child worktree
+				try {
+					await preAcceptClaudeTrust(childWorktreePath)
+				} catch (error) {
+					getLogger().warn(`Failed to pre-accept Claude trust for child worktree: ${error instanceof Error ? error.message : String(error)}`)
+				}
 
 				// Write metadata with state: 'pending' and parentLoom
 				const metadataInput: WriteMetadataInput = {
@@ -198,29 +204,26 @@ export class SwarmSetupService {
 					)
 				}
 
-				results.push({
+				getLogger().success(`Created child worktree for ${child.number}`)
+				return {
 					issueId: rawId,
 					worktreePath: childWorktreePath,
 					branch: childBranch,
 					success: true,
-				})
-
-				getLogger().success(`Created child worktree for ${child.number}`)
+				}
 			} catch (error) {
 				const rawId = child.number.replace(/^#/, '')
 				const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 				getLogger().warn(`Failed to create child worktree for ${child.number}: ${errorMessage}`)
-				results.push({
+				return {
 					issueId: rawId,
 					worktreePath: '',
 					branch: '',
 					success: false,
 					error: errorMessage,
-				})
+				}
 			}
-		}
-
-		return results
+		}))
 	}
 
 	/**
@@ -246,38 +249,28 @@ export class SwarmSetupService {
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
 
-		// Apply swarm-specific model overrides (fallback chain)
-		// Priority 1: agents.iloom-swarm-worker.agents.<agent-name>.model (swarm-specific per-agent)
-		// Priority 2: agents.iloom-swarm-worker.model (blanket swarm worker model, explicitly configured)
-		// Priority 2.5: built-in swarm defaults (e.g., implementer defaults to sonnet)
-		// Priority 3: agents.<agent-name>.model (base per-agent, already applied by loadAgents)
-		// Priority 4: agent .md file default (already applied by loadAgents)
-		const swarmWorkerSettings = settings?.agents?.['iloom-swarm-worker']
-		const swarmAgentOverrides = swarmWorkerSettings?.agents
-		// NOTE: swarmWorkerModel is undefined when not explicitly set by the user.
-		// Do NOT use `?? 'opus'` here -- the implicit default must NOT participate
-		// in the fallback chain. It only activates in renderSwarmWorkerAgent for the
-		// worker agent's own frontmatter model.
-		const swarmWorkerModel = swarmWorkerSettings?.model
-
-		// Built-in defaults for phase agents in swarm mode (priority 2.5)
-		const swarmAgentDefaults: Record<string, string> = {
+		// Default swarmModel map for "Balanced" mode. All swarm phase agents are
+		// listed explicitly so that swarm mode never accidentally inherits a
+		// non-swarm model override. User-configured swarmModel values always
+		// take precedence.
+		const defaultSwarmModels: Record<string, 'sonnet' | 'opus' | 'haiku'> = {
+			'iloom-issue-analyzer': 'opus',
+			'iloom-issue-analyze-and-plan': 'opus',
+			'iloom-issue-planner': 'sonnet',
 			'iloom-issue-implementer': 'sonnet',
+			'iloom-issue-enhancer': 'sonnet',
+			'iloom-code-reviewer': 'sonnet',
+			'iloom-issue-complexity-evaluator': 'haiku',
 		}
 
+		// Apply per-agent swarmModel overrides (user-configured takes precedence over defaults)
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
-			const swarmOverrideModel = swarmAgentOverrides?.[agentName]?.model
-			if (swarmOverrideModel) {
-				// Priority 1: swarm-specific agent model override
-				agents[agentName] = { ...agentConfig, model: swarmOverrideModel }
-			} else if (swarmWorkerModel) {
-				// Priority 2: blanket swarm worker model (overrides base per-agent model)
-				agents[agentName] = { ...agentConfig, model: swarmWorkerModel }
-			} else if (swarmAgentDefaults[agentName]) {
-				// Priority 2.5: built-in swarm defaults for specific agents
-				agents[agentName] = { ...agentConfig, model: swarmAgentDefaults[agentName] }
+			const userSwarmModel = settings?.agents?.[agentName]?.swarmModel
+			if (userSwarmModel) {
+				agents[agentName] = { ...agentConfig, model: userSwarmModel }
+			} else if (defaultSwarmModels[agentName]) {
+				agents[agentName] = { ...agentConfig, model: defaultSwarmModels[agentName] }
 			}
-			// Priority 3/4: keep model from loadAgents() (base agent model / .md default)
 		}
 
 		const renderedFiles: string[] = []
@@ -335,12 +328,17 @@ export class SwarmSetupService {
 			const providerType = settings?.issueManagement?.provider ?? 'github'
 			const issuePrefix = IssueManagementProviderFactory.create(providerType, settings ?? undefined).issuePrefix
 
+			// Compute sub-agent timeout in milliseconds (default: 10 minutes)
+			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
+			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
+
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
 				ISSUE_PREFIX: issuePrefix,
+				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}
@@ -349,7 +347,7 @@ export class SwarmSetupService {
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
 			// Build the agent file with frontmatter
-			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
+			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'opus'
 
 			const frontmatter = [
 				'---',
@@ -372,6 +370,42 @@ export class SwarmSetupService {
 			)
 			return false
 		}
+	}
+
+	/**
+	 * Copy .claude/agents/ from the epic worktree to each child worktree.
+	 *
+	 * Child workers need local access to agent files (used via --append-system-prompt-file).
+	 * Without this copy, child worktrees lack the rendered agent files since they only
+	 * exist in the epic worktree after renderSwarmAgents/renderSwarmWorkerAgent.
+	 */
+	async copyAgentsToChildWorktrees(
+		epicWorktreePath: string,
+		childWorktrees: SwarmSetupResult['childWorktrees'],
+	): Promise<void> {
+		const sourceDir = path.join(epicWorktreePath, '.claude', 'agents')
+
+		if (!await fs.pathExists(sourceDir)) {
+			getLogger().warn('No .claude/agents/ directory in epic worktree to copy')
+			return
+		}
+
+		const successfulChildren = childWorktrees.filter((c) => c.success)
+
+		await Promise.all(successfulChildren.map(async (child) => {
+			try {
+				const targetDir = path.join(child.worktreePath, '.claude', 'agents')
+				await fs.copy(sourceDir, targetDir, { overwrite: true })
+				getLogger().debug(`Copied .claude/agents/ to ${child.worktreePath}`)
+			} catch (error) {
+				// Non-fatal: worker can fall back to epic worktree path
+				getLogger().warn(
+					`Failed to copy agents to child worktree ${child.issueId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+				)
+			}
+		}))
+
+		getLogger().success(`Copied agents to ${successfulChildren.length} child worktrees`)
 	}
 
 	/**
@@ -408,6 +442,9 @@ export class SwarmSetupService {
 			epicWorktreePath,
 			agentMetadata,
 		)
+
+		// 4. Copy .claude/agents/ from epic worktree to each child worktree
+		await this.copyAgentsToChildWorktrees(epicWorktreePath, childWorktrees)
 
 		const successCount = childWorktrees.filter((c) => c.success).length
 		const failCount = childWorktrees.filter((c) => !c.success).length

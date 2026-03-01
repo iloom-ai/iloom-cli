@@ -60,6 +60,21 @@ describe('ClaudeService', () => {
 	})
 
 	describe('launchForWorkflow', () => {
+		let originalIloomVscode: string | undefined
+
+		beforeEach(() => {
+			originalIloomVscode = process.env.ILOOM_VSCODE
+			delete process.env.ILOOM_VSCODE
+		})
+
+		afterEach(() => {
+			if (originalIloomVscode === undefined) {
+				delete process.env.ILOOM_VSCODE
+			} else {
+				process.env.ILOOM_VSCODE = originalIloomVscode
+			}
+		})
+
 		describe('issue workflow', () => {
 			it('should launch Claude with acceptEdits permission mode (no model specified)', async () => {
 				// Create a service with a mocked SettingsManager to avoid loading real settings.json
@@ -89,6 +104,7 @@ describe('ClaudeService', () => {
 					ISSUE_TITLE: 'Add authentication',
 					WORKSPACE_PATH: '/workspace/issue-123',
 					PORT: 3123,
+					IS_VSCODE_MODE: false,
 				})
 
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
@@ -119,6 +135,7 @@ describe('ClaudeService', () => {
 					ISSUE_NUMBER: 123,
 					WORKSPACE_PATH: '/workspace',
 					PORT: 3123,
+					IS_VSCODE_MODE: false,
 				})
 			})
 
@@ -138,6 +155,7 @@ describe('ClaudeService', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('issue', {
 					ISSUE_NUMBER: 123,
 					WORKSPACE_PATH: '/workspace',
+					IS_VSCODE_MODE: false,
 				})
 			})
 		})
@@ -164,6 +182,7 @@ describe('ClaudeService', () => {
 					PR_TITLE: 'Fix bug',
 					WORKSPACE_PATH: '/workspace/pr-456',
 					PORT: 3456,
+					IS_VSCODE_MODE: false,
 				})
 
 				// PR workflow uses acceptEdits permission mode by default
@@ -194,6 +213,7 @@ describe('ClaudeService', () => {
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('regular', {
 					WORKSPACE_PATH: '/workspace/feature',
+					IS_VSCODE_MODE: false,
 				})
 
 				// Regular workflow uses acceptEdits permission mode by default
@@ -204,6 +224,70 @@ describe('ClaudeService', () => {
 					headless: false,
 					oneShot: 'default',
 				})
+			})
+		})
+
+		describe('VS Code mode detection', () => {
+			it('should pass IS_VSCODE_MODE: true when ILOOM_VSCODE=1', async () => {
+				const originalEnv = process.env.ILOOM_VSCODE
+				process.env.ILOOM_VSCODE = '1'
+
+				try {
+					const options: ClaudeWorkflowOptions = {
+						type: 'issue',
+						issueNumber: 123,
+						workspacePath: '/workspace/issue-123',
+					}
+
+					const prompt = 'Issue prompt'
+					vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+					vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+					await service.launchForWorkflow(options)
+
+					expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+						'issue',
+						expect.objectContaining({
+							IS_VSCODE_MODE: true,
+						})
+					)
+				} finally {
+					if (originalEnv === undefined) {
+						delete process.env.ILOOM_VSCODE
+					} else {
+						process.env.ILOOM_VSCODE = originalEnv
+					}
+				}
+			})
+
+			it('should pass IS_VSCODE_MODE: false when ILOOM_VSCODE is not set', async () => {
+				const originalEnv = process.env.ILOOM_VSCODE
+				delete process.env.ILOOM_VSCODE
+
+				try {
+					const options: ClaudeWorkflowOptions = {
+						type: 'issue',
+						issueNumber: 123,
+						workspacePath: '/workspace/issue-123',
+					}
+
+					const prompt = 'Issue prompt'
+					vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+					vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+					await service.launchForWorkflow(options)
+
+					expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+						'issue',
+						expect.objectContaining({
+							IS_VSCODE_MODE: false,
+						})
+					)
+				} finally {
+					if (originalEnv !== undefined) {
+						process.env.ILOOM_VSCODE = originalEnv
+					}
+				}
 			})
 		})
 

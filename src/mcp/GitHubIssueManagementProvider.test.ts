@@ -44,6 +44,14 @@ describe('extractNumericIdFromUrl', () => {
 		expect(extractNumericIdFromUrl(url)).toBe('9876543210')
 	})
 
+	it('returns undefined when URL is undefined', () => {
+		expect(extractNumericIdFromUrl(undefined)).toBeUndefined()
+	})
+
+	it('returns undefined when URL is null', () => {
+		expect(extractNumericIdFromUrl(null)).toBeUndefined()
+	})
+
 	it('throws error when URL has no issuecomment fragment', () => {
 		const url = 'https://github.com/owner/repo/issues/123'
 		expect(() => extractNumericIdFromUrl(url)).toThrow('Cannot extract comment ID from URL')
@@ -151,6 +159,79 @@ describe('GitHubIssueManagementProvider', () => {
 			await expect(provider.getIssue({ number: '123' })).rejects.toThrow(
 				'Cannot extract comment ID from URL'
 			)
+		})
+
+		it('falls back to comment.id when url is undefined (older gh CLI)', async () => {
+			const mockResponse = {
+				number: 123,
+				title: 'Test Issue',
+				body: 'Issue body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/issues/123',
+				author: { login: 'testuser' },
+				comments: [
+					{
+						id: 12345678,
+						author: { login: 'commenter1' },
+						body: 'Comment without url field',
+						createdAt: '2025-01-01T00:00:00Z',
+						// url is missing - simulates older gh CLI (e.g. v2.4.0)
+					},
+					{
+						id: 87654321,
+						author: { login: 'commenter2' },
+						body: 'Another comment without url',
+						createdAt: '2025-01-02T00:00:00Z',
+						// url is missing
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getIssue({ number: '123' })
+
+			expect(result.comments).toHaveLength(2)
+			// Falls back to stringified comment.id
+			expect(result.comments![0].id).toBe('12345678')
+			expect(result.comments![1].id).toBe('87654321')
+		})
+
+		it('uses url extraction for some comments and fallback for others', async () => {
+			const mockResponse = {
+				number: 123,
+				title: 'Test Issue',
+				body: 'Issue body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/issues/123',
+				author: { login: 'testuser' },
+				comments: [
+					{
+						id: 11111111,
+						author: { login: 'commenter1' },
+						body: 'Comment with url',
+						createdAt: '2025-01-01T00:00:00Z',
+						url: 'https://github.com/owner/repo/issues/123#issuecomment-99999999',
+					},
+					{
+						id: 22222222,
+						author: { login: 'commenter2' },
+						body: 'Comment without url',
+						createdAt: '2025-01-02T00:00:00Z',
+						// url is missing
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getIssue({ number: '123' })
+
+			expect(result.comments).toHaveLength(2)
+			// First comment: extracted from URL
+			expect(result.comments![0].id).toBe('99999999')
+			// Second comment: fallback to comment.id
+			expect(result.comments![1].id).toBe('22222222')
 		})
 
 		it('passes --repo flag when repo parameter is provided', async () => {
@@ -595,6 +676,37 @@ describe('GitHubIssueManagementProvider', () => {
 			expect(result.comments![0].body).toBe('LGTM')
 		})
 
+		it('falls back to comment.id when url is undefined in PR comments (older gh CLI)', async () => {
+			const mockResponse = {
+				number: 42,
+				title: 'Test PR',
+				body: 'PR description',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/pull/42',
+				author: { login: 'testuser' },
+				headRefName: 'feature-branch',
+				baseRefName: 'main',
+				comments: [
+					{
+						id: 55555555,
+						author: { login: 'reviewer' },
+						body: 'Review comment without url',
+						createdAt: '2025-01-01T00:00:00Z',
+						// url is missing - simulates older gh CLI
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getPR({ number: '42' })
+
+			expect(result.comments).toHaveLength(1)
+			// Falls back to stringified comment.id
+			expect(result.comments![0].id).toBe('55555555')
+			expect(result.comments![0].body).toBe('Review comment without url')
+		})
+
 		it('handles PRs without comments', async () => {
 			const mockResponse = {
 				number: 43,
@@ -677,6 +789,176 @@ describe('GitHubIssueManagementProvider', () => {
 					author: null,
 				},
 			])
+		})
+	})
+
+	describe('getReviewComments', () => {
+		it('returns review comments with file path, line number, and body', async () => {
+			const mockResponse = [
+				{
+					id: 1001,
+					body: 'This needs refactoring',
+					path: 'src/foo.ts',
+					line: 42,
+					side: 'RIGHT',
+					user: { login: 'reviewer1' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: '2025-01-01T01:00:00Z',
+					in_reply_to_id: null,
+					pull_request_review_id: 5000,
+				},
+				{
+					id: 1002,
+					body: 'Good catch',
+					path: 'src/bar.ts',
+					line: 10,
+					side: 'LEFT',
+					user: { login: 'reviewer2' },
+					created_at: '2025-01-02T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 5001,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result).toHaveLength(2)
+			expect(result[0]).toEqual({
+				id: '1001',
+				body: 'This needs refactoring',
+				path: 'src/foo.ts',
+				line: 42,
+				side: 'RIGHT',
+				author: { id: 'reviewer1', displayName: 'reviewer1', login: 'reviewer1' },
+				createdAt: '2025-01-01T00:00:00Z',
+				updatedAt: '2025-01-01T01:00:00Z',
+				inReplyToId: null,
+				pullRequestReviewId: 5000,
+			})
+			expect(result[1].id).toBe('1002')
+			expect(result[1].path).toBe('src/bar.ts')
+		})
+
+		it('filters by reviewId when provided', async () => {
+			const mockResponse = [
+				{
+					id: 2001,
+					body: 'Comment from review A',
+					path: 'src/a.ts',
+					line: 1,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 100,
+				},
+				{
+					id: 2002,
+					body: 'Comment from review B',
+					path: 'src/b.ts',
+					line: 5,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: null,
+					pull_request_review_id: 200,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42', reviewId: '100' })
+
+			expect(result).toHaveLength(1)
+			expect(result[0].id).toBe('2001')
+			expect(result[0].pullRequestReviewId).toBe(100)
+		})
+
+		it('handles empty review comments', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result).toEqual([])
+		})
+
+		it('passes repo to API path when provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42', repo: 'other-owner/other-repo' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/other-owner/other-repo/pulls/42/comments',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('uses :owner/:repo placeholder when repo is not provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/:owner/:repo/pulls/42/comments',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('throws error for non-numeric PR number', async () => {
+			await expect(provider.getReviewComments({ number: 'not-a-number' })).rejects.toThrow(
+				'Invalid GitHub PR number: not-a-number. GitHub PR IDs must be numeric.'
+			)
+		})
+
+		it('throws error for non-numeric review ID', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await expect(provider.getReviewComments({ number: '42', reviewId: 'abc' })).rejects.toThrow(
+				'Invalid review ID: abc. Review IDs must be numeric.'
+			)
+		})
+
+		it('uses --paginate flag in gh api call', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewComments({ number: '42' })
+
+			const callArgs = vi.mocked(executeGhCommand).mock.calls[0][0]
+			expect(callArgs).toContain('--paginate')
+		})
+
+		it('normalizes in_reply_to_id to string', async () => {
+			const mockResponse = [
+				{
+					id: 3001,
+					body: 'Reply comment',
+					path: 'src/foo.ts',
+					line: 42,
+					side: 'RIGHT',
+					user: { login: 'reviewer' },
+					created_at: '2025-01-01T00:00:00Z',
+					updated_at: null,
+					in_reply_to_id: 3000,
+					pull_request_review_id: 500,
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewComments({ number: '42' })
+
+			expect(result[0].inReplyToId).toBe('3000')
 		})
 	})
 

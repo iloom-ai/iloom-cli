@@ -1,6 +1,5 @@
 // --- Config schema ---
 export interface TelemetryConfig {
-  distinct_id: string
   enabled: boolean
   disclosed_at?: string // ISO 8601 timestamp
   last_version?: string // e.g., "0.9.2"
@@ -29,6 +28,8 @@ export interface LoomCreatedProperties {
   vcs_provider?: 'github' | 'bitbucket'
   is_child_loom: boolean
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
+  complexity_override: boolean
+  create_only: boolean
 }
 
 export interface LoomFinishedProperties {
@@ -87,6 +88,28 @@ export interface ErrorOccurredProperties {
   phase: string
 }
 
+export interface InitStartedProperties {
+  mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
+}
+
+export interface InitCompletedProperties {
+  mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
+}
+
+export interface AutoSwarmStartedProperties {
+  source: 'decomposition' | 'fresh'
+  planner: string // 'claude' | 'gemini' | 'codex'
+}
+
+export interface AutoSwarmCompletedProperties {
+  source: 'decomposition' | 'fresh'
+  success: boolean
+  child_count: number
+  duration_minutes: number
+  phase_reached: 'plan' | 'start' | 'spin'
+  fallback_to_normal: boolean
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -103,6 +126,10 @@ export interface TelemetryEventMap {
   'contribute.started': ContributeStartedProperties
   'session.started': SessionStartedProperties
   'error.occurred': ErrorOccurredProperties
+  'init.started': InitStartedProperties
+  'init.completed': InitCompletedProperties
+  'auto_swarm.started': AutoSwarmStartedProperties
+  'auto_swarm.completed': AutoSwarmCompletedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

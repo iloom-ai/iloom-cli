@@ -14,7 +14,7 @@ il finish <epic>   Merge epic branch back to main
 
 ## Architecture
 
-**Orchestrator** (`swarm-orchestrator-prompt.txt`) — runs in the epic worktree, fully autonomous (`bypassPermissions`). Manages a DAG-based dependency scheduler: spawns child agents in parallel for unblocked issues, monitors completions, rebases + fast-forward merges children into the epic branch, spawns newly unblocked children, handles failures.
+**Orchestrator** (`swarm-orchestrator-prompt.txt`) — runs in the epic worktree, fully autonomous (`bypassPermissions`). Stays lean as a pure coordinator: manages a DAG-based dependency scheduler, spawns child agents in parallel for unblocked issues, monitors completions, delegates all heavy git operations (rebasing, merging, pushing, conflict resolution) to subagents, spawns newly unblocked children, handles failures.
 
 **Child agents** (`iloom-swarm-worker` custom agent type) — each implements one child issue in its own worktree. Strict isolation: only works in its assigned worktree, never merges branches or closes issues (orchestrator handles that). Reports success/failure back to orchestrator then stops.
 
@@ -46,7 +46,7 @@ Each child worktree gets its own `iloom-metadata.json` with `parentLoom` referen
 
 ## Merge Strategy
 
-Rebase child onto epic branch (from child worktree), then `git merge --ff-only` from epic worktree. Keeps linear history. Conflicts are auto-resolved by spawning a subagent; unresolvable conflicts mark the child as failed.
+Rebase child onto epic branch (from child worktree), then `git merge --ff-only` from epic worktree. Keeps linear history. The entire rebase+merge operation (including conflict resolution) is delegated to a subagent -- the orchestrator never runs git rebase/merge directly. Unresolvable conflicts mark the child as failed.
 
 ## State Flow
 

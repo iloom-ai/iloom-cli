@@ -140,6 +140,9 @@ export interface Config {
 // One-shot automation mode type
 export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 
+// Complexity override type
+export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
@@ -151,8 +154,12 @@ export interface StartOptions {
   childLoom?: boolean
   // Epic loom control flag (for issues with child issues)
   epic?: boolean
+  // Create-only mode: skip Claude, IDE, terminal, dev server, and epic
+  createOnly?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
+  // Complexity override (skips complexity evaluation)
+  complexity?: ComplexityOverride
   // Optional body text for issue creation
   body?: string
   // Output result as JSON
@@ -185,6 +192,7 @@ export interface FinishOptions {
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
+  jsonStream?: boolean // --json-stream - Stream JSONL output for Claude conflict resolution
   review?: boolean    // --review - Review commit message before committing (default: auto-commit without review)
 }
 
@@ -267,6 +275,20 @@ export interface SummaryResult {
   loomType: 'issue' | 'pr' | 'branch' | 'epic'
 }
 
+export interface RebaseResult {
+  success: boolean
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved?: boolean
+  error?: string
+}
+
+export interface RebaseOutcome {
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved: boolean
+}
+
 // Deprecated: Result types - use exception-based error handling instead
 // export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
 
@@ -312,6 +334,7 @@ export interface ValidationOptions {
 	skipTypecheck?: boolean
 	skipLint?: boolean
 	skipTests?: boolean
+	jsonStream?: boolean
 }
 
 export interface ValidationStepResult {
@@ -358,6 +381,7 @@ export interface MergeOptions {
 	dryRun?: boolean      // Preview actions without executing
 	force?: boolean       // Skip confirmation prompts
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
+	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
 }
 
 export interface MergeResult {

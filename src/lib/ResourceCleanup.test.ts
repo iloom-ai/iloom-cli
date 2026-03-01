@@ -15,6 +15,10 @@ vi.mock('./DatabaseManager.js')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./SettingsManager.js')
 
+vi.mock('../utils/claude-trust.js', () => ({
+	removeClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock MetadataManager to prevent real file creation during tests
 vi.mock('./MetadataManager.js', () => ({
 	MetadataManager: vi.fn(() => ({
@@ -152,7 +156,7 @@ describe('ResourceCleanup', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.errors).toHaveLength(0)
-			expect(result.operations).toHaveLength(6) // dev-server, worktree, recap, branch, database, metadata
+			expect(result.operations).toHaveLength(7) // dev-server, worktree, recap, branch, database, metadata, trust
 			expect(result.operations[0]?.type).toBe('dev-server')
 			expect(result.operations[0]?.success).toBe(true)
 			expect(result.operations[1]?.type).toBe('worktree')
@@ -160,6 +164,7 @@ describe('ResourceCleanup', () => {
 			expect(result.operations[3]?.type).toBe('branch')
 			expect(result.operations[4]?.type).toBe('database')
 			expect(result.operations[5]?.type).toBe('metadata')
+			expect(result.operations[6]?.type).toBe('trust')
 		})
 
 		it('should pre-fetch merge target BEFORE worktree deletion (bug fix for issue #328)', async () => {
@@ -332,7 +337,7 @@ describe('ResourceCleanup', () => {
 				keepDatabase: true,
 			})
 
-			expect(result.operations).toHaveLength(4) // dev-server check + worktree removal + recap archival + metadata
+			expect(result.operations).toHaveLength(5) // dev-server check + worktree removal + recap archival + metadata + trust
 			expect(result.operations.every(op => 'type' in op)).toBe(true)
 			expect(result.operations.every(op => 'success' in op)).toBe(true)
 			expect(result.operations.every(op => 'message' in op)).toBe(true)

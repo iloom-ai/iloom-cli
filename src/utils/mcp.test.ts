@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { generateRecapMcpConfig } from './mcp.js'
+import { generateRecapMcpConfig, generateHarnessMcpConfig } from './mcp.js'
 import os from 'os'
 import path from 'path'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
@@ -127,5 +127,63 @@ describe('generateRecapMcpConfig', () => {
 		// Should not have trailing separator
 		expect(env.RECAP_FILE_PATH).toContain('___path___to___dir.json')
 		expect(env.RECAP_FILE_PATH).not.toContain('___path___to___dir___.json')
+	})
+})
+
+describe('generateHarnessMcpConfig', () => {
+	it('should generate MCP config with correct structure', () => {
+		const socketPath = '/tmp/iloom-harness.sock'
+
+		const config = generateHarnessMcpConfig(socketPath)
+
+		expect(config).toHaveLength(1)
+		expect(config[0]).toHaveProperty('mcpServers')
+		expect(config[0].mcpServers).toHaveProperty('harness')
+	})
+
+	it('should set ILOOM_HARNESS_SOCKET env var to the socket path', () => {
+		const socketPath = '/tmp/iloom-harness.sock'
+
+		const config = generateHarnessMcpConfig(socketPath)
+
+		const harnessConfig = (config[0].mcpServers as Record<string, unknown>).harness as Record<string, unknown>
+		const env = harnessConfig.env as Record<string, string>
+
+		expect(env.ILOOM_HARNESS_SOCKET).toBe(socketPath)
+	})
+
+	it('should use node as command and point to harness-server.js', () => {
+		const socketPath = '/tmp/iloom-harness.sock'
+
+		const config = generateHarnessMcpConfig(socketPath)
+
+		const harnessConfig = (config[0].mcpServers as Record<string, unknown>).harness as Record<string, unknown>
+
+		expect(harnessConfig.transport).toBe('stdio')
+		expect(harnessConfig.command).toBe('node')
+		expect(harnessConfig.args).toBeInstanceOf(Array)
+		expect((harnessConfig.args as string[])[0]).toContain('harness-server.js')
+	})
+
+	it('should use different socket paths when called with different paths', () => {
+		const config1 = generateHarnessMcpConfig('/tmp/socket-a.sock')
+		const config2 = generateHarnessMcpConfig('/tmp/socket-b.sock')
+
+		const env1 = ((config1[0].mcpServers as Record<string, unknown>).harness as Record<string, unknown>).env as Record<string, string>
+		const env2 = ((config2[0].mcpServers as Record<string, unknown>).harness as Record<string, unknown>).env as Record<string, string>
+
+		expect(env1.ILOOM_HARNESS_SOCKET).toBe('/tmp/socket-a.sock')
+		expect(env2.ILOOM_HARNESS_SOCKET).toBe('/tmp/socket-b.sock')
+	})
+
+	it('should use absolute path for harness server JS file', () => {
+		const socketPath = '/tmp/iloom-harness.sock'
+
+		const config = generateHarnessMcpConfig(socketPath)
+
+		const harnessConfig = (config[0].mcpServers as Record<string, unknown>).harness as Record<string, unknown>
+		const serverPath = (harnessConfig.args as string[])[0]
+
+		expect(path.isAbsolute(serverPath)).toBe(true)
 	})
 })

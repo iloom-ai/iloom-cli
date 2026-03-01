@@ -1596,5 +1596,147 @@ describe('MergeManager', () => {
 				'Bash(git rebase:*)',
 			]))
 		})
+
+		it('should pass headless + passthroughStdout to launchClaude when jsonStream is true', async () => {
+			// Mock: rebase fails with conflict, Claude available and resolves
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
+				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
+				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
+				.mockResolvedValueOnce('') // check if rebase in progress (no)
+
+			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
+			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true, jsonStream: true })
+
+			// Verify Claude was called with headless + passthroughStdout + bypassPermissions
+			expect(claude.launchClaude).toHaveBeenCalledWith(
+				'Help me with this rebase please.',
+				expect.objectContaining({
+					addDir: '/test/worktree',
+					headless: true,
+					permissionMode: 'bypassPermissions',
+					passthroughStdout: true,
+				})
+			)
+		})
+
+		it('should use interactive mode when jsonStream is false/undefined', async () => {
+			// Mock: rebase fails with conflict, Claude available and resolves
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
+				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
+				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
+				.mockResolvedValueOnce('') // check if rebase in progress (no)
+
+			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
+			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify Claude was called with interactive mode (headless: false, no passthroughStdout)
+			const launchOptions = vi.mocked(claude.launchClaude).mock.calls[0][1]
+			expect(launchOptions?.headless).toBe(false)
+			expect(launchOptions?.passthroughStdout).toBeUndefined()
+			expect(launchOptions?.permissionMode).toBeUndefined()
+		})
+	})
+
+	describe('rebaseOnMain return value (RebaseOutcome)', () => {
+		it('should return RebaseOutcome with conflictsDetected=false when no conflicts', async () => {
+			// Mock: successful rebase with no conflicts
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase: success
+
+			const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			expect(result).toEqual({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+			})
+		})
+
+		it('should return RebaseOutcome with conflictsDetected=false when branch already up to date', async () => {
+			// Mock: branch already up to date
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse main (SAME)
+
+			const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			expect(result).toEqual({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+			})
+		})
+
+		it('should return RebaseOutcome with conflicts resolved by Claude', async () => {
+			// Mock: rebase fails with conflict, Claude resolves
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
+				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
+				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
+				.mockResolvedValueOnce('') // check if rebase in progress (no)
+
+			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
+			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
+
+			const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			expect(result).toEqual({
+				conflictsDetected: true,
+				claudeLaunched: true,
+				conflictsResolved: true,
+			})
+		})
+
+		it('should return RebaseOutcome with conflictsDetected=false for dry-run', async () => {
+			// Mock: dry-run
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+
+			const result = await manager.rebaseOnMain('/test/worktree', { dryRun: true })
+
+			expect(result).toEqual({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+			})
+		})
 	})
 })

@@ -29,6 +29,7 @@ export interface LaunchLoomOptions {
 	sourceEnvOnStart?: boolean // defaults to false if undefined
 	colorTerminal?: boolean // defaults to true if undefined
 	colorHex?: string // Pre-calculated hex color from metadata, avoids recalculation
+	complexity?: import('../types/index.js').ComplexityOverride
 }
 
 /**
@@ -219,6 +220,9 @@ export class LoomLauncher {
 			for (const setArg of options.setArguments) {
 				claudeCommand += ` --set ${setArg}`
 			}
+		}
+		if (options.complexity) {
+			claudeCommand += ` --complexity=${options.complexity}`
 		}
 
 		// Only generate color if terminal coloring is enabled (default: true)

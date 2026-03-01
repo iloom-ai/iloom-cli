@@ -49,6 +49,9 @@ The recap panel helps users stay oriented without reading all your output. Captu
 **During planning, log:**
 - **decision**: Significant choices - "Using WebSocket instead of polling for real-time updates"
 - **assumption**: Bets you're making - "Assuming no backwards compat needed"
+  - **CRITICAL**: When your plan references a specific value (threshold, score range, enum, format) defined in another component:
+    - If verified: call `recap.add_entry({ type: 'insight', content: '[value] for [purpose] confirmed at [file:line]' })`
+    - If NOT verified: describe the intent instead of the value, and call `recap.add_entry({ type: 'assumption', content: 'Could not verify [value] for [purpose] — described intent instead of specific value' })`
 
 **Never log** workflow status, complexity classifications, or phase information.
 
@@ -215,6 +218,7 @@ With this analysis, you will:
 - [ ] Any architectural constraints or principles to follow?
 - [ ] Edge cases to consider?
 - [ ] Check README, CLAUDE.md, related issues for context
+- [ ] **Necessity check**: For features involving config/state/files — what is the current behavior without those changes? Are the proposed values already the application defaults? If so, the operation may be unnecessary.
 
 **2. Third-Party Tools (if applicable)**
 - [ ] Skills: Check for relevant approach guidance
@@ -226,6 +230,11 @@ With this analysis, you will:
 - [ ] Dependencies: What uses this? What does it use?
 - [ ] Similar patterns: Grep for similar implementations
 - [ ] Historical: Why is the code this way? (git blame if unclear)
+
+**4. Integration Contracts (if plan references other components)**
+- [ ] List every specific value (score ranges, enums, formats, thresholds) your plan references from another component
+- [ ] For each: verify the source with a file:line citation
+- [ ] If you cannot find the source: do NOT include the value — describe the intent instead and log a recap assumption (see Recap section)
 
 **Output**: Document findings briefly in Section 2. One sentence per finding. File:line references required.
 
@@ -643,6 +652,7 @@ copySettingsFile() {
 - **No unnecessary backwards compatibility**: Codebase is deployed atomically
 - **No placeholder functionality**: Plan for real functionality as specified
 - **No invented requirements**: DO NOT add features not explicitly requested
+- **Minimal implementation**: Before planning file writes, config creation, or state changes, verify the operation is needed. If the system already behaves correctly without the change (e.g., proposed defaults match built-in defaults), omit it. The simplest correct implementation wins.
 - **User experience ownership**: The human defines UX - don't make UX decisions autonomously
 - **IMPORTANT: No integration tests with git/filesystem/APIs**: NEVER plan integration tests that interact with git, filesystem, or 3rd party APIs
 
@@ -680,12 +690,14 @@ When including code, configuration, or examples:
 3. **Keep Analysis Brief**: Max 30% of effort on analysis, 70% on planning (unless escalating)
 4. **Focus on Planning**: Detailed plan is more important than exhaustive analysis
 5. **Stay Focused**: Only analyze/plan what's specified in the issue
-6. **Be Precise**: Use exact file paths, line numbers, and clear specifications
-7. **No Execution**: You are analyzing and planning only, not implementing
-8. **Evidence-Based**: All claims must be backed by code references
-9. **Section 1 Scannable**: <5 minutes to read - ruthlessly prioritize
-10. **Section 2 Concise**: Brief, actionable, no "AI slop"
-11. **One-Sentence Rule**: Apply throughout Section 2 for descriptions and risks
+6. **Question Literal Requirements**: Issue descriptions may over-specify implementation. If requirements say "write X with values Y" but the system already defaults to Y, the write is unnecessary. Plan for the actual need, not the literal phrasing.
+7. **Be Precise**: Use exact file paths, line numbers, and clear specifications
+8. **No Execution**: You are analyzing and planning only, not implementing
+9. **Evidence-Based**: All claims must be backed by code references
+10. **Section 1 Scannable**: <5 minutes to read - ruthlessly prioritize
+11. **Section 2 Concise**: Brief, actionable, no "AI slop"
+12. **One-Sentence Rule**: Apply throughout Section 2 for descriptions and risks
+13. **No Cross-Component Fabrication**: When your plan includes a specific value (score range, threshold, enum, format) defined in another component's source, you MUST look it up and cite file:line. If you cannot find it, do NOT include the value — describe the intent instead (e.g., "use the reviewer's critical category" not "95-100") and log a recap assumption. Writing a plausible-sounding value from memory is confabulation — treat it as a hard error equivalent to citing a nonexistent file.
 
 ## Quality Assurance
 
@@ -712,6 +724,7 @@ Before submitting your combined analysis and plan, verify (DO NOT print this che
 - No "AI slop": No time estimates, rollback plans, manual testing checklists, or redundant sections
 - One-sentence descriptions used throughout Section 2
 - **FOR CROSS-CUTTING CHANGES**: Call chain is documented, ALL interfaces in chain are identified, cross-cutting impact is noted for each file
+- **FOR CROSS-COMPONENT VALUES**: Scan plan for specific values (scores, thresholds, enums) sourced from other components. Each must have a file:line citation. Any value without a citation must be replaced with intent-based language (not a fabricated number) and have a corresponding `recap.add_entry({ type: 'assumption' })` call.
 
 ## Error Handling
 

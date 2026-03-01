@@ -51,7 +51,7 @@ describe('RebaseCommand', () => {
 
 		// Create mock MergeManager
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 		} as unknown as MergeManager
 
 		// Create mock GitWorktreeManager
@@ -159,6 +159,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: false,
 				force: false,
+				jsonStream: false,
 			})
 		})
 
@@ -238,17 +239,18 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: false,
 				force: false,
+				jsonStream: false,
 			})
 		})
 
 		it('succeeds when branch is already up to date', async () => {
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
 
 		it('succeeds when rebase completes without conflicts', async () => {
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
@@ -256,7 +258,7 @@ describe('RebaseCommand', () => {
 		it('handles rebase conflicts by launching Claude (via MergeManager)', async () => {
 			// MergeManager.rebaseOnMain handles Claude conflict resolution internally
 			// It only throws if conflicts cannot be resolved
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
@@ -274,6 +276,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: true,
 				force: false,
+				jsonStream: false,
 			})
 		})
 
@@ -283,6 +286,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: false,
 				force: true,
+				jsonStream: false,
 			})
 		})
 
@@ -292,6 +296,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: true,
 				force: true,
+				jsonStream: false,
 			})
 		})
 
@@ -340,6 +345,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/feat-issue-123', {
 				dryRun: false,
 				force: false,
+				jsonStream: false,
 			})
 		})
 
@@ -366,6 +372,7 @@ describe('RebaseCommand', () => {
 			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
 				dryRun: false,
 				force: false,
+				jsonStream: false,
 			})
 		})
 	})
@@ -503,6 +510,75 @@ describe('RebaseCommand', () => {
 
 			// BuildRunner is not called in dry-run mode because the command returns early
 			expect(mockBuildRunner.runBuild).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('execute with jsonStream', () => {
+		beforeEach(() => {
+			// Setup valid worktree context
+			const worktree = createMockWorktree({ path: '/test/worktree' })
+			process.cwd = vi.fn().mockReturnValue('/test/worktree')
+			vi.mocked(isValidGitRepo).mockResolvedValue(true)
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
+			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
+			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
+		})
+
+		it('should pass jsonStream through mergeOptions to rebaseOnMain', async () => {
+			await command.execute({ jsonStream: true })
+
+			expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/worktree', {
+				dryRun: false,
+				force: false,
+				jsonStream: true,
+			})
+		})
+
+		it('should return RebaseResult when jsonStream is true', async () => {
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+				conflictsDetected: true,
+				claudeLaunched: true,
+				conflictsResolved: true,
+			})
+
+			const result = await command.execute({ jsonStream: true })
+
+			expect(result).toEqual({
+				success: true,
+				conflictsDetected: true,
+				claudeLaunched: true,
+				conflictsResolved: true,
+			})
+		})
+
+		it('should return void when jsonStream is not set (existing behavior)', async () => {
+			const result = await command.execute({})
+
+			expect(result).toBeUndefined()
+		})
+
+		it('should throw WorktreeValidationError when jsonStream is true so cli.ts can format error and exit(1)', async () => {
+			process.cwd = vi.fn().mockReturnValue('/tmp/not-a-repo')
+			vi.mocked(isValidGitRepo).mockResolvedValue(false)
+
+			await expect(command.execute({ jsonStream: true })).rejects.toThrow(WorktreeValidationError)
+		})
+
+		it('should return RebaseResult with no conflicts when rebase is clean', async () => {
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+			})
+
+			const result = await command.execute({ jsonStream: true })
+
+			expect(result).toEqual({
+				success: true,
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+			})
 		})
 	})
 })

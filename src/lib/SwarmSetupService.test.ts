@@ -8,6 +8,9 @@ import type { SettingsManager, IloomSettings } from './SettingsManager.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
 
 // Mock dependencies
+vi.mock('../utils/claude-trust.js', () => ({
+	preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../utils/package-manager.js', () => ({
 	installDependencies: vi.fn().mockResolvedValue(undefined),
 }))
@@ -26,6 +29,8 @@ vi.mock('fs-extra', () => ({
 	default: {
 		ensureDir: vi.fn().mockResolvedValue(undefined),
 		writeFile: vi.fn().mockResolvedValue(undefined),
+		pathExists: vi.fn().mockResolvedValue(true),
+		copy: vi.fn().mockResolvedValue(undefined),
 	},
 }))
 
@@ -119,8 +124,10 @@ describe('SwarmSetupService', () => {
 			getPrompt: vi.fn().mockResolvedValue('# Rendered swarm skill content'),
 		} as unknown as PromptTemplateManager
 
-		// Re-configure mock after vitest's automatic mockReset
+		// Re-configure mocks after vitest's automatic mockReset
 		mockGenerateAndWriteMcpConfigFile.mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json')
+		vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+		vi.mocked(fs.copy).mockResolvedValue(undefined)
 
 		service = new SwarmSetupService(
 			mockGitWorktree,
@@ -322,6 +329,7 @@ describe('SwarmSetupService', () => {
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 			expect(result.metadata).toHaveProperty('iloom-swarm-issue-implementer')
+			// iloom-issue-implementer is in the default swarmModel map, so model is overridden to sonnet
 			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
 			expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
 		})
@@ -337,42 +345,15 @@ describe('SwarmSetupService', () => {
 
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('sonnet')
+			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
 			expect(result.metadata['iloom-swarm-issue-analyzer']).not.toHaveProperty('tools')
 		})
 
-		describe('swarm-specific model overrides', () => {
-			it('uses swarm-specific agent model override when configured', async () => {
+		describe('phase agent swarmModel overrides', () => {
+			it('uses per-agent swarmModel when configured', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
-						'iloom-swarm-worker': {
-							agents: {
-								'iloom-issue-implementer': { model: 'sonnet' },
-							},
-						},
-					},
-				} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-			})
-
-			it('falls back to swarm worker model when no agent-specific override', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							model: 'haiku',
-						},
+						'iloom-issue-implementer': { swarmModel: 'haiku' },
 					},
 				} as unknown as IloomSettings)
 
@@ -390,23 +371,13 @@ describe('SwarmSetupService', () => {
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
 			})
 
-			it('blanket swarm model overrides base per-agent model', async () => {
-				// This tests the most subtle behavior: when the user sets BOTH:
-				// - agents.iloom-issue-implementer.model = 'opus' (base per-agent)
-				// - agents.iloom-swarm-worker.model = 'sonnet' (blanket swarm)
-				// The blanket swarm model should win in swarm mode.
-				// loadAgents has already applied the base per-agent model ('opus'),
-				// so the override logic must replace it with the blanket swarm model.
+			it('applies default swarmModel (sonnet) for agents in default map when no swarmModel configured', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { model: 'opus' },
-						'iloom-swarm-worker': {
-							model: 'sonnet',
-						},
 					},
 				} as unknown as IloomSettings)
 
-				// loadAgents returns the agent with model='opus' (applied from base per-agent settings)
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
@@ -418,67 +389,95 @@ describe('SwarmSetupService', () => {
 
 				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// Blanket swarm model overrides the base per-agent model
+				// iloom-issue-implementer is in the default swarmModel map, so it should be sonnet
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
 			})
 
-			it('does NOT apply implicit opus default as blanket override', async () => {
-				// When iloom-swarm-worker has NO .model set, the implicit '?? opus'
-				// default from renderSwarmWorkerAgent line 318 must NOT leak into
-				// renderSwarmAgents. Phase agents keep their base per-agent model.
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-issue-implementer': { model: 'sonnet' },
-						'iloom-swarm-worker': {
-							// No model set -- simulating unconfigured blanket swarm model
-						},
-					},
-				} as unknown as IloomSettings)
+			it('applies default swarmModel (opus) for analyzer agent', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
 
-				// loadAgents returns implementer with model='sonnet' (from base per-agent)
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
 						model: 'sonnet',
 					},
 				})
 
 				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// Model should remain 'sonnet' (unchanged), NOT overridden to 'opus'
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+				// iloom-issue-analyzer is in the default swarmModel map as opus
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
 			})
 
-			it('falls back to base agent model when no swarm overrides at all', async () => {
-				// No swarm-worker config at all
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({})
+			it('non-swarm model override does not affect swarm mode when default map covers the agent', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { model: 'haiku' },
+						'iloom-issue-analyzer': { model: 'haiku' },
+						'iloom-issue-planner': { model: 'haiku' },
+					},
+				} as unknown as IloomSettings)
 
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
 						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
+						model: 'haiku',
+					},
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'haiku',
+					},
+					'iloom-issue-planner': {
+						description: 'Planner agent',
+						prompt: 'Plan things',
+						model: 'haiku',
 					},
 				})
 
 				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// implementer gets built-in swarm default of 'sonnet' (priority 2.5)
+				// Even though non-swarm model is set to haiku, swarm defaults override
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
+				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('sonnet')
 			})
 
-			it('applies different overrides to different agents', async () => {
+			it('explicit swarmModel overrides both non-swarm model and default map', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
-						'iloom-swarm-worker': {
-							agents: {
-								'iloom-issue-implementer': { model: 'sonnet' },
-								'iloom-issue-planner': { model: 'haiku' },
-							},
-						},
+						'iloom-issue-implementer': { model: 'haiku', swarmModel: 'opus' },
+						'iloom-issue-analyzer': { model: 'haiku', swarmModel: 'haiku' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'haiku',
+					},
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'haiku',
+					},
+				})
+
+				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Explicit swarmModel always wins over both non-swarm model and default map
+				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
+				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('haiku')
+			})
+
+			it('different agents can have different swarmModels', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmModel: 'sonnet' },
+						'iloom-issue-planner': { swarmModel: 'haiku' },
 					},
 				} as unknown as IloomSettings)
 
@@ -502,14 +501,10 @@ describe('SwarmSetupService', () => {
 				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('haiku')
 			})
 
-			it('ignores swarm overrides for unknown agent names', async () => {
+			it('swarmModel override preserves tools metadata', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
-						'iloom-swarm-worker': {
-							agents: {
-								'typo-agent': { model: 'sonnet' },
-							},
-						},
+						'iloom-issue-implementer': { swarmModel: 'haiku' },
 					},
 				} as unknown as IloomSettings)
 
@@ -524,157 +519,6 @@ describe('SwarmSetupService', () => {
 
 				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// No error thrown, implementer gets built-in swarm default of 'sonnet'
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-			})
-
-			it('prefers agent-specific override over blanket worker model', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							model: 'haiku',
-							agents: {
-								'iloom-issue-implementer': { model: 'sonnet' },
-							},
-						},
-					},
-				} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-					'iloom-issue-planner': {
-						description: 'Planner agent',
-						prompt: 'Plan things',
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// Implementer gets agent-specific override (sonnet), not blanket (haiku)
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-				// Planner gets blanket swarm model (haiku) since no agent-specific override
-				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('haiku')
-			})
-
-			it('applies built-in swarm default for implementer when no user overrides exist', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-					'iloom-issue-analyzer': {
-						description: 'Analyzer agent',
-						prompt: 'Analyze things',
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// Implementer gets built-in swarm default of 'sonnet'
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-				// Analyzer has no built-in swarm default, keeps base model
-				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
-			})
-
-			it('user swarm-specific override beats built-in default', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							agents: {
-								'iloom-issue-implementer': { model: 'haiku' },
-							},
-						},
-					},
-				} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// User override (haiku) wins over built-in default (sonnet)
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
-			})
-
-			it('blanket swarm worker model beats built-in default', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							model: 'haiku',
-						},
-					},
-				} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// Blanket swarm model (haiku) wins over built-in default (sonnet)
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
-			})
-
-			it('agent without built-in default keeps base model when no swarm overrides', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-analyzer': {
-						description: 'Analyzer agent',
-						prompt: 'Analyze things',
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// Analyzer has no built-in swarm default, keeps base model from loadAgents
-				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
-			})
-
-			it('swarm override does not mutate tools metadata', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							model: 'haiku',
-						},
-					},
-				} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-implementer': {
-						description: 'Implementer agent',
-						prompt: 'Implement things',
-						tools: ['Bash', 'Read'],
-						model: 'opus',
-					},
-				})
-
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// Model overridden but tools preserved
 				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
 				expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
 			})
@@ -746,20 +590,20 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('includes frontmatter with correct fields and defaults model to sonnet', async () => {
+		it('includes frontmatter with correct fields and defaults model to opus', async () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
 			expect(writtenContent).toContain('name: iloom-swarm-worker')
 			expect(writtenContent).toContain('description: Swarm worker agent that implements a child issue following the full iloom workflow.')
-			expect(writtenContent).toContain('model: sonnet')
+			expect(writtenContent).toContain('model: opus')
 		})
 
 		it('uses model from settings.agents["iloom-swarm-worker"] when configured', async () => {
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 				agents: {
 					'iloom-swarm-worker': {
-						model: 'opus',
+						model: 'haiku',
 					},
 				},
 			} as unknown as IloomSettings)
@@ -767,8 +611,8 @@ describe('SwarmSetupService', () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
-			expect(writtenContent).toContain('model: opus')
-			expect(writtenContent).not.toContain('model: sonnet')
+			expect(writtenContent).toContain('model: haiku')
+			expect(writtenContent).not.toContain('model: opus')
 		})
 
 		it('includes rendered template content in the body', async () => {
@@ -816,6 +660,118 @@ describe('SwarmSetupService', () => {
 
 			expect(result).toBe(false)
 		})
+
+		describe('sub-agent timeout', () => {
+			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 600000 (10 minutes) when not configured', async () => {
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 600000,
+					}),
+				)
+			})
+
+			it('converts configured subAgentTimeout from minutes to milliseconds', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-swarm-worker': {
+							subAgentTimeout: 30,
+						},
+					},
+				} as unknown as IloomSettings)
+
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 1800000, // 30 * 60 * 1000
+					}),
+				)
+			})
+
+			it('uses configured subAgentTimeout of 1 minute correctly', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-swarm-worker': {
+							subAgentTimeout: 1,
+						},
+					},
+				} as unknown as IloomSettings)
+
+				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						SWARM_SUB_AGENT_TIMEOUT_MS: 60000, // 1 * 60 * 1000
+					}),
+				)
+			})
+		})
+	})
+
+	describe('copyAgentsToChildWorktrees', () => {
+		it('copies .claude/agents/ from epic to each successful child worktree', async () => {
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(2)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+				'/Users/dev/project__issue-101/.claude/agents',
+				{ overwrite: true },
+			)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+				'/Users/dev/project__issue-102/.claude/agents',
+				{ overwrite: true },
+			)
+		})
+
+		it('skips failed child worktrees', async () => {
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '', branch: '', success: false, error: 'Branch already exists' },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(1)
+		})
+
+		it('skips copy when epic agents directory does not exist', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValueOnce(false as never)
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).not.toHaveBeenCalled()
+		})
+
+		it('continues if copy fails for one child', async () => {
+			vi.mocked(fs.copy)
+				.mockRejectedValueOnce(new Error('Permission denied'))
+				.mockResolvedValueOnce(undefined)
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
+			]
+
+			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(2)
+		})
 	})
 
 	describe('setupSwarm', () => {
@@ -834,6 +790,23 @@ describe('SwarmSetupService', () => {
 			expect(result.childWorktrees).toHaveLength(2)
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
+		})
+
+		it('copies agents to child worktrees after rendering', async () => {
+			await service.setupSwarm(
+				'610',
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				childIssues,
+				'/Users/dev/project',
+				'github',
+			)
+
+			// Should check for agents dir and copy to each successful child
+			expect(fs.pathExists).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+			)
+			expect(fs.copy).toHaveBeenCalledTimes(2)
 		})
 
 		it('passes agent metadata to renderSwarmWorkerAgent (no mcpConfigJson)', async () => {

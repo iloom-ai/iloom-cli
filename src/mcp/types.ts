@@ -38,6 +38,32 @@ export interface GetPRInput {
 }
 
 /**
+ * Input schema for getting PR review comments (inline code comments)
+ * Note: PRs only exist on GitHub, so this always uses GitHub provider
+ */
+export interface GetReviewCommentsInput {
+	number: string // PR number
+	reviewId?: string | undefined // Optional review ID to filter by
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL
+}
+
+/**
+ * Output schema for a single PR review comment (inline code comment)
+ */
+export interface ReviewCommentResult {
+	id: string
+	body: string
+	path: string // File path the comment is on
+	line: number | null // Line number in the diff
+	side: string | null // Side of the diff ('LEFT' or 'RIGHT')
+	author: FlexibleAuthor | null
+	createdAt: string
+	updatedAt: string | null
+	inReplyToId: string | null // If this is a reply to another review comment
+	pullRequestReviewId: number | null // The review this comment belongs to
+}
+
+/**
  * Input schema for getting a specific comment
  */
 export interface GetCommentInput {
@@ -53,6 +79,7 @@ export interface CreateCommentInput {
 	number: string // Issue or PR identifier
 	body: string // Comment markdown content
 	type: 'issue' | 'pr' // Type of entity to comment on
+	markupLanguage?: 'GFM' | undefined // Markup language for body content (must be GFM)
 }
 
 /**
@@ -63,6 +90,7 @@ export interface UpdateCommentInput {
 	number: string // Issue or PR identifier (context for providers that need it)
 	body: string // Updated markdown content
 	type?: 'issue' | 'pr' | undefined // Optional type to route PR comments to GitHub regardless of configured provider
+	markupLanguage?: 'GFM' | undefined // Markup language for body content (must be GFM)
 }
 
 /**
@@ -74,6 +102,7 @@ export interface CreateIssueInput {
 	labels?: string[] | undefined // Optional labels to apply
 	teamKey?: string | undefined // Required for Linear, ignored for GitHub
 	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+	markupLanguage?: 'GFM' | undefined // Markup language for body content (must be GFM)
 }
 
 /**
@@ -86,6 +115,7 @@ export interface CreateChildIssueInput {
 	labels?: string[] | undefined // Optional labels to apply
 	teamKey?: string | undefined // Linear only - falls back to parent's team. Ignored for GitHub.
 	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+	markupLanguage?: 'GFM' | undefined // Markup language for body content (must be GFM)
 }
 
 /**
@@ -159,6 +189,7 @@ export interface EditIssueInput {
 	state?: 'open' | 'closed' | undefined // New issue state
 	labels?: string[] | undefined // Labels to set on the issue
 	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+	markupLanguage?: 'GFM' | undefined // Markup language for body content (must be GFM)
 }
 
 /**

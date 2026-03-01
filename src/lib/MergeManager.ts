@@ -3,7 +3,7 @@ import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
-import type { MergeOptions } from '../types/index.js'
+import type { MergeOptions, RebaseOutcome } from '../types/index.js'
 
 /**
  * MergeManager handles Git rebase and fast-forward merge operations
@@ -42,8 +42,8 @@ export class MergeManager {
 	 * @param options - Merge options (dryRun, force)
 	 * @throws Error if main branch doesn't exist, uncommitted changes exist, or conflicts occur
 	 */
-	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<void> {
-		const { dryRun = false, force = false } = options
+	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<RebaseOutcome> {
+		const { dryRun = false, force = false, jsonStream = false } = options
 
 		// Pre-check: abort any in-progress rebase before starting a new one
 		await this.abortInProgressRebase(worktreePath)
@@ -126,7 +126,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
-			return
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		}
 
 		// Step 4: Show commits to be rebased (for informational purposes)
@@ -159,7 +159,7 @@ export class MergeManager {
 			if (commitLines.length > 0) {
 				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
 			}
-			return
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		}
 
 		// Execute rebase
@@ -173,6 +173,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
@@ -183,7 +184,8 @@ export class MergeManager {
 
 				const resolved = await this.attemptClaudeConflictResolution(
 					worktreePath,
-					conflictedFiles
+					conflictedFiles,
+					{ jsonStream }
 				)
 
 				if (resolved) {
@@ -193,7 +195,7 @@ export class MergeManager {
 					if (wipCommitHash) {
 						await this.restoreWipCommit(worktreePath, wipCommitHash)
 					}
-					return // Continue with successful rebase
+					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true }
 				}
 
 				// Claude couldn't resolve or not available - fail fast
@@ -457,7 +459,8 @@ export class MergeManager {
 	 */
 	private async attemptClaudeConflictResolution(
 		worktreePath: string,
-		conflictedFiles: string[]
+		conflictedFiles: string[],
+		options: { jsonStream?: boolean } = {}
 	): Promise<boolean> {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
@@ -495,10 +498,15 @@ export class MergeManager {
 		try {
 			// Launch Claude interactively in current terminal
 			// User will interact directly with Claude to resolve conflicts
+			// When jsonStream is true, run headless with stdout passthrough for JSONL streaming
 			await launchClaude(prompt, {
 				appendSystemPrompt: systemPrompt,
 				addDir: worktreePath,
-				headless: false, // Interactive - runs in current terminal with stdio: inherit
+				headless: options.jsonStream ? true : false,
+				...(options.jsonStream && {
+					permissionMode: 'bypassPermissions' as const,
+					passthroughStdout: true,
+				}),
 				allowedTools: rebaseAllowedTools,
 				noSessionPersistence: true, // Utility operation - no session persistence needed
 			})

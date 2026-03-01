@@ -2,6 +2,7 @@ import type { Migration } from '../lib/VersionMigrationManager.js'
 import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Migration registry - add new migrations here in version order
 // Each migration must be idempotent (safe to run multiple times)
@@ -94,6 +95,26 @@ export const migrations: Migration[] = [
       const separator = content.endsWith('\n') || content === '' ? '' : '\n'
       const newContent = content + separator + '\n# Added by iloom CLI\n' + agentPattern + '\n' + skillPattern + '\n' + mcpConfigPathPattern + '\n'
       await fs.writeFile(globalIgnorePath, newContent, 'utf-8')
+    }
+  },
+  {
+    version: '0.10.3',
+    description: 'Remediate global gitignore path for custom core.excludesFile',
+    migrate: async (): Promise<void> => {
+      // All iloom patterns from this and previous migrations
+      const allIloomPatterns = [
+        '**/.iloom/settings.local.json',
+        '**/.iloom/package.iloom.local.json',
+        '**/.claude/agents/iloom-*',
+        '**/.claude/skills/iloom-*',
+        '**/.claude/iloom-swarm-mcp-config-path',
+      ]
+
+      // Ensure all patterns exist at the correctly resolved global gitignore path.
+      // This remediates previous migrations that hardcoded the XDG default
+      // (~/.config/git/ignore) — if the user has core.excludesFile set to a
+      // different path, this writes all iloom patterns to the correct location.
+      await ensureGlobalGitignorePatterns(allIloomPatterns)
     }
   },
 ]
