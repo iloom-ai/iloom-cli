@@ -277,6 +277,7 @@ Each child issue should include ONLY these sections:
 4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports). A contract is an interface boundary — what one issue exposes for another to consume. Example: `PlanCommand.execute()` gains an optional `autoSwarm?: boolean` 7th parameter. NOT an implementation: do not describe what happens internally when `autoSwarm` is true — that is implementation detail, not a contract.
 5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
 6. **Scope Boundaries**: What is explicitly NOT included
+{{#if WAVE_VERIFICATION}}
 7. **Must-Haves**: Concrete verification criteria that describe the expected outcome of this issue. These are NOT implementation instructions — they describe what should exist after the work is done, not how to build it. Include at least one must-have per child issue. Each must-have uses one of three check types:
    - `exists: <file-path>` — the file was created
    - `substantive: <file-path> — <what it should contain or export>` — the file has expected content, exports, or structure
@@ -289,6 +290,7 @@ Each child issue should include ONLY these sections:
    - substantive: src/lib/WaveVerifier.ts — exports a WaveVerifier class with a verify() method
    - wired: src/lib/WaveVerifier.ts — imported and invoked in src/commands/finish.ts
    ```
+{{/if}}
 
 Do NOT add "Implementation Details", "Technical Approach", or similar sections — these violate the rule above.
 
@@ -328,6 +330,29 @@ Before presenting the plan to the user, audit it against these questions:
 1. **For each blocking dependency:** "Can I replace this with a shared contract so both issues run in parallel?" If yes, rewrite the issues with an explicit contract and remove the dependency.
 2. **DAG shape check:** Is the graph wide and shallow, or narrow and linear? If your longest chain is more than 2 deep, re-examine whether intermediate dependencies are truly hard blockers.
 3. **Contract completeness:** Does every issue that produces or consumes a shared API specify the exact contract (function signatures, types, module exports) in its description?
+
+{{#if WAVE_VERIFICATION}}
+**Wave Verification Tasks:**
+
+After designing the dependency DAG, insert verification child issues between dependency waves to catch integration issues early. A "wave" is a set of issues that can run in parallel (they share the same depth in the DAG).
+
+- For each wave boundary (e.g., between wave 1 and wave 2), create a verification child issue titled "Verify wave N integration"
+- The verification issue should depend on (be blocked by) all issues in wave N
+- All issues in wave N+1 should depend on (be blocked by) the verification issue
+- The verification issue body should describe what integration checks to perform: compile the combined changes, run tests, and verify that shared contracts between wave N issues are compatible
+- Verification issues should be lightweight — they exist to catch mismatches between parallel implementations before the next wave begins
+
+Example DAG with verification:
+```
+Wave 1: Issue A, Issue B (parallel, no deps)
+         ↓
+Verify wave 1 integration (depends on A, B)
+         ↓
+Wave 2: Issue C, Issue D (depend on verification)
+```
+
+Skip verification tasks when there is only a single wave (all issues are independent) or when the DAG is trivially small (2 or fewer child issues).
+{{/if}}
 
 **Before Creating Issues:**
 1. Summarize the proposed issues and their relationships

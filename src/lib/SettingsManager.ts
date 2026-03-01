@@ -86,6 +86,10 @@ export const PlanCommandSettingsSchema = z.object({
 		.enum(['claude', 'gemini', 'codex', 'none'])
 		.default('none')
 		.describe('AI provider for reviewing the plan (none to skip review)'),
+	waveVerification: z
+		.boolean()
+		.default(true)
+		.describe('When enabled, the planner generates verification child issues between dependency waves to catch integration issues early.'),
 })
 
 /**
@@ -615,6 +619,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 			planner: z.enum(['claude', 'gemini', 'codex']).optional(),
 			reviewer: z.enum(['claude', 'gemini', 'codex', 'none']).optional(),
+			waveVerification: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Plan command configuration'),
@@ -1169,6 +1174,17 @@ export class SettingsManager {
 	 */
 	getPlanReviewer(settings?: IloomSettings): 'claude' | 'gemini' | 'codex' | 'none' {
 		return settings?.plan?.reviewer ?? 'none'
+	}
+
+	/**
+	 * Get the plan command waveVerification setting with default applied
+	 * Default is true (verification tasks are generated)
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Whether wave verification is enabled
+	 */
+	getPlanWaveVerification(settings?: IloomSettings): boolean {
+		return settings?.plan?.waveVerification !== false
 	}
 
 	/**

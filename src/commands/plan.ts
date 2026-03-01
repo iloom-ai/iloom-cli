@@ -433,10 +433,14 @@ export class PlanCommand {
 			providerFlags[`USE_${p.toUpperCase()}_REVIEWER`] = effectiveReviewer === p
 		})
 
+		// Get wave verification setting (default true)
+		const waveVerification = settingsManager.getPlanWaveVerification(settings ?? undefined)
+
 		// Load plan prompt template with mode-specific variables
 		logger.debug('Loading plan prompt template')
 		const templateVariables: TemplateVariables = {
 			IS_VSCODE_MODE: isVscodeMode,
+			WAVE_VERIFICATION: waveVerification,
 			EXISTING_ISSUE_MODE: !!decompositionContext,
 			FRESH_PLANNING_MODE: !decompositionContext,
 			PARENT_ISSUE_NUMBER: decompositionContext?.identifier,
