@@ -243,13 +243,8 @@ export class SwarmSetupService {
 
 		const settings = await this.settingsManager.loadSettings()
 
-		const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
-		const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
-
 		const templateVariables: TemplateVariables = {
 			SWARM_MODE: true,
-			EPIC_WORKTREE_PATH: epicWorktreePath,
-			SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 		}
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
