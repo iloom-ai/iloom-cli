@@ -20,7 +20,7 @@ import { hasMultipleRemotes } from './utils/remote.js'
 import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
-import { formatLoomsForJson, formatFinishedLoomForJson, enrichSwarmIssues, loadComplexityMap } from './utils/loom-formatter.js'
+import { formatLoomsForJson, formatFinishedLoomForJson, enrichSwarmIssues } from './utils/loom-formatter.js'
 import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
 import chalk from 'chalk'
@@ -1213,22 +1213,15 @@ program
           ? globalActiveLooms
           : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
 
-        // Build complexity map from recap files for all known worktree paths
-        const childWorktreePaths: string[] = []
-        for (const meta of [...allActiveMetadata, ...finishedLooms]) {
-          if (meta.worktreePath) childWorktreePaths.push(meta.worktreePath)
-        }
-        const complexityMap = await loadComplexityMap(childWorktreePaths)
-
         // Format active looms
-        let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
+        let activeJson: Awaited<ReturnType<typeof formatLoomsForJson>> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
         if (showActive) {
           if (options.global) {
             // Format global active looms from metadata (similar to finished looms format)
-            activeJson = globalActiveLooms.map(loom => {
+            activeJson = await Promise.all(globalActiveLooms.map(async loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath, complexityMap)
+                ? await enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
@@ -1258,10 +1251,10 @@ program
                 ...(swarmIssues !== undefined && { swarmIssues }),
                 ...(depMap !== undefined && { dependencyMap: depMap }),
               }
-            })
+            }))
           } else {
             // Format worktrees from current repo
-            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms, complexityMap).map(loom => ({
+            activeJson = (await formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms)).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
@@ -1279,7 +1272,7 @@ program
 
         // Format finished looms (only when --finished or --all is set)
         let finishedJson = showFinished
-          ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms, complexityMap))
+          ? await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
           : []
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)

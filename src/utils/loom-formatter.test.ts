@@ -4,8 +4,6 @@ import {
   formatLoomsForJson,
   formatFinishedLoomForJson,
   enrichSwarmIssues,
-  loadComplexityMap,
-  type SwarmComplexity,
 } from './loom-formatter.js'
 import { readRecapFile } from './mcp.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -66,26 +64,26 @@ describe('formatLoomForJson', () => {
   }
 
   describe('isMainWorktree detection', () => {
-    it('should return true when worktree path matches mainWorktreePath', () => {
+    it('should return true when worktree path matches mainWorktreePath', async () => {
       const mainPath = '/Users/dev/projects/myapp'
       const worktree = createWorktree({ path: mainPath, branch: 'main' })
-      const result = formatLoomForJson(worktree, mainPath)
+      const result = await formatLoomForJson(worktree, mainPath)
       expect(result.isMainWorktree).toBe(true)
     })
 
-    it('should return false when worktree path does not match mainWorktreePath', () => {
+    it('should return false when worktree path does not match mainWorktreePath', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-456__add-feature' })
-      const result = formatLoomForJson(worktree, '/Users/dev/projects/myapp')
+      const result = await formatLoomForJson(worktree, '/Users/dev/projects/myapp')
       expect(result.isMainWorktree).toBe(false)
     })
 
-    it('should return false when mainWorktreePath is not provided', () => {
+    it('should return false when mainWorktreePath is not provided', async () => {
       const worktree = createWorktree({ path: '/Users/dev/projects/myapp', branch: 'main' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.isMainWorktree).toBe(false)
     })
 
-    it('should correctly identify main worktree with realistic paths', () => {
+    it('should correctly identify main worktree with realistic paths', async () => {
       const mainPath = '/Users/adam/Documents/Projects/iloom-cli'
       const mainWorktree = createWorktree({
         path: mainPath,
@@ -98,8 +96,8 @@ describe('formatLoomForJson', () => {
         branchName: 'issue-269__json-formatter',
       })
 
-      const mainResult = formatLoomForJson(mainWorktree, mainPath)
-      const featureResult = formatLoomForJson(featureWorktree, mainPath)
+      const mainResult = await formatLoomForJson(mainWorktree, mainPath)
+      const featureResult = await formatLoomForJson(featureWorktree, mainPath)
 
       expect(mainResult.isMainWorktree).toBe(true)
       expect(featureResult.isMainWorktree).toBe(false)
@@ -107,33 +105,33 @@ describe('formatLoomForJson', () => {
   })
 
   describe('type detection', () => {
-    it('should detect PR type from _pr_N path suffix', () => {
+    it('should detect PR type from _pr_N path suffix', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-123__feature',
         prNumber: 456,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('pr')
     })
 
-    it('should detect issue type from issue-N branch pattern', () => {
+    it('should detect issue type from issue-N branch pattern', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-123__feature' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('issue')
     })
 
-    it('should detect issue type from alphanumeric pattern (MARK-1)', () => {
+    it('should detect issue type from alphanumeric pattern (MARK-1)', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-MARK-1__feature' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('issue')
     })
 
-    it('should default to branch type when no patterns match', () => {
+    it('should default to branch type when no patterns match', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp',
         branch: 'main',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('branch')
     })
 
@@ -173,12 +171,12 @@ describe('formatLoomForJson', () => {
         ['feature-dark-mode', 'branch'],
         ['add-json-formatter', 'branch'],
         ['wip-testing', 'branch'],
-      ])('should detect type for branch "%s" as "%s"', (branchName, expectedType) => {
+      ])('should detect type for branch "%s" as "%s"', async (branchName, expectedType) => {
         const worktree = createWorktree({
           path: `/Users/dev/projects/myapp-looms/${branchName}`,
           branch: branchName,
         })
-        const result = formatLoomForJson(worktree)
+        const result = await formatLoomForJson(worktree)
         expect(result.type).toBe(expectedType)
       })
     })
@@ -198,39 +196,39 @@ describe('formatLoomForJson', () => {
 
         // Path that looks like PR but branch has issue pattern
         ['/projects/myapp-looms/issue-42__test', 'issue'],
-      ])('should detect type for path "%s" as "%s"', (path, expectedType) => {
+      ])('should detect type for path "%s" as "%s"', async (path, expectedType) => {
         const worktree = createWorktree({
           path,
           branch: 'issue-123__feature', // Branch always has issue pattern
         })
-        const result = formatLoomForJson(worktree)
+        const result = await formatLoomForJson(worktree)
         expect(result.type).toBe(expectedType)
       })
     })
   })
 
   describe('pr_numbers extraction', () => {
-    it('should extract PR number from path suffix for PR type', () => {
+    it('should extract PR number from path suffix for PR type', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-123__feature',
         prNumber: 456,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.pr_numbers).toEqual(['456'])
     })
 
-    it('should return empty pr_numbers for issue type', () => {
+    it('should return empty pr_numbers for issue type', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-123__feature' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should return empty pr_numbers for branch type', () => {
+    it('should return empty pr_numbers for branch type', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp',
         branch: 'main',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.pr_numbers).toEqual([])
     })
 
@@ -241,54 +239,54 @@ describe('formatLoomForJson', () => {
       [123, '123'],
       [9999, '9999'],
       [99999, '99999'],
-    ])('should extract PR number %d as string "%s"', (prNum, expectedStr) => {
+    ])('should extract PR number %d as string "%s"', async (prNum, expectedStr) => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-42__feature',
         prNumber: prNum,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.pr_numbers).toEqual([expectedStr])
     })
   })
 
   describe('issue_numbers extraction', () => {
-    it('should extract numeric issue number from branch for issue type', () => {
+    it('should extract numeric issue number from branch for issue type', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-42__fix-bug' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.issue_numbers).toEqual(['42'])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should extract alphanumeric issue ID (Linear-style) for issue type', () => {
+    it('should extract alphanumeric issue ID (Linear-style) for issue type', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-PROJ-123__implement-feature' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.issue_numbers).toEqual(['PROJ-123'])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should return empty issue_numbers for branch type', () => {
+    it('should return empty issue_numbers for branch type', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp',
         branch: 'main',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should handle old format issue branch (issue-N-slug)', () => {
+    it('should handle old format issue branch (issue-N-slug)', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-25-add-tests' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.issue_numbers).toEqual(['25'])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should return empty issue_numbers for PR type (pr_numbers populated instead)', () => {
+    it('should return empty issue_numbers for PR type (pr_numbers populated instead)', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-123__feature',
         prNumber: 456,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual(['456'])
     })
@@ -311,9 +309,9 @@ describe('formatLoomForJson', () => {
         ['issue-1-init', '1'],
         ['issue-42-fix', '42'],
         ['issue-123-feature', '123'],
-      ])('should extract issue number from "%s" as "%s"', (branchName, expectedIssue) => {
+      ])('should extract issue number from "%s" as "%s"', async (branchName, expectedIssue) => {
         const worktree = createRealisticWorktree({ branchName })
-        const result = formatLoomForJson(worktree)
+        const result = await formatLoomForJson(worktree)
         expect(result.issue_numbers).toEqual([expectedIssue])
         expect(result.type).toBe('issue')
       })
@@ -321,59 +319,59 @@ describe('formatLoomForJson', () => {
   })
 
   describe('field mapping', () => {
-    it('should use branch as name', () => {
+    it('should use branch as name', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-42__feature-test' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.name).toBe('issue-42__feature-test')
     })
 
-    it('should use path as name when branch is empty', () => {
+    it('should use path as name when branch is empty', async () => {
       const worktree = createWorktree({
         branch: '',
         path: '/Users/dev/projects/myapp-looms/orphan-worktree',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.name).toBe('/Users/dev/projects/myapp-looms/orphan-worktree')
     })
 
-    it('should handle null worktreePath when bare is true', () => {
+    it('should handle null worktreePath when bare is true', async () => {
       const worktree = createWorktree({
         bare: true,
         path: '/Users/dev/projects/myapp.git',
         branch: 'main',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBeNull()
     })
 
-    it('should return path as worktreePath when not bare', () => {
+    it('should return path as worktreePath when not bare', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-42__feature' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-42__feature')
     })
 
-    it('should return branch as branch field', () => {
+    it('should return branch as branch field', async () => {
       const worktree = createRealisticWorktree({ branchName: 'issue-42__my-branch' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBe('issue-42__my-branch')
     })
 
-    it('should return null for branch when empty', () => {
+    it('should return null for branch when empty', async () => {
       const worktree = createWorktree({ branch: '' })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBeNull()
     })
   })
 
   describe('detached HEAD states', () => {
-    it('should handle detached HEAD with branch set to HEAD', () => {
+    it('should handle detached HEAD with branch set to HEAD', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp-looms/detached-state',
         branch: 'HEAD',
         commit: 'abc123def456789012345678901234567890abcd',
         detached: true,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBe('HEAD')
       expect(result.name).toBe('HEAD')
       expect(result.type).toBe('branch') // No issue pattern in "HEAD"
@@ -381,7 +379,7 @@ describe('formatLoomForJson', () => {
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should handle detached HEAD from bisect operation', () => {
+    it('should handle detached HEAD from bisect operation', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp',
         branch: 'HEAD',
@@ -389,93 +387,93 @@ describe('formatLoomForJson', () => {
         detached: true,
         bare: false,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('branch')
       expect(result.worktreePath).toBe('/Users/dev/projects/myapp')
     })
 
-    it('should correctly identify main worktree even when detached', () => {
+    it('should correctly identify main worktree even when detached', async () => {
       const mainPath = '/Users/dev/projects/myapp'
       const worktree = createWorktree({
         path: mainPath,
         branch: 'HEAD',
         detached: true,
       })
-      const result = formatLoomForJson(worktree, mainPath)
+      const result = await formatLoomForJson(worktree, mainPath)
       expect(result.isMainWorktree).toBe(true)
     })
   })
 
   describe('bare repositories', () => {
-    it('should set worktreePath to null for bare repository', () => {
+    it('should set worktreePath to null for bare repository', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp.git',
         branch: 'main',
         bare: true,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBeNull()
       expect(result.branch).toBe('main')
       expect(result.name).toBe('main')
     })
 
-    it('should handle bare repo with custom default branch', () => {
+    it('should handle bare repo with custom default branch', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp.git',
         branch: 'develop',
         bare: true,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBeNull()
       expect(result.branch).toBe('develop')
       expect(result.type).toBe('branch')
     })
 
-    it('should correctly identify bare repo as main worktree when path matches', () => {
+    it('should correctly identify bare repo as main worktree when path matches', async () => {
       const barePath = '/Users/dev/projects/myapp.git'
       const worktree = createWorktree({
         path: barePath,
         branch: 'main',
         bare: true,
       })
-      const result = formatLoomForJson(worktree, barePath)
+      const result = await formatLoomForJson(worktree, barePath)
       expect(result.isMainWorktree).toBe(true)
       expect(result.worktreePath).toBeNull()
     })
   })
 
   describe('locked worktrees', () => {
-    it('should handle locked worktree without reason', () => {
+    it('should handle locked worktree without reason', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-42__in-progress',
         locked: true,
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('issue')
       expect(result.issue_numbers).toEqual(['42'])
       // Note: locked status is not exposed in LoomJsonOutput, but should not break formatting
     })
 
-    it('should handle locked worktree with lock reason', () => {
+    it('should handle locked worktree with lock reason', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-123__critical-fix',
         locked: true,
         lockReason: 'Locked for deployment review',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('issue')
       expect(result.issue_numbers).toEqual(['123'])
       expect(result.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-123__critical-fix')
     })
 
-    it('should handle locked PR worktree', () => {
+    it('should handle locked PR worktree', async () => {
       const worktree = createRealisticWorktree({
         branchName: 'issue-789__feature',
         prNumber: 100,
         locked: true,
         lockReason: 'PR under review',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.type).toBe('pr')
       expect(result.pr_numbers).toEqual(['100'])
       expect(result.issue_numbers).toEqual([])
@@ -483,59 +481,59 @@ describe('formatLoomForJson', () => {
   })
 
   describe('edge cases and realistic git output scenarios', () => {
-    it('should handle worktree with empty commit hash', () => {
+    it('should handle worktree with empty commit hash', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp',
         branch: 'main',
         commit: '',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBe('main')
       expect(result.type).toBe('branch')
     })
 
-    it('should handle worktree paths with spaces', () => {
+    it('should handle worktree paths with spaces', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/My Projects/myapp-looms/issue-42__feature',
         branch: 'issue-42__feature',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBe('/Users/dev/My Projects/myapp-looms/issue-42__feature')
       expect(result.type).toBe('issue')
     })
 
-    it('should handle worktree paths with special characters', () => {
+    it('should handle worktree paths with special characters', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/my-app@2.0-looms/issue-42__feature',
         branch: 'issue-42__feature',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBe('/Users/dev/projects/my-app@2.0-looms/issue-42__feature')
     })
 
-    it('should handle branch names with forward slashes (converted by git worktree)', () => {
+    it('should handle branch names with forward slashes (converted by git worktree)', async () => {
       // When a branch like "feat/add-feature" is used with worktrees,
       // the path typically has the slash converted
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp-looms/feat-add-feature',
         branch: 'feat/add-feature', // Original branch name preserved
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBe('feat/add-feature')
       expect(result.name).toBe('feat/add-feature')
       expect(result.type).toBe('branch')
     })
 
-    it('should handle very long branch names', () => {
+    it('should handle very long branch names', async () => {
       const longSlug = 'a'.repeat(100)
       const branchName = `issue-42__${longSlug}`
       const worktree = createRealisticWorktree({ branchName })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.branch).toBe(branchName)
       expect(result.issue_numbers).toEqual(['42'])
     })
 
-    it('should handle worktree with all flags set', () => {
+    it('should handle worktree with all flags set', async () => {
       const worktree = createWorktree({
         path: '/Users/dev/projects/myapp.git',
         branch: 'main',
@@ -545,34 +543,34 @@ describe('formatLoomForJson', () => {
         locked: true,
         lockReason: 'Test lock',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBeNull() // bare=true overrides
       expect(result.branch).toBe('main')
     })
 
-    it('should handle Windows-style paths', () => {
+    it('should handle Windows-style paths', async () => {
       const worktree = createWorktree({
         path: 'C:\\Users\\dev\\projects\\myapp-looms\\issue-42__feature',
         branch: 'issue-42__feature',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBe('C:\\Users\\dev\\projects\\myapp-looms\\issue-42__feature')
       expect(result.type).toBe('issue')
     })
 
-    it('should handle network/UNC paths', () => {
+    it('should handle network/UNC paths', async () => {
       const worktree = createWorktree({
         path: '//server/share/projects/myapp-looms/issue-42__feature',
         branch: 'issue-42__feature',
       })
-      const result = formatLoomForJson(worktree)
+      const result = await formatLoomForJson(worktree)
       expect(result.worktreePath).toBe('//server/share/projects/myapp-looms/issue-42__feature')
     })
   })
 })
 
 describe('formatLoomsForJson', () => {
-  it('should transform array of worktrees to JSON schema with correct issue/pr numbers', () => {
+  it('should transform array of worktrees to JSON schema with correct issue/pr numbers', async () => {
     const mainPath = '/Users/dev/projects/myapp'
     const worktrees: GitWorktree[] = [
       {
@@ -601,7 +599,7 @@ describe('formatLoomsForJson', () => {
       },
     ]
 
-    const result = formatLoomsForJson(worktrees, mainPath)
+    const result = await formatLoomsForJson(worktrees, mainPath)
 
     expect(result).toHaveLength(3)
     // Issue type - issue_numbers populated, pr_numbers empty, not main
@@ -624,13 +622,13 @@ describe('formatLoomsForJson', () => {
     expect(result[2].isMainWorktree).toBe(false)
   })
 
-  it('should return empty array for empty input', () => {
-    const result = formatLoomsForJson([])
+  it('should return empty array for empty input', async () => {
+    const result = await formatLoomsForJson([])
     expect(result).toEqual([])
   })
 
   describe('realistic multi-worktree scenarios', () => {
-    it('should handle typical iloom workspace with multiple active issues', () => {
+    it('should handle typical iloom workspace with multiple active issues', async () => {
       const mainPath = '/Users/adam/Documents/Projects/iloom-cli'
       const worktrees: GitWorktree[] = [
         // Main worktree
@@ -671,7 +669,7 @@ describe('formatLoomsForJson', () => {
         },
       ]
 
-      const result = formatLoomsForJson(worktrees, mainPath)
+      const result = await formatLoomsForJson(worktrees, mainPath)
 
       expect(result).toHaveLength(4)
 
@@ -764,7 +762,7 @@ describe('formatLoomsForJson', () => {
       })
     })
 
-    it('should handle mixed worktree states (detached, locked, bare)', () => {
+    it('should handle mixed worktree states (detached, locked, bare)', async () => {
       const worktrees: GitWorktree[] = [
         // Main bare repo
         {
@@ -796,7 +794,7 @@ describe('formatLoomsForJson', () => {
         },
       ]
 
-      const result = formatLoomsForJson(worktrees)
+      const result = await formatLoomsForJson(worktrees)
 
       expect(result).toHaveLength(3)
 
@@ -814,7 +812,7 @@ describe('formatLoomsForJson', () => {
       expect(result[2].issue_numbers).toEqual(['100'])
     })
 
-    it('should handle worktrees without mainWorktreePath provided', () => {
+    it('should handle worktrees without mainWorktreePath provided', async () => {
       const worktrees: GitWorktree[] = [
         {
           path: '/Users/dev/projects/myapp',
@@ -835,7 +833,7 @@ describe('formatLoomsForJson', () => {
       ]
 
       // No mainWorktreePath provided
-      const result = formatLoomsForJson(worktrees)
+      const result = await formatLoomsForJson(worktrees)
 
       expect(result).toHaveLength(2)
       // All should have isMainWorktree: false when not provided
@@ -872,9 +870,9 @@ describe('formatFinishedLoomForJson', () => {
   })
 
   describe('field mapping', () => {
-    it('should correctly format finished loom with all fields populated', () => {
+    it('should correctly format finished loom with all fields populated', async () => {
       const metadata = createFinishedMetadata()
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
 
       expect(result).toEqual({
         name: 'issue-269__json-formatter',
@@ -900,61 +898,61 @@ describe('formatFinishedLoomForJson', () => {
       })
     })
 
-    it('should use branchName for name field', () => {
+    it('should use branchName for name field', async () => {
       const metadata = createFinishedMetadata({
         branchName: 'issue-PROJ-123__feature-work',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.name).toBe('issue-PROJ-123__feature-work')
     })
 
-    it('should fallback to worktreePath for name when branchName is null', () => {
+    it('should fallback to worktreePath for name when branchName is null', async () => {
       const metadata = createFinishedMetadata({
         branchName: null,
         worktreePath: '/Users/dev/projects/myapp-looms/orphan-branch',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.name).toBe('/Users/dev/projects/myapp-looms/orphan-branch')
     })
 
-    it('should fallback to "unknown" for name when both branchName and worktreePath are null', () => {
+    it('should fallback to "unknown" for name when both branchName and worktreePath are null', async () => {
       const metadata = createFinishedMetadata({
         branchName: null,
         worktreePath: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.name).toBe('unknown')
     })
 
-    it('should always set worktreePath to null for finished looms', () => {
+    it('should always set worktreePath to null for finished looms', async () => {
       const metadata = createFinishedMetadata({
         worktreePath: '/some/path/that/should/be/ignored',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.worktreePath).toBeNull()
     })
 
-    it('should always set isMainWorktree to false for finished looms', () => {
+    it('should always set isMainWorktree to false for finished looms', async () => {
       const metadata = createFinishedMetadata()
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.isMainWorktree).toBe(false)
     })
   })
 
   describe('type detection and issue/pr numbers', () => {
-    it('should format finished issue loom correctly', () => {
+    it('should format finished issue loom correctly', async () => {
       const metadata = createFinishedMetadata({
         issueType: 'issue',
         issue_numbers: ['42'],
         pr_numbers: [],
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('issue')
       expect(result.issue_numbers).toEqual(['42'])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should format finished PR loom correctly', () => {
+    it('should format finished PR loom correctly', async () => {
       const metadata = createFinishedMetadata({
         branchName: 'issue-254__dotenv-flow',
         issueType: 'pr',
@@ -962,47 +960,47 @@ describe('formatFinishedLoomForJson', () => {
         pr_numbers: ['255'],
         prUrls: { '255': 'https://github.com/owner/repo/pull/255' },
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('pr')
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual(['255'])
       expect(result.prUrls).toEqual({ '255': 'https://github.com/owner/repo/pull/255' })
     })
 
-    it('should format finished branch loom correctly', () => {
+    it('should format finished branch loom correctly', async () => {
       const metadata = createFinishedMetadata({
         branchName: 'feat/new-feature',
         issueType: 'branch',
         issue_numbers: [],
         pr_numbers: [],
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('branch')
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should default to branch type when issueType is null', () => {
+    it('should default to branch type when issueType is null', async () => {
       const metadata = createFinishedMetadata({
         issueType: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('branch')
     })
 
-    it('should handle Linear-style alphanumeric issue numbers', () => {
+    it('should handle Linear-style alphanumeric issue numbers', async () => {
       const metadata = createFinishedMetadata({
         branchName: 'issue-PROJ-123__implement-feature',
         issueType: 'issue',
         issue_numbers: ['PROJ-123'],
         issueUrls: { 'PROJ-123': 'https://linear.app/org/issue/PROJ-123' },
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issue_numbers).toEqual(['PROJ-123'])
       expect(result.issueUrls).toEqual({ 'PROJ-123': 'https://linear.app/org/issue/PROJ-123' })
     })
 
-    it('should handle multiple issue numbers', () => {
+    it('should handle multiple issue numbers', async () => {
       const metadata = createFinishedMetadata({
         issueType: 'issue',
         issue_numbers: ['42', 'PROJ-123', '999'],
@@ -1012,7 +1010,7 @@ describe('formatFinishedLoomForJson', () => {
           '999': 'https://github.com/owner/repo/issues/999',
         },
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issue_numbers).toEqual(['42', 'PROJ-123', '999'])
       expect(result.issueUrls).toEqual({
         '42': 'https://github.com/owner/repo/issues/42',
@@ -1021,7 +1019,7 @@ describe('formatFinishedLoomForJson', () => {
       })
     })
 
-    it('should handle multiple PR numbers', () => {
+    it('should handle multiple PR numbers', async () => {
       const metadata = createFinishedMetadata({
         issueType: 'pr',
         issue_numbers: [],
@@ -1031,7 +1029,7 @@ describe('formatFinishedLoomForJson', () => {
           '101': 'https://github.com/owner/repo/pull/101',
         },
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.pr_numbers).toEqual(['100', '101'])
       expect(result.prUrls).toEqual({
         '100': 'https://github.com/owner/repo/pull/100',
@@ -1041,83 +1039,83 @@ describe('formatFinishedLoomForJson', () => {
   })
 
   describe('optional field handling', () => {
-    it('should handle empty description field', () => {
+    it('should handle empty description field', async () => {
       const metadata = createFinishedMetadata({
         description: '',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.description).toBe('')
     })
 
-    it('should handle null created_at', () => {
+    it('should handle null created_at', async () => {
       const metadata = createFinishedMetadata({
         created_at: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.created_at).toBeNull()
     })
 
-    it('should handle null issueTracker', () => {
+    it('should handle null issueTracker', async () => {
       const metadata = createFinishedMetadata({
         issueTracker: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issueTracker).toBeNull()
     })
 
-    it('should handle null colorHex', () => {
+    it('should handle null colorHex', async () => {
       const metadata = createFinishedMetadata({
         colorHex: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.colorHex).toBeNull()
     })
 
-    it('should handle null projectPath', () => {
+    it('should handle null projectPath', async () => {
       const metadata = createFinishedMetadata({
         projectPath: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.projectPath).toBeNull()
     })
 
-    it('should handle empty issueUrls and prUrls', () => {
+    it('should handle empty issueUrls and prUrls', async () => {
       const metadata = createFinishedMetadata({
         issueUrls: {},
         prUrls: {},
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issueUrls).toEqual({})
       expect(result.prUrls).toEqual({})
     })
 
-    it('should handle undefined status field with default "finished"', () => {
+    it('should handle undefined status field with default "finished"', async () => {
       const metadata = createFinishedMetadata({
         status: undefined,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.status).toBe('finished')
     })
 
-    it('should handle null finishedAt', () => {
+    it('should handle null finishedAt', async () => {
       const metadata = createFinishedMetadata({
         finishedAt: null,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.finishedAt).toBeNull()
     })
 
-    it('should handle undefined finishedAt', () => {
+    it('should handle undefined finishedAt', async () => {
       const metadata = createFinishedMetadata({
         finishedAt: undefined,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.finishedAt).toBeNull()
     })
   })
 
   describe('edge cases and legacy metadata', () => {
-    it('should handle minimal legacy metadata with only required fields', () => {
+    it('should handle minimal legacy metadata with only required fields', async () => {
       const metadata: LoomMetadata = {
         description: 'Legacy loom',
         created_at: null,
@@ -1138,7 +1136,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: null,
       }
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result).toEqual({
         name: 'old-branch',
         worktreePath: null,
@@ -1163,55 +1161,55 @@ describe('formatFinishedLoomForJson', () => {
       })
     })
 
-    it('should handle empty issue_numbers and pr_numbers arrays', () => {
+    it('should handle empty issue_numbers and pr_numbers arrays', async () => {
       const metadata = createFinishedMetadata({
         issue_numbers: [],
         pr_numbers: [],
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual([])
     })
 
-    it('should handle branch names with special characters', () => {
+    it('should handle branch names with special characters', async () => {
       const metadata = createFinishedMetadata({
         branchName: 'feat/add-feature@v2.0-beta',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.branch).toBe('feat/add-feature@v2.0-beta')
       expect(result.name).toBe('feat/add-feature@v2.0-beta')
     })
 
-    it('should handle very long branch names', () => {
+    it('should handle very long branch names', async () => {
       const longSlug = 'a'.repeat(200)
       const branchName = `issue-42__${longSlug}`
       const metadata = createFinishedMetadata({
         branchName,
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.branch).toBe(branchName)
       expect(result.name).toBe(branchName)
     })
 
-    it('should handle finished loom with active status', () => {
+    it('should handle finished loom with active status', async () => {
       const metadata = createFinishedMetadata({
         status: 'active',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.status).toBe('active')
     })
 
-    it('should preserve exact status value from metadata', () => {
+    it('should preserve exact status value from metadata', async () => {
       const metadata = createFinishedMetadata({
         status: 'finished',
       })
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.status).toBe('finished')
     })
   })
 
   describe('realistic finished loom scenarios', () => {
-    it('should format finished issue loom from iloom-cli project', () => {
+    it('should format finished issue loom from iloom-cli project', async () => {
       const metadata: LoomMetadata = {
         description: 'Add JSON formatter support to il list command',
         created_at: '2024-01-15T10:30:00.000Z',
@@ -1232,7 +1230,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
       }
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result).toEqual({
         name: 'issue-269__json-formatter',
         worktreePath: null,
@@ -1257,7 +1255,7 @@ describe('formatFinishedLoomForJson', () => {
       })
     })
 
-    it('should format finished PR loom', () => {
+    it('should format finished PR loom', async () => {
       const metadata: LoomMetadata = {
         description: 'Implement dotenv-flow integration',
         created_at: '2024-01-10T08:00:00.000Z',
@@ -1278,14 +1276,14 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-18T12:30:00.000Z',
       }
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('pr')
       expect(result.pr_numbers).toEqual(['255'])
       expect(result.prUrls).toEqual({ '255': 'https://github.com/acreeger/iloom-cli/pull/255' })
       expect(result.status).toBe('finished')
     })
 
-    it('should format finished Linear-style issue loom', () => {
+    it('should format finished Linear-style issue loom', async () => {
       const metadata: LoomMetadata = {
         description: 'Implement new reporting feature',
         created_at: '2024-01-12T14:20:00.000Z',
@@ -1306,13 +1304,13 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-22T09:15:00.000Z',
       }
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.issue_numbers).toEqual(['ILOOM-42'])
       expect(result.issueUrls).toEqual({ 'ILOOM-42': 'https://linear.app/company/issue/ILOOM-42' })
       expect(result.issueTracker).toBe('linear')
     })
 
-    it('should format finished branch loom without issue tracking', () => {
+    it('should format finished branch loom without issue tracking', async () => {
       const metadata: LoomMetadata = {
         description: 'Experimental feature branch',
         created_at: '2024-01-08T16:45:00.000Z',
@@ -1333,7 +1331,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-25T11:00:00.000Z',
       }
-      const result = formatFinishedLoomForJson(metadata)
+      const result = await formatFinishedLoomForJson(metadata)
       expect(result.type).toBe('branch')
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual([])
@@ -1378,24 +1376,24 @@ describe('formatLoomForJson - child loom fields', () => {
     },
   })
 
-  it('should set isChildLoom: false when parentLoom is null', () => {
+  it('should set isChildLoom: false when parentLoom is null', async () => {
     const worktree = createWorktree()
-    const result = formatLoomForJson(worktree)
+    const result = await formatLoomForJson(worktree)
     expect(result.isChildLoom).toBe(false)
     expect(result.parentLoom).toBeNull()
   })
 
-  it('should set isChildLoom: true when parentLoom exists', () => {
+  it('should set isChildLoom: true when parentLoom exists', async () => {
     const worktree = createWorktree()
     const metadata = createMetadataWithParent()
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
     expect(result.isChildLoom).toBe(true)
   })
 
-  it('should include parentLoom reference in output when present', () => {
+  it('should include parentLoom reference in output when present', async () => {
     const worktree = createWorktree()
     const metadata = createMetadataWithParent()
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
     expect(result.parentLoom).toEqual({
       type: 'issue',
       identifier: '100',
@@ -1405,7 +1403,7 @@ describe('formatLoomForJson - child loom fields', () => {
     })
   })
 
-  it('should handle parentLoom without optional databaseBranch', () => {
+  it('should handle parentLoom without optional databaseBranch', async () => {
     const worktree = createWorktree()
     const metadata: LoomMetadata = {
       ...createMetadataWithParent(),
@@ -1416,7 +1414,7 @@ describe('formatLoomForJson - child loom fields', () => {
         worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
       },
     }
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
     expect(result.isChildLoom).toBe(true)
     expect(result.parentLoom?.databaseBranch).toBeUndefined()
   })
@@ -1449,25 +1447,25 @@ describe('formatFinishedLoomForJson - child loom fields', () => {
     finishedAt: '2024-01-20T15:45:00.000Z',
   })
 
-  it('should set isChildLoom: false when parentLoom is null', () => {
+  it('should set isChildLoom: false when parentLoom is null', async () => {
     const metadata: LoomMetadata = {
       ...createFinishedMetadataWithParent(),
       parentLoom: null,
     }
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
     expect(result.isChildLoom).toBe(false)
     expect(result.parentLoom).toBeNull()
   })
 
-  it('should set isChildLoom: true when parentLoom exists', () => {
+  it('should set isChildLoom: true when parentLoom exists', async () => {
     const metadata = createFinishedMetadataWithParent()
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
     expect(result.isChildLoom).toBe(true)
   })
 
-  it('should include parentLoom reference in output when present', () => {
+  it('should include parentLoom reference in output when present', async () => {
     const metadata = createFinishedMetadataWithParent()
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
     expect(result.parentLoom).toEqual({
       type: 'issue',
       identifier: '100',
@@ -1510,16 +1508,16 @@ describe('formatLoomForJson - swarm state field', () => {
     parentLoom: null,
   })
 
-  it('should return state: null when no metadata is provided', () => {
+  it('should return state: null when no metadata is provided', async () => {
     const worktree = createWorktree()
-    const result = formatLoomForJson(worktree)
+    const result = await formatLoomForJson(worktree)
     expect(result.state).toBeNull()
   })
 
-  it('should return state: null when metadata has no state', () => {
+  it('should return state: null when metadata has no state', async () => {
     const worktree = createWorktree()
     const metadata = createMetadataWithState(null)
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
     expect(result.state).toBeNull()
   })
 
@@ -1529,10 +1527,10 @@ describe('formatLoomForJson - swarm state field', () => {
     'code_review' as const,
     'done' as const,
     'failed' as const,
-  ])('should include state "%s" in output when set', (state) => {
+  ])('should include state "%s" in output when set', async (state) => {
     const worktree = createWorktree()
     const metadata = createMetadataWithState(state)
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
     expect(result.state).toBe(state)
   })
 })
@@ -1562,9 +1560,9 @@ describe('formatFinishedLoomForJson - swarm state field', () => {
     finishedAt: '2024-01-20T15:45:00.000Z',
   })
 
-  it('should return state: null when metadata has no state', () => {
+  it('should return state: null when metadata has no state', async () => {
     const metadata = createFinishedMetadataWithState(null)
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
     expect(result.state).toBeNull()
   })
 
@@ -1574,9 +1572,9 @@ describe('formatFinishedLoomForJson - swarm state field', () => {
     'code_review' as const,
     'done' as const,
     'failed' as const,
-  ])('should include state "%s" in output when set', (state) => {
+  ])('should include state "%s" in output when set', async (state) => {
     const metadata = createFinishedMetadataWithState(state)
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
     expect(result.state).toBe(state)
   })
 })
@@ -1620,7 +1618,7 @@ describe('enrichSwarmIssues', () => {
     dependencyMap: {},
   })
 
-  it('should enrich child issues with state and worktreePath from child loom metadata', () => {
+  it('should enrich child issues with state and worktreePath from child loom metadata', async () => {
     const childIssues = [
       { number: '#101', title: 'First task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
       { number: '#102', title: 'Second task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
@@ -1630,7 +1628,7 @@ describe('enrichSwarmIssues', () => {
       createChildLoomMetadata('102', 'done', '/Users/dev/projects/myapp-looms/issue-102__child'),
     ]
 
-    const result = enrichSwarmIssues(childIssues, allMetadata)
+    const result = await enrichSwarmIssues(childIssues, allMetadata)
 
     expect(result).toEqual([
       {
@@ -1652,13 +1650,13 @@ describe('enrichSwarmIssues', () => {
     ])
   })
 
-  it('should set state and worktreePath to null when no child loom exists', () => {
+  it('should set state and worktreePath to null when no child loom exists', async () => {
     const childIssues = [
       { number: '#101', title: 'Task without loom', body: 'body', url: 'https://github.com/org/repo/issues/101' },
     ]
     const allMetadata: LoomMetadata[] = []
 
-    const result = enrichSwarmIssues(childIssues, allMetadata)
+    const result = await enrichSwarmIssues(childIssues, allMetadata)
 
     expect(result).toEqual([
       {
@@ -1672,7 +1670,7 @@ describe('enrichSwarmIssues', () => {
     ])
   })
 
-  it('should handle Linear-style issue numbers (no # prefix)', () => {
+  it('should handle Linear-style issue numbers (no # prefix)', async () => {
     const childIssues = [
       { number: 'ENG-123', title: 'Linear task', body: 'body', url: 'https://linear.app/org/issue/ENG-123' },
     ]
@@ -1680,7 +1678,7 @@ describe('enrichSwarmIssues', () => {
       createChildLoomMetadata('ENG-123', 'code_review', '/Users/dev/projects/myapp-looms/issue-ENG-123__task'),
     ]
 
-    const result = enrichSwarmIssues(childIssues, allMetadata)
+    const result = await enrichSwarmIssues(childIssues, allMetadata)
 
     expect(result).toEqual([
       {
@@ -1694,7 +1692,7 @@ describe('enrichSwarmIssues', () => {
     ])
   })
 
-  it('should handle mixed matched and unmatched child issues', () => {
+  it('should handle mixed matched and unmatched child issues', async () => {
     const childIssues = [
       { number: '#101', title: 'Matched task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
       { number: '#102', title: 'Unmatched task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
@@ -1703,7 +1701,7 @@ describe('enrichSwarmIssues', () => {
       createChildLoomMetadata('101', 'pending', '/Users/dev/projects/myapp-looms/issue-101__child'),
     ]
 
-    const result = enrichSwarmIssues(childIssues, allMetadata)
+    const result = await enrichSwarmIssues(childIssues, allMetadata)
 
     expect(result[0]?.state).toBe('pending')
     expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__child')
@@ -1713,12 +1711,12 @@ describe('enrichSwarmIssues', () => {
     expect(result[1]?.complexity).toBeNull()
   })
 
-  it('should return empty array for empty childIssues', () => {
-    const result = enrichSwarmIssues([], [])
+  it('should return empty array for empty childIssues', async () => {
+    const result = await enrichSwarmIssues([], [])
     expect(result).toEqual([])
   })
 
-  it('should fall back to finished metadata when child loom is not in active metadata', () => {
+  it('should fall back to finished metadata when child loom is not in active metadata', async () => {
     const childIssues = [
       { number: '#101', title: 'Cleaned up task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
       { number: '#102', title: 'Still active task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
@@ -1736,7 +1734,7 @@ describe('enrichSwarmIssues', () => {
       },
     ]
 
-    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+    const result = await enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
 
     expect(result).toEqual([
       {
@@ -1758,7 +1756,7 @@ describe('enrichSwarmIssues', () => {
     ])
   })
 
-  it('should prefer active metadata over finished metadata for the same issue', () => {
+  it('should prefer active metadata over finished metadata for the same issue', async () => {
     const childIssues = [
       { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
     ]
@@ -1773,7 +1771,7 @@ describe('enrichSwarmIssues', () => {
       },
     ]
 
-    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+    const result = await enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
 
     // Active metadata should take precedence
     expect(result[0]?.state).toBe('in_progress')
@@ -1791,7 +1789,7 @@ describe('enrichSwarmIssues', () => {
       projectPath,
     })
 
-    it('should only match metadata from the same project, preventing cross-project collisions', () => {
+    it('should only match metadata from the same project, preventing cross-project collisions', async () => {
       const childIssues = [
         { number: '#2', title: 'Resume builder task', body: 'body', url: 'https://github.com/org/resume-builder/issues/2' },
       ]
@@ -1801,13 +1799,13 @@ describe('enrichSwarmIssues', () => {
         createMetaForProject('2', 'done', '/projects/real-estate-looms/issue-2__task', '/projects/real-estate'),
       ]
 
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/resume-builder')
+      const result = await enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/resume-builder')
 
       expect(result[0]?.state).toBe('in_progress')
       expect(result[0]?.worktreePath).toBe('/projects/resume-builder-looms/issue-2__task')
     })
 
-    it('should scope finished metadata by project too', () => {
+    it('should scope finished metadata by project too', async () => {
       const childIssues = [
         { number: '#3', title: 'Task three', body: 'body', url: 'https://github.com/org/project-a/issues/3' },
       ]
@@ -1829,14 +1827,14 @@ describe('enrichSwarmIssues', () => {
         },
       ]
 
-      const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata, '/projects/project-a')
+      const result = await enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata, '/projects/project-a')
 
       // Should fall back to project-a's finished metadata, not project-b's active or finished
       expect(result[0]?.state).toBe('done')
       expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-3__done')
     })
 
-    it('should fall back to unscoped behavior when projectPath is null', () => {
+    it('should fall back to unscoped behavior when projectPath is null', async () => {
       const childIssues = [
         { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
       ]
@@ -1845,13 +1843,13 @@ describe('enrichSwarmIssues', () => {
       ]
 
       // null projectPath => no filtering, matches any project
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, null)
+      const result = await enrichSwarmIssues(childIssues, allMetadata, undefined, null)
 
       expect(result[0]?.state).toBe('pending')
       expect(result[0]?.worktreePath).toBe('/projects/some-project-looms/issue-5__work')
     })
 
-    it('should fall back to unscoped behavior when projectPath is undefined', () => {
+    it('should fall back to unscoped behavior when projectPath is undefined', async () => {
       const childIssues = [
         { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
       ]
@@ -1860,12 +1858,12 @@ describe('enrichSwarmIssues', () => {
       ]
 
       // undefined projectPath => no filtering
-      const result = enrichSwarmIssues(childIssues, allMetadata)
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
       expect(result[0]?.state).toBe('pending')
     })
 
-    it('should handle realpathSync errors gracefully (falls back to original path)', () => {
+    it('should handle realpathSync errors gracefully (falls back to original path)', async () => {
       // When realpathSync throws (e.g., path doesn't exist), resolvePathSafe falls back to original.
       // This means paths that differ only in symlinks but don't resolve will still compare by string.
       const childIssues = [
@@ -1876,13 +1874,13 @@ describe('enrichSwarmIssues', () => {
       ]
 
       // Same string path => matches even if realpathSync can't resolve
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/project-a')
+      const result = await enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/project-a')
 
       expect(result[0]?.state).toBe('in_progress')
       expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-7__work')
     })
 
-    it('should exclude metadata entries with null projectPath when scoping is active', () => {
+    it('should exclude metadata entries with null projectPath when scoping is active', async () => {
       const childIssues = [
         { number: '#10', title: 'Test', body: 'body', url: 'https://github.com/org/repo/issues/10' },
       ]
@@ -1894,7 +1892,7 @@ describe('enrichSwarmIssues', () => {
         },
       ]
 
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/my-project')
+      const result = await enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/my-project')
 
       // Legacy entry (null projectPath) should NOT match when we're scoping
       expect(result[0]?.state).toBeNull()
@@ -1903,7 +1901,7 @@ describe('enrichSwarmIssues', () => {
   })
 
   describe('complexity enrichment', () => {
-    it('should include complexity from complexityMap when worktreePath matches', () => {
+    it('should read complexity from recap file for children with worktreePaths', async () => {
       const childIssues = [
         { number: '#101', title: 'First task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
         { number: '#102', title: 'Second task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
@@ -1912,132 +1910,88 @@ describe('enrichSwarmIssues', () => {
         createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
         createChildLoomMetadata('102', 'done', '/Users/dev/projects/myapp-looms/issue-102__child'),
       ]
-      const complexityMap = new Map<string, SwarmComplexity>([
-        ['/Users/dev/projects/myapp-looms/issue-101__child', { level: 'simple', reason: 'Single file change' }],
-      ])
+      vi.mocked(readRecapFile)
+        .mockResolvedValueOnce({ complexity: { level: 'simple', reason: 'Single file change' } })
+        .mockResolvedValueOnce({})
 
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
       expect(result[0]?.complexity).toEqual({ level: 'simple', reason: 'Single file change' })
       expect(result[1]?.complexity).toBeNull()
     })
 
-    it('should set complexity to null when no complexityMap is provided', () => {
+    it('should set complexity to null when recap file has no complexity', async () => {
       const childIssues = [
         { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
       ]
       const allMetadata = [
         createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
       ]
+      vi.mocked(readRecapFile).mockResolvedValue({})
 
-      const result = enrichSwarmIssues(childIssues, allMetadata)
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
       expect(result[0]?.complexity).toBeNull()
     })
 
-    it('should set complexity to null when child has no worktreePath', () => {
+    it('should set complexity to null when child has no worktreePath', async () => {
       const childIssues = [
         { number: '#101', title: 'Task without loom', body: 'body', url: 'https://github.com/org/repo/issues/101' },
       ]
       const allMetadata: LoomMetadata[] = []
-      const complexityMap = new Map<string, SwarmComplexity>([
-        ['/some/path', { level: 'complex', reason: 'Many files' }],
-      ])
 
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
       expect(result[0]?.complexity).toBeNull()
+      expect(readRecapFile).not.toHaveBeenCalled()
     })
 
-    it('should include complexity with only level when reason is not provided', () => {
+    it('should include complexity with only level when reason is not provided', async () => {
       const childIssues = [
         { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
       ]
       const allMetadata = [
         createChildLoomMetadata('101', 'pending', '/Users/dev/projects/myapp-looms/issue-101__child'),
       ]
-      const complexityMap = new Map<string, SwarmComplexity>([
-        ['/Users/dev/projects/myapp-looms/issue-101__child', { level: 'trivial' }],
-      ])
+      vi.mocked(readRecapFile).mockResolvedValue({
+        complexity: { level: 'trivial' },
+      })
 
-      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, undefined, complexityMap)
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
       expect(result[0]?.complexity).toEqual({ level: 'trivial' })
     })
-  })
-})
 
-describe('loadComplexityMap', () => {
-  it('should return empty map when no worktree paths provided', async () => {
-    const result = await loadComplexityMap([])
-    expect(result.size).toBe(0)
-  })
+    it('should exclude timestamp from complexity data', async () => {
+      const childIssues = [
+        { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ]
+      const allMetadata = [
+        createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      ]
+      vi.mocked(readRecapFile).mockResolvedValue({
+        complexity: { level: 'complex', reason: 'Many changes', timestamp: '2024-01-01T00:00:00Z' },
+      })
 
-  it('should return empty map when recap files have no complexity', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({})
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
-    const result = await loadComplexityMap(['/path/to/worktree'])
-    expect(result.size).toBe(0)
-  })
-
-  it('should extract complexity from recap files', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({
-      complexity: { level: 'simple', reason: 'Single file', timestamp: '2024-01-01T00:00:00Z' },
+      expect(result[0]?.complexity).toEqual({ level: 'complex', reason: 'Many changes' })
+      expect(result[0]?.complexity).not.toHaveProperty('timestamp')
     })
 
-    const result = await loadComplexityMap(['/path/to/worktree'])
+    it('should gracefully handle recap file read errors', async () => {
+      const childIssues = [
+        { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ]
+      const allMetadata = [
+        createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      ]
+      vi.mocked(readRecapFile).mockRejectedValue(new Error('File read error'))
 
-    expect(result.size).toBe(1)
-    expect(result.get('/path/to/worktree')).toEqual({ level: 'simple', reason: 'Single file' })
-  })
+      const result = await enrichSwarmIssues(childIssues, allMetadata)
 
-  it('should exclude timestamp from complexity data', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({
-      complexity: { level: 'complex', reason: 'Many changes', timestamp: '2024-01-01T00:00:00Z' },
+      expect(result[0]?.complexity).toBeNull()
     })
-
-    const result = await loadComplexityMap(['/path/to/worktree'])
-    const complexity = result.get('/path/to/worktree')
-
-    expect(complexity).toEqual({ level: 'complex', reason: 'Many changes' })
-    expect(complexity).not.toHaveProperty('timestamp')
-  })
-
-  it('should deduplicate worktree paths', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({
-      complexity: { level: 'trivial', timestamp: '2024-01-01T00:00:00Z' },
-    })
-
-    await loadComplexityMap(['/path/a', '/path/a', '/path/a'])
-
-    expect(readRecapFile).toHaveBeenCalledTimes(1)
-  })
-
-  it('should filter out falsy paths', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({})
-
-    await loadComplexityMap(['', '/valid/path'])
-
-    expect(readRecapFile).toHaveBeenCalledTimes(1)
-  })
-
-  it('should gracefully handle read errors', async () => {
-    vi.mocked(readRecapFile).mockRejectedValue(new Error('File read error'))
-
-    const result = await loadComplexityMap(['/path/to/worktree'])
-
-    expect(result.size).toBe(0)
-  })
-
-  it('should omit reason when not present in recap', async () => {
-    vi.mocked(readRecapFile).mockResolvedValue({
-      complexity: { level: 'trivial', timestamp: '2024-01-01T00:00:00Z' },
-    })
-
-    const result = await loadComplexityMap(['/path/to/worktree'])
-
-    expect(result.get('/path/to/worktree')).toEqual({ level: 'trivial' })
-    expect(result.get('/path/to/worktree')).not.toHaveProperty('reason')
   })
 })
 
@@ -2115,7 +2069,7 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
     dependencyMap: {},
   })
 
-  it('should include swarmIssues and dependencyMap for epic loom with child issues', () => {
+  it('should include swarmIssues and dependencyMap for epic loom with child issues', async () => {
     const worktree = createWorktree()
     const metadata = createEpicMetadata()
     const allMetadata = [
@@ -2123,7 +2077,7 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
       createChildMetadata('102', 'pending', '/Users/dev/projects/myapp-looms/issue-102__child'),
     ]
 
-    const result = formatLoomForJson(worktree, undefined, metadata, allMetadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata, allMetadata)
 
     expect(result.type).toBe('epic')
     expect(result.swarmIssues).toEqual([
@@ -2147,18 +2101,18 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
     expect(result.dependencyMap).toEqual({ '#102': ['#101'] })
   })
 
-  it('should return empty swarmIssues for epic loom with no childIssues', () => {
+  it('should return empty swarmIssues for epic loom with no childIssues', async () => {
     const worktree = createWorktree()
     const metadata = createEpicMetadata({ childIssues: [], dependencyMap: {} })
 
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
 
     expect(result.type).toBe('epic')
     expect(result.swarmIssues).toEqual([])
     expect(result.dependencyMap).toEqual({})
   })
 
-  it('should not include swarmIssues or dependencyMap for non-epic looms', () => {
+  it('should not include swarmIssues or dependencyMap for non-epic looms', async () => {
     const worktree = createWorktree({
       path: '/Users/dev/projects/myapp-looms/issue-42__feature',
       branch: 'issue-42__feature',
@@ -2188,16 +2142,16 @@ describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () 
       dependencyMap: {},
     }
 
-    const result = formatLoomForJson(worktree, undefined, metadata)
+    const result = await formatLoomForJson(worktree, undefined, metadata)
 
     expect(result.type).toBe('issue')
     expect(result.swarmIssues).toBeUndefined()
     expect(result.dependencyMap).toBeUndefined()
   })
 
-  it('should not include swarmIssues or dependencyMap when no metadata', () => {
+  it('should not include swarmIssues or dependencyMap when no metadata', async () => {
     const worktree = createWorktree()
-    const result = formatLoomForJson(worktree)
+    const result = await formatLoomForJson(worktree)
 
     expect(result.swarmIssues).toBeUndefined()
     expect(result.dependencyMap).toBeUndefined()
@@ -2235,7 +2189,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
     ...overrides,
   })
 
-  it('should include swarmIssues and dependencyMap for finished epic loom', () => {
+  it('should include swarmIssues and dependencyMap for finished epic loom', async () => {
     const metadata = createFinishedEpicMetadata()
     const allMetadata: LoomMetadata[] = [
       {
@@ -2264,7 +2218,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
       },
     ]
 
-    const result = formatFinishedLoomForJson(metadata, allMetadata)
+    const result = await formatFinishedLoomForJson(metadata, allMetadata)
 
     expect(result.type).toBe('epic')
     expect(result.swarmIssues).toEqual([
@@ -2280,7 +2234,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
     expect(result.dependencyMap).toEqual({})
   })
 
-  it('should not include swarmIssues or dependencyMap for finished non-epic loom', () => {
+  it('should not include swarmIssues or dependencyMap for finished non-epic loom', async () => {
     const metadata: LoomMetadata = {
       description: 'Finished issue',
       created_at: '2024-01-15T10:30:00.000Z',
@@ -2308,7 +2262,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
       finishedAt: '2024-01-20T15:45:00.000Z',
     }
 
-    const result = formatFinishedLoomForJson(metadata)
+    const result = await formatFinishedLoomForJson(metadata)
 
     expect(result.swarmIssues).toBeUndefined()
     expect(result.dependencyMap).toBeUndefined()
@@ -2316,7 +2270,7 @@ describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic loo
 })
 
 describe('formatLoomsForJson - swarm issues propagation', () => {
-  it('should propagate allMetadata to individual loom formatting for epic looms', () => {
+  it('should propagate allMetadata to individual loom formatting for epic looms', async () => {
     const mainPath = '/Users/dev/projects/myapp'
     const epicWorktree: GitWorktree = {
       path: '/Users/dev/projects/myapp-looms/issue-100__epic',
@@ -2387,7 +2341,7 @@ describe('formatLoomsForJson - swarm issues propagation', () => {
     const metadataMap = new Map<string, LoomMetadata | null>()
     metadataMap.set(epicWorktree.path, epicMetadata)
 
-    const result = formatLoomsForJson(
+    const result = await formatLoomsForJson(
       [epicWorktree],
       mainPath,
       metadataMap,
