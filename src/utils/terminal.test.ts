@@ -151,8 +151,10 @@ describe('openTerminalWindow', () => {
 			writable: true,
 		})
 
-		// On Linux with no GUI terminal or tmux, it should throw a descriptive error
-		vi.mocked(execa).mockRejectedValue(new Error('not found'))
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error.
+		// Simulate execa's behavior: `which` exits with code 1 when command not found.
+		const notFoundError = Object.assign(new Error('not found'), { exitCode: 1 })
+		vi.mocked(execa).mockRejectedValue(notFoundError)
 
 		await expect(openTerminalWindow({})).rejects.toThrow(
 			'No supported terminal found on Linux'
@@ -468,8 +470,10 @@ describe('openDualTerminalWindow', () => {
 			writable: true,
 		})
 
-		// On Linux with no GUI terminal or tmux, it should throw a descriptive error
-		vi.mocked(execa).mockRejectedValue(new Error('not found'))
+		// On Linux with no GUI terminal or tmux, it should throw a descriptive error.
+		// Simulate execa's behavior: `which` exits with code 1 when command not found.
+		const notFoundError = Object.assign(new Error('not found'), { exitCode: 1 })
+		vi.mocked(execa).mockRejectedValue(notFoundError)
 
 		await expect(
 			openDualTerminalWindow(

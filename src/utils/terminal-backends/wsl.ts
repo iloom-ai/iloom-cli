@@ -44,7 +44,8 @@ export class WSLBackend implements TerminalBackend {
 	readonly name = 'wsl'
 
 	async openSingle(options: TerminalWindowOptions): Promise<void> {
-		const shellCommand = await buildCommandSequence(options)
+		const rawCommand = (await buildCommandSequence(options)).trim()
+		const shellCommand = rawCommand ? `${rawCommand}; exec bash` : 'exec bash'
 		const distro = detectWSLDistro()
 		const args = buildTabArgs(shellCommand, options, distro)
 
@@ -75,7 +76,8 @@ export class WSLBackend implements TerminalBackend {
 				throw new Error(`Terminal option at index ${i} is undefined`)
 			}
 
-			const shellCommand = await buildCommandSequence(options)
+			const rawCommand = (await buildCommandSequence(options)).trim()
+			const shellCommand = rawCommand ? `${rawCommand}; exec bash` : 'exec bash'
 			const tabArgs = buildTabArgs(shellCommand, options, distro)
 
 			if (i > 0) {

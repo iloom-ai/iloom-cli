@@ -30,7 +30,9 @@ describe('tmux backend', () => {
 		})
 
 		it('should return false when tmux is not found', async () => {
-			vi.mocked(execa).mockRejectedValue(new Error('not found'))
+			vi.mocked(execa).mockRejectedValue(
+				Object.assign(new Error('not found'), { exitCode: 1 })
+			)
 
 			expect(await isTmuxAvailable()).toBe(false)
 		})
@@ -48,7 +50,7 @@ describe('tmux backend', () => {
 			it('should create a new tmux session when no iloom session exists', async () => {
 				vi.mocked(execa).mockImplementation(async (cmd: string, args?: readonly string[]) => {
 					if (cmd === 'tmux' && args?.[0] === 'list-sessions') {
-						throw new Error('no server running')
+						throw Object.assign(new Error('no server running'), { exitCode: 1 })
 					}
 					if (cmd === 'tmux' && args?.[0] === 'new-session') {
 						return {} as never
@@ -69,7 +71,7 @@ describe('tmux backend', () => {
 				expect(args).toContain('-d')
 				expect(args).toContain('-s')
 				expect(args).toContain('-n')
-				expect(args).toContain('Dev-Server')
+				expect(args).toContain('iloom-Dev-Server')
 			})
 
 			it('should add a window to existing iloom session', async () => {
@@ -100,7 +102,7 @@ describe('tmux backend', () => {
 			it('should use bash as default when no command provided', async () => {
 				vi.mocked(execa).mockImplementation(async (cmd: string, args?: readonly string[]) => {
 					if (cmd === 'tmux' && args?.[0] === 'list-sessions') {
-						throw new Error('no server running')
+						throw Object.assign(new Error('no server running'), { exitCode: 1 })
 					}
 					return {} as never
 				})
@@ -118,7 +120,7 @@ describe('tmux backend', () => {
 			it('should throw when tmux command fails', async () => {
 				vi.mocked(execa).mockImplementation(async (cmd: string, args?: readonly string[]) => {
 					if (cmd === 'tmux' && args?.[0] === 'list-sessions') {
-						throw new Error('no server running')
+						throw Object.assign(new Error('no server running'), { exitCode: 1 })
 					}
 					if (cmd === 'tmux' && args?.[0] === 'new-session') {
 						throw new Error('tmux error')
@@ -136,7 +138,7 @@ describe('tmux backend', () => {
 			it('should create session with first window then add remaining', async () => {
 				vi.mocked(execa).mockImplementation(async (cmd: string, args?: readonly string[]) => {
 					if (cmd === 'tmux' && args?.[0] === 'has-session') {
-						throw new Error('no such session')
+						throw Object.assign(new Error('no such session'), { exitCode: 1 })
 					}
 					return {} as never
 				})

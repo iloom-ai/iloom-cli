@@ -11,8 +11,12 @@ export async function isTmuxAvailable(): Promise<boolean> {
 	try {
 		await execa('which', ['tmux'])
 		return true
-	} catch {
-		return false
+	} catch (error) {
+		// `which` exits with code 1 when the command is not found
+		if (error instanceof Error && 'exitCode' in error) {
+			return false
+		}
+		throw error
 	}
 }
 
@@ -45,8 +49,12 @@ async function sessionExists(sessionName: string): Promise<boolean> {
 	try {
 		await execa('tmux', ['has-session', '-t', sessionName])
 		return true
-	} catch {
-		return false
+	} catch (error) {
+		// `tmux has-session` exits with code 1 when the session doesn't exist
+		if (error instanceof Error && 'exitCode' in error) {
+			return false
+		}
+		throw error
 	}
 }
 
@@ -73,7 +81,7 @@ export class TmuxBackend implements TerminalBackend {
 		}
 
 		const sessionName = options.title
-			? sanitizeSessionName(options.title)
+			? sanitizeSessionName(`iloom-${options.title}`)
 			: `iloom-${Date.now()}`
 
 		const windowName = options.title
@@ -192,9 +200,12 @@ export class TmuxBackend implements TerminalBackend {
 			const result = await execa('tmux', ['list-sessions', '-F', '#{session_name}'])
 			const sessions = result.stdout.split('\n').filter(Boolean)
 			return sessions.find(s => s.startsWith('iloom-')) ?? null
-		} catch {
-			// No tmux server running or no sessions
-			return null
+		} catch (error) {
+			// `tmux list-sessions` exits with code 1 when no server is running
+			if (error instanceof Error && 'exitCode' in error) {
+				return null
+			}
+			throw error
 		}
 	}
 }

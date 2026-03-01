@@ -20,8 +20,12 @@ export async function detectLinuxTerminal(): Promise<LinuxTerminal | null> {
 		try {
 			await execa('which', [terminal])
 			return terminal
-		} catch {
-			// not found, try next
+		} catch (error) {
+			// `which` exits with code 1 when the command is not found
+			if (error instanceof Error && 'exitCode' in error) {
+				continue
+			}
+			throw error
 		}
 	}
 	return null
@@ -68,16 +72,26 @@ export class LinuxBackend implements TerminalBackend {
 		}
 
 		// gnome-terminal --tab adds a tab to the most recently focused window.
-		// Calling openSingle sequentially achieves multi-tab behavior reliably
-		// without the `--` option parsing issue that breaks multi-tab in a single
-		// invocation (gnome-terminal's `--` terminates ALL option parsing, so
-		// subsequent --tab flags would be passed to bash as arguments).
+		// Opening sequentially achieves multi-tab behavior reliably without the
+		// `--` option parsing issue that breaks multi-tab in a single invocation
+		// (gnome-terminal's `--` terminates ALL option parsing, so subsequent
+		// --tab flags would be passed to bash as arguments).
 		for (let i = 0; i < optionsArray.length; i++) {
 			const options = optionsArray[i]
 			if (!options) {
 				throw new Error(`Terminal option at index ${i} is undefined`)
 			}
-			await this.openSingle(options)
+
+			if (options.backgroundColor) {
+				logger.debug(
+					'Terminal background colors are not supported via CLI on Linux terminal emulators.'
+				)
+			}
+
+			const shellCommand = (await buildCommandSequence(options)).trim()
+			const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
+
+			await this.execTerminal(terminal, keepAliveCommand, options.title)
 		}
 	}
 
