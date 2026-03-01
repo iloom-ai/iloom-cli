@@ -334,24 +334,34 @@ Before presenting the plan to the user, audit it against these questions:
 {{#if WAVE_VERIFICATION}}
 **Wave Verification Tasks:**
 
-After designing the dependency DAG, insert verification child issues between dependency waves to catch integration issues early. A "wave" is a set of issues that can run in parallel (they share the same depth in the DAG).
+After designing the dependency DAG, insert verification child issues to catch integration issues early. A "wave" is a set of issues that can run in parallel (they share the same depth in the DAG).
 
 - For each wave boundary (e.g., between wave 1 and wave 2), create a verification child issue titled "Verify wave N integration"
 - The verification issue should depend on (be blocked by) all issues in wave N
 - All issues in wave N+1 should depend on (be blocked by) the verification issue
 - The verification issue body should describe what integration checks to perform: compile the combined changes, run tests, and verify that shared contracts between wave N issues are compatible
 - Verification issues should be lightweight — they exist to catch mismatches between parallel implementations before the next wave begins
+- **Always create a final verification task** that depends on all other issues (including any intermediate verification tasks). Even if there is only one wave, a final verification step ensures all parallel work integrates correctly before the epic is complete.
 
-Example DAG with verification:
+Example DAG with multiple waves:
 ```
 Wave 1: Issue A, Issue B (parallel, no deps)
          ↓
 Verify wave 1 integration (depends on A, B)
          ↓
 Wave 2: Issue C, Issue D (depend on verification)
+         ↓
+Verify final integration (depends on C, D)
 ```
 
-Skip verification tasks when there is only a single wave (all issues are independent) or when the DAG is trivially small (2 or fewer child issues).
+Example DAG with a single wave:
+```
+Wave 1: Issue A, Issue B, Issue C (parallel, no deps)
+         ↓
+Verify integration (depends on A, B, C)
+```
+
+Skip verification tasks only when the DAG is trivially small (2 or fewer child issues).
 {{/if}}
 
 **Before Creating Issues:**
