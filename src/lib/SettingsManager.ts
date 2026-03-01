@@ -35,7 +35,7 @@ export const BaseAgentSettingsSchema = z.object({
 	swarmReview: z
 		.boolean()
 		.optional()
-		.describe('Whether artifacts from this agent should be reviewed in swarm mode. Overrides the base review flag when running inside swarm workers. Falls back to review if not set.'),
+		.describe('Whether artifacts from this agent should be reviewed in swarm mode. Defaults to false if not set (review is off in swarm mode for speed and cost unless explicitly enabled).'),
 })
 
 /**
