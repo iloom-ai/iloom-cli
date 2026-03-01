@@ -78,8 +78,14 @@ function normalizeAuthor(author: GitHubAuthor | null | undefined): FlexibleAutho
 /**
  * Extract numeric comment ID from GitHub comment URL
  * URL format: https://github.com/owner/repo/issues/123#issuecomment-3615239386
+ *
+ * Returns undefined if URL is null/undefined (older gh CLI versions don't include url).
+ * Throws if URL is present but has no valid issuecomment fragment.
  */
-export function extractNumericIdFromUrl(url: string): string {
+export function extractNumericIdFromUrl(url: string | null | undefined): string | undefined {
+	if (url == null) {
+		return undefined
+	}
 	const match = url.match(/#issuecomment-(\d+)$/)
 	if (!match?.[1]) {
 		throw new Error(`Cannot extract comment ID from URL: ${url}`)
@@ -129,7 +135,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				body: string
 				createdAt: string
 				updatedAt?: string
-				url: string
+				url?: string // Optional: older gh CLI versions (e.g. v2.4.0) don't include url
 			}>
 		}
 
@@ -178,9 +184,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		// Handle comments with normalized authors
 		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
 		// (GitHub CLI returns GraphQL node IDs in the id field, but REST API expects numeric IDs)
+		// Fallback: older gh CLI versions (e.g. v2.4.0) don't include url, so use comment.id directly
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
-				id: extractNumericIdFromUrl(comment.url),
+				id: extractNumericIdFromUrl(comment.url) ?? String(comment.id),
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.author),
@@ -244,7 +251,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				body: string
 				createdAt: string
 				updatedAt?: string
-				url: string
+				url?: string // Optional: older gh CLI versions (e.g. v2.4.0) don't include url
 			}>
 		}
 
@@ -304,9 +311,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 
 		// Handle comments with normalized authors
 		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
+		// Fallback: older gh CLI versions (e.g. v2.4.0) don't include url, so use comment.id directly
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
-				id: extractNumericIdFromUrl(comment.url),
+				id: extractNumericIdFromUrl(comment.url) ?? String(comment.id),
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.author),

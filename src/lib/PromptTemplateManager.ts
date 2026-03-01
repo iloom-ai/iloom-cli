@@ -82,6 +82,7 @@ export interface TemplateVariables {
 	ANALYZE_AND_PLAN_REVIEW_ENABLED?: boolean       // True if analyze-and-plan artifacts should be reviewed
 	IMPLEMENTER_REVIEW_ENABLED?: boolean            // True if implementer artifacts should be reviewed
 	COMPLEXITY_REVIEW_ENABLED?: boolean             // True if complexity evaluator artifacts should be reviewed
+	COMPLEXITY_OVERRIDE?: 'trivial' | 'simple' | 'complex'  // Complexity override from CLI flag or loom metadata
 	// Planning mode variables - mutually exclusive
 	EXISTING_ISSUE_MODE?: boolean   // True when decomposing an existing issue (il plan 42)
 	FRESH_PLANNING_MODE?: boolean   // True when starting fresh planning session (il plan "feature idea")
@@ -115,6 +116,7 @@ export interface TemplateVariables {
 	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
 	SWARM_SUB_AGENT_TIMEOUT_MS?: number  // Timeout in milliseconds for sub-agent claude -p Bash tool calls (default: 600000 = 10 minutes)
 	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
+	POST_SWARM_REVIEW?: boolean  // True when post-swarm code review is enabled (defaults to true)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
 }
 

@@ -378,15 +378,26 @@ In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot
 **MCP Config:** Read the file `.claude/iloom-swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
 
 **Command template:**
+
+Each `claude -p` call redirects its stream-json output to a temp file, then the result is extracted from that file. This keeps the worker's context window lean -- it only sees the extracted result text, not the full agent narrative.
+
 ```bash
-env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30 claude -p \
-  --append-system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
+PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX)
+env -u CLAUDECODE \
+  ENABLE_TOOL_SEARCH=auto:30 \
+  CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING=1 \
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+  CLAUDE_CODE_EFFORT_LEVEL=medium \
+  claude -p \
+  --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
   --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
   --model <model-from-metadata> \
   --permission-mode bypassPermissions \
-  --output-format text \
+  --output-format stream-json \
+  --verbose \
   --max-turns 50 \
-  "<prompt for the phase>"
+  "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE}.stderr"
 ```
 
 **Bash tool timeout:** When invoking the command above via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` (milliseconds). This prevents sub-agent invocations from hanging indefinitely.
@@ -404,8 +415,15 @@ For each agent, use:
 - `--allowedTools` from the `tools` array in the metadata above (comma-separated, only if the `tools` field exists)
 - The agent file is at `{{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-key>.md` where `<agent-key>` matches the key in the JSON above
 
-**Output parsing:**
-The `--output-format text` produces plain text output. The Bash tool output IS the agent's response -- no JSON parsing is needed.
+**Output parsing (stream-json temp file):**
+
+The `--output-format stream-json` produces newline-delimited JSON (JSONL) in the temp file. Each line is a JSON object. The last line with `"type":"result"` contains the agent's final result in the `result` field. Read the temp file, extract the result text, and clean up:
+
+```bash
+rm -f "$PHASE_OUTPUT_FILE" "${PHASE_OUTPUT_FILE}.stderr"
+```
+
+You can also tail the temp file to check on the agent's progress while it's running. Do NOT read the full temp file into your context — only extract the final result text.
 
 **Working directory:**
 Each `claude -p` process inherits the current working directory. Ensure you are in the child worktree before invoking phase agents.
@@ -416,6 +434,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 - The agent `.md` files are pre-rendered and available at the paths above
 - Always include `env -u CLAUDECODE` prefix -- this is mandatory
 - The `.claude/iloom-swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
+- Output is redirected to a temp file to keep your context window lean -- never pipe the full stream into your context
 
 **Todo List:**
 1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
@@ -445,7 +464,7 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{/if}}{{/if}}
 8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via headless claude -p process (code reviewer agent)
 9. If critical/high issues found, auto-fix and optionally re-review
-10. Stage and commit all changes: `git add -A && git commit -m "fixes {{ISSUE_PREFIX}}<issue-number>"`
+10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
 {{else}}
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
@@ -461,6 +480,10 @@ You are orchestrating a set of agents through a development process, with human 
 3. Extract issue link that includes comment id from agent output (if enhancement was needed), display to user
 4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
    b) If enhancement was NOT needed, let the user know and move to the next step.
+{{#if COMPLEXITY_OVERRIDE}}
+5. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and proceed directly to routing.
+6. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
+{{else}}
 5. Run complexity evaluation for {{ISSUE_NUMBER}} using @agent-iloom-issue-complexity-evaluator
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
@@ -468,6 +491,7 @@ You are orchestrating a set of agents through a development process, with human 
 6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE, or COMPLEX)
+{{/if}}
 9. If SIMPLE: Run combined analysis and planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyze-and-plan
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
 9a. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
@@ -525,12 +549,17 @@ For the Enhancement Decision specifically: you check whether an existing comment
    - If skipping, log: "Issue #ISSUE_NUMBER is already thorough ([word count] words with clear structure), skipping enhancement"
 
    **Complexity Evaluation Decision:**
+{{#if COMPLEXITY_OVERRIDE}}
+   - Decision: SKIP_COMPLEXITY_EVAL (complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag)
+   - Log: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{else}}
    - Search ALL comments for existing complexity evaluation. Consider "already evaluated" if ANY comment has:
      * Header containing "Complexity Assessment" or "Complexity Evaluation"
      * Section with "**Classification**: [TRIVIAL / SIMPLE / COMPLEX]"
      * Metrics section with estimated files, LOC, breaking changes, DB migrations, and risk level
    - Decision: NEEDS_COMPLEXITY_EVAL or SKIP_COMPLEXITY_EVAL
    - If skipping, log: "Issue #ISSUE_NUMBER already has complexity evaluation by @[author] from [date] showing [TRIVIAL/SIMPLE/COMPLEX] classification, skipping evaluation"
+{{/if}}
 
    **Analysis Decision:**
    - Search ALL comments for existing analysis. Consider "already analyzed" if ANY comment has ALL:
@@ -679,6 +708,16 @@ If workflow plan determined SKIP_ENHANCEMENT:
 
 **STEP 1.5 - Complexity Evaluation Phase:**
 
+{{#if COMPLEXITY_OVERRIDE}}
+The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. Skip complexity evaluation entirely.
+1. Set confirmed complexity to {{COMPLEXITY_OVERRIDE}}
+{{#if SWARM_MODE}}
+2. Log: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{else}}
+2. Display to user: "Complexity overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag, skipping complexity evaluation"
+{{/if}}
+3. Proceed directly to ROUTING DECISION POINT with complexity = {{COMPLEXITY_OVERRIDE}}
+{{else}}
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
 1. Execute complexity evaluator agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
@@ -788,6 +827,7 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
    If complexity found: "Previous evaluation classified this as [TRIVIAL/SIMPLE/COMPLEX]. Proceeding with [TRIVIAL/SIMPLE/COMPLEX] workflow."
    If not found: "No complexity classification found - defaulting to COMPLEX workflow."
 4. Proceed to ROUTING DECISION POINT with extracted complexity (no confirmation needed)
+{{/if}}
 
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 
@@ -1378,7 +1418,7 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 ---
 
 {{#if SWARM_MODE}}
-**MANDATORY CHECKPOINT: You MUST complete the code review before committing. After review, stage and commit all changes with `git add -A && git commit -m "fixes {{ISSUE_PREFIX}}<issue-number>"` (using your issue number from invocation arguments). Then set state to `done` and report results.**
+**MANDATORY CHECKPOINT: You MUST complete the code review before committing. After review, stage and commit all changes with `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary]"` (using your issue number from invocation arguments). The commit message MUST describe what was implemented — do NOT use generic "fixes #NNN" messages. Then set state to `done` and report results.**
 {{else}}
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}

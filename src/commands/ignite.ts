@@ -6,7 +6,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -17,7 +17,7 @@ import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePa
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode } from '../types/index.js'
+import type { OneShotMode, ComplexityOverride } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
@@ -25,6 +25,7 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
 import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -134,6 +135,7 @@ export class IgniteCommand {
 	 * @param printOptions - Print mode options for headless/CI execution
 	 * @param skipCleanup - Skip cleanup after execution
 	 * @param workspacePath - Optional explicit workspace path for programmatic invocation (avoids process.chdir())
+	 * @param complexity - Override complexity evaluation (session-only, takes priority over metadata)
 	 */
 	async execute(oneShot?: OneShotMode, printOptions?: {
 		print?: boolean
@@ -141,23 +143,23 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity))
 		}
 
-		return this.executeInternal(oneShot, skipCleanup, workspacePath)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -224,6 +226,24 @@ export class IgniteCommand {
 			const isHeadlessForOneShot = this.printOptions?.print ?? false
 			const effectiveOneShot: OneShotMode = isHeadlessForOneShot ? 'noReview' : (oneShot ?? storedOneShot)
 
+			// Determine effective complexity override
+			// CLI flag takes priority over loom metadata
+			const effectiveComplexity = complexity ?? metadata?.complexity ?? undefined
+
+			// Set recap complexity if overridden and not already set
+			if (effectiveComplexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(context.workspacePath)
+					const recap = await readRecapFile(recapFilePath)
+					if (!recap.complexity) {
+						recap.complexity = { level: effectiveComplexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+						await writeRecapFile(recapFilePath, recap)
+					}
+				} catch (error) {
+					logger.debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
+
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
 				const cliOverrides = extractSettingsOverrides()
@@ -279,7 +299,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl, effectiveComplexity)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -486,6 +506,13 @@ export class IgniteCommand {
 				hasMcpConfig: !!mcpConfig,
 			})
 
+			// Pre-accept Claude Code trust for this worktree path
+			try {
+				await preAcceptClaudeTrust(context.workspacePath)
+			} catch (error) {
+				logger.warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
+			}
+
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
 			// Prepare system prompt based on platform
@@ -563,7 +590,8 @@ export class IgniteCommand {
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
 		draftPrNumber?: number,
-		draftPrUrl?: string
+		draftPrUrl?: string,
+		complexity?: ComplexityOverride
 	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
@@ -598,6 +626,11 @@ export class IgniteCommand {
 
 		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
 		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
+
+		// Set complexity override if provided (CLI flag or loom metadata)
+		if (complexity) {
+			variables.COMPLEXITY_OVERRIDE = complexity
+		}
 
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode
@@ -1017,6 +1050,9 @@ export class IgniteCommand {
 		// Determine issue prefix for commit message trailers
 		const issuePrefix = providerName === 'github' ? '#' : ''
 
+		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
+		const postSwarmReview = settings.spin?.postSwarmReview !== false
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
@@ -1025,6 +1061,7 @@ export class IgniteCommand {
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
+			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
@@ -1113,6 +1150,16 @@ export class IgniteCommand {
 		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
 			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
 
+		// Set env vars directly on process.env so they propagate to Claude Code
+		// and its child processes (execa's env option doesn't reliably pass them)
+		process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'
+		process.env.ILOOM_SWARM = '1'
+		process.env.ENABLE_TOOL_SEARCH = 'auto:30'
+		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
+		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
+		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
+
 		await launchClaude(effectiveSwarmPrompt, {
 			model,
 			permissionMode: 'bypassPermissions',
@@ -1124,11 +1171,6 @@ export class IgniteCommand {
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
-			env: {
-				CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-				ILOOM_SWARM: '1',
-				ENABLE_TOOL_SEARCH: 'auto:30',
-			},
 		})
 
 		// Track swarm child completions and overall completion

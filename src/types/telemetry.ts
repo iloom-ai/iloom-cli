@@ -27,6 +27,8 @@ export interface LoomCreatedProperties {
   tracker: string // 'github' | 'linear' | 'jira' | 'bitbucket'
   is_child_loom: boolean
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
+  complexity_override: boolean
+  create_only: boolean
 }
 
 export interface LoomFinishedProperties {

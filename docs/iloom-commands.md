@@ -67,6 +67,7 @@ il start "<issue-description>"
 |------|--------|-------------|
 | `--one-shot` | `default`, `noReview`, `bypassPermissions` | Automation level for Claude CLI workflow |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (persists in loom metadata) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
 | `--epic` | - | Force create as epic loom with child issues (skip prompt; ignored if no children) |
@@ -75,12 +76,24 @@ il start "<issue-description>"
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
 | `--terminal` / `--no-terminal` | - | Enable/disable terminal without dev server (default: disabled) |
+| `--create-only` | - | Create workspace only: skip Claude, IDE, terminal, dev server (shorthand for `--no-claude --no-code --no-terminal --no-dev-server`) |
 | `--body` | `<text>` | Body text for issue (skips AI enhancement) |
 
 **One-Shot Modes:**
 - `default` - Standard behavior with approval prompts at each phase
 - `noReview` - Skip phase approval prompts, but respect permission settings
 - `bypassPermissions` - Full automation, skip all permission and approval prompts (use with caution!)
+
+**Complexity Override:**
+
+The `--complexity` flag skips the complexity evaluation agent entirely and routes the workflow directly based on the specified value:
+- `trivial` - Simplest workflow path, minimal analysis
+- `simple` - Combined analysis and planning in a single step
+- `complex` - Full multi-step analysis, planning, and review phases
+
+The override follows a two-level model:
+- **`il start --complexity`** - Persists the complexity value in loom metadata. All subsequent `il spin` sessions for this loom will use the stored complexity unless explicitly overridden.
+- **`il spin --complexity`** - Overrides the stored complexity for the current session only. The loom metadata is not modified, so the next `il spin` without `--complexity` reverts to the stored value (or runs the evaluator if none was stored).
 
 **Workflow Phases:**
 
@@ -129,6 +142,12 @@ il start 100 --epic
 
 # Force normal loom even if issue has children
 il start 100 --no-epic
+
+# Skip complexity evaluation and treat as simple
+il start 25 --complexity=simple
+
+# Skip complexity evaluation and run full automation
+il start 25 --complexity=complex --yolo
 ```
 
 **Notes:**
@@ -557,6 +576,7 @@ il spin [options]
 |------|--------|-------------|
 | `--one-shot` | `noReview`, `bypassPermissions` | Automation level (same as `il start`) |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (session-only, does not persist) |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
@@ -606,6 +626,28 @@ To disable automatic cleanup and keep all child worktrees after swarm completion
 il spin --skip-cleanup
 ```
 
+**Post-Swarm Code Review:**
+
+After all child agents complete and their work is merged into the epic branch, the orchestrator automatically runs a full code review using the `iloom-code-reviewer` agent. This catches cross-cutting issues that individual child agents miss because they each only see their own changes, not the integrated result.
+
+If the review finds any issues (confidence score 80+), a fix agent is spawned to address them before the final commit. The review is non-blocking -- if the reviewer or fix agent fails, the swarm continues to finalization without interruption. Only a single review-fix pass is performed (no re-review loops).
+
+Post-swarm review is enabled by default. To disable it, set `spin.postSwarmReview` to `false` in your settings:
+
+```json
+{
+  "spin": {
+    "postSwarmReview": false
+  }
+}
+```
+
+Or via CLI override:
+
+```bash
+il spin --set spin.postSwarmReview=false
+```
+
 **Examples:**
 
 ```bash
@@ -626,6 +668,12 @@ il spin --print --output-format=json
 
 # Keep child worktrees after swarm mode completes
 il spin --skip-cleanup
+
+# Override complexity for this session only
+il spin --complexity=trivial
+
+# Override complexity with full automation
+il spin --complexity=complex --yolo
 ```
 
 ---

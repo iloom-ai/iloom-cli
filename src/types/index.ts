@@ -140,6 +140,9 @@ export interface Config {
 // One-shot automation mode type
 export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 
+// Complexity override type
+export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
@@ -151,8 +154,12 @@ export interface StartOptions {
   childLoom?: boolean
   // Epic loom control flag (for issues with child issues)
   epic?: boolean
+  // Create-only mode: skip Claude, IDE, terminal, dev server, and epic
+  createOnly?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
+  // Complexity override (skips complexity evaluation)
+  complexity?: ComplexityOverride
   // Optional body text for issue creation
   body?: string
   // Output result as JSON
