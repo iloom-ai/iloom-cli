@@ -1048,6 +1048,8 @@ export class IgniteCommand {
 
 		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
 		const postSwarmReview = settings.spin?.postSwarmReview !== false
+		// Wave verification defaults to true (matches SpinAgentSettingsSchema default)
+		const waveVerification = settings.spin?.waveVerification !== false
 
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
@@ -1058,6 +1060,7 @@ export class IgniteCommand {
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
 			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
+			...(waveVerification && { WAVE_VERIFICATION: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
@@ -1132,6 +1135,7 @@ export class IgniteCommand {
 			TelemetryService.getInstance().track('swarm.started', {
 				child_count: successfulWorktrees.length,
 				tracker: providerName,
+				wave_verification: waveVerification,
 			})
 		} catch (error) {
 			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)

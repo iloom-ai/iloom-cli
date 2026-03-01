@@ -3800,6 +3800,7 @@ describe('IgniteCommand', () => {
 			expect(mockTrack).toHaveBeenCalledWith('swarm.started', {
 				child_count: 2,
 				tracker: 'github',
+				wave_verification: true,
 			})
 		})
 
