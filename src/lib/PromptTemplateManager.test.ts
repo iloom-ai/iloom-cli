@@ -752,12 +752,12 @@ describe('buildReviewTemplateVariables', () => {
 			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
 		})
 
-		it('should fall back to review when swarmReview is not set and isSwarmMode is true', () => {
+		it('should default to false when swarmReview is not set and isSwarmMode is true', () => {
 			const result = buildReviewTemplateVariables(true, {
 				'iloom-issue-planner': { review: true },
 			})
 
-			expect(result.PLANNER_REVIEW_ENABLED).toBe(true)
+			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)
 		})
 
 		it('should ignore swarmReview when isSwarmMode is false', () => {
@@ -789,7 +789,7 @@ describe('buildReviewTemplateVariables', () => {
 		it('should handle mixed swarmReview across agents in swarm mode', () => {
 			const result = buildReviewTemplateVariables(true, {
 				'iloom-issue-planner': { review: true, swarmReview: false },
-				'iloom-issue-analyzer': { review: true },
+				'iloom-issue-analyzer': { review: true, swarmReview: true },
 			})
 
 			expect(result.PLANNER_REVIEW_ENABLED).toBe(false)

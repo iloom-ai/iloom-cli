@@ -176,10 +176,10 @@ export function buildReviewTemplateVariables(isSwarmMode: boolean, agents?: Reco
 	}
 
 	// Per-agent review flags (defaults to false for each)
-	// In swarm mode, swarmReview overrides review (falling back to review if swarmReview is not set)
+	// In swarm mode, swarmReview is used directly (defaults to false if not set)
 	const resolveReview = (agent: AgentSettings | undefined): boolean => {
 		if (isSwarmMode) {
-			return agent?.swarmReview ?? (agent?.review === true)
+			return agent?.swarmReview === true
 		}
 		return agent?.review === true
 	}

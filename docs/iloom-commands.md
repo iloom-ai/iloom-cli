@@ -1833,7 +1833,7 @@ Each agent supports a `swarmReview` field to control whether artifact review run
 }
 ```
 
-If `swarmReview` is set, it overrides the agent's `review` flag in swarm mode. If `swarmReview` is not set, the base `review` value is used as fallback. This lets you enable artifact review for single-issue looms (where a human reviews before proceeding) while disabling it in swarm mode (where autonomous parallel execution makes review a source of latency without benefit).
+In swarm mode, only `swarmReview` is used — it defaults to `false` if not set (the base `review` value is ignored). This means artifact review is off by default in swarm mode for speed and cost, and must be explicitly opted into with `swarmReview: true`. In non-swarm mode, the base `review` flag is used as usual.
 
 With the configuration above:
 

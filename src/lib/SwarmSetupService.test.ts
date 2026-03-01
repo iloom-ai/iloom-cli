@@ -672,12 +672,12 @@ describe('SwarmSetupService', () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			// swarmReview: false should override review: true for planner in swarm mode
-			// analyzer has no swarmReview, so it should fall back to review: true
+			// analyzer has no swarmReview, so it defaults to false in swarm mode
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
 				expect.objectContaining({
 					PLANNER_REVIEW_ENABLED: false,
-					ANALYZER_REVIEW_ENABLED: true,
+					ANALYZER_REVIEW_ENABLED: false,
 				}),
 			)
 		})
