@@ -336,6 +336,7 @@ export class SwarmSetupService {
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
 				ONE_SHOT_MODE: true,
+				COMPLEXITY_OVERRIDE: 'simple',
 				EPIC_WORKTREE_PATH: epicWorktreePath,
 				ISSUE_PREFIX: issuePrefix,
 				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,

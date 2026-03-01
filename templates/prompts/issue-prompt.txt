@@ -443,11 +443,16 @@ Each `claude -p` process inherits the current working directory. Ensure you are 
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
 3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
+{{#if COMPLEXITY_OVERRIDE}}
+4. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}}. Skip complexity evaluation and proceed directly to routing.
+5. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
+{{else}}
 4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
 4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
+{{/if}}
 6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
 6a. If COMPLEX: Run artifact review on analysis output via headless claude -p process (artifact reviewer agent)
