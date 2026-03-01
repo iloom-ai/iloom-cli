@@ -3279,6 +3279,58 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('getPlanWaveVerification', () => {
+		it('should return true by default when plan not configured', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getPlanWaveVerification(settings)
+			expect(result).toBe(true)
+		})
+
+		it('should return true when waveVerification is explicitly true', () => {
+			const settings = { sourceEnvOnStart: false, plan: { waveVerification: true } }
+			const result = settingsManager.getPlanWaveVerification(settings)
+			expect(result).toBe(true)
+		})
+
+		it('should return false when waveVerification is explicitly false', () => {
+			const settings = { sourceEnvOnStart: false, plan: { waveVerification: false } }
+			const result = settingsManager.getPlanWaveVerification(settings)
+			expect(result).toBe(false)
+		})
+
+		it('should return true when plan object exists but waveVerification not set', () => {
+			const settings = { sourceEnvOnStart: false, plan: { model: 'opus' as const } }
+			const result = settingsManager.getPlanWaveVerification(settings)
+			expect(result).toBe(true)
+		})
+
+		it('should return true when settings is undefined', () => {
+			const result = settingsManager.getPlanWaveVerification(undefined)
+			expect(result).toBe(true)
+		})
+
+		it('should accept waveVerification in settings file', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				plan: {
+					waveVerification: false,
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.plan?.waveVerification).toBe(false)
+		})
+	})
+
 	describe('AgentSettingsSchema review field', () => {
 		it('should accept review: true', async () => {
 			const projectRoot = '/test/project'
