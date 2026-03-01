@@ -48,6 +48,7 @@ vi.mock('../lib/SettingsManager.js', () => ({
 		getPlanModel: vi.fn().mockReturnValue('opus'),
 		getPlanPlanner: vi.fn().mockReturnValue('claude'),
 		getPlanReviewer: vi.fn().mockReturnValue('none'),
+		getPlanWaveVerification: vi.fn().mockReturnValue(true),
 	})),
 }))
 vi.mock('../lib/IssueTrackerFactory.js', () => ({

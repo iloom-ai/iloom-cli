@@ -112,6 +112,7 @@ export interface TemplateVariables {
 	CHILD_ISSUES?: string  // JSON stringified array of child issues with worktree paths
 	DEPENDENCY_MAP?: string  // JSON stringified dependency map
 	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
+	WAVE_VERIFICATION?: boolean  // True when wave verification is enabled (planner generates verification child issues)
 	AUTO_SWARM_MODE?: boolean  // True when plan command launched with --auto-swarm flag
 	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
 	SWARM_SUB_AGENT_TIMEOUT_MS?: number  // Timeout in milliseconds for sub-agent claude -p Bash tool calls (default: 600000 = 10 minutes)
