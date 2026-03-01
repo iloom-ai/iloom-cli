@@ -668,7 +668,7 @@ This is an early-stage product.
 
 **Requirements:**
 
-*   ✅ **OS:** macOS (Fully supported). ⚠️ Linux/Windows are untested.
+*   ✅ **OS:** macOS (fully supported), Linux (GUI terminals + tmux for headless), WSL (Windows Terminal). ⚠️ Native Windows is unsupported.
     
 *   ✅ **Runtime:** Node.js 16+, Git 2.5+.
     
@@ -726,6 +726,8 @@ Acknowledgments
 ----------------
 
 - [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
+- [@TickTockBent](https://github.com/TickTockBent) — Linux, WSL, and tmux terminal support (PR [#796](https://github.com/iloom-ai/iloom-cli/pull/796)): strategy-pattern terminal backends, GUI-to-tmux fallback for headless environments, WSL detection, and cross-platform terminal launching.
+- [@rexsilex](https://github.com/rexsilex) — Original Linux/WSL terminal support design (PR [#649](https://github.com/iloom-ai/iloom-cli/pull/649)): pioneered the strategy pattern and backend interface that inspired the final implementation.
 
 License & Name
 --------------

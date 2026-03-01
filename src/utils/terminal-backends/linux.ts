@@ -42,34 +42,12 @@ export class LinuxBackend implements TerminalBackend {
 	readonly name = 'linux'
 
 	async openSingle(options: TerminalWindowOptions): Promise<void> {
-		const terminal = await detectLinuxTerminal()
-		if (!terminal) {
-			throw new Error(
-				'No supported GUI terminal emulator found. ' +
-				'Install gnome-terminal, konsole, or xterm — or use tmux for headless environments.'
-			)
-		}
-
-		if (options.backgroundColor) {
-			logger.debug(
-				'Terminal background colors are not supported via CLI on Linux terminal emulators.'
-			)
-		}
-
-		const shellCommand = (await buildCommandSequence(options)).trim()
-		const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
-
-		await this.execTerminal(terminal, keepAliveCommand, options.title)
+		const terminal = await this.resolveTerminal()
+		await this.openSingleWithTerminal(options, terminal)
 	}
 
 	async openMultiple(optionsArray: TerminalWindowOptions[]): Promise<void> {
-		const terminal = await detectLinuxTerminal()
-		if (!terminal) {
-			throw new Error(
-				'No supported GUI terminal emulator found. ' +
-				'Install gnome-terminal, konsole, or xterm — or use tmux for headless environments.'
-			)
-		}
+		const terminal = await this.resolveTerminal()
 
 		// gnome-terminal --tab adds a tab to the most recently focused window.
 		// Opening sequentially achieves multi-tab behavior reliably without the
@@ -81,18 +59,35 @@ export class LinuxBackend implements TerminalBackend {
 			if (!options) {
 				throw new Error(`Terminal option at index ${i} is undefined`)
 			}
-
-			if (options.backgroundColor) {
-				logger.debug(
-					'Terminal background colors are not supported via CLI on Linux terminal emulators.'
-				)
-			}
-
-			const shellCommand = (await buildCommandSequence(options)).trim()
-			const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
-
-			await this.execTerminal(terminal, keepAliveCommand, options.title)
+			await this.openSingleWithTerminal(options, terminal)
 		}
+	}
+
+	private async resolveTerminal(): Promise<LinuxTerminal> {
+		const terminal = await detectLinuxTerminal()
+		if (!terminal) {
+			throw new Error(
+				'No supported GUI terminal emulator found. ' +
+				'Install gnome-terminal, konsole, or xterm — or use tmux for headless environments.'
+			)
+		}
+		return terminal
+	}
+
+	private async openSingleWithTerminal(
+		options: TerminalWindowOptions,
+		terminal: LinuxTerminal
+	): Promise<void> {
+		if (options.backgroundColor) {
+			logger.debug(
+				'Terminal background colors are not supported via CLI on Linux terminal emulators.'
+			)
+		}
+
+		const shellCommand = (await buildCommandSequence(options)).trim()
+		const keepAliveCommand = shellCommand ? `${shellCommand}; exec bash` : 'exec bash'
+
+		await this.execTerminal(terminal, keepAliveCommand, options.title)
 	}
 
 	private async execTerminal(

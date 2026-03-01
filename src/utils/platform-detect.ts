@@ -38,7 +38,13 @@ export function isWSL(): boolean {
 		const procVersion = readFileSync('/proc/version', 'utf-8')
 		cachedIsWSL = /microsoft|wsl/i.test(procVersion)
 		return cachedIsWSL
-	} catch {
+	} catch (error: unknown) {
+		// /proc/version not found — not WSL
+		if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+			cachedIsWSL = false
+			return false
+		}
+		// Unexpected error — assume not WSL
 		cachedIsWSL = false
 		return false
 	}

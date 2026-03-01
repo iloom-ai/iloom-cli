@@ -48,10 +48,19 @@ describe('platform-detect', () => {
 			expect(isWSL()).toBe(false)
 		})
 
-		it('should return false when /proc/version is unreadable', () => {
+		it('should return false when /proc/version is not found (ENOENT)', () => {
 			Object.defineProperty(process, 'platform', { value: 'linux', writable: true })
 			delete process.env.WSL_DISTRO_NAME
-			vi.mocked(readFileSync).mockImplementation(() => { throw new Error('ENOENT') })
+			const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException
+			err.code = 'ENOENT'
+			vi.mocked(readFileSync).mockImplementation(() => { throw err })
+			expect(isWSL()).toBe(false)
+		})
+
+		it('should return false when /proc/version throws an unexpected error', () => {
+			Object.defineProperty(process, 'platform', { value: 'linux', writable: true })
+			delete process.env.WSL_DISTRO_NAME
+			vi.mocked(readFileSync).mockImplementation(() => { throw new Error('unexpected failure') })
 			expect(isWSL()).toBe(false)
 		})
 
