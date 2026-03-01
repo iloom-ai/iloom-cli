@@ -49,7 +49,6 @@ export interface EpicPlannedProperties {
 export interface SwarmStartedProperties {
   child_count: number
   tracker: string
-  wave_verification: boolean
 }
 
 export interface SwarmChildCompletedProperties {

@@ -648,26 +648,6 @@ Or via CLI override:
 il spin --set spin.postSwarmReview=false
 ```
 
-**Wave Verification:**
-
-During swarm execution, each wave of child agents can be verified before the next wave begins. A verifier agent checks each wave's output and flags issues early, before they compound across dependent waves.
-
-Wave verification is enabled by default. To disable it, set `spin.waveVerification` to `false` in your settings:
-
-```json
-{
-  "spin": {
-    "waveVerification": false
-  }
-}
-```
-
-Or via CLI override:
-
-```bash
-il spin --set spin.waveVerification=false
-```
-
 **Examples:**
 
 ```bash
