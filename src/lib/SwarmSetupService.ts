@@ -28,6 +28,7 @@ export interface SwarmSetupResult {
 	}>
 	agentsRendered: string[]
 	workerAgentRendered: boolean
+	verifierAgentRendered: boolean
 }
 
 /**
@@ -243,8 +244,14 @@ export class SwarmSetupService {
 
 		const settings = await this.settingsManager.loadSettings()
 
+		// Compute sub-agent timeout for wave verifier template (mirrors renderSwarmWorkerAgent pattern)
+		const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
+		const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
+
 		const templateVariables: TemplateVariables = {
 			SWARM_MODE: true,
+			EPIC_WORKTREE_PATH: epicWorktreePath,
+			SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
 		}
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
@@ -276,7 +283,16 @@ export class SwarmSetupService {
 		const renderedFiles: string[] = []
 		const metadata: SwarmAgentMetadata = {}
 
+		// Agents that are rendered as standalone custom agent types (with frontmatter)
+		// rather than as phase agents (without frontmatter). These are skipped here
+		// and rendered separately with their own dedicated methods.
+		const standaloneAgents = new Set(['iloom-wave-verifier'])
+
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
+			if (standaloneAgents.has(agentName)) {
+				continue
+			}
+
 			const swarmFileName = agentName.startsWith('iloom-')
 				? `iloom-swarm-${agentName.slice('iloom-'.length)}.md`
 				: `iloom-swarm-${agentName}.md`
@@ -374,6 +390,68 @@ export class SwarmSetupService {
 	}
 
 	/**
+	 * Render the wave verifier agent file to the epic worktree's .claude/agents/ directory.
+	 *
+	 * This creates an agent file at `.claude/agents/iloom-swarm-wave-verifier.md` WITH frontmatter,
+	 * making it available as a custom agent type via `subagent_type: "iloom-swarm-wave-verifier"`.
+	 * Unlike phase agents (which are appended as system prompts), the wave verifier is a standalone
+	 * agent that the orchestrator spawns directly for verification child issues.
+	 */
+	async renderSwarmWaveVerifierAgent(epicWorktreePath: string): Promise<boolean> {
+		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-wave-verifier.md')
+
+		await fs.ensureDir(agentsDir)
+
+		try {
+			const settings = await this.settingsManager.loadSettings()
+
+			// Compute sub-agent timeout (mirrors renderSwarmWorkerAgent pattern)
+			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
+			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
+
+			// Load agents to get the wave verifier template (rendered with template variables)
+			const templateVariables: TemplateVariables = {
+				SWARM_MODE: true,
+				EPIC_WORKTREE_PATH: epicWorktreePath,
+				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
+			}
+
+			const agents = await this.agentManager.loadAgents(settings, templateVariables, ['iloom-wave-verifier.md'])
+			const verifierConfig = agents['iloom-wave-verifier']
+
+			if (!verifierConfig) {
+				getLogger().debug('No wave verifier agent template found — skipping')
+				return false
+			}
+
+			// Get model from settings or use the template's declared model
+			const verifierModel = settings?.agents?.['iloom-wave-verifier']?.model ?? verifierConfig.model ?? 'opus'
+
+			// Build the agent file WITH frontmatter (standalone custom agent type)
+			const frontmatter = [
+				'---',
+				'name: iloom-swarm-wave-verifier',
+				`description: ${verifierConfig.description ?? 'Wave verification agent that checks must-have criteria after each swarm wave.'}`,
+				`model: ${verifierModel}`,
+				...(verifierConfig.tools ? [`tools: ${verifierConfig.tools.join(', ')}`] : []),
+				'---',
+			].join('\n')
+
+			const content = `${frontmatter}\n\n${verifierConfig.prompt}\n`
+
+			await fs.writeFile(agentOutputPath, content, 'utf-8')
+			getLogger().success(`Rendered wave verifier agent to ${agentOutputPath}`)
+			return true
+		} catch (error) {
+			getLogger().warn(
+				`Failed to render wave verifier agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			)
+			return false
+		}
+	}
+
+	/**
 	 * Copy .claude/agents/ from the epic worktree to each child worktree.
 	 *
 	 * Child workers need local access to agent files (used via --append-system-prompt-file).
@@ -444,6 +522,9 @@ export class SwarmSetupService {
 			agentMetadata,
 		)
 
+		// 3b. Render the wave verifier agent file (standalone custom agent type with frontmatter)
+		const verifierAgentRendered = await this.renderSwarmWaveVerifierAgent(epicWorktreePath)
+
 		// 4. Copy .claude/agents/ from epic worktree to each child worktree
 		await this.copyAgentsToChildWorktrees(epicWorktreePath, childWorktrees)
 
@@ -461,6 +542,7 @@ export class SwarmSetupService {
 			childWorktrees,
 			agentsRendered,
 			workerAgentRendered,
+			verifierAgentRendered,
 		}
 	}
 }

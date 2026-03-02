@@ -181,7 +181,13 @@ Use `TeamCreate` to create a team:
 
 For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
 
-For each child issue, use these parameters:
+#### Detecting Verification Issues
+
+Before spawning, check if a child issue is a **verification task** by examining its title. A verification issue has a title that starts with "Verify" (e.g., "Verify wave 1 integration", "Verify integration", "Verify final integration"). These are created by the planner to check that parallel implementations integrate correctly.
+
+#### Spawning Regular (Implementation) Issues
+
+For regular child issues (non-verification), use these parameters:
 - `subagent_type`: `"iloom-swarm-worker"`
 - `mode`: `"delegate"`
 - `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
@@ -189,7 +195,7 @@ For each child issue, use these parameters:
 
 **CRITICAL: The task prompt MUST contain only the issue number and worktree path. Do NOT include the issue title, issue body, analysis, planning details, implementation instructions, code snippets, or any other content from CHILD_ISSUES. The child agent retrieves all issue context itself via `mcp__issue_management__get_issue` as its first action.**
 
-The prompt for each child agent should be exactly:
+The prompt for each regular child agent should be exactly:
 
 ```
 Issue: #<child-number>
@@ -197,6 +203,26 @@ Worktree: <child-worktree-path>
 ```
 
 Nothing else. No title. No body. No instructions. No context. The child's system prompt defines everything it needs to do.
+
+#### Spawning Verification Issues
+
+For verification child issues (title starts with "Verify"), use the wave verifier agent instead of the regular swarm worker:
+
+- `subagent_type`: `"iloom-swarm-wave-verifier"`
+- `mode`: `"delegate"`
+- `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
+- `name`: `"verifier-<child-number>"`
+
+The prompt for each verification agent should be exactly:
+
+```
+Issue: #<child-number>
+Worktree: <child-worktree-path>
+```
+
+The wave verifier agent reads the verification issue body to determine which child issues to verify (from its dependencies in the DAG), parses their must-have criteria, and checks them against the codebase. It spawns fix agents for failures and returns a structured report.
+
+After the verification agent completes, proceed with the normal merge flow (Step 3.1 onwards). Even if verification reports failures, the verification issue's branch should be merged (it may contain fix commits from the verifier's fix agents).
 
 Update each child's tracking status to `in_progress`.
 
