@@ -42,7 +42,14 @@ vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn(),
   findMainWorktreePath: vi.fn().mockResolvedValue('/main/worktree'),
   findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/main/worktree'),
-  hasUncommittedChanges: vi.fn().mockResolvedValue(false)
+  hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+  extractIssueNumber: vi.fn().mockReturnValue(42),
+}))
+
+// Mock port utilities (getWorkspacePort has IO dependencies)
+vi.mock('../../src/utils/port.js', () => ({
+  getWorkspacePort: vi.fn().mockResolvedValue(3042),
+  calculatePortFromIdentifier: vi.fn().mockReturnValue(3042),
 }))
 
 describe('ResourceCleanup - CLI Integration', () => {

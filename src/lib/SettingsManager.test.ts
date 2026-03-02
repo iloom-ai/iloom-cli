@@ -3683,3 +3683,147 @@ const error: { code?: string; message: string } = {
 	})
 
 })
+
+import { DevServerSettingsSchema, DevServerSettingsSchemaNoDefaults } from './SettingsManager.js'
+
+describe('DevServerSettingsSchema', () => {
+	describe('valid configs', () => {
+		it('should accept a full valid Docker config', () => {
+			const input = {
+				mode: 'docker',
+				docker: {
+					dockerFile: './Dockerfile',
+					containerPort: 4200,
+					buildArgs: { NODE_ENV: 'development' },
+					runArgs: ['-v', './src:/app/src'],
+				},
+			}
+			const result = DevServerSettingsSchema.parse(input)
+			expect(result).toMatchObject(input)
+		})
+
+		it('should accept config with only mode set', () => {
+			const result = DevServerSettingsSchema.parse({ mode: 'docker' })
+			expect(result.mode).toBe('docker')
+		})
+
+		it('should accept config without docker sub-object', () => {
+			const result = DevServerSettingsSchema.parse({})
+			expect(result.mode).toBe('docker')
+			expect(result.docker).toBeUndefined()
+		})
+
+		it('should accept config with empty docker object', () => {
+			const result = DevServerSettingsSchema.parse({ docker: {} })
+			expect(result.docker?.dockerFile).toBe('./Dockerfile')
+		})
+
+		it('should accept dockerFile with subdirectory path', () => {
+			const result = DevServerSettingsSchema.parse({ docker: { dockerFile: 'docker/Dockerfile.dev' } })
+			expect(result.docker?.dockerFile).toBe('docker/Dockerfile.dev')
+		})
+
+		it('should accept containerPort at boundaries (1 and 65535)', () => {
+			expect(DevServerSettingsSchema.parse({ docker: { containerPort: 1 } }).docker?.containerPort).toBe(1)
+			expect(DevServerSettingsSchema.parse({ docker: { containerPort: 65535 } }).docker?.containerPort).toBe(65535)
+		})
+
+		it('should accept buildArgs as record of strings', () => {
+			const result = DevServerSettingsSchema.parse({ docker: { buildArgs: { KEY: 'value', NUM: '42' } } })
+			expect(result.docker?.buildArgs).toEqual({ KEY: 'value', NUM: '42' })
+		})
+
+		it('should accept empty buildArgs', () => {
+			const result = DevServerSettingsSchema.parse({ docker: { buildArgs: {} } })
+			expect(result.docker?.buildArgs).toEqual({})
+		})
+
+		it('should accept runArgs as array of strings', () => {
+			const result = DevServerSettingsSchema.parse({ docker: { runArgs: ['--rm', '--name', 'myapp'] } })
+			expect(result.docker?.runArgs).toEqual(['--rm', '--name', 'myapp'])
+		})
+	})
+
+	describe('defaults', () => {
+		it('should default mode to "docker" when not provided', () => {
+			const result = DevServerSettingsSchema.parse({})
+			expect(result.mode).toBe('docker')
+		})
+
+		it('should default dockerFile to "./Dockerfile" when not provided', () => {
+			const result = DevServerSettingsSchema.parse({ docker: {} })
+			expect(result.docker?.dockerFile).toBe('./Dockerfile')
+		})
+
+		it('should not set containerPort by default', () => {
+			const result = DevServerSettingsSchema.parse({ docker: {} })
+			expect(result.docker?.containerPort).toBeUndefined()
+		})
+	})
+
+	describe('invalid values', () => {
+		it('should reject containerPort below 1', () => {
+			expect(() => DevServerSettingsSchema.parse({ docker: { containerPort: 0 } })).toThrow()
+		})
+
+		it('should reject containerPort above 65535', () => {
+			expect(() => DevServerSettingsSchema.parse({ docker: { containerPort: 65536 } })).toThrow()
+		})
+
+		it('should reject absolute dockerFile paths', () => {
+			expect(() => DevServerSettingsSchema.parse({ docker: { dockerFile: '/etc/Dockerfile' } })).toThrow(
+				'dockerFile must be a relative path',
+			)
+		})
+
+		it('should reject dockerFile paths that traverse outside project root via ../', () => {
+			expect(() => DevServerSettingsSchema.parse({ docker: { dockerFile: '../Dockerfile' } })).toThrow(
+				'dockerFile must be a relative path',
+			)
+		})
+
+		it('should reject dockerFile paths that traverse outside project root via deep ../', () => {
+			expect(() => DevServerSettingsSchema.parse({ docker: { dockerFile: 'subdir/../../Dockerfile' } })).toThrow(
+				'dockerFile must be a relative path',
+			)
+		})
+	})
+
+	describe('backwards compatibility', () => {
+		it('should accept absent devServer section (schema is optional in IloomSettingsSchema)', () => {
+			// DevServerSettingsSchema parses undefined as valid when used as optional
+			const result = DevServerSettingsSchema.optional().parse(undefined)
+			expect(result).toBeUndefined()
+		})
+	})
+})
+
+describe('DevServerSettingsSchemaNoDefaults', () => {
+	it('should not apply defaults for mode', () => {
+		const result = DevServerSettingsSchemaNoDefaults.parse({})
+		expect(result.mode).toBeUndefined()
+	})
+
+	it('should not apply defaults for dockerFile', () => {
+		const result = DevServerSettingsSchemaNoDefaults.parse({ docker: {} })
+		expect(result.docker?.dockerFile).toBeUndefined()
+	})
+
+	it('should accept valid docker config without applying defaults', () => {
+		const input = {
+			mode: 'docker' as const,
+			docker: {
+				dockerFile: './Dockerfile.dev',
+				containerPort: 3000,
+			},
+		}
+		const result = DevServerSettingsSchemaNoDefaults.parse(input)
+		expect(result).toMatchObject(input)
+	})
+
+	it('should reject invalid dockerFile paths', () => {
+		expect(() =>
+			DevServerSettingsSchemaNoDefaults.parse({ docker: { dockerFile: '../escape' } }),
+		).toThrow('dockerFile must be a relative path')
+	})
+})

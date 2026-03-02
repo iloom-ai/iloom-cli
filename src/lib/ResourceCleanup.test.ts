@@ -4,6 +4,7 @@ import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
 import { SettingsManager } from './SettingsManager.js'
+import { DockerManager } from './DockerManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ResourceCleanupOptions } from '../types/cleanup.js'
 import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch } from '../utils/git.js'
@@ -14,6 +15,7 @@ vi.mock('./GitWorktreeManager.js')
 vi.mock('./DatabaseManager.js')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./SettingsManager.js')
+vi.mock('./DockerManager.js')
 
 vi.mock('../utils/claude-trust.js', () => ({
 	removeClaudeTrust: vi.fn().mockResolvedValue(undefined),
@@ -549,6 +551,215 @@ describe('ResourceCleanup', () => {
 			await expect(resourceCleanup.terminateDevServer(3025)).rejects.toThrow(
 				/may still be running/
 			)
+		})
+
+		it('should stop Docker container when dockerIdentifier is provided and container is running', async () => {
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValueOnce(true)
+
+			const result = await resourceCleanup.terminateDevServer(3025, 25)
+
+			expect(DockerManager.buildContainerName).toHaveBeenCalledWith(25)
+			expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-25')
+			expect(DockerManager.stopAndRemoveContainer).toHaveBeenCalledWith('iloom-dev-25')
+			expect(result).toBe(true)
+			// Should NOT fall through to process detection
+			expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+		})
+
+		it('should fall back to process detection when dockerIdentifier is provided but no container found', async () => {
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
+				pid: 12345,
+				name: 'node',
+				command: 'node next dev',
+				port: 3025,
+				isDevServer: true,
+			})
+			vi.mocked(mockProcessManager.terminateProcess).mockResolvedValueOnce(true)
+			vi.mocked(mockProcessManager.verifyPortFree).mockResolvedValueOnce(true)
+
+			const result = await resourceCleanup.terminateDevServer(3025, 25)
+
+			expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-25')
+			expect(mockProcessManager.detectDevServer).toHaveBeenCalledWith(3025)
+			expect(result).toBe(true)
+		})
+
+		it('should return false when dockerIdentifier provided but no container and no process found', async () => {
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-42')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			const result = await resourceCleanup.terminateDevServer(3042, 42)
+
+			expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-42')
+			expect(result).toBe(false)
+		})
+
+		it('should not check Docker when no dockerIdentifier is provided', async () => {
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			const result = await resourceCleanup.terminateDevServer(3025)
+
+			expect(DockerManager.isContainerRunning).not.toHaveBeenCalled()
+			expect(DockerManager.stopAndRemoveContainer).not.toHaveBeenCalled()
+			expect(result).toBe(false)
+		})
+
+		it('should handle string dockerIdentifier (branch name)', async () => {
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-feat-issue-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValueOnce(true)
+
+			const result = await resourceCleanup.terminateDevServer(3025, 'feat/issue-25')
+
+			expect(DockerManager.buildContainerName).toHaveBeenCalledWith('feat/issue-25')
+			expect(result).toBe(true)
+		})
+	})
+
+	describe('cleanupWorktree - Docker mode', () => {
+		const mockWorktree: GitWorktree = {
+			path: '/path/to/worktree',
+			branch: 'feat/issue-25',
+			commit: 'abc123',
+			bare: false,
+			detached: false,
+			locked: false,
+		}
+
+		it('should pass dockerIdentifier to terminateDevServer when Docker mode is configured', async () => {
+			// Configure Docker mode in settings
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			// Docker container is found and removed
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValueOnce(true)
+
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(DockerManager.buildContainerName).toHaveBeenCalledWith('25')
+			expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-25')
+			expect(DockerManager.stopAndRemoveContainer).toHaveBeenCalledWith('iloom-dev-25')
+			expect(result.operations[0]?.type).toBe('dev-server')
+			expect(result.operations[0]?.success).toBe(true)
+			expect(result.operations[0]?.message).toContain('terminated')
+		})
+
+		it('should NOT pass dockerIdentifier when process mode is configured', async () => {
+			// Configure process mode (default)
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'process',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			// Docker methods should NOT be called
+			expect(DockerManager.isContainerRunning).not.toHaveBeenCalled()
+			expect(DockerManager.stopAndRemoveContainer).not.toHaveBeenCalled()
+		})
+
+		it('should NOT pass dockerIdentifier when devServer setting is not configured (defaults to process)', async () => {
+			// Settings without devServer field - should default to 'process'
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			// Docker methods should NOT be called
+			expect(DockerManager.isContainerRunning).not.toHaveBeenCalled()
+		})
+
+		it('should fall back to process cleanup when Docker mode is configured but no container found', async () => {
+			// Configure Docker mode in settings
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			// Docker container not found
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+
+			// Falls back to process detection - no process found either
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(result.operations[0]?.message).toContain('No dev server running')
 		})
 	})
 

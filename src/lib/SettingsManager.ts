@@ -208,6 +208,28 @@ export const CapabilitiesSettingsSchema = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				devServer: z
+					.enum(['process', 'docker'])
+					.default('process')
+					.describe('Dev server mode: "process" runs natively, "docker" runs inside a Docker container with port mapping'),
+				dockerFile: z
+					.string()
+					.default('./Dockerfile')
+					.describe('Path to Dockerfile relative to worktree root (only used when devServer is "docker")'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+				dockerBuildArgs: z
+					.record(z.string())
+					.optional()
+					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerRunArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
@@ -238,6 +260,28 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				devServer: z
+					.enum(['process', 'docker'])
+					.optional()
+					.describe('Dev server mode: "process" runs natively, "docker" runs inside a Docker container with port mapping'),
+				dockerFile: z
+					.string()
+					.optional()
+					.describe('Path to Dockerfile relative to worktree root (only used when devServer is "docker")'),
+				containerPort: z
+					.number()
+					.min(1, 'Container port must be >= 1')
+					.max(65535, 'Container port must be <= 65535')
+					.optional()
+					.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+				dockerBuildArgs: z
+					.record(z.string())
+					.optional()
+					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerRunArgs: z
+					.array(z.string())
+					.optional()
+					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
@@ -253,6 +297,98 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 			.optional(),
 	})
 	.optional()
+
+/**
+ * Zod schema for Docker dev server settings
+ */
+export const DevServerSettingsSchema = z.object({
+	mode: z
+		.enum(['docker'])
+		.default('docker')
+		.describe('Dev server mode. Currently only "docker" is supported.'),
+	docker: z
+		.object({
+			dockerFile: z
+				.string()
+				.default('./Dockerfile')
+				.refine(
+					(val) => {
+						// Must be a relative path (no leading slash)
+						if (path.isAbsolute(val)) return false
+						// Must not traverse outside the project root
+						const normalized = path.normalize(val)
+						if (normalized.startsWith('..')) return false
+						return true
+					},
+					{
+						message:
+							'dockerFile must be a relative path that does not traverse outside the project root (no leading "/" and no "../" escaping)',
+					},
+				)
+				.describe('Path to Dockerfile relative to worktree root'),
+			containerPort: z
+				.number()
+				.min(1, 'Container port must be >= 1')
+				.max(65535, 'Container port must be <= 65535')
+				.optional()
+				.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+			buildArgs: z
+				.record(z.string(), z.string())
+				.optional()
+				.describe('Build arguments to pass to docker build'),
+			runArgs: z
+				.array(z.string())
+				.optional()
+				.describe('Additional arguments for docker run'),
+		})
+		.optional(),
+})
+
+/**
+ * Non-defaulting variant of DevServerSettingsSchema for pre-merge validation
+ * This prevents Zod from polluting partial settings with default values before merge
+ */
+export const DevServerSettingsSchemaNoDefaults = z.object({
+	mode: z
+		.enum(['docker'])
+		.optional()
+		.describe('Dev server mode. Currently only "docker" is supported.'),
+	docker: z
+		.object({
+			dockerFile: z
+				.string()
+				.optional()
+				.refine(
+					(val) => {
+						if (val === undefined) return true
+						if (path.isAbsolute(val)) return false
+						const normalized = path.normalize(val)
+						if (normalized.startsWith('..')) return false
+						return true
+					},
+					{
+						message:
+							'dockerFile must be a relative path that does not traverse outside the project root (no leading "/" and no "../" escaping)',
+					},
+				)
+				.describe('Path to Dockerfile relative to worktree root'),
+			containerPort: z
+				.number()
+				.min(1, 'Container port must be >= 1')
+				.max(65535, 'Container port must be <= 65535')
+				.optional()
+				.describe('Port the app runs on inside the Docker container (auto-detected from EXPOSE directive if not set)'),
+			buildArgs: z
+				.record(z.string(), z.string())
+				.optional()
+				.describe('Build arguments to pass to docker build'),
+			runArgs: z
+				.array(z.string())
+				.optional()
+				.describe('Additional arguments for docker run'),
+		})
+		.optional(),
+})
 
 /**
  * Zod schema for Neon database provider settings
@@ -371,6 +507,7 @@ export const IloomSettingsSchema = z.object({
 		'Session summary generation configuration. Model defaults to sonnet when not configured.',
 	),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
+	devServer: DevServerSettingsSchema.optional().describe('Docker-based dev server configuration'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
@@ -662,6 +799,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.optional()
 		.describe('Session summary generation configuration'),
 	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
+	devServer: DevServerSettingsSchemaNoDefaults.optional().describe('Docker-based dev server configuration'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
@@ -840,6 +978,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.optional()
 		.describe('Git operation settings'),
 })
+
+/**
+ * TypeScript type for dev server settings derived from Zod schema
+ */
+export type DevServerSettings = z.infer<typeof DevServerSettingsSchema>
 
 /**
  * TypeScript type for Neon settings derived from Zod schema

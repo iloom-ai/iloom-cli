@@ -1,9 +1,8 @@
-import { execa, type ExecaChildProcess } from 'execa'
-import { setTimeout } from 'timers/promises'
+import path from 'path'
 import { ProcessManager } from './process/ProcessManager.js'
-import { buildDevServerCommand } from '../utils/dev-server.js'
-import { runScript } from '../utils/package-manager.js'
-import { getPackageScripts } from '../utils/package-json.js'
+import { DockerManager, type DockerConfig } from './DockerManager.js'
+import { DockerDevServerStrategy, type DockerConfig as StrategyDockerConfig, type DockerUtils } from './DockerDevServerStrategy.js'
+import { NativeDevServerStrategy } from './NativeDevServerStrategy.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -11,6 +10,18 @@ import { logger } from '../utils/logger.js'
  * Can be overridden via ILOOM_DEV_SERVER_TIMEOUT environment variable
  */
 const DEFAULT_STARTUP_TIMEOUT = 180000
+
+/**
+ * Bridge DockerManager static methods to the DockerUtils interface
+ * expected by DockerDevServerStrategy.
+ */
+const dockerUtils: DockerUtils = {
+	parseDockerfileExpose: (filePath: string) => DockerManager.parseExposeFromDockerfile(filePath),
+	inspectImagePorts: (imageName: string) => DockerManager.inspectImagePorts(imageName),
+	buildContainerName: (id: string | number) => DockerManager.buildContainerName(id),
+	buildImageName: (id: string | number) => DockerManager.buildImageName(id),
+	assertDockerAvailable: () => DockerManager.assertAvailable(),
+}
 
 function getStartupTimeout(): number {
 	const envTimeout = process.env.ILOOM_DEV_SERVER_TIMEOUT
@@ -38,14 +49,36 @@ export interface DevServerManagerOptions {
 	checkInterval?: number
 }
 
+// Re-export DockerConfig from DockerManager for backward compatibility
+export type { DockerConfig } from './DockerManager.js'
+
 /**
- * DevServerManager handles auto-starting and monitoring dev servers
- * Used by open/run commands to ensure dev server is running before opening browser
+ * Convert a DockerConfig (from DockerManager) to a StrategyDockerConfig
+ * (for DockerDevServerStrategy).
+ */
+function toStrategyConfig(config: DockerConfig): StrategyDockerConfig {
+	return {
+		dockerFile: config.dockerFile,
+		containerPort: config.containerPort,
+		buildArgs: config.dockerBuildArgs,
+		runArgs: config.dockerRunArgs,
+		identifier: config.identifier,
+	}
+}
+
+/**
+ * DevServerManager handles auto-starting and monitoring dev servers.
+ * Used by open/run commands to ensure dev server is running before opening browser.
+ *
+ * When devServer config is absent OR mode is not 'docker', behavior is identical
+ * to the native process-based implementation via NativeDevServerStrategy.
+ * When Docker mode is configured, all operations delegate to DockerDevServerStrategy.
  */
 export class DevServerManager {
 	private readonly processManager: ProcessManager
 	private readonly options: Required<DevServerManagerOptions>
-	private runningServers: Map<number, ExecaChildProcess> = new Map()
+	private readonly nativeStrategy: NativeDevServerStrategy
+	private runningDockerContainers: Map<number, string> = new Map()
 
 	constructor(
 		processManager?: ProcessManager,
@@ -56,20 +89,56 @@ export class DevServerManager {
 			startupTimeout: options.startupTimeout ?? getStartupTimeout(),
 			checkInterval: options.checkInterval ?? 1000,
 		}
+		this.nativeStrategy = new NativeDevServerStrategy(
+			this.processManager,
+			this.options.startupTimeout,
+			this.options.checkInterval
+		)
 	}
 
 	/**
-	 * Ensure dev server is running on the specified port
-	 * If not running, start it and wait for it to be ready
+	 * Create a DockerDevServerStrategy for the given Docker config.
+	 * The strategy encapsulates all Docker container lifecycle operations.
+	 */
+	private createDockerStrategy(dockerConfig: DockerConfig): DockerDevServerStrategy {
+		return new DockerDevServerStrategy(toStrategyConfig(dockerConfig), dockerUtils)
+	}
+
+	/**
+	 * Ensure dev server is running on the specified port.
+	 * If not running, start it and wait for it to be ready.
 	 *
 	 * @param worktreePath - Path to the worktree
 	 * @param port - Port the server should run on
+	 * @param dockerConfig - Optional Docker configuration for container-based server
 	 * @returns true if server is ready, false if startup failed/timed out
 	 */
-	async ensureServerRunning(worktreePath: string, port: number): Promise<boolean> {
+	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig): Promise<boolean> {
 		logger.debug(`Checking if dev server is running on port ${port}...`)
 
-		// Check if already running
+		// Docker mode: check if container is already running
+		if (dockerConfig) {
+			const strategy = this.createDockerStrategy(dockerConfig)
+			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
+			const isRunning = await strategy.isContainerRunning(containerName)
+			if (isRunning) {
+				logger.debug(`Docker container "${containerName}" already running on port ${port}`)
+				return true
+			}
+
+			logger.info(`Docker dev server not running on port ${port}, starting...`)
+			try {
+				await this.startDockerServer(worktreePath, port, dockerConfig, strategy)
+				return true
+			} catch (error) {
+				logger.error(
+					`Failed to start Docker dev server: ${error instanceof Error ? error.message : 'Unknown error'}`
+				)
+				return false
+			}
+		}
+
+		// Native mode: check if a process is listening on the port
 		const existingProcess = await this.processManager.detectDevServer(port)
 		if (existingProcess) {
 			logger.debug(
@@ -82,7 +151,7 @@ export class DevServerManager {
 		logger.info(`Dev server not running on port ${port}, starting...`)
 
 		try {
-			await this.startDevServer(worktreePath, port)
+			await this.nativeStrategy.startBackground(worktreePath, port)
 			return true
 		} catch (error) {
 			logger.error(
@@ -93,97 +162,83 @@ export class DevServerManager {
 	}
 
 	/**
-	 * Start dev server in background and wait for it to be ready
+	 * Start dev server in Docker container (background) and wait for it to be ready.
+	 * Builds the image, resolves the container port, starts the container detached,
+	 * and polls the host port for readiness.
 	 */
-	private async startDevServer(worktreePath: string, port: number): Promise<void> {
-		// Guard: Check if a dev script exists in package.json or package.iloom.json
-		const scripts = await getPackageScripts(worktreePath)
-		if (!scripts['dev']) {
-			logger.warn('Skipping auto-start: no "dev" script found in package.json or package.iloom.json')
-			return
-		}
+	private async startDockerServer(
+		worktreePath: string,
+		port: number,
+		dockerConfig: DockerConfig,
+		strategy: DockerDevServerStrategy
+	): Promise<void> {
+		const strategyConfig = toStrategyConfig(dockerConfig)
+		const imageName = dockerUtils.buildImageName(dockerConfig.identifier)
+		const dockerfilePath = path.resolve(worktreePath, dockerConfig.dockerFile)
 
-		// Build dev server command
-		const devCommand = await buildDevServerCommand(worktreePath)
-		logger.debug(`Starting dev server with command: ${devCommand}`)
+		// Build image
+		await strategy.buildImage(worktreePath, strategyConfig)
 
-		// Start server in background
-		const serverProcess = execa('sh', ['-c', devCommand], {
-			cwd: worktreePath,
-			env: {
-				...process.env,
-				PORT: port.toString(),
-			},
-			// Important: Don't inherit stdio - server runs in background
-			stdio: 'ignore',
-			// Detach from parent process so it continues running
-			detached: true,
-		})
+		// Resolve container port (config > image inspect > Dockerfile EXPOSE)
+		const containerPort = await strategy.resolveContainerPort(
+			strategyConfig,
+			imageName,
+			dockerfilePath
+		)
 
-		// Store reference to prevent cleanup
-		this.runningServers.set(port, serverProcess)
+		// Run container detached
+		const containerName = await strategy.runContainerDetached(
+			worktreePath,
+			port,
+			containerPort,
+			strategyConfig
+		)
 
-		// Unref so parent can exit
-		serverProcess.unref()
+		// Track for cleanup
+		this.runningDockerContainers.set(port, containerName)
 
-		// Wait for server to be ready
-		logger.info(`Waiting for dev server to start on port ${port}...`)
-		const ready = await this.waitForServerReady(port)
+		// Wait for server to be ready via TCP probe (Docker proxy listens on host port)
+		// Pass container name for early crash detection
+		logger.info(`Waiting for Docker dev server to start on port ${port}...`)
+		const ready = await strategy.waitForReady(
+			port,
+			this.options.startupTimeout,
+			this.options.checkInterval,
+			containerName
+		)
 
 		if (!ready) {
+			// Clean up the container if startup failed
+			await strategy.stopContainer(containerName)
+			this.runningDockerContainers.delete(port)
 			throw new Error(
-				`Dev server failed to start within ${this.options.startupTimeout}ms timeout`
+				`Docker dev server failed to start within ${this.options.startupTimeout}ms timeout`
 			)
 		}
 
-		logger.success(`Dev server started successfully on port ${port}`)
-	}
-
-	/**
-	 * Wait for server to be ready by polling the port
-	 */
-	private async waitForServerReady(port: number): Promise<boolean> {
-		const startTime = Date.now()
-		let attempts = 0
-
-		while (Date.now() - startTime < this.options.startupTimeout) {
-			attempts++
-
-			// Check if server is listening
-			const processInfo = await this.processManager.detectDevServer(port)
-
-			if (processInfo) {
-				logger.debug(
-					`Server detected on port ${port} after ${attempts} attempts (${Date.now() - startTime}ms)`
-				)
-				return true
-			}
-
-			// Wait before next check
-			await setTimeout(this.options.checkInterval)
-		}
-
-		// Timeout
-		logger.warn(
-			`Server did not start on port ${port} after ${this.options.startupTimeout}ms (${attempts} attempts)`
-		)
-		return false
+		logger.success(`Docker dev server started successfully on port ${port}`)
 	}
 
 	/**
 	 * Check if a dev server is running on the specified port
 	 *
 	 * @param port - Port to check
+	 * @param dockerConfig - Optional Docker configuration; when provided, checks container status
 	 * @returns true if server is running, false otherwise
 	 */
-	async isServerRunning(port: number): Promise<boolean> {
+	async isServerRunning(port: number, dockerConfig?: DockerConfig): Promise<boolean> {
+		if (dockerConfig) {
+			const strategy = this.createDockerStrategy(dockerConfig)
+			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
+			return strategy.isContainerRunning(containerName)
+		}
 		const existingProcess = await this.processManager.detectDevServer(port)
 		return existingProcess !== null
 	}
 
 	/**
-	 * Run dev server in foreground mode (blocking)
-	 * This method blocks until the server is stopped (e.g., via Ctrl+C)
+	 * Run dev server in foreground mode (blocking).
+	 * This method blocks until the server is stopped (e.g., via Ctrl+C).
 	 *
 	 * @param worktreePath - Path to the worktree
 	 * @param port - Port the server should run on
@@ -196,64 +251,81 @@ export class DevServerManager {
 		port: number,
 		redirectToStderr = false,
 		onProcessStarted?: (pid?: number) => void,
-		envOverrides?: Record<string, string>
+		envOverrides?: Record<string, string>,
+		dockerConfig?: DockerConfig
 	): Promise<{ pid?: number }> {
-		logger.debug(`Starting dev server in foreground on port ${port}`)
+		// Docker mode: build image and run container in foreground
+		if (dockerConfig) {
+			logger.debug(`Starting Docker dev server in foreground on port ${port}`)
 
-		// Use runScript for foreground mode to support multi-language projects
-		// Note: redirectToStderr is handled via custom execa call when needed
-		if (redirectToStderr) {
-			// For redirectToStderr, we still need direct execa control for custom stdio
-			const devCommand = await buildDevServerCommand(worktreePath)
-			logger.debug(`Starting dev server with command: ${devCommand}`)
+			const strategy = this.createDockerStrategy(dockerConfig)
+			const strategyConfig = toStrategyConfig(dockerConfig)
+			const imageName = dockerUtils.buildImageName(dockerConfig.identifier)
+			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
+			const dockerfilePath = path.resolve(worktreePath, dockerConfig.dockerFile)
 
-			const serverProcess = execa('sh', ['-c', devCommand], {
-				cwd: worktreePath,
-				env: {
-					...process.env,
-					...envOverrides,
-					PORT: port.toString(),
-				},
-				stdio: [process.stdin, process.stderr, process.stderr],
-			})
+			// Build image
+			await strategy.buildImage(worktreePath, strategyConfig)
 
-			const processInfo: { pid?: number } = serverProcess.pid !== undefined ? { pid: serverProcess.pid } : {}
+			// Resolve container port
+			const containerPort = await strategy.resolveContainerPort(
+				strategyConfig,
+				imageName,
+				dockerfilePath
+			)
 
 			if (onProcessStarted) {
-				onProcessStarted(processInfo.pid)
+				onProcessStarted(undefined)
 			}
 
-			await serverProcess
-			return processInfo
+			// Track container for cleanup
+			this.runningDockerContainers.set(port, containerName)
+			try {
+				// Run container in foreground (blocks until stopped)
+				// DockerDevServerStrategy.runContainerForeground handles signal forwarding internally
+				await strategy.runContainerForeground(
+					worktreePath,
+					port,
+					containerPort,
+					strategyConfig,
+					{ redirectToStderr, envOverrides }
+				)
+			} finally {
+				this.runningDockerContainers.delete(port)
+			}
+
+			return {}
 		}
 
-		// Use runScript for standard foreground mode
-		return await runScript('dev', worktreePath, [], {
-			env: {
-				...envOverrides,
-				PORT: port.toString(),
-			},
-			foreground: true,
-			...(onProcessStarted && { onStart: onProcessStarted }),
-			noCi: true, // Dev servers should not have CI=true
+		// Native mode: delegate to NativeDevServerStrategy
+		return this.nativeStrategy.startForeground(worktreePath, port, {
+			redirectToStderr,
+			...(onProcessStarted !== undefined && { onProcessStarted }),
+			...(envOverrides !== undefined && { envOverrides }),
 		})
 	}
 
 	/**
-	 * Clean up all running server processes
-	 * This should be called when the manager is being disposed
+	 * Clean up all running server processes and Docker containers.
+	 * This should be called when the manager is being disposed.
 	 */
 	async cleanup(): Promise<void> {
-		for (const [port, serverProcess] of this.runningServers.entries()) {
+		// Clean up native process-based servers
+		await this.nativeStrategy.stopAll()
+
+		// Clean up Docker containers using DockerDevServerStrategy
+		for (const [port, containerName] of this.runningDockerContainers.entries()) {
 			try {
-				logger.debug(`Cleaning up server process on port ${port}`)
-				serverProcess.kill()
+				logger.debug(`Cleaning up Docker container "${containerName}" on port ${port}`)
+				// Create a minimal strategy just for stopContainer
+				const strategy = new DockerDevServerStrategy({}, dockerUtils)
+				await strategy.stopContainer(containerName)
 			} catch (error) {
 				logger.warn(
-					`Failed to kill server process on port ${port}: ${error instanceof Error ? error.message : 'Unknown error'}`
+					`Failed to stop Docker container "${containerName}" on port ${port}: ${error instanceof Error ? error.message : 'Unknown error'}`
 				)
 			}
 		}
-		this.runningServers.clear()
+		this.runningDockerContainers.clear()
 	}
 }

@@ -109,6 +109,27 @@ export interface AutoSwarmCompletedProperties {
   fallback_to_normal: boolean
 }
 
+export interface DevServerStartedEvent {
+  /** Execution mode for the dev server */
+  mode: 'docker' | 'process'
+  /** Whether the dev server started successfully */
+  success: boolean
+  /**
+   * Time in milliseconds to build the Docker image.
+   * Only present when mode is 'docker'.
+   */
+  buildDurationMs?: number
+  /** Time in milliseconds from start to the server being ready */
+  startDurationMs: number
+}
+
+export interface DevServerStoppedEvent {
+  /** Execution mode for the dev server */
+  mode: 'docker' | 'process'
+  /** Reason the dev server stopped */
+  reason: 'user' | 'cleanup' | 'error'
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -129,6 +150,8 @@ export interface TelemetryEventMap {
   'init.completed': InitCompletedProperties
   'auto_swarm.started': AutoSwarmStartedProperties
   'auto_swarm.completed': AutoSwarmCompletedProperties
+  'devServer.started': DevServerStartedEvent
+  'devServer.stopped': DevServerStoppedEvent
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

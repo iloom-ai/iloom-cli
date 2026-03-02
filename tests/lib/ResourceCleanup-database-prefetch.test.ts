@@ -34,6 +34,13 @@ vi.mock('../../src/utils/git.js', () => ({
 	findMainWorktreePath: vi.fn().mockResolvedValue('/test/main'),
 	findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
 	hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+	extractIssueNumber: vi.fn().mockReturnValue(42),
+}))
+
+// Mock port utilities (getWorkspacePort has IO dependencies)
+vi.mock('../../src/utils/port.js', () => ({
+	getWorkspacePort: vi.fn().mockResolvedValue(3042),
+	calculatePortFromIdentifier: vi.fn().mockReturnValue(3042),
 }))
 
 describe('ResourceCleanup - Database Cleanup with Pre-fetched Config', () => {

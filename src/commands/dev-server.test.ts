@@ -4,6 +4,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { DockerManager } from '../lib/DockerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
@@ -16,6 +17,7 @@ vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/MetadataManager.js')
 vi.mock('../lib/ProjectCapabilityDetector.js')
 vi.mock('../lib/DevServerManager.js')
+vi.mock('../lib/DockerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
 vi.mock('../lib/SettingsManager.js')
@@ -219,7 +221,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.any(Object)
+				expect.any(Object),
+				undefined
 			)
 		})
 
@@ -303,7 +306,8 @@ describe('DevServerCommand', () => {
 				4500,
 				false,
 				expect.any(Function),
-				expect.any(Object)
+				expect.any(Object),
+				undefined
 			)
 		})
 
@@ -325,7 +329,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.any(Object)
+				expect.any(Object),
+				undefined
 			)
 		})
 	})
@@ -412,7 +417,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.any(Object)
+				expect.any(Object),
+				undefined
 			)
 		})
 
@@ -427,7 +433,8 @@ describe('DevServerCommand', () => {
 				3087,
 				true,
 				expect.any(Function),
-				expect.any(Object)
+				expect.any(Object),
+				undefined
 			)
 		})
 	})
@@ -468,7 +475,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.objectContaining({ DATABASE_URL: 'postgres://test', API_KEY: 'secret', ILOOM_LOOM: '87' })
+				expect.objectContaining({ DATABASE_URL: 'postgres://test', API_KEY: 'secret', ILOOM_LOOM: '87' }),
+				undefined
 			)
 		})
 
@@ -485,7 +493,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.objectContaining({ ILOOM_LOOM: '87' })
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined
 			)
 		})
 
@@ -500,7 +509,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.objectContaining({ ILOOM_LOOM: '87' })
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined
 			)
 		})
 
@@ -523,7 +533,8 @@ describe('DevServerCommand', () => {
 				3087,
 				false,
 				expect.any(Function),
-				expect.objectContaining({ ILOOM_LOOM: '87' })
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined
 			)
 		})
 
@@ -614,6 +625,213 @@ describe('DevServerCommand', () => {
 
 			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
 			expect(envArg).not.toHaveProperty('ILOOM_COLOR_HEX')
+		})
+	})
+
+	describe('Docker mode', () => {
+		beforeEach(() => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 87,
+				originalInput: '87',
+			})
+
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+
+			// Docker is available by default in Docker mode tests
+			vi.mocked(DockerManager.assertAvailable).mockResolvedValue(undefined)
+		})
+
+		it('should construct DockerConfig and pass to isServerRunning and runServerForeground when devServer is "docker"', async () => {
+			const expectedDockerConfig = {
+				dockerFile: './Dockerfile.dev',
+				containerPort: 4200,
+				dockerBuildArgs: { NODE_ENV: 'development' },
+				dockerRunArgs: ['-v', './src:/app/src'],
+				identifier: '87',
+			}
+
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: {
+					web: {
+						devServer: 'docker',
+						dockerFile: './Dockerfile.dev',
+						containerPort: 4200,
+						dockerBuildArgs: { NODE_ENV: 'development' },
+						dockerRunArgs: ['-v', './src:/app/src'],
+					},
+				},
+			})
+
+			vi.mocked(DockerManager.buildDockerConfigFromSettings).mockReturnValue(expectedDockerConfig)
+
+			await command.execute({ identifier: '87' })
+
+			expect(DockerManager.assertAvailable).toHaveBeenCalled()
+			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
+				3087,
+				expectedDockerConfig
+			)
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				expectedDockerConfig
+			)
+		})
+
+		it('should use default dockerFile when not specified in settings', async () => {
+			const expectedDockerConfig = {
+				dockerFile: './Dockerfile',
+				containerPort: undefined,
+				dockerBuildArgs: undefined,
+				dockerRunArgs: undefined,
+				identifier: '87',
+			}
+
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: {
+					web: {
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(DockerManager.buildDockerConfigFromSettings).mockReturnValue(expectedDockerConfig)
+
+			await command.execute({ identifier: '87' })
+
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				expect.objectContaining({
+					dockerFile: './Dockerfile',
+					identifier: '87',
+				})
+			)
+		})
+
+		it('should use branchName as identifier when number is not available', async () => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'branch',
+				branchName: 'feat/docker-support',
+				originalInput: 'feat/docker-support',
+			})
+
+			vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: {
+					web: {
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(DockerManager.buildDockerConfigFromSettings).mockReturnValue({
+				dockerFile: './Dockerfile',
+				containerPort: undefined,
+				dockerBuildArgs: undefined,
+				dockerRunArgs: undefined,
+				identifier: 'feat/docker-support',
+			})
+
+			await command.execute({ identifier: 'feat/docker-support' })
+
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				expect.objectContaining({ ILOOM_LOOM: 'feat/docker-support' }),
+				expect.objectContaining({
+					identifier: 'feat/docker-support',
+				})
+			)
+		})
+
+		it('should throw when Docker is not available in Docker mode', async () => {
+			vi.mocked(DockerManager.assertAvailable).mockRejectedValue(
+				new Error(
+					'Docker is not available. Please ensure Docker is installed and the Docker daemon is running.'
+				)
+			)
+
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: {
+					web: {
+						devServer: 'docker',
+					},
+				},
+			})
+
+			// Return a config so that the code path reaches assertAvailable
+			vi.mocked(DockerManager.buildDockerConfigFromSettings).mockReturnValue({
+				dockerFile: './Dockerfile',
+				containerPort: undefined,
+				dockerBuildArgs: undefined,
+				dockerRunArgs: undefined,
+				identifier: '87',
+			})
+
+			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
+				'Docker is not available'
+			)
+
+			// Should not proceed to run server
+			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+		})
+
+		it('should not call DockerManager.assertAvailable when devServer is "process"', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: {
+					web: {
+						devServer: 'process',
+					},
+				},
+			})
+
+			await command.execute({ identifier: '87' })
+
+			expect(DockerManager.assertAvailable).not.toHaveBeenCalled()
+			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
+				3087,
+				undefined
+			)
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined
+			)
+		})
+
+		it('should not call DockerManager.assertAvailable when devServer is not configured', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({})
+
+			await command.execute({ identifier: '87' })
+
+			expect(DockerManager.assertAvailable).not.toHaveBeenCalled()
+			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
+				3087,
+				undefined
+			)
 		})
 	})
 })

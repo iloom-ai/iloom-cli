@@ -5,10 +5,11 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
+import { DockerManager } from './DockerManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
 import { removeClaudeTrust } from '../utils/claude-trust.js'
-import { calculatePortFromIdentifier } from '../utils/port.js'
+import { getWorkspacePort } from '../utils/port.js'
 import { archiveRecap } from '../utils/recap-archiver.js'
 
 import type {
@@ -57,46 +58,7 @@ export class ResourceCleanup {
 		const displayIdentifier = parsed.branchName ?? parsed.number?.toString() ?? parsed.originalInput
 		getLogger().info(`Starting cleanup for: ${displayIdentifier}`)
 
-		// Extract number from ParsedInput for port calculation
-		const number = parsed.number
-
-		// Step 1: Terminate dev server if applicable
-		if (number !== undefined) {
-			// Load settings to get basePort
-			const settings = await this.settingsManager.loadSettings()
-			const basePort = settings?.capabilities?.web?.basePort ?? 3000
-			const port = calculatePortFromIdentifier(number, basePort)
-
-			if (options.dryRun) {
-				operations.push({
-					type: 'dev-server',
-					success: true,
-					message: `[DRY RUN] Would check for dev server on port ${port}`,
-				})
-			} else {
-				try {
-					const terminated = await this.terminateDevServer(port)
-					operations.push({
-						type: 'dev-server',
-						success: true,
-						message: terminated
-							? `Dev server on port ${port} terminated`
-							: `No dev server running on port ${port}`,
-					})
-				} catch (error) {
-					const err = error instanceof Error ? error : new Error('Unknown error')
-					errors.push(err)
-					operations.push({
-						type: 'dev-server',
-						success: false,
-						message: `Failed to terminate dev server`,
-						error: err.message,
-					})
-				}
-			}
-		}
-
-		// Step 2: Find worktree using specific methods based on type
+		// Step 1: Find worktree using specific methods based on type
 		let worktree: GitWorktree | null = null
 		try {
 			// Use pre-resolved worktree if provided (skips the search step)
@@ -145,6 +107,50 @@ export class ResourceCleanup {
 			}
 		}
 
+		// Step 1.5: Terminate dev server if applicable
+		// Done after worktree is found so we can use getWorkspacePort which checks .env PORT overrides
+		{
+			const settings = await this.settingsManager.loadSettings()
+			const port = await getWorkspacePort({
+				worktreePath: worktree.path,
+				worktreeBranch: worktree.branch,
+				basePort: settings?.capabilities?.web?.basePort,
+				checkEnvFile: true,
+			})
+			const devServerMode = settings?.capabilities?.web?.devServer ?? 'process'
+			const dockerIdentifier = devServerMode === 'docker'
+				? (parsed.number?.toString() ?? parsed.branchName ?? parsed.originalInput)
+				: undefined
+
+			if (options.dryRun) {
+				operations.push({
+					type: 'dev-server',
+					success: true,
+					message: `[DRY RUN] Would check for dev server on port ${port}`,
+				})
+			} else {
+				try {
+					const terminated = await this.terminateDevServer(port, dockerIdentifier)
+					operations.push({
+						type: 'dev-server',
+						success: true,
+						message: terminated
+							? `Dev server on port ${port} terminated`
+							: `No dev server running on port ${port}`,
+					})
+				} catch (error) {
+					const err = error instanceof Error ? error : new Error('Unknown error')
+					errors.push(err)
+					operations.push({
+						type: 'dev-server',
+						success: false,
+						message: `Failed to terminate dev server`,
+						error: err.message,
+					})
+				}
+			}
+		}
+
 		// Step 2.5: Validate safety before proceeding with cleanup (unless force flag is set)
 		// Check merge safety if: deleteBranch is true AND checkMergeSafety is not explicitly false
 		// This prevents the scenario where worktree is deleted but branch deletion fails
@@ -183,7 +189,7 @@ export class ResourceCleanup {
 				databaseConfig = { shouldCleanup, envFilePath }
 			} catch (error) {
 				// If we can't read the config, we'll skip database cleanup
-			getLogger().warn(
+				getLogger().warn(
 					`Failed to read database config from ${envFilePath}, skipping database cleanup: ${
 						error instanceof Error ? error.message : String(error)
 					}`
@@ -198,7 +204,7 @@ export class ResourceCleanup {
 			try {
 				mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			} catch (error) {
-			getLogger().warn(
+				getLogger().warn(
 					`Failed to find main worktree path: ${error instanceof Error ? error.message : String(error)}`
 				)
 			}
@@ -354,7 +360,7 @@ export class ResourceCleanup {
 					// Log warning but don't fail
 					const err = error instanceof Error ? error : new Error('Unknown error')
 					errors.push(err)
-				getLogger().warn(
+					getLogger().warn(
 						`CLI symlink cleanup failed: ${err.message}`
 					)
 					operations.push({
@@ -390,7 +396,7 @@ export class ResourceCleanup {
 							// Create operation result based on what actually happened
 							if (deletionResult.deleted) {
 								// Branch was actually deleted
-							getLogger().info(`Database branch deleted: ${worktree.branch}`)
+								getLogger().info(`Database branch deleted: ${worktree.branch}`)
 								operations.push({
 									type: 'database',
 									success: true,
@@ -399,7 +405,7 @@ export class ResourceCleanup {
 								})
 							} else if (deletionResult.notFound) {
 								// Branch didn't exist - not an error, just nothing to delete
-							getLogger().debug(`No database branch found for: ${worktree.branch}`)
+								getLogger().debug(`No database branch found for: ${worktree.branch}`)
 								operations.push({
 									type: 'database',
 									success: true,
@@ -408,7 +414,7 @@ export class ResourceCleanup {
 								})
 							} else if (deletionResult.userDeclined) {
 								// User declined preview database deletion
-							getLogger().info('Preview database deletion declined by user')
+								getLogger().info('Preview database deletion declined by user')
 								operations.push({
 									type: 'database',
 									success: true,
@@ -419,7 +425,7 @@ export class ResourceCleanup {
 								// Deletion failed with error
 								const errorMsg = deletionResult.error ?? 'Unknown error'
 								errors.push(new Error(errorMsg))
-							getLogger().warn(`Database cleanup failed: ${errorMsg}`)
+								getLogger().warn(`Database cleanup failed: ${errorMsg}`)
 								operations.push({
 									type: 'database',
 									success: false, // Non-fatal, but report error
@@ -430,7 +436,7 @@ export class ResourceCleanup {
 							} else {
 								// Unexpected state - log for debugging
 								errors.push(new Error('Database cleanup in an unknown state'))
-							getLogger().warn('Database deletion returned unexpected result state')
+								getLogger().warn('Database deletion returned unexpected result state')
 								operations.push({
 									type: 'database',
 									success: false,
@@ -441,7 +447,7 @@ export class ResourceCleanup {
 						} catch (error) {
 							// Unexpected exception (shouldn't happen with result object pattern)
 							errors.push(error instanceof Error ? error : new Error(String(error)))
-						getLogger().warn(
+							getLogger().warn(
 								`Unexpected database cleanup exception: ${error instanceof Error ? error.message : String(error)}`
 							)
 							operations.push({
@@ -571,26 +577,44 @@ export class ResourceCleanup {
 	}
 
 	/**
-	 * Terminate dev server on specified port
+	 * Terminate dev server on specified port.
+	 * When a dockerIdentifier is provided, attempts Docker container cleanup first
+	 * before falling back to process-based detection.
+	 *
+	 * @param port - Port the dev server is running on
+	 * @param dockerIdentifier - Optional identifier for Docker container lookup (issue number, branch name, etc.)
 	 */
-	async terminateDevServer(port: number): Promise<boolean> {
-	getLogger().debug(`Checking for dev server on port ${port}`)
+	async terminateDevServer(port: number, dockerIdentifier?: string | number): Promise<boolean> {
+		getLogger().debug(`Checking for dev server on port ${port}`)
 
+		// Try Docker container cleanup first if identifier provided
+		if (dockerIdentifier !== undefined) {
+			const containerName = DockerManager.buildContainerName(dockerIdentifier)
+			const isRunning = await DockerManager.isContainerRunning(containerName)
+			if (isRunning) {
+				getLogger().info(`Terminating Docker container: ${containerName}`)
+				await DockerManager.stopAndRemoveContainer(containerName)
+				return true
+			}
+			getLogger().debug(`No Docker container found with name "${containerName}", falling back to process detection`)
+		}
+
+		// Existing process-based detection
 		const processInfo = await this.processManager.detectDevServer(port)
 
 		if (!processInfo) {
-		getLogger().debug(`No process found on port ${port}`)
+			getLogger().debug(`No process found on port ${port}`)
 			return false
 		}
 
 		if (!processInfo.isDevServer) {
-		getLogger().warn(
+			getLogger().warn(
 				`Process on port ${port} (${processInfo.name}) doesn't appear to be a dev server, skipping`
 			)
 			return false
 		}
 
-	getLogger().info(`Terminating dev server: ${processInfo.name} (PID: ${processInfo.pid})`)
+		getLogger().info(`Terminating dev server: ${processInfo.name} (PID: ${processInfo.pid})`)
 
 		await this.processManager.terminateProcess(processInfo.pid)
 
@@ -634,12 +658,12 @@ export class ResourceCleanup {
 			})
 		} catch {
 			// Branch doesn't exist - already deleted, return success
-		getLogger().debug(`Branch ${branchName} does not exist, skipping deletion`)
+			getLogger().debug(`Branch ${branchName} does not exist, skipping deletion`)
 			return true
 		}
 
 		if (options.dryRun) {
-		getLogger().info(`[DRY RUN] Would delete branch: ${branchName}`)
+			getLogger().info(`[DRY RUN] Would delete branch: ${branchName}`)
 			return true
 		}
 
@@ -713,14 +737,14 @@ export class ResourceCleanup {
 				cwd: deleteCwd
 			})
 
-		getLogger().info(`Branch deleted: ${branchName}`)
+			getLogger().info(`Branch deleted: ${branchName}`)
 			return true
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 
 			// Handle "branch not found" - may occur in race conditions
 			if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
-			getLogger().debug(`Branch ${branchName} already deleted`)
+				getLogger().debug(`Branch ${branchName} already deleted`)
 				return true
 			}
 
@@ -761,7 +785,7 @@ export class ResourceCleanup {
 	 */
 	async cleanupDatabase(branchName: string, worktreePath: string): Promise<boolean> {
 		if (!this.database) {
-		getLogger().debug('Database manager not available, skipping database cleanup')
+			getLogger().debug('Database manager not available, skipping database cleanup')
 			return false
 		}
 
@@ -776,7 +800,7 @@ export class ResourceCleanup {
 				cwd = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 			} catch (error) {
 				// If we can't find main worktree, commands will run from current directory
-			getLogger().debug(
+				getLogger().debug(
 					`Could not find main worktree path, using current directory: ${error instanceof Error ? error.message : String(error)}`
 				)
 			}
@@ -790,25 +814,25 @@ export class ResourceCleanup {
 
 			// Only return true if deletion actually occurred
 			if (result.deleted) {
-			getLogger().info(`Database branch deleted: ${branchName}`)
+				getLogger().info(`Database branch deleted: ${branchName}`)
 				return true
 			} else if (result.notFound) {
-			getLogger().debug(`No database branch found for: ${branchName}`)
+				getLogger().debug(`No database branch found for: ${branchName}`)
 				return false
 			} else if (result.userDeclined) {
-			getLogger().info('Preview database deletion declined by user')
+				getLogger().info('Preview database deletion declined by user')
 				return false
 			} else if (!result.success) {
-			getLogger().warn(`Database cleanup failed: ${result.error ?? 'Unknown error'}`)
+				getLogger().warn(`Database cleanup failed: ${result.error ?? 'Unknown error'}`)
 				return false
 			} else {
 				// Unexpected state
-			getLogger().debug('Database deletion returned unexpected result')
+				getLogger().debug('Database deletion returned unexpected result')
 				return false
 			}
 		} catch (error) {
 			// Unexpected exception
-		getLogger().warn(
+			getLogger().warn(
 				`Unexpected database cleanup error: ${error instanceof Error ? error.message : String(error)}`
 			)
 			return false

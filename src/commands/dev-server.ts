@@ -3,6 +3,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { DockerManager } from '../lib/DockerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
@@ -67,9 +68,22 @@ export class DevServerCommand {
 
 		logger.debug(`Found worktree at: ${worktree.path}`)
 
-		// 3. Load settings to check sourceEnvOnStart
+		// 3. Load settings to check sourceEnvOnStart and Docker config
 		const settings = await this.settingsManager.loadSettings()
 		const shouldLoadEnv = settings.sourceEnvOnStart ?? false
+
+		// 3a. Extract Docker configuration if Docker mode is enabled
+		const identifier = parsed.number?.toString() ?? parsed.branchName ?? parsed.originalInput
+		const dockerConfig = DockerManager.buildDockerConfigFromSettings(
+			settings.capabilities?.web,
+			identifier
+		)
+
+		if (dockerConfig) {
+			await DockerManager.assertAvailable()
+			const { dockerFile, containerPort, identifier } = dockerConfig
+			logger.debug(`Docker mode enabled with config: ${JSON.stringify({ dockerFile, containerPort, identifier })}`)
+		}
 
 		// Build environment variables
 		let envOverrides: Record<string, string> = {}
@@ -128,7 +142,7 @@ export class DevServerCommand {
 		const url = `http://localhost:${port}`
 
 		// 6. Check if server already running
-		const isRunning = await this.devServerManager.isServerRunning(port)
+		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig)
 
 		if (isRunning) {
 			const message = `Dev server already running at ${url}`
@@ -176,7 +190,8 @@ export class DevServerCommand {
 					this.outputJson(finalResult)
 				}
 			},
-			envOverrides
+			envOverrides,
+			dockerConfig
 		)
 
 		if (processInfo.pid) {
