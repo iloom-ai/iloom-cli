@@ -2065,6 +2065,55 @@ The following Jira settings can be configured in `.iloom/settings.json` under `i
 
 **Note:** Different Jira instances may use different issue type names. If issue creation fails with a 400 error, check your Jira project's available issue types and configure `defaultIssueType` and `defaultSubtaskType` accordingly.
 
+**Version Control (VCS) Provider Settings:**
+
+iloom supports multiple version control providers for PR operations. By default, GitHub is used via the `gh` CLI. For BitBucket Cloud, configure the following in `.iloom/settings.json`:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `versionControl.provider` | `"github"` \| `"bitbucket"` | `"github"` | VCS provider for PR operations |
+| `versionControl.bitbucket.username` | string | (required) | BitBucket username |
+| `versionControl.bitbucket.apiToken` | string | (required) | BitBucket API token (store in `settings.local.json`) |
+| `versionControl.bitbucket.workspace` | string | (auto-detected) | BitBucket workspace slug |
+| `versionControl.bitbucket.repoSlug` | string | (auto-detected) | Repository slug |
+| `versionControl.bitbucket.reviewers` | string[] | - | Usernames to add as PR reviewers |
+
+**Example Configuration:**
+
+`.iloom/settings.json`:
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-username",
+      "workspace": "your-workspace",
+      "reviewers": ["reviewer1", "reviewer2"]
+    }
+  }
+}
+```
+
+`.iloom/settings.local.json` (gitignored):
+```json
+{
+  "versionControl": {
+    "bitbucket": {
+      "apiToken": "your-api-token"
+    }
+  }
+}
+```
+
+**Supported Provider Combinations:**
+
+- GitHub Issues + GitHub VCS (default)
+- GitHub Issues + BitBucket VCS
+- Linear Issues + BitBucket VCS
+- Jira Issues + BitBucket VCS
+
+**Note:** Draft PR mode (`mergeBehavior.mode: "draft-pr"`) is GitHub-only. BitBucket does not support draft pull requests.
+
 ---
 
 ### il update

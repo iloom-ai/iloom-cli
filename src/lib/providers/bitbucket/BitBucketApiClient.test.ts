@@ -365,6 +365,281 @@ describe('BitBucketApiClient', () => {
 		})
 	})
 
+	describe('addPRComment', () => {
+		it('should return comment id and url from response', async () => {
+			const https = await import('node:https')
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				const mockResponse = {
+					statusCode: 201,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								id: 456,
+								content: { raw: 'Test comment' },
+								links: { html: { href: 'https://bitbucket.org/workspace/repo/pull-requests/1#comment-456' } },
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const result = await client.addPRComment('workspace', 'repo', 1, 'Test comment')
+
+			expect(result.id).toBe(456)
+			expect(result.links.html.href).toBe('https://bitbucket.org/workspace/repo/pull-requests/1#comment-456')
+			expect(result.content.raw).toBe('Test comment')
+		})
+	})
+
+	describe('put method support', () => {
+		it('should send PUT requests to BitBucket API', async () => {
+			const https = await import('node:https')
+			let capturedMethod: string | undefined
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				capturedMethod = (options as { method: string }).method
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								id: 789,
+								content: { raw: 'Updated comment' },
+								links: { html: { href: 'https://bitbucket.org/workspace/repo/pull-requests/1#comment-789' } },
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			await client.updatePRComment('workspace', 'repo', 1, 789, 'Updated comment')
+
+			expect(capturedMethod).toBe('PUT')
+		})
+	})
+
+	describe('updatePRComment', () => {
+		it('should PUT to correct endpoint with content body', async () => {
+			const https = await import('node:https')
+			let capturedPath: string | undefined
+			let capturedPayload: string | undefined
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				capturedPath = (options as { path: string }).path
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								id: 42,
+								content: { raw: 'Updated text' },
+								links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/5#comment-42' } },
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: (data: string) => { capturedPayload = data },
+					end: vi.fn(),
+				}
+			})
+
+			const result = await client.updatePRComment('ws', 'repo', 5, 42, 'Updated text')
+
+			expect(capturedPath).toBe('/2.0/repositories/ws/repo/pullrequests/5/comments/42')
+			expect(capturedPayload).toBeDefined()
+			const payload = JSON.parse(capturedPayload!)
+			expect(payload).toEqual({ content: { raw: 'Updated text' } })
+			expect(result.id).toBe(42)
+			expect(result.links.html.href).toBe('https://bitbucket.org/ws/repo/pull-requests/5#comment-42')
+		})
+	})
+
+	describe('listPRComments', () => {
+		it('should GET PR comments and return all from single page', async () => {
+			const https = await import('node:https')
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								values: [
+									{
+										id: 1,
+										content: { raw: 'General comment' },
+										links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/10#comment-1' } },
+									},
+									{
+										id: 2,
+										content: { raw: 'Inline comment' },
+										inline: { from: null, to: 15, path: 'src/main.ts' },
+										links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/10#comment-2' } },
+									},
+								],
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const comments = await client.listPRComments('ws', 'repo', 10)
+
+			expect(comments).toHaveLength(2)
+			expect(comments[0].id).toBe(1)
+			expect(comments[0].inline).toBeUndefined()
+			expect(comments[1].id).toBe(2)
+			expect(comments[1].inline).toEqual({ from: null, to: 15, path: 'src/main.ts' })
+		})
+
+		it('should handle pagination when fetching PR comments', async () => {
+			const https = await import('node:https')
+			let requestCount = 0
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				requestCount++
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							if (requestCount === 1) {
+								handler(JSON.stringify({
+									values: [
+										{
+											id: 1,
+											content: { raw: 'Comment 1' },
+											links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/10#comment-1' } },
+										},
+									],
+									next: 'https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/10/comments?page=2',
+								}))
+							} else {
+								handler(JSON.stringify({
+									values: [
+										{
+											id: 2,
+											content: { raw: 'Comment 2' },
+											links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/10#comment-2' } },
+										},
+									],
+								}))
+							}
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const comments = await client.listPRComments('ws', 'repo', 10)
+
+			expect(requestCount).toBe(2)
+			expect(comments).toHaveLength(2)
+			expect(comments[0].id).toBe(1)
+			expect(comments[1].id).toBe(2)
+		})
+	})
+
+	describe('addInlinePRComment', () => {
+		it('should POST with inline metadata', async () => {
+			const https = await import('node:https')
+			let capturedPayload: string | undefined
+			let capturedPath: string | undefined
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				capturedPath = (options as { path: string }).path
+				const mockResponse = {
+					statusCode: 201,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								id: 99,
+								content: { raw: 'Inline review note' },
+								inline: { from: null, to: 42, path: 'src/utils/helper.ts' },
+								links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/7#comment-99' } },
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: (data: string) => { capturedPayload = data },
+					end: vi.fn(),
+				}
+			})
+
+			const result = await client.addInlinePRComment('ws', 'repo', 7, 'Inline review note', 'src/utils/helper.ts', 42)
+
+			expect(capturedPath).toBe('/2.0/repositories/ws/repo/pullrequests/7/comments')
+			expect(capturedPayload).toBeDefined()
+			const payload = JSON.parse(capturedPayload!)
+			expect(payload).toEqual({
+				content: { raw: 'Inline review note' },
+				inline: { to: 42, path: 'src/utils/helper.ts' },
+			})
+			expect(result.id).toBe(99)
+			expect(result.inline).toEqual({ from: null, to: 42, path: 'src/utils/helper.ts' })
+			expect(result.links.html.href).toBe('https://bitbucket.org/ws/repo/pull-requests/7#comment-99')
+		})
+	})
+
 	describe('getCurrentUser', () => {
 		it('should return current user data from /user endpoint', async () => {
 			const https = await import('node:https')

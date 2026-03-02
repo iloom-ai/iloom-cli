@@ -13,6 +13,8 @@ import { IssueManagementProviderFactory } from './IssueManagementProviderFactory
 import { JiraWikiSanitizer } from '../utils/jira-wiki-sanitizer.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
+import { VCSProviderFactory } from '../lib/VCSProviderFactory.js'
+import type { VersionControlProvider } from '../lib/VersionControlProvider.js'
 import type {
 	IssueProvider,
 	GetIssueInput,
@@ -34,6 +36,9 @@ import type {
 
 // Module-level settings loaded at startup
 let settings: IloomSettings | undefined
+
+// Module-level VCS provider (non-null when BitBucket or other non-GitHub VCS is configured)
+let vcsProvider: VersionControlProvider | null = null
 
 // Validate required environment variables
 function validateEnvironment(): IssueProvider {
@@ -183,19 +188,17 @@ server.registerTool(
 	}
 )
 
-// Import GitHubIssueManagementProvider for get_pr tool (PRs always use GitHub)
+// Import GitHubIssueManagementProvider for GitHub fallback on PR tools
 import { GitHubIssueManagementProvider } from './GitHubIssueManagementProvider.js'
 
 // Register get_pr tool
-// Note: PRs only exist on GitHub, so this tool always uses the GitHub provider
-// regardless of the configured issue tracker
 server.registerTool(
 	'get_pr',
 	{
 		title: 'Get Pull Request',
 		description:
 			'Fetch pull request details including title, body, comments, files, commits, and branch information. ' +
-			'PRs only exist on GitHub, so this tool always uses GitHub regardless of configured issue tracker. ' +
+			'Uses the configured VCS provider (GitHub or BitBucket). Falls back to GitHub when no VCS provider is configured. ' +
 			'Author fields have normalized core fields: { id, displayName } plus provider-specific fields.',
 		inputSchema: {
 			number: z.string().describe('The PR number'),
@@ -258,7 +261,44 @@ server.registerTool(
 		console.error(`Fetching PR ${number}${repo ? ` from ${repo}` : ''}`)
 
 		try {
-			// PRs always use GitHub provider regardless of configured issue tracker
+			// Use VCS provider when available (e.g., BitBucket), fall back to GitHub
+			if (vcsProvider) {
+				if (repo) {
+					console.error(`VCS provider path does not support 'repo' override parameter, using configured repository`)
+				}
+				// Note: includeComments is not passed to vcsProvider.fetchPR() because
+				// BitBucket's fetchPR API does not support filtering comments separately.
+				// Comments are not included in the VCS provider response.
+				const pr = await vcsProvider.fetchPR(parseInt(number, 10))
+				// Note: author, files, commits, and comments are not available in the
+				// VCS provider path. BitBucket's fetchPR returns core PR metadata only.
+				const result = {
+					id: String(pr.number),
+					number: pr.number,
+					title: pr.title,
+					body: pr.body,
+					state: pr.state.toUpperCase(),
+					url: pr.url,
+					headRefName: pr.branch,
+					baseRefName: pr.baseBranch,
+					author: null as null,
+					isDraft: pr.isDraft,
+				}
+
+				console.error(`PR fetched successfully: #${result.number} - ${result.title}`)
+
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: JSON.stringify(result),
+						},
+					],
+					structuredContent: result as unknown as { [x: string]: unknown },
+				}
+			}
+
+			// Fall back to GitHub provider
 			const provider = new GitHubIssueManagementProvider()
 			const result = await provider.getPR({ number, includeComments, repo })
 
@@ -283,8 +323,6 @@ server.registerTool(
 )
 
 // Register get_review_comments tool
-// Note: Review comments only exist on GitHub PRs, so this tool always uses the GitHub provider
-
 server.registerTool(
 	'get_review_comments',
 	{
@@ -292,7 +330,7 @@ server.registerTool(
 		description:
 			'Fetch inline code review comments on a pull request (comments on specific files and lines). ' +
 			'Returns comments with file path, line number, diff side, author, and reply threading. ' +
-			'Optionally filter by review ID. PRs only exist on GitHub, so this tool always uses GitHub.',
+			'Uses the configured VCS provider when available, falls back to GitHub.',
 		inputSchema: {
 			number: z.string().describe('The PR number'),
 			reviewId: z
@@ -328,7 +366,40 @@ server.registerTool(
 		console.error(`Fetching review comments for PR ${number}${reviewId ? ` (review ${reviewId})` : ''}${repo ? ` from ${repo}` : ''}`)
 
 		try {
-			// Review comments always use GitHub provider regardless of configured issue tracker
+			// Use VCS provider when available and it supports review comments
+			if (vcsProvider?.getReviewComments) {
+				if (repo) {
+					console.error(`VCS provider path does not support 'repo' override parameter, using configured repository`)
+				}
+				// Note: reviewId filtering is not supported for the VCS provider path.
+				// BitBucket does not have a concept of "reviews" grouping inline comments.
+				// All inline comments are returned regardless of reviewId parameter.
+				if (reviewId) {
+					console.error(`VCS provider path does not support 'reviewId' filter, returning all inline comments`)
+				}
+				const reviewComments = await vcsProvider.getReviewComments(parseInt(number, 10))
+
+				// Map ReviewComment[] to output shape (add pullRequestReviewId: null for non-GitHub providers)
+				const comments = reviewComments.map(c => ({
+					...c,
+					pullRequestReviewId: null,
+				}))
+
+				console.error(`Review comments fetched successfully: ${comments.length} comments`)
+
+				const result = { comments }
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: JSON.stringify(result),
+						},
+					],
+					structuredContent: result as unknown as { [x: string]: unknown },
+				}
+			}
+
+			// Fall back to GitHub provider
 			const provider = new GitHubIssueManagementProvider()
 			const comments = await provider.getReviewComments({ number, reviewId, repo })
 
@@ -437,7 +508,28 @@ server.registerTool(
 
 		try {
 			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
-			// PR comments must always go to GitHub since PRs only exist on GitHub
+
+			// Use VCS provider for PR comments when available (e.g., BitBucket)
+			if (type === 'pr' && vcsProvider) {
+				const vcsResult = await vcsProvider.createPRComment(parseInt(number, 10), sanitizedBody)
+
+				console.error(
+					`Comment created successfully: ${vcsResult.id} at ${vcsResult.url}`
+				)
+
+				const result = { id: vcsResult.id, url: vcsResult.url, created_at: new Date().toISOString() }
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: JSON.stringify(result),
+						},
+					],
+					structuredContent: result as unknown as { [x: string]: unknown },
+				}
+			}
+
+			// Fall back to issue management provider (GitHub for PR comments, configured provider for issues)
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
 			const result = await provider.createComment({ number, body: sanitizedBody, type })
@@ -489,7 +581,28 @@ server.registerTool(
 
 		try {
 			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
-			// PR comments must always go to GitHub since PRs only exist on GitHub
+
+			// Use VCS provider for PR comments when available and it supports update
+			if (type === 'pr' && vcsProvider?.updatePRComment) {
+				const vcsResult = await vcsProvider.updatePRComment(parseInt(number, 10), commentId, sanitizedBody)
+
+				console.error(
+					`Comment updated successfully: ${vcsResult.id} at ${vcsResult.url}`
+				)
+
+				const result = { id: vcsResult.id, url: vcsResult.url, updated_at: new Date().toISOString() }
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: JSON.stringify(result),
+						},
+					],
+					structuredContent: result as unknown as { [x: string]: unknown },
+				}
+			}
+
+			// Fall back to issue management provider (GitHub for PR comments, configured provider for issues)
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
 			const result = await provider.updateComment({ commentId, number, body: sanitizedBody })
@@ -1057,6 +1170,26 @@ async function main(): Promise<void> {
 	const settingsManager = new SettingsManager()
 	settings = await settingsManager.loadSettings()
 	console.error('Settings loaded')
+
+	// Initialize VCS provider if configured (e.g., BitBucket)
+	try {
+		vcsProvider = VCSProviderFactory.create(settings)
+		if (vcsProvider) {
+			console.error(`VCS provider initialized: ${vcsProvider.providerName}`)
+		}
+	} catch (error) {
+		// Only catch configuration-related errors (missing credentials, unsupported provider).
+		// Re-throw unexpected errors to avoid silently swallowing real failures.
+		if (
+			error instanceof Error &&
+			(error.message.includes('is required') || error.message.includes('Unsupported VCS provider'))
+		) {
+			console.error(`Failed to initialize VCS provider (falling back to GitHub): ${error.message}`)
+			vcsProvider = null
+		} else {
+			throw error
+		}
+	}
 
 	// Validate environment and get provider
 	const provider = validateEnvironment()

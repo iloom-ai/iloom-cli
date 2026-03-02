@@ -1,7 +1,7 @@
 // BitBucketVCSProvider - Implements VersionControlProvider for BitBucket
 // Provides PR/VCS operations via BitBucket REST API
 
-import type { VersionControlProvider, ExistingPR } from '../../VersionControlProvider.js'
+import type { VersionControlProvider, ExistingPR, PRCreationResult, ReviewComment } from '../../VersionControlProvider.js'
 import type { PullRequest } from '../../../types/index.js'
 import { BitBucketApiClient, type BitBucketConfig, type BitBucketPullRequest } from './BitBucketApiClient.js'
 import type { IloomSettings } from '../../SettingsManager.js'
@@ -114,7 +114,7 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		body: string,
 		baseBranch: string,
 		cwd?: string
-	): Promise<string> {
+	): Promise<PRCreationResult> {
 		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
 
 		// Log the target repository so users can verify it's correct
@@ -160,7 +160,7 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		}
 
 		getLogger().info(`BitBucket PR #${pr.id} created successfully`)
-		return pr.links.html.href
+		return { url: pr.links.html.href, number: pr.id, wasExisting: false }
 	}
 
 	/**
@@ -186,12 +186,74 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 	/**
 	 * Create a comment on a PR
 	 */
-	async createPRComment(prNumber: number, body: string, cwd?: string): Promise<void> {
+	async createPRComment(prNumber: number, body: string, cwd?: string): Promise<{ id: string; url: string }> {
 		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
 
 		getLogger().debug('Creating BitBucket PR comment', { workspace, repoSlug, prNumber })
 
-		await this.client.addPRComment(workspace, repoSlug, prNumber, body)
+		const comment = await this.client.addPRComment(workspace, repoSlug, prNumber, body)
+		return { id: String(comment.id), url: comment.links.html.href }
+	}
+
+	/**
+	 * Update an existing comment on a PR
+	 */
+	async updatePRComment(prNumber: number, commentId: string, body: string, cwd?: string): Promise<{ id: string; url: string }> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		getLogger().debug('Updating BitBucket PR comment', { workspace, repoSlug, prNumber, commentId })
+
+		const numericCommentId = parseInt(commentId, 10)
+		if (isNaN(numericCommentId)) {
+			throw new Error(`Invalid comment ID "${commentId}": expected a numeric value`)
+		}
+
+		const comment = await this.client.updatePRComment(workspace, repoSlug, prNumber, numericCommentId, body)
+		return { id: String(comment.id), url: comment.links.html.href }
+	}
+
+	/**
+	 * Get inline review comments on a PR
+	 * Fetches all comments and filters for those with inline metadata
+	 */
+	async getReviewComments(prNumber: number, cwd?: string): Promise<ReviewComment[]> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		getLogger().debug('Fetching BitBucket PR review comments', { workspace, repoSlug, prNumber })
+
+		const allComments = await this.client.listPRComments(workspace, repoSlug, prNumber)
+
+		// Filter for inline comments only (those with inline metadata) and map to ReviewComment
+		const inlineComments: ReviewComment[] = []
+		for (const c of allComments) {
+			if (c.inline == null) continue
+			inlineComments.push({
+				id: String(c.id),
+				body: c.content.raw,
+				path: c.inline.path,
+				line: c.inline.to ?? c.inline.from ?? null,
+				side: null, // BitBucket doesn't have a "side" concept like GitHub
+				author: c.user
+					? { id: c.user.uuid, displayName: c.user.display_name }
+					: null,
+				createdAt: c.created_on ?? '',
+				updatedAt: c.updated_on ?? null,
+				inReplyToId: null, // BitBucket uses nested comments, not reply chains
+			})
+		}
+		return inlineComments
+	}
+
+	/**
+	 * Create an inline review comment on a specific file and line in a PR
+	 */
+	async createReviewComment(prNumber: number, path: string, line: number, body: string, cwd?: string): Promise<{ id: string; url: string }> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		getLogger().debug('Creating BitBucket inline PR comment', { workspace, repoSlug, prNumber, path, line })
+
+		const comment = await this.client.addInlinePRComment(workspace, repoSlug, prNumber, body, path, line)
+		return { id: String(comment.id), url: comment.links.html.href }
 	}
 
 	/**

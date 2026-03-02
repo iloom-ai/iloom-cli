@@ -19,6 +19,7 @@ import { MetadataManager } from './MetadataManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueProvider } from '../mcp/types.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { formatRecapMarkdown } from '../utils/recap-formatter.js'
@@ -402,20 +403,28 @@ export class SessionSummaryService {
 		worktreePath: string,
 		prNumber?: number
 	): Promise<void> {
-		// Get the issue management provider from settings
-		// PRs only exist on GitHub, so always use 'github' provider when prNumber is provided
-		// (see types.ts:32-33 and LinearIssueManagementProvider.getPR())
-		const providerType = prNumber !== undefined
-			? 'github'
-			: (settings.issueManagement?.provider ?? 'github') as IssueProvider
-		const provider = IssueManagementProviderFactory.create(providerType, settings)
-
 		// Apply attribution if configured
 		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)
 
 		// When prNumber is provided, post to the PR instead of the issue
 		const targetNumber = prNumber ?? issueNumber
 		const targetType = prNumber !== undefined ? 'pr' : 'issue'
+
+		if (prNumber !== undefined) {
+			// Try VCS provider first for PR comments (e.g., BitBucket)
+			const vcsProvider = VCSProviderFactory.create(settings)
+			if (vcsProvider) {
+				await vcsProvider.createPRComment(prNumber, finalSummary, worktreePath)
+				return
+			}
+			// Fall through to issue management provider (GitHub)
+		}
+
+		// Use issue management provider (GitHub, Linear, Jira)
+		const providerType = prNumber !== undefined
+			? 'github'
+			: (settings.issueManagement?.provider ?? 'github') as IssueProvider
+		const provider = IssueManagementProviderFactory.create(providerType, settings)
 
 		// Create the comment
 		await provider.createComment({

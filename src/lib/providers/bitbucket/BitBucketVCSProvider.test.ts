@@ -13,6 +13,9 @@ vi.mock('./BitBucketApiClient.js', () => ({
 		listPullRequests: vi.fn(),
 		getPullRequest: vi.fn(),
 		addPRComment: vi.fn(),
+		updatePRComment: vi.fn(),
+		listPRComments: vi.fn(),
+		addInlinePRComment: vi.fn(),
 	})),
 }))
 
@@ -42,6 +45,9 @@ describe('BitBucketVCSProvider', () => {
 		listPullRequests: ReturnType<typeof vi.fn>
 		getPullRequest: ReturnType<typeof vi.fn>
 		addPRComment: ReturnType<typeof vi.fn>
+		updatePRComment: ReturnType<typeof vi.fn>
+		listPRComments: ReturnType<typeof vi.fn>
+		addInlinePRComment: ReturnType<typeof vi.fn>
 	}
 
 	beforeEach(() => {
@@ -59,6 +65,9 @@ describe('BitBucketVCSProvider', () => {
 			listPullRequests: vi.fn(),
 			getPullRequest: vi.fn(),
 			addPRComment: vi.fn(),
+			updatePRComment: vi.fn(),
+			listPRComments: vi.fn(),
+			addInlinePRComment: vi.fn(),
 		}
 		vi.mocked(BitBucketApiClient).mockImplementation(() => mockClient as unknown as BitBucketApiClient)
 	})
@@ -94,7 +103,7 @@ describe('BitBucketVCSProvider', () => {
 				links: { html: { href: 'https://bitbucket.org/test/pr/123' } },
 			})
 
-			const url = await provider.createPR('feature', 'Test PR', 'Test body', 'main')
+			const result = await provider.createPR('feature', 'Test PR', 'Test body', 'main')
 
 			// Verify findUsersByUsername was called with the configured usernames
 			expect(mockClient.findUsersByUsername).toHaveBeenCalledWith(
@@ -113,7 +122,11 @@ describe('BitBucketVCSProvider', () => {
 				['acc-alice', 'acc-bob']
 			)
 
-			expect(url).toBe('https://bitbucket.org/test/pr/123')
+			expect(result).toEqual({
+				url: 'https://bitbucket.org/test/pr/123',
+				number: 123,
+				wasExisting: false,
+			})
 		})
 
 		it('should continue with partial reviewers when some usernames cannot be resolved', async () => {
@@ -446,6 +459,285 @@ describe('BitBucketVCSProvider', () => {
 			const result = await provider.checkForExistingPR('feature-branch')
 
 			expect(result).toBeNull()
+		})
+	})
+
+	describe('createPR return type', () => {
+		it('should return PRCreationResult with url, number, and wasExisting', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.createPullRequest.mockResolvedValue({
+				id: 42,
+				title: 'Test PR',
+				description: 'Test body',
+				state: 'OPEN',
+				author: { display_name: 'Test', uuid: 'uuid' },
+				source: { branch: { name: 'feature' } },
+				destination: { branch: { name: 'main' } },
+				created_on: '2024-01-01',
+				updated_on: '2024-01-01',
+				links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/42' } },
+			})
+
+			const result = await provider.createPR('feature', 'Test PR', 'Test body', 'main')
+
+			expect(result).toEqual({
+				url: 'https://bitbucket.org/ws/repo/pull-requests/42',
+				number: 42,
+				wasExisting: false,
+			})
+		})
+	})
+
+	describe('createPRComment', () => {
+		it('should return { id, url } from API response', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.addPRComment.mockResolvedValue({
+				id: 456,
+				content: { raw: 'Test comment' },
+				links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-456' } },
+			})
+
+			const result = await provider.createPRComment(1, 'Test comment')
+
+			expect(mockClient.addPRComment).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				1,
+				'Test comment'
+			)
+			expect(result).toEqual({
+				id: '456',
+				url: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-456',
+			})
+		})
+	})
+
+	describe('updatePRComment', () => {
+		it('should delegate to client.updatePRComment and return { id, url }', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.updatePRComment.mockResolvedValue({
+				id: 789,
+				content: { raw: 'Updated comment' },
+				links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/5#comment-789' } },
+			})
+
+			const result = await provider.updatePRComment(5, '789', 'Updated comment')
+
+			expect(mockClient.updatePRComment).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				5,
+				789,
+				'Updated comment'
+			)
+			expect(result).toEqual({
+				id: '789',
+				url: 'https://bitbucket.org/ws/repo/pull-requests/5#comment-789',
+			})
+		})
+	})
+
+	describe('updatePRComment - validation', () => {
+		it('should throw when commentId is not a valid number', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			await expect(
+				provider.updatePRComment(5, 'not-a-number', 'Updated comment')
+			).rejects.toThrow('Invalid comment ID "not-a-number": expected a numeric value')
+		})
+	})
+
+	describe('getReviewComments', () => {
+		it('should call listPRComments and filter for inline comments', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPRComments.mockResolvedValue([
+				{
+					id: 100,
+					content: { raw: 'General comment' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-100' } },
+					user: { display_name: 'Alice', uuid: '{uuid-alice}' },
+					created_on: '2024-01-01T00:00:00Z',
+					updated_on: '2024-01-02T00:00:00Z',
+					// No inline property -- this is a general comment
+				},
+				{
+					id: 200,
+					content: { raw: 'Inline comment on line 10' },
+					inline: { from: null, to: 10, path: 'src/index.ts' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-200' } },
+					user: { display_name: 'Bob', uuid: '{uuid-bob}' },
+					created_on: '2024-01-03T00:00:00Z',
+					updated_on: undefined,
+				},
+				{
+					id: 300,
+					content: { raw: 'Another inline comment' },
+					inline: { from: 5, to: 15, path: 'src/utils.ts' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-300' } },
+					user: null,
+					created_on: '2024-01-04T00:00:00Z',
+					updated_on: '2024-01-05T00:00:00Z',
+				},
+			])
+
+			const result = await provider.getReviewComments(1)
+
+			expect(mockClient.listPRComments).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				1
+			)
+
+			// Only inline comments should be returned
+			expect(result).toHaveLength(2)
+			expect(result[0]).toEqual({
+				id: '200',
+				body: 'Inline comment on line 10',
+				path: 'src/index.ts',
+				line: 10,
+				side: null,
+				author: { id: '{uuid-bob}', displayName: 'Bob' },
+				createdAt: '2024-01-03T00:00:00Z',
+				updatedAt: null,
+				inReplyToId: null,
+			})
+			expect(result[1]).toEqual({
+				id: '300',
+				body: 'Another inline comment',
+				path: 'src/utils.ts',
+				line: 15,
+				side: null,
+				author: null,
+				createdAt: '2024-01-04T00:00:00Z',
+				updatedAt: '2024-01-05T00:00:00Z',
+				inReplyToId: null,
+			})
+		})
+
+		it('should fall back to inline.from when inline.to is null', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPRComments.mockResolvedValue([
+				{
+					id: 400,
+					content: { raw: 'Comment with only from' },
+					inline: { from: 7, to: null, path: 'src/deleted.ts' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-400' } },
+					user: { display_name: 'Alice', uuid: '{uuid-alice}' },
+					created_on: '2024-01-06T00:00:00Z',
+					updated_on: undefined,
+				},
+			])
+
+			const result = await provider.getReviewComments(1)
+
+			expect(result).toHaveLength(1)
+			expect(result[0]?.line).toBe(7)
+		})
+
+		it('should return null for line when both inline.to and inline.from are null', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPRComments.mockResolvedValue([
+				{
+					id: 500,
+					content: { raw: 'Comment with no line info' },
+					inline: { from: null, to: null, path: 'src/file.ts' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-500' } },
+					user: { display_name: 'Alice', uuid: '{uuid-alice}' },
+					created_on: '2024-01-07T00:00:00Z',
+					updated_on: undefined,
+				},
+			])
+
+			const result = await provider.getReviewComments(1)
+
+			expect(result).toHaveLength(1)
+			expect(result[0]?.line).toBeNull()
+		})
+
+		it('should return empty array when no inline comments exist', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.listPRComments.mockResolvedValue([
+				{
+					id: 100,
+					content: { raw: 'General comment' },
+					links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/1#comment-100' } },
+				},
+			])
+
+			const result = await provider.getReviewComments(1)
+
+			expect(result).toHaveLength(0)
+		})
+	})
+
+	describe('createReviewComment', () => {
+		it('should delegate to client.addInlinePRComment', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.addInlinePRComment.mockResolvedValue({
+				id: 999,
+				content: { raw: 'Review comment on line 42' },
+				inline: { from: null, to: 42, path: 'src/main.ts' },
+				links: { html: { href: 'https://bitbucket.org/ws/repo/pull-requests/3#comment-999' } },
+			})
+
+			const result = await provider.createReviewComment(3, 'src/main.ts', 42, 'Review comment on line 42')
+
+			expect(mockClient.addInlinePRComment).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				3,
+				'Review comment on line 42',
+				'src/main.ts',
+				42
+			)
+			expect(result).toEqual({
+				id: '999',
+				url: 'https://bitbucket.org/ws/repo/pull-requests/3#comment-999',
+			})
 		})
 	})
 

@@ -29,7 +29,6 @@ export interface GetIssueInput {
 
 /**
  * Input schema for getting pull request details
- * Note: PRs only exist on GitHub, so this always uses GitHub provider regardless of configured issue tracker
  */
 export interface GetPRInput {
 	number: string // PR number
@@ -39,7 +38,6 @@ export interface GetPRInput {
 
 /**
  * Input schema for getting PR review comments (inline code comments)
- * Note: PRs only exist on GitHub, so this always uses GitHub provider
  */
 export interface GetReviewCommentsInput {
 	number: string // PR number
@@ -263,7 +261,6 @@ export interface IssueResult {
 
 /**
  * Output schema for pull request details
- * PRs only exist on GitHub, so this is GitHub-specific
  */
 export interface PRResult {
 	// Core fields

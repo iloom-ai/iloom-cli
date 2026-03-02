@@ -1178,7 +1178,7 @@ export class FinishCommand {
 					worktree.path
 				)
 
-				const prUrl = await vcsProvider.createPR(
+				const prResult = await vcsProvider.createPR(
 					worktree.branch,
 					prTitle,
 					prBody,
@@ -1186,13 +1186,15 @@ export class FinishCommand {
 					worktree.path
 				)
 
-				getLogger().success(`Pull request created: ${prUrl}`)
-				finishResult.prUrl = prUrl
+				getLogger().success(`Pull request created: ${prResult.url}`)
+				finishResult.prUrl = prResult.url
 				finishResult.operations.push({
 					type: 'pr-creation',
 					message: 'Pull request created',
 					success: true,
 				})
+
+				await this.generateSessionSummaryIfConfigured(parsed, worktree, options, prResult.number)
 			}
 
 			// Open in browser if configured

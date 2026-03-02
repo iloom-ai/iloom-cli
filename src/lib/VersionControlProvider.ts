@@ -21,6 +21,21 @@ export interface ExistingPR {
 }
 
 /**
+ * Represents an inline review comment on a pull request
+ */
+export interface ReviewComment {
+	id: string
+	body: string
+	path: string
+	line: number | null
+	side: string | null
+	author: { id: string; displayName: string } | null
+	createdAt: string
+	updatedAt: string | null
+	inReplyToId: string | null
+}
+
+/**
  * VersionControlProvider interface - abstraction for VCS providers
  * 
  * Design Philosophy:
@@ -43,14 +58,14 @@ export interface VersionControlProvider {
 		body: string,
 		baseBranch: string,
 		cwd?: string
-	): Promise<string>
+	): Promise<PRCreationResult>
 	createDraftPR?(
 		branchName: string,
 		title: string,
 		body: string,
 		baseBranch: string,
 		cwd?: string
-	): Promise<string>
+	): Promise<PRCreationResult>
 	markPRReadyForReview?(prNumber: number, cwd?: string): Promise<void>
 	
 	// PR metadata and state
@@ -58,8 +73,11 @@ export interface VersionControlProvider {
 	getPRUrl(prNumber: number, cwd?: string): Promise<string>
 	
 	// PR comments
-	createPRComment(prNumber: number, body: string, cwd?: string): Promise<void>
-	
+	createPRComment(prNumber: number, body: string, cwd?: string): Promise<{ id: string; url: string }>
+	updatePRComment?(prNumber: number, commentId: string, body: string, cwd?: string): Promise<{ id: string; url: string }>
+	getReviewComments?(prNumber: number, cwd?: string): Promise<ReviewComment[]>
+	createReviewComment?(prNumber: number, path: string, line: number, body: string, cwd?: string): Promise<{ id: string; url: string }>
+
 	// Remote and repository detection
 	detectRepository(cwd?: string): Promise<{ owner: string; repo: string } | null>
 	getTargetRemote(cwd?: string): Promise<string>

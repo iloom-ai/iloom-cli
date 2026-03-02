@@ -89,6 +89,19 @@ export interface BitBucketCurrentUser {
 }
 
 /**
+ * BitBucket PR comment response from API
+ */
+export interface BitBucketComment {
+	id: number
+	content: { raw: string }
+	inline?: { from: number | null; to: number | null; path: string }
+	links: { html: { href: string } }
+	user?: { display_name: string; uuid: string }
+	created_on?: string
+	updated_on?: string
+}
+
+/**
  * BitBucketApiClient provides low-level REST API access to BitBucket
  * 
  * Authentication: Basic Auth with username and API token
@@ -116,7 +129,7 @@ export class BitBucketApiClient {
 	 * Make an HTTP request to BitBucket API
 	 */
 	private async request<T>(
-		method: 'GET' | 'POST',
+		method: 'GET' | 'POST' | 'PUT',
 		endpoint: string,
 		body?: unknown
 	): Promise<T> {
@@ -124,6 +137,11 @@ export class BitBucketApiClient {
 		const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
 			? new URL(endpoint)
 			: new URL(`${this.baseUrl}${endpoint}`)
+
+		// Validate hostname for full URLs to prevent sending auth credentials to unexpected hosts
+		if ((endpoint.startsWith('http://') || endpoint.startsWith('https://')) && url.hostname !== 'api.bitbucket.org') {
+			throw new Error(`Refusing to send authenticated request to unexpected host: ${url.hostname} (expected api.bitbucket.org)`)
+		}
 		getLogger().debug(`BitBucket API ${method} request`, { url: url.toString() })
 
 		return new Promise((resolve, reject) => {
@@ -190,6 +208,13 @@ export class BitBucketApiClient {
 	 */
 	private async post<T>(endpoint: string, body: unknown): Promise<T> {
 		return this.request<T>('POST', endpoint, body)
+	}
+
+	/**
+	 * Make a PUT request to BitBucket API
+	 */
+	private async put<T>(endpoint: string, body: unknown): Promise<T> {
+		return this.request<T>('PUT', endpoint, body)
 	}
 
 	/**
@@ -288,12 +313,90 @@ export class BitBucketApiClient {
 		repoSlug: string,
 		prId: number,
 		content: string
-	): Promise<void> {
-		await this.post(
+	): Promise<BitBucketComment> {
+		return this.post<BitBucketComment>(
 			`/repositories/${workspace}/${repoSlug}/pullrequests/${prId}/comments`,
 			{
 				content: {
 					raw: content,
+				},
+			}
+		)
+	}
+
+	/**
+	 * Update an existing comment on a pull request
+	 */
+	async updatePRComment(
+		workspace: string,
+		repoSlug: string,
+		prId: number,
+		commentId: number,
+		content: string
+	): Promise<BitBucketComment> {
+		return this.put<BitBucketComment>(
+			`/repositories/${workspace}/${repoSlug}/pullrequests/${prId}/comments/${commentId}`,
+			{
+				content: {
+					raw: content,
+				},
+			}
+		)
+	}
+
+	/**
+	 * List all comments on a pull request with pagination
+	 */
+	async listPRComments(
+		workspace: string,
+		repoSlug: string,
+		prId: number
+	): Promise<BitBucketComment[]> {
+		const MAX_PAGES = 50
+		const allComments: BitBucketComment[] = []
+		let nextUrl: string | null = `/repositories/${workspace}/${repoSlug}/pullrequests/${prId}/comments`
+		let pageCount = 0
+
+		while (nextUrl) {
+			pageCount++
+			if (pageCount > MAX_PAGES) {
+				console.error(`BitBucket listPRComments: exceeded maximum pagination limit of ${MAX_PAGES} pages, returning ${allComments.length} comments collected so far`)
+				break
+			}
+
+			const response: { values: BitBucketComment[]; next?: string } =
+				await this.get(nextUrl)
+
+			allComments.push(...response.values)
+
+			// BitBucket pagination uses 'next' field with full URL
+			nextUrl = response.next ?? null
+		}
+
+		getLogger().debug(`Fetched ${allComments.length} PR comments from BitBucket`)
+		return allComments
+	}
+
+	/**
+	 * Add an inline comment to a specific file and line in a pull request
+	 */
+	async addInlinePRComment(
+		workspace: string,
+		repoSlug: string,
+		prId: number,
+		content: string,
+		filePath: string,
+		line: number
+	): Promise<BitBucketComment> {
+		return this.post<BitBucketComment>(
+			`/repositories/${workspace}/${repoSlug}/pullrequests/${prId}/comments`,
+			{
+				content: {
+					raw: content,
+				},
+				inline: {
+					to: line,
+					path: filePath,
 				},
 			}
 		)

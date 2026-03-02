@@ -27,6 +27,13 @@ vi.mock('../utils/remote.js', () => ({
 	hasMultipleRemotes: vi.fn(),
 }))
 
+// Mock VCSProviderFactory
+vi.mock('./VCSProviderFactory.js', () => ({
+	VCSProviderFactory: {
+		create: vi.fn(),
+	},
+}))
+
 // Mock fs-extra for recap file reading
 vi.mock('fs-extra', () => ({
 	default: {
@@ -39,7 +46,9 @@ vi.mock('fs-extra', () => ({
 import { launchClaude } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
+import type { VersionControlProvider } from './VersionControlProvider.js'
 import fs from 'fs-extra'
 
 describe('SessionSummaryService', () => {
@@ -118,8 +127,10 @@ describe('SessionSummaryService', () => {
 			updateComment: vi.fn(),
 		}
 
-		// Setup factory mock
+		// Setup factory mocks
 		vi.mocked(IssueManagementProviderFactory.create).mockReturnValue(mockIssueProvider)
+		// Default: no VCS provider configured (GitHub uses legacy path)
+		vi.mocked(VCSProviderFactory.create).mockReturnValue(null)
 
 		// Setup Claude mock - must be > 100 chars to pass length check
 		vi.mocked(launchClaude).mockResolvedValue('## iloom Session Summary\n\n**Key Themes:**\n- Theme one about testing\n- Theme two about implementation\n\n### Key Insights\n- Test insight one\n- Test insight two')
@@ -363,6 +374,64 @@ describe('SessionSummaryService', () => {
 			await service.generateAndPostSummary(defaultInput)
 
 			// Verify comment was posted to issue with type: 'issue'
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.any(String),
+				type: 'issue',
+			})
+		})
+
+		it('should use VCS provider for PR comments when BitBucket is configured', async () => {
+			const mockVcsProvider: Partial<VersionControlProvider> = {
+				createPRComment: vi.fn().mockResolvedValue({ id: '789', url: 'https://bitbucket.org/...' }),
+			}
+			vi.mocked(VCSProviderFactory.create).mockReturnValue(mockVcsProvider as VersionControlProvider)
+
+			const inputWithPrNumber: SessionSummaryInput = {
+				...defaultInput,
+				prNumber: 456,
+			}
+
+			await service.generateAndPostSummary(inputWithPrNumber)
+
+			// Verify VCS provider was used for PR comment
+			expect(VCSProviderFactory.create).toHaveBeenCalledWith(defaultSettings)
+			expect(mockVcsProvider.createPRComment).toHaveBeenCalledWith(456, expect.any(String), '/path/to/worktree')
+			// Verify issue management provider was NOT used
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
+		it('should fall back to issue management provider when VCS provider returns null', async () => {
+			vi.mocked(VCSProviderFactory.create).mockReturnValue(null)
+
+			const inputWithPrNumber: SessionSummaryInput = {
+				...defaultInput,
+				prNumber: 456,
+			}
+
+			await service.generateAndPostSummary(inputWithPrNumber)
+
+			// Verify fallback to GitHub issue management provider
+			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('github', defaultSettings)
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '456',
+				body: expect.any(String),
+				type: 'pr',
+			})
+		})
+
+		it('should not use VCS provider for issue comments even when configured', async () => {
+			const mockVcsProvider: Partial<VersionControlProvider> = {
+				createPRComment: vi.fn().mockResolvedValue({ id: '789', url: 'https://bitbucket.org/...' }),
+			}
+			vi.mocked(VCSProviderFactory.create).mockReturnValue(mockVcsProvider as VersionControlProvider)
+
+			// No prNumber - posting to issue
+			await service.generateAndPostSummary(defaultInput)
+
+			// VCS provider should not be used for issue comments
+			expect(mockVcsProvider.createPRComment).not.toHaveBeenCalled()
+			// Issue management provider should be used instead
 			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
 				number: '123',
 				body: expect.any(String),
