@@ -60,7 +60,7 @@ vi.mock('../lib/SwarmSetupService.js', () => ({
 				{ issueId: '101', worktreePath: '/path/to/child-101', branch: 'feat/issue-101', success: true },
 				{ issueId: '102', worktreePath: '/path/to/child-102', branch: 'feat/issue-102', success: true },
 			],
-			agentsRendered: [],
+			skillsRendered: [],
 			workerAgentRendered: false,
 			verifierAgentRendered: false,
 		}),
@@ -3314,7 +3314,7 @@ describe('IgniteCommand', () => {
 					childWorktrees: [
 						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
 					],
-					agentsRendered: [],
+					skillsRendered: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),
@@ -3417,7 +3417,7 @@ describe('IgniteCommand', () => {
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
 				childWorktrees: [],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3521,7 +3521,7 @@ describe('IgniteCommand', () => {
 					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 					{ issueId: '203', worktreePath: '/path/to/child-203', branch: 'feat/issue-203', success: true },
 				],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3566,7 +3566,7 @@ describe('IgniteCommand', () => {
 					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
 					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 				],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3596,7 +3596,7 @@ describe('IgniteCommand', () => {
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
 				childWorktrees: [],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3628,7 +3628,7 @@ describe('IgniteCommand', () => {
 					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
 					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 				],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3662,7 +3662,7 @@ describe('IgniteCommand', () => {
 				childWorktrees: [
 					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 				],
-				agentsRendered: [],
+				skillsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3779,7 +3779,7 @@ describe('IgniteCommand', () => {
 						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
 						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 					],
-					agentsRendered: [],
+					skillsRendered: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),
@@ -4127,7 +4127,7 @@ describe('IgniteCommand', () => {
 					childWorktrees: [
 						{ issueId: '501', worktreePath: '/path/to/child-501', branch: 'feat/issue-501', success: true },
 					],
-					agentsRendered: [],
+					skillsRendered: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),

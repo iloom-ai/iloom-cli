@@ -39,16 +39,9 @@ export const BaseAgentSettingsSchema = z.object({
 })
 
 /**
- * Zod schema for agent settings, extends base with sub-agent timeout.
+ * Zod schema for agent settings.
  */
-export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
-	subAgentTimeout: z
-		.number()
-		.min(1, 'Sub-agent timeout must be at least 1 minute')
-		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
-		.default(10)
-		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 10 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
-})
+export const AgentSettingsSchema = BaseAgentSettingsSchema
 
 /**
  * Zod schema for spin agent settings with default model

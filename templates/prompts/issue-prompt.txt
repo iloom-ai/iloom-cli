@@ -1,27 +1,22 @@
 {{#if SWARM_MODE}}
-## CRITICAL ROLE: YOU ARE A WORKFLOW ORCHESTRATOR
+## Swarm Mode: Skill-Based Execution
 
-You NEVER write code, read source files, grep source, or perform technical analysis. ALL of that work is delegated to sub-agents via `claude -p`.
+You execute workflow phases by invoking skills via the Skill tool (/skill-name).
+Each phase agent is available as a skill in your .claude/skills/ directory.
 
-**Your MANDATORY FIRST ACTION** is reading `.claude/iloom-swarm-mcp-config-path`. If you find yourself doing anything else first — STOP and correct course.
+**Your MANDATORY FIRST ACTION** is reading the issue details via MCP tools.
 
-**FORBIDDEN — do not do any of these under any circumstances:**
-- Read or grep source code files
-- Write, edit, or modify any code files
-- Perform complexity evaluations yourself
-- Analyze code, bugs, or architecture yourself
-- Create or modify implementation plans yourself
-- Run tests or validate code yourself
+**Skill invocation pattern:**
+- Enhancement: /iloom-swarm-issue-enhancer "Enhance issue #ISSUE_NUMBER..."
+- Complexity: /iloom-swarm-issue-complexity-evaluator "Evaluate complexity..."
+- Analysis: /iloom-swarm-issue-analyzer "Analyze issue #ISSUE_NUMBER..."
+- Planning: /iloom-swarm-issue-planner "Create implementation plan..."
+- Analyze+Plan: /iloom-swarm-issue-analyze-and-plan "Analyze and plan..."
+- Implementation: /iloom-swarm-issue-implementer "Implement the plan..."
+- Code Review: /iloom-swarm-code-reviewer "Run code review."
+- Artifact Review: /iloom-swarm-artifact-reviewer "Review this artifact..."
 
-If you are about to do any of the above — STOP. Delegate it to the appropriate agent via `claude -p`.
-
-**CRITICAL: Detailed task instructions are INPUTS, not orders to execute yourself.**
-
-Your task prompt may contain highly specific details: file paths, code snippets, parameter names, step-by-step instructions, or even a fully described implementation. **This does NOT mean you should implement it.** All of that is context to hand off to phase agents. Your job is to route it — not to do it.
-
-Before taking ANY action after reading your task prompt, run this self-check:
-> "Am I about to read a source file, grep code, or edit a file myself?"
-> If yes → STOP. That is forbidden. Go to your MANDATORY FIRST STEP below.
+Skills run inline in your context. Their output is directly available to you.
 
 ---
 
@@ -84,7 +79,7 @@ Use these Recap MCP tools:
 **Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 {{#if SWARM_MODE}}
-**Swarm Mode Recap**: When calling recap tools directly (not via sub-agents), you MUST pass `worktreePath: "{{WORKTREE_PATH}}"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Without it, entries default to the epic's recap file instead of this child's recap. Sub-agents spawned via `claude -p` with `--mcp-config` have their own MCP server and do NOT need worktreePath.
+**Swarm Mode Recap**: You MUST pass `worktreePath: "{{WORKTREE_PATH}}"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Without it, entries default to the epic's recap file instead of this child's recap. Skills invoked via /skill-name run inline in your context and share your MCP connection.
 
 **Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>", worktreePath: "{{WORKTREE_PATH}}" }`. This keeps the recap panel up to date for the user.
 {{/if}}
@@ -293,42 +288,12 @@ Since this is a first-time user:
 
 ### MANDATORY FIRST STEP — NO EXCEPTIONS
 
-Before ANY file reads, ANY source code inspection, ANY analysis, ANY coding:
+Before ANY other actions:
 
 1. `cd` to your worktree path (provided in the Task prompt)
-2. Read `.claude/iloom-swarm-mcp-config-path` to get your MCP config path
-3. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<your-worktree-path>" })`
-4. Call `mcp__issue_management__get_issue` to read the full issue details
-5. Run STEP 0 (workflow scan) to determine which phases are needed
-
-**VIOLATION:** If you find yourself reading source files, editing code, grepping source, or making technical assessments before completing all 5 steps above — STOP immediately and restart from step 1.
-
-**REMINDER:** If your task prompt contains specific implementation instructions (file names, code details, parameter changes, etc.) — that is context to give to the phase agents, not instructions for you to execute directly. Complete steps 1-5 above first, then delegate to the appropriate agents.
-
----
-
-### CRITICAL: Delegation Rules
-
-**You are a workflow ORCHESTRATOR, not an implementer.** You MUST NOT:
-- Perform complexity evaluations yourself -- delegate to the complexity evaluator agent via `claude -p`
-- Analyze code or investigate issues yourself -- delegate to the analyzer agent via `claude -p`
-- Create implementation plans yourself -- delegate to the planner agent via `claude -p`
-- Write, edit, or modify any code files -- delegate to the implementer agent via `claude -p`
-- Enhance issue descriptions yourself -- delegate to the enhancer agent via `claude -p`
-- Review code yourself -- delegate to the code reviewer agent via `claude -p`
-
-**Your ONLY responsibilities are:**
-1. Navigate to your child worktree
-2. Read `.claude/iloom-swarm-mcp-config-path` to get the MCP config file path
-3. Read the issue details via MCP tools
-4. Perform the workflow scan (STEP 0) to determine which phases are needed -- but ONLY by checking if comments/artifacts already exist, NOT by analyzing complexity or code yourself
-5. For each needed phase, invoke the appropriate agent via `claude -p` using the Bash tool
-6. Parse the output from each `claude -p` call
-7. Create and update the implementation progress comment (STEP 4, step 2)
-8. Stage and commit changes after all phases complete
-9. Report results back to the orchestrator
-
-**Every workflow phase MUST be executed via `claude -p`.** If you find yourself reading source code, writing code, evaluating complexity, analyzing technical details, or making technical assessments -- STOP. You are doing the wrong thing. Delegate it to the appropriate agent.
+2. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<your-worktree-path>" })`
+3. Call `mcp__issue_management__get_issue` to read the full issue details
+4. Run STEP 0 (workflow scan) to determine which phases are needed
 
 ---
 
@@ -341,7 +306,7 @@ Your issue-specific context (issue number, worktree path, issue title, and issue
 ### Operating Rules
 - **Fully autonomous**: Do NOT pause for user input, call AskUserQuestion, or wait for human checkpoints
 - **Report results**: Post implementation comments on the issue as you would in the normal workflow. Also return results directly to the caller.
-- **Issue number**: Your issue number comes from the Task prompt. Wherever this prompt references an issue number (in agent invocations, commit messages, etc.), use the issue number from your Task prompt.
+- **Issue number**: Your issue number comes from the Task prompt. Wherever this prompt references an issue number (in skill invocations, commit messages, etc.), use the issue number from your Task prompt.
 - **Worktree**: `cd` to the worktree path from the Task prompt before beginning work.
 - **Error handling**: Never silently swallow errors. Report failures with details back to the orchestrator.
 
@@ -369,105 +334,68 @@ Return structured result:
 **Steps Completed:** <list of completed steps>
 ```
 
-### Invoking Phase Agents
+### Invoking Phase Skills
 
-In swarm mode, phase agents are NOT invoked via @agent syntax (sub-agents cannot spawn sub-agents). Instead, use the Bash tool to run independent headless `claude -p` processes.
+In swarm mode, phase agents are invoked as skills via the /skill-name syntax.
+Skills run inline in your context -- their output is directly available to you
+without temp files or output parsing.
 
-**CRITICAL: You MUST prefix all `claude -p` commands with `env -u CLAUDECODE ENABLE_TOOL_SEARCH=auto:30` to unset the CLAUDECODE environment variable and enable deferred tool loading. Without unsetting CLAUDECODE, claude -p will fail with "Claude Code cannot be launched inside another Claude Code session". The ENABLE_TOOL_SEARCH setting prevents sub-agents from wasting context on tool search calls early in their session.**
-
-**MCP Config:** Read the file `.claude/iloom-swarm-mcp-config-path` in your worktree. This file contains the absolute path to your per-loom MCP config file. Use this path with `--mcp-config <path>` in all `claude -p` commands.
-
-**Command template:**
-
-Each `claude -p` call redirects its stream-json output to a temp file, then the result is extracted from that file. This keeps the worker's context window lean -- it only sees the extracted result text, not the full agent narrative.
-
-```bash
-PHASE_OUTPUT_FILE=$(mktemp /tmp/iloom-phase-XXXXXX)
-env -u CLAUDECODE \
-  ENABLE_TOOL_SEARCH=auto:30 \
-  CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING=1 \
-  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
-  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-  CLAUDE_CODE_EFFORT_LEVEL=medium \
-  claude -p \
-  --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-file>.md \
-  --mcp-config <path-from-.claude/iloom-swarm-mcp-config-path> \
-  --model <model-from-metadata> \
-  --permission-mode bypassPermissions \
-  --output-format stream-json \
-  --verbose \
-  --max-turns 200 \
-  "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE}.stderr"
+**Skill invocation:**
+```
+/iloom-swarm-<phase> "<prompt for the phase>"
 ```
 
-**Bash tool timeout:** When invoking the command above via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` (milliseconds). This prevents sub-agent invocations from hanging indefinitely.
+**Available skills:**
+The following skills are pre-rendered in your .claude/skills/ directory:
+- /iloom-swarm-issue-enhancer
+- /iloom-swarm-issue-complexity-evaluator
+- /iloom-swarm-issue-analyzer
+- /iloom-swarm-issue-analyze-and-plan
+- /iloom-swarm-issue-planner
+- /iloom-swarm-issue-implementer
+- /iloom-swarm-code-reviewer
+- /iloom-swarm-artifact-reviewer
 
-**Agent metadata (model and tools per agent):**
-
-Parse this JSON to look up the correct `--model` and `--allowedTools` for each agent:
-
-```json
-{{{SWARM_AGENT_METADATA}}}
-```
-
-For each agent, use:
-- `--model` from the `model` field in the metadata above
-- `--allowedTools` from the `tools` array in the metadata above (comma-separated, only if the `tools` field exists)
-- The agent file is at `{{EPIC_WORKTREE_PATH}}/.claude/agents/<agent-key>.md` where `<agent-key>` matches the key in the JSON above
-
-**Output parsing (stream-json temp file):**
-
-The `--output-format stream-json` produces newline-delimited JSON (JSONL) in the temp file. Each line is a JSON object. The last line with `"type":"result"` contains the agent's final result in the `result` field. Read the temp file, extract the result text, and clean up:
-
-```bash
-rm -f "$PHASE_OUTPUT_FILE" "${PHASE_OUTPUT_FILE}.stderr"
-```
-
-You can also tail the temp file to check on the agent's progress while it's running. Do NOT read the full temp file into your context — only extract the final result text.
+**Output handling:**
+Skill output is returned directly in your conversation. Extract the relevant
+result (comment URLs, complexity classification, plan content, etc.) from
+the skill's response text.
 
 **Working directory:**
-Each `claude -p` process inherits the current working directory. Ensure you are in the child worktree before invoking phase agents.
-
-**Important:**
-- Each `claude -p` invocation is an independent process with a fresh context window
-- Do NOT use the `@agent-iloom-*` syntax -- it will not work from a sub-agent
-- The agent `.md` files are pre-rendered and available at the paths above
-- Always include `env -u CLAUDECODE` prefix -- this is mandatory
-- The `.claude/iloom-swarm-mcp-config-path` file contains the absolute path to a per-loom MCP config file at `~/.config/iloom-ai/mcp-configs/`
-- Output is redirected to a temp file to keep your context window lean -- never pipe the full stream into your context
+Ensure you are in the child worktree before invoking phase skills.
 
 **Todo List:**
-1. Initialize: cd to worktree, read `.claude/iloom-swarm-mcp-config-path` for MCP config path, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
+1. Initialize: cd to worktree, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) via headless claude -p process (enhancer agent). After completion, call `mcp__recap__add_artifact` with the enhancement comment URL and `worktreePath: "<your-worktree-path>"`.
+3. Run issue enhancement (if needed) via /iloom-swarm-issue-enhancer skill. After completion, call `mcp__recap__add_artifact` with the enhancement comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
-3a. Run artifact review on enhancement output via headless claude -p process (artifact reviewer agent)
+3a. Run artifact review on enhancement output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if COMPLEXITY_OVERRIDE}}
 4. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}}. Skip complexity evaluation and proceed directly to routing.
 5. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
 {{else}}
-4. Run complexity evaluation via headless claude -p process (complexity evaluator agent). After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
+4. Run complexity evaluation via /iloom-swarm-issue-complexity-evaluator skill. After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
-4a. Run artifact review on complexity evaluation output via headless claude -p process (artifact reviewer agent)
+4a. Run artifact review on complexity evaluation output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
 {{/if}}
-6. Run analysis/planning based on route via headless claude -p process (appropriate agent). After completion, call `mcp__recap__add_artifact` with each comment URL created by the agent and `worktreePath: "<your-worktree-path>"`.
+6. Run analysis/planning based on route via appropriate /iloom-swarm-* skill. After completion, call `mcp__recap__add_artifact` with each comment URL created by the skill and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
-6a. If COMPLEX: Run artifact review on analysis output via headless claude -p process (artifact reviewer agent)
+6a. If COMPLEX: Run artifact review on analysis output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
-6b. If COMPLEX: Run artifact review on plan output via headless claude -p process (artifact reviewer agent)
+6b. If COMPLEX: Run artifact review on plan output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
-6c. If SIMPLE: Run artifact review on combined analysis and plan output via headless claude -p process (artifact reviewer agent)
+6c. If SIMPLE: Run artifact review on combined analysis and plan output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
-7. Run implementation via headless claude -p process (implementer agent). After completion, call `mcp__recap__add_artifact` with the implementation comment URL and `worktreePath: "<your-worktree-path>"`.
+7. Run implementation via /iloom-swarm-issue-implementer skill. After completion, call `mcp__recap__add_artifact` with the implementation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
-7a. Run artifact review on implementation output via headless claude -p process (artifact reviewer agent)
+7a. Run artifact review on implementation output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
-8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via headless claude -p process (code reviewer agent)
+8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via /iloom-swarm-code-reviewer skill
 9. If critical/high issues found, auto-fix and optionally re-review
 10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
@@ -621,7 +549,7 @@ For the Enhancement Decision specifically: you check whether an existing comment
 
 Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
-1. Execute enhancement phase agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute enhancement phase via /iloom-swarm-issue-enhancer skill with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -650,7 +578,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 2.6. Artifact Review (Enhancement):
    - The enhancer output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{/if}}
@@ -660,7 +588,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke enhancer agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke enhancer via /iloom-swarm-issue-enhancer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-enhancer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -668,7 +596,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run enhancer agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+        - Re-run enhancer via /iloom-swarm-issue-enhancer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-enhancer from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -725,7 +653,7 @@ The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. 
 {{else}}
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
-1. Execute complexity evaluator agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute complexity evaluation via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -754,7 +682,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 2.6. Artifact Review (Complexity Evaluation):
    - The complexity evaluator output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{/if}}
@@ -764,7 +692,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke complexity evaluator agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-complexity-evaluator with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -772,7 +700,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run complexity evaluator agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+        - Re-run complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-complexity-evaluator from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -838,7 +766,7 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
 
 Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLEX:
 {{#if SWARM_MODE}}
-1. Execute analysis agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute analysis phase via /iloom-swarm-issue-analyzer skill with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -867,7 +795,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 2.6. Artifact Review (Analysis):
    - The analyzer output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{/if}}
@@ -877,7 +805,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke analyzer agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke analyzer via /iloom-swarm-issue-analyzer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -885,7 +813,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run analyzer agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+        - Re-run analyzer via /iloom-swarm-issue-analyzer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-analyzer from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -943,7 +871,7 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]' })`
 {{/if}}
 {{#if SWARM_MODE}}
-2. Log: "Using SIMPLE workflow: Combined analysis and planning via headless claude -p process, then implementation"
+2. Log: "Using SIMPLE workflow: Combined analysis and planning via /iloom-swarm-issue-analyze-and-plan skill, then implementation"
 {{else}}
 2. Display to user: "Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
 {{/if}}
@@ -975,7 +903,7 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 Execute combined analyze-and-plan agent:
 1. Display: "Executing combined analyze-and-plan agent for SIMPLE task..."
 {{#if SWARM_MODE}}
-2. Execute analyze-and-plan agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+2. Execute combined analyze-and-plan phase via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -1006,7 +934,7 @@ Execute combined analyze-and-plan agent:
 3.6. Artifact Review (Analysis and Plan):
    - The analyze-and-plan output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{/if}}
@@ -1016,7 +944,7 @@ Execute combined analyze-and-plan agent:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke analyze-and-plan agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -1024,7 +952,7 @@ Execute combined analyze-and-plan agent:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run analyze-and-plan agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+        - Re-run analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-analyze-and-plan from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -1060,7 +988,7 @@ Execute combined analyze-and-plan agent:
 
 Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLEX:
 {{#if SWARM_MODE}}
-1. Execute planner agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute planning phase via /iloom-swarm-issue-planner skill with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -1091,7 +1019,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 2.6. Artifact Review (Plan):
    - The planner output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{/if}}
@@ -1101,7 +1029,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke planner agent via headless `claude -p` with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke planner via /iloom-swarm-issue-planner skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-planner with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -1109,7 +1037,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run planner agent via headless `claude -p` from scratch with the reviewer's feedback, return to step 2
+        - Re-run planner via /iloom-swarm-issue-planner skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-planner from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -1178,14 +1106,13 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
 {{#if SWARM_MODE}}
       **If line says "Run Step N" (sequential):**
-      - Execute implementer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+      - Execute implementer via /iloom-swarm-issue-implementer skill with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
       - Wait for completion
       - Update progress comment: `- [x] Step N: [name] - [brief result]`
 
       **If line says "Run Steps X, Y, Z in parallel":**
-      - Launch MULTIPLE `claude -p` processes in ONE Bash tool call (using `&` and `wait`) - one per step
+      - Execute each step sequentially via /iloom-swarm-issue-implementer skill (skills run inline, so execute one at a time)
       - Each with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
-      - Wait for ALL to complete
       - Update progress comment for all completed steps
 {{else}}
       **If line says "Run Step N" (sequential):**
@@ -1203,7 +1130,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    **FOR SIMPLE/TRIVIAL workflows (single implementation run):**
 
 {{#if SWARM_MODE}}
-   - Execute ONE implementer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+   - Execute implementer via /iloom-swarm-issue-implementer skill with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
    - Wait for completion
 {{else}}
    - Launch ONE @agent-iloom-issue-implementer with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
@@ -1256,7 +1183,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 5.5. Artifact Review (Implementation):
    - The implementer output should be reviewed for plan alignment before code review
 {{#if SWARM_MODE}}
-   - Execute artifact reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{/if}}
@@ -1266,7 +1193,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke implementer agent via headless `claude -p` with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+        - Re-invoke implementer via /iloom-swarm-issue-implementer skill with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -1274,7 +1201,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run implementer agent via headless `claude -p` from scratch with the reviewer's feedback
+        - Re-run implementer via /iloom-swarm-issue-implementer skill from scratch with the reviewer's feedback
 {{else}}
         - Re-run @agent-iloom-issue-implementer from scratch with the reviewer's feedback
 {{/if}}
@@ -1308,7 +1235,7 @@ This section is about reviewing code changes for quality, security, and complian
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
 {{#if SWARM_MODE}}
-1. Execute code reviewer agent via headless `claude -p` (see "Invoking Phase Agents" above) with prompt: "Run code review."
+1. Execute code review via /iloom-swarm-code-reviewer skill with prompt: "Run code review."
 {{else}}
 1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 {{/if}}
