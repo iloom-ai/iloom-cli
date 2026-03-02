@@ -62,6 +62,7 @@ vi.mock('../lib/SwarmSetupService.js', () => ({
 			],
 			agentsRendered: [],
 			workerAgentRendered: false,
+			verifierAgentRendered: false,
 		}),
 	})),
 }))
@@ -3315,6 +3316,7 @@ describe('IgniteCommand', () => {
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,
+					verifierAgentRendered: false,
 				}),
 			}) as unknown as SwarmSetupService)
 
@@ -3417,6 +3419,7 @@ describe('IgniteCommand', () => {
 				childWorktrees: [],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
@@ -3520,6 +3523,7 @@ describe('IgniteCommand', () => {
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
@@ -3564,6 +3568,7 @@ describe('IgniteCommand', () => {
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
@@ -3593,6 +3598,7 @@ describe('IgniteCommand', () => {
 				childWorktrees: [],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
@@ -3624,6 +3630,7 @@ describe('IgniteCommand', () => {
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
@@ -3657,6 +3664,7 @@ describe('IgniteCommand', () => {
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
+				verifierAgentRendered: false,
 			})
 
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata, finishedMeta)
@@ -3773,6 +3781,7 @@ describe('IgniteCommand', () => {
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,
+					verifierAgentRendered: false,
 				}),
 			}) as unknown as SwarmSetupService)
 		})
@@ -4120,6 +4129,7 @@ describe('IgniteCommand', () => {
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,
+					verifierAgentRendered: false,
 				}),
 			}) as unknown as SwarmSetupService)
 
