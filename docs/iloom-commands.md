@@ -35,6 +35,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il update](#il-update)
   - [il feedback](#il-feedback)
   - [il contribute](#il-contribute)
+  - [il openclaw](#il-openclaw)
   - [il telemetry](#il-telemetry)
 
 ---
@@ -2245,6 +2246,65 @@ il contribute "facebook/react"
 - Sets up `draft-pr` mode so PRs are created immediately when you start work
 - Draft PRs receive iloom's AI analysis and planning comments, giving maintainers full context
 - For iloom contributions, see [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines
+
+---
+
+### il openclaw
+
+Register iloom as an OpenClaw skill by creating a symlink from the OpenClaw workspace to the project's `openclaw-skill/` directory.
+
+**Usage:**
+```bash
+il openclaw [options]
+```
+
+**Options:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-f, --force` | Overwrite existing skill registration | `false` |
+| `-w, --workspace <name>` | OpenClaw workspace name | `workspace` |
+
+**Behavior:**
+
+1. Verifies `openclaw-skill/` directory exists in the project root
+2. Checks that OpenClaw is installed (`~/.openclaw` exists)
+3. Checks that the specified workspace exists under `~/.openclaw/`
+4. Creates `~/.openclaw/<workspace>/skills/` directory if needed
+5. Creates symlink: `~/.openclaw/<workspace>/skills/iloom` → `<project-root>/openclaw-skill/`
+
+**Examples:**
+
+```bash
+# Register iloom skill in the default workspace
+il openclaw
+
+# Register in a specific workspace
+il openclaw --workspace my-workspace
+il openclaw -w my-workspace
+
+# Force overwrite an existing registration
+il openclaw --force
+il openclaw -f
+
+# Combine options
+il openclaw -f -w my-workspace
+```
+
+**Error Handling:**
+
+| Scenario | Behavior |
+|----------|----------|
+| `openclaw-skill/` missing from project | Error with clear message |
+| `~/.openclaw` not found | Friendly error suggesting OpenClaw is not installed |
+| Workspace not found | Error suggesting `--workspace` flag |
+| Target already correctly linked | Reports "Already linked" and exits successfully |
+| Target exists (wrong symlink/file/dir) | Error suggesting `--force` (and `--workspace` if using default workspace) |
+
+**Notes:**
+- This command does not create `~/.openclaw` or workspace directories — those are managed by OpenClaw itself
+- The `skills/` subdirectory under the workspace is safe to auto-create
+- Running the command multiple times is idempotent when the symlink is already correct
 
 ---
 

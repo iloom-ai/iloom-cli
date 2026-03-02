@@ -172,7 +172,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   const commandName = command.name()
 
   // Tier 1: Commands that bypass ALL validation
-  const bypassCommands = ['help', 'init', 'update', 'contribute', 'telemetry']
+  const bypassCommands = ['help', 'init', 'update', 'contribute', 'telemetry', 'openclaw']
 
   if (bypassCommands.includes(commandName)) {
     return
@@ -2253,6 +2253,24 @@ program
       if (error instanceof Error && error.stack) {
         logger.debug(error.stack)
       }
+      process.exit(1)
+    }
+  })
+
+// OpenClaw skill registration
+program
+  .command('openclaw')
+  .description('Register iloom as an OpenClaw skill')
+  .option('-f, --force', 'Overwrite existing skill registration')
+  .option('-w, --workspace <name>', 'OpenClaw workspace name', 'workspace')
+  .action(async (options: { force?: boolean; workspace?: string }) => {
+    try {
+      const { OpenclawCommand } = await import('./commands/openclaw.js')
+      const command = new OpenclawCommand()
+      const result = await command.execute(options)
+      logger.info(result.status)
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : 'Unknown error')
       process.exit(1)
     }
   })

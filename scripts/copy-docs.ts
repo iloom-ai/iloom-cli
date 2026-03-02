@@ -1,4 +1,4 @@
-import { copyFile } from 'fs/promises'
+import { copyFile, cp } from 'fs/promises'
 import path from 'path'
 import { existsSync } from 'fs'
 
@@ -13,6 +13,16 @@ async function copyDocs() {
 		console.log(`✓ README.md copied to ${readmeDest}`)
 	} else {
 		console.warn(`⚠ README.md not found at ${readmeSrc} - skipping copy`)
+	}
+
+	// Copy openclaw-skill/ to dist
+	const openclawSrc = path.join(process.cwd(), 'openclaw-skill')
+	const openclawDest = path.join(distDir, 'openclaw-skill')
+	if (existsSync(openclawSrc)) {
+		await cp(openclawSrc, openclawDest, { recursive: true })
+		console.log(`✓ openclaw-skill/ copied to ${openclawDest}`)
+	} else {
+		console.warn(`⚠ openclaw-skill/ not found at ${openclawSrc} - skipping copy`)
 	}
 }
 
