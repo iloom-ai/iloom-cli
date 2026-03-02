@@ -51,13 +51,13 @@ The metadata file contains:
 
 ### Child Issues (from template)
 
-If child issues are provided directly (e.g., with worktree paths assigned during loom creation), they are available here:
+If child issues are provided directly, they are available here:
 
 ```json
 {{CHILD_ISSUES}}
 ```
 
-This is a JSON array where each entry has: `{ number, title, body, worktreePath, branchName }`
+This is a JSON array where each entry has: `{ number, title, body, branchName }`. Note: `worktreePath` is NOT included — worktrees are created on-demand by the orchestrator using the `mcp__worktree__create_worktree` MCP tool before spawning each child agent (see Phase 2).
 
 ### Dependency Map (from template)
 
@@ -78,51 +78,52 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 1. Parse child issues and dependency map
 2. Validate dependencies and identify initially unblocked issues
 3. Create the agent team
-4. Spawn agents for all initially unblocked child issues
-5. Monitor agent completions and merge completed work
+4. Create worktrees for initially unblocked issues (via `mcp__worktree__create_worktree`)
+5. Spawn agents for all initially unblocked child issues
+6. Monitor agent completions and merge completed work
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-6. Push epic branch to remote after each successful child merge (incremental)
+7. Push epic branch to remote after each successful child merge (incremental)
+8. Clean up completed child worktrees (if not --skip-cleanup)
+9. Create worktrees for newly unblocked issues, then spawn agents (repeat as needed)
+10. Handle any failures (mark failed, continue with others)
+11. When all children are done or failed, finalize and clean up
+{{#if POST_SWARM_REVIEW}}
+12. Run post-swarm code review and auto-fix any findings
+13. Create final commit with Fixes trailer for epic issue
+14. Push epic branch to remote (final commit)
+15. Print final summary
+{{else}}
+12. Create final commit with Fixes trailer for epic issue
+13. Push epic branch to remote (final commit)
+14. Print final summary
+{{/if}}
+{{else}}
 7. Clean up completed child worktrees (if not --skip-cleanup)
-8. Spawn agents for newly unblocked child issues (repeat as needed)
+8. Create worktrees for newly unblocked issues, then spawn agents (repeat as needed)
 9. Handle any failures (mark failed, continue with others)
 10. When all children are done or failed, finalize and clean up
 {{#if POST_SWARM_REVIEW}}
 11. Run post-swarm code review and auto-fix any findings
 12. Create final commit with Fixes trailer for epic issue
-13. Push epic branch to remote (final commit)
-14. Print final summary
-{{else}}
-11. Create final commit with Fixes trailer for epic issue
-12. Push epic branch to remote (final commit)
 13. Print final summary
-{{/if}}
 {{else}}
-6. Clean up completed child worktrees (if not --skip-cleanup)
-7. Spawn agents for newly unblocked child issues (repeat as needed)
-8. Handle any failures (mark failed, continue with others)
-9. When all children are done or failed, finalize and clean up
-{{#if POST_SWARM_REVIEW}}
-10. Run post-swarm code review and auto-fix any findings
 11. Create final commit with Fixes trailer for epic issue
 12. Print final summary
-{{else}}
-10. Create final commit with Fixes trailer for epic issue
-11. Print final summary
 {{/if}}
 {{/if}}
 {{else}}
-6. Clean up completed child worktrees (if not --skip-cleanup)
-7. Spawn agents for newly unblocked child issues (repeat as needed)
-8. Handle any failures (mark failed, continue with others)
-9. When all children are done or failed, finalize and clean up
+7. Clean up completed child worktrees (if not --skip-cleanup)
+8. Create worktrees for newly unblocked issues, then spawn agents (repeat as needed)
+9. Handle any failures (mark failed, continue with others)
+10. When all children are done or failed, finalize and clean up
 {{#if POST_SWARM_REVIEW}}
-10. Run post-swarm code review and auto-fix any findings
+11. Run post-swarm code review and auto-fix any findings
+12. Create final commit with Fixes trailer for epic issue
+13. Print final summary
+{{else}}
 11. Create final commit with Fixes trailer for epic issue
 12. Print final summary
-{{else}}
-10. Create final commit with Fixes trailer for epic issue
-11. Print final summary
 {{/if}}
 {{/if}}
 
@@ -134,7 +135,7 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 
 Parse the `CHILD_ISSUES` JSON array and `DEPENDENCY_MAP` JSON object from the data above.
 
-- `CHILD_ISSUES`: Array of `{ number, title, worktreePath, branchName }`
+- `CHILD_ISSUES`: Array of `{ number, title, branchName }`
 - `DEPENDENCY_MAP`: Object where each key is a child issue number (string) and each value is an array of issue numbers (strings) that block it
 
 ### Step 1.2: Validate and Build the DAG
@@ -146,7 +147,7 @@ Parse the `CHILD_ISSUES` JSON array and `DEPENDENCY_MAP` JSON object from the da
    - Continue with the remaining non-cyclic issues
    - Report the cycle in the final summary
 3. Build an internal tracking structure:
-   - For each child issue, track: `number`, `title`, `worktreePath`, `branchName`, `status` (pending/in_progress/done/failed), `blockedBy` (list of issue numbers)
+   - For each child issue, track: `number`, `title`, `branchName`, `worktreePath` (initially empty — populated after calling the MCP tool), `status` (pending/in_progress/done/failed), `blockedBy` (list of issue numbers)
 
 ### Step 1.3: Identify Initially Unblocked Issues
 
@@ -177,9 +178,31 @@ Mark todo #1 and #2 as completed.
 Use `TeamCreate` to create a team:
 - Team name: `swarm-epic-{{EPIC_ISSUE_NUMBER}}`
 
-### Step 2.2: Spawn Agents for Unblocked Issues
+### Step 2.2: Create Worktrees for Unblocked Issues
 
-For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
+**Worktrees are created on-demand (just-in-time), not upfront.** Before spawning any child agent, you MUST create its worktree by calling the `mcp__worktree__create_worktree` MCP tool.
+
+For each unblocked child issue, call the MCP tool:
+
+```
+mcp__worktree__create_worktree({ issueNumber: "<child-number>" })
+```
+
+The tool returns: `{ worktreePath: string, branchName: string, alreadyExisted: boolean }`
+
+- Store the returned `worktreePath` in your internal tracking structure for that child.
+- If the tool returns `alreadyExisted: true`, the worktree was already created (e.g., from a previous attempt). Use it as normal.
+- If the tool call **fails**, mark the child as `failed` with reason: `"Worktree creation failed: <error>"`. Do NOT spawn an agent for it. Skip to Phase 4 failure handling for that child (cascade failures to downstream dependencies).
+
+**IMPORTANT**: Create worktrees **sequentially**, one at a time. Do NOT parallelize worktree creation within a single wave. This avoids race conditions with git operations.
+
+After all worktrees for this wave are created (or failed), proceed to spawn agents.
+
+Mark todo #4 as completed.
+
+### Step 2.3: Spawn Agents for Unblocked Issues
+
+For each unblocked child issue that has a worktree (created successfully in Step 2.2), spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
 
 #### Detecting Verification Issues
 
@@ -202,6 +225,8 @@ Issue: #<child-number>
 Worktree: <child-worktree-path>
 ```
 
+Where `<child-worktree-path>` is the `worktreePath` returned by the `mcp__worktree__create_worktree` tool in Step 2.2 (stored in your tracking structure).
+
 Nothing else. No title. No body. No instructions. No context. The child's system prompt defines everything it needs to do.
 
 #### Spawning Verification Issues
@@ -220,13 +245,15 @@ Issue: #<child-number>
 Worktree: <child-worktree-path>
 ```
 
+Where `<child-worktree-path>` is the `worktreePath` returned by the `mcp__worktree__create_worktree` tool in Step 2.2 (stored in your tracking structure).
+
 The wave verifier agent reads the verification issue body to determine which child issues to verify (from its dependencies in the DAG), parses their must-have criteria, and checks them against the codebase. It spawns fix agents for failures and returns a structured report.
 
 After the verification agent completes, proceed with the normal merge flow (Step 3.1 onwards). Even if verification reports failures, the verification issue's branch should be merged (it may contain fix commits from the verifier's fix agents).
 
 Update each child's tracking status to `in_progress`.
 
-Mark todo #3 and #4 as completed.
+Mark todo #3 and #5 as completed.
 
 ---
 
@@ -349,6 +376,8 @@ Report back with status: "success" or "failed" and any error output.
 {{#unless NO_CLEANUP}}
 After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il cleanup --archive`. Since the child's work is already rebased and merged into the epic branch, we only need to remove the worktree and branch while preserving metadata.
 
+**Pre-check:** If the child has no `worktreePath` in your tracking structure (worktree was never created), skip this step for that child -- there is nothing to clean up.
+
 ```bash
 cd "{{EPIC_WORKTREE_PATH}}"
 il cleanup <child-issue-number> --archive --force --json
@@ -367,16 +396,18 @@ If the `il cleanup` command fails, log the error but continue with the orchestra
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
 2. Check if any previously blocked children are now unblocked (empty `blockedBy` list)
-3. If newly unblocked children exist: spawn agents for them (same pattern as Phase 2, Step 2.2)
+3. If newly unblocked children exist:
+   a. **Create worktrees first**: For each newly unblocked child, call `mcp__worktree__create_worktree({ issueNumber: "<child-number>" })` sequentially (same pattern as Phase 2, Step 2.2). Store the returned `worktreePath` in your tracking structure. If the tool fails for a child, mark it as `failed` and cascade to its downstream dependencies (Phase 4).
+   b. **Then spawn agents**: For each child with a successfully created worktree, spawn agents (same pattern as Phase 2, Step 2.3).
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #5, #6, #7, and #8 as completed after each merge-and-spawn cycle.
+Mark todo #6, #7, #8, and #9 as completed after each merge-and-spawn cycle.
 {{else}}
-Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
+Mark todo #6, #7, and #8 as completed after each merge-and-spawn cycle.
 {{/if}}
 {{else}}
-Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
+Mark todo #6, #7, and #8 as completed after each merge-and-spawn cycle.
 {{/if}}
 
 ---
@@ -388,24 +419,24 @@ Mark todo #5, #6, and #7 as completed after each merge-and-spawn cycle.
 If a child agent reports back with status `failed`, or encounters an unrecoverable error:
 
 1. **Update tracking**: Mark the child's status as `failed`
-2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
-3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. Log the comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Failure comment for #<child-number>", worktreePath: "<child-worktree-path>" }`.
-4. **Log the failure as a recap entry**: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<child-number> failed: <brief reason>", worktreePath: "<child-worktree-path>" }` to record the failure in the child's recap
+2. **Update loom state** (only if child has a `worktreePath` in tracking): Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`. If the child has no worktreePath (worktree was never created, e.g., worktree creation itself failed), skip this step.
+3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. If the child has a `worktreePath`, log the comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Failure comment for #<child-number>", worktreePath: "<child-worktree-path>" }`.
+4. **Log the failure as a recap entry** (only if child has a `worktreePath`): Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<child-number> failed: <brief reason>", worktreePath: "<child-worktree-path>" }` to record the failure in the child's recap. If no worktreePath, log to the epic recap instead (omit `worktreePath`).
 5. **Do NOT block other children**: Continue processing remaining children
 6. **Handle downstream dependencies**: For any children that depend on the failed child:
    - Mark them as `failed` with reason: "Blocked by failed dependency #<failed-child-number>"
-   - Update their loom state: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<downstream-child-worktree-path>" }`
-   - Log a recap entry for each: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Blocked by failed dependency #<failed-child-number>", worktreePath: "<downstream-child-worktree-path>" }`
+   - Do NOT create worktrees for them (they will never be spawned)
+   - Log a recap entry to the epic recap (omit `worktreePath`): Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<downstream-number> blocked by failed dependency #<failed-child-number>" }`
    - Do NOT spawn agents for them
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
-Mark todo #9 as completed.
+Mark todo #10 as completed.
 {{else}}
-Mark todo #8 as completed.
+Mark todo #9 as completed.
 {{/if}}
 {{else}}
-Mark todo #8 as completed.
+Mark todo #9 as completed.
 {{/if}}
 
 ---
@@ -590,21 +621,21 @@ The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 {{#if POST_SWARM_REVIEW}}
-Mark todo #10, #11, #12, #13, and #14 as completed.
+Mark todo #11, #12, #13, #14, and #15 as completed.
 {{else}}
+Mark todo #11, #12, #13, and #14 as completed.
+{{/if}}
+{{else}}
+{{#if POST_SWARM_REVIEW}}
 Mark todo #10, #11, #12, and #13 as completed.
-{{/if}}
 {{else}}
-{{#if POST_SWARM_REVIEW}}
-Mark todo #9, #10, #11, and #12 as completed.
-{{else}}
-Mark todo #9, #10, and #11 as completed.
+Mark todo #10, #11, and #12 as completed.
 {{/if}}
 {{/if}}
 {{else}}
 {{#if POST_SWARM_REVIEW}}
-Mark todo #9, #10, #11, and #12 as completed.
+Mark todo #10, #11, #12, and #13 as completed.
 {{else}}
-Mark todo #9, #10, and #11 as completed.
+Mark todo #10, #11, and #12 as completed.
 {{/if}}
 {{/if}}

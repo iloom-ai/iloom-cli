@@ -288,6 +288,62 @@ export function generateHarnessMcpConfig(socketPath: string): Record<string, unk
 }
 
 /**
+ * Generate MCP configuration for the worktree server
+ *
+ * The worktree server provides the orchestrator with a `create_worktree` tool
+ * for just-in-time child worktree creation. This ensures worktrees branch from
+ * the latest epic branch HEAD (including previously merged work).
+ *
+ * @param epicWorktreePath - Absolute path to the epic worktree (source for agent files)
+ * @param epicBranch - Epic branch name (base for child branches)
+ * @param mainWorktreePath - Path to main worktree (for generateWorktreePath)
+ * @param epicIssueNumber - Parent epic issue number (for metadata parentLoom)
+ * @param issueTracker - Issue tracker provider name
+ */
+export function generateWorktreeMcpConfig(
+	epicWorktreePath: string,
+	epicBranch: string,
+	mainWorktreePath: string,
+	epicIssueNumber: string,
+	issueTracker: string,
+): Record<string, unknown>[] {
+	const worktreeServerJsPath = path.resolve(
+		path.join(
+			path.dirname(new globalThis.URL(import.meta.url).pathname),
+			'../dist/mcp/worktree-server.js'
+		)
+	)
+
+	const envVars: Record<string, string> = {
+		EPIC_WORKTREE_PATH: epicWorktreePath,
+		EPIC_BRANCH: epicBranch,
+		MAIN_WORKTREE_PATH: mainWorktreePath,
+		EPIC_ISSUE_NUMBER: epicIssueNumber,
+		ISSUE_TRACKER: issueTracker,
+	}
+
+	logger.debug('Generated MCP config for worktree server', {
+		epicWorktreePath,
+		epicBranch,
+		epicIssueNumber,
+		issueTracker,
+	})
+
+	return [
+		{
+			mcpServers: {
+				worktree: {
+					transport: 'stdio',
+					command: 'node',
+					args: [worktreeServerJsPath],
+					env: envVars,
+				},
+			},
+		},
+	]
+}
+
+/**
  * Get the MCP configs directory path
  */
 export function getMcpConfigsDir(): string {

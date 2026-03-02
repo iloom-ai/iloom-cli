@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { generateRecapMcpConfig, generateHarnessMcpConfig } from './mcp.js'
+import { generateRecapMcpConfig, generateHarnessMcpConfig, generateWorktreeMcpConfig } from './mcp.js'
 import os from 'os'
 import path from 'path'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
@@ -185,5 +185,120 @@ describe('generateHarnessMcpConfig', () => {
 		const serverPath = (harnessConfig.args as string[])[0]
 
 		expect(path.isAbsolute(serverPath)).toBe(true)
+	})
+})
+
+describe('generateWorktreeMcpConfig', () => {
+	const defaultArgs = {
+		epicWorktreePath: '/Users/test/projects/epic-worktree',
+		epicBranch: 'epic/issue-100',
+		mainWorktreePath: '/Users/test/projects/main',
+		epicIssueNumber: '100',
+		issueTracker: 'github',
+	}
+
+	it('should generate MCP config with correct structure', () => {
+		const config = generateWorktreeMcpConfig(
+			defaultArgs.epicWorktreePath,
+			defaultArgs.epicBranch,
+			defaultArgs.mainWorktreePath,
+			defaultArgs.epicIssueNumber,
+			defaultArgs.issueTracker,
+		)
+
+		expect(config).toHaveLength(1)
+		expect(config[0]).toHaveProperty('mcpServers')
+		expect(config[0].mcpServers).toHaveProperty('worktree')
+	})
+
+	it('should set all required env vars', () => {
+		const config = generateWorktreeMcpConfig(
+			defaultArgs.epicWorktreePath,
+			defaultArgs.epicBranch,
+			defaultArgs.mainWorktreePath,
+			defaultArgs.epicIssueNumber,
+			defaultArgs.issueTracker,
+		)
+
+		const worktreeConfig = (config[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>
+		const env = worktreeConfig.env as Record<string, string>
+
+		expect(env.EPIC_WORKTREE_PATH).toBe(defaultArgs.epicWorktreePath)
+		expect(env.EPIC_BRANCH).toBe(defaultArgs.epicBranch)
+		expect(env.MAIN_WORKTREE_PATH).toBe(defaultArgs.mainWorktreePath)
+		expect(env.EPIC_ISSUE_NUMBER).toBe(defaultArgs.epicIssueNumber)
+		expect(env.ISSUE_TRACKER).toBe(defaultArgs.issueTracker)
+	})
+
+	it('should use node as command and point to worktree-server.js', () => {
+		const config = generateWorktreeMcpConfig(
+			defaultArgs.epicWorktreePath,
+			defaultArgs.epicBranch,
+			defaultArgs.mainWorktreePath,
+			defaultArgs.epicIssueNumber,
+			defaultArgs.issueTracker,
+		)
+
+		const worktreeConfig = (config[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>
+
+		expect(worktreeConfig.transport).toBe('stdio')
+		expect(worktreeConfig.command).toBe('node')
+		expect(worktreeConfig.args).toBeInstanceOf(Array)
+		expect((worktreeConfig.args as string[])[0]).toContain('worktree-server.js')
+	})
+
+	it('should use absolute path for worktree server JS file', () => {
+		const config = generateWorktreeMcpConfig(
+			defaultArgs.epicWorktreePath,
+			defaultArgs.epicBranch,
+			defaultArgs.mainWorktreePath,
+			defaultArgs.epicIssueNumber,
+			defaultArgs.issueTracker,
+		)
+
+		const worktreeConfig = (config[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>
+		const serverPath = (worktreeConfig.args as string[])[0]
+
+		expect(path.isAbsolute(serverPath)).toBe(true)
+	})
+
+	it('should work with different issue tracker providers', () => {
+		const linearConfig = generateWorktreeMcpConfig(
+			defaultArgs.epicWorktreePath,
+			defaultArgs.epicBranch,
+			defaultArgs.mainWorktreePath,
+			defaultArgs.epicIssueNumber,
+			'linear',
+		)
+
+		const worktreeConfig = (linearConfig[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>
+		const env = worktreeConfig.env as Record<string, string>
+
+		expect(env.ISSUE_TRACKER).toBe('linear')
+	})
+
+	it('should pass different env values when called with different args', () => {
+		const config1 = generateWorktreeMcpConfig(
+			'/path/a',
+			'branch-a',
+			'/main/a',
+			'101',
+			'github',
+		)
+		const config2 = generateWorktreeMcpConfig(
+			'/path/b',
+			'branch-b',
+			'/main/b',
+			'202',
+			'linear',
+		)
+
+		const env1 = ((config1[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>).env as Record<string, string>
+		const env2 = ((config2[0].mcpServers as Record<string, unknown>).worktree as Record<string, unknown>).env as Record<string, string>
+
+		expect(env1.EPIC_WORKTREE_PATH).toBe('/path/a')
+		expect(env2.EPIC_WORKTREE_PATH).toBe('/path/b')
+		expect(env1.EPIC_ISSUE_NUMBER).toBe('101')
+		expect(env2.EPIC_ISSUE_NUMBER).toBe('202')
 	})
 })

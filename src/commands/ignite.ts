@@ -6,7 +6,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateWorktreeMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -976,6 +976,20 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
+		// Worktree MCP for just-in-time child worktree creation by the orchestrator
+		try {
+			const worktreeMcpConfigs = generateWorktreeMcpConfig(
+				epicWorktreePath,
+				epicBranch,
+				mainWorktreePath,
+				epicIssueNumber,
+				providerName,
+			)
+			mcpConfigs.push(...worktreeMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate worktree MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
 		// Filter out children that are already done (finished looms may have metadata
 		// in the "looms/finished" directory, not just in active worktree metadata)
 		const finishedMetadata = await metadataManager.listFinishedMetadata()
@@ -1023,24 +1037,22 @@ export class IgniteCommand {
 			pendingChildIssues,
 			mainWorktreePath,
 			providerName,
-			settings,
 		)
 
 		// Build template variables for orchestrator prompt
-		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
-		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
+		// childMetadata contains planned paths for each child (worktrees created on-demand by orchestrator)
+		const childMetadataMap = new Map(swarmResult.childMetadata.map((cm) => [cm.issueId, cm]))
 
 		const childIssuesData = pendingChildIssues
-			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
+			.filter((ci) => childMetadataMap.has(ci.number.replace(/^#/, '')))
 			.map((ci) => {
 				const rawId = ci.number.replace(/^#/, '')
-				const wt = worktreeMap.get(rawId)
+				const cm = childMetadataMap.get(rawId)
 				return {
 					number: rawId,
 					title: ci.title,
 					body: ci.body,
-					worktreePath: wt?.worktreePath ?? '',
-					branchName: wt?.branch ?? '',
+					branchName: cm?.branch ?? '',
 				}
 			})
 
@@ -1100,6 +1112,7 @@ export class IgniteCommand {
 			'mcp__recap__set_complexity',
 			'mcp__recap__set_loom_state',
 			'mcp__recap__get_loom_state',
+			'mcp__worktree__create_worktree',
 		]
 
 		// Launch Claude with agent teams enabled
@@ -1109,7 +1122,7 @@ export class IgniteCommand {
 		logger.info(`   Model: ${model ?? 'default'}`)
 		logger.info(`   Permission mode: bypassPermissions`)
 		logger.info(`   Agent teams: enabled`)
-		logger.info(`   Child worktrees: ${successfulWorktrees.length}`)
+		logger.info(`   Child issues: ${swarmResult.childMetadata.length} (worktrees created on-demand)`)
 
 		// Load agents for the orchestrator
 		let agents: Record<string, unknown> | undefined
@@ -1134,7 +1147,7 @@ export class IgniteCommand {
 		const swarmStartTime = Date.now()
 		try {
 			TelemetryService.getInstance().track('swarm.started', {
-				child_count: successfulWorktrees.length,
+				child_count: swarmResult.childMetadata.length,
 				tracker: providerName,
 			})
 		} catch (error) {
@@ -1179,7 +1192,7 @@ export class IgniteCommand {
 			let succeeded = 0
 			let failed = 0
 
-			for (const child of successfulWorktrees) {
+			for (const child of swarmResult.childMetadata) {
 				const childMeta = await metadataManager.readMetadata(child.worktreePath)
 				const isSuccess = childMeta?.state === 'done'
 				if (isSuccess) {
@@ -1199,7 +1212,7 @@ export class IgniteCommand {
 			}
 
 			TelemetryService.getInstance().track('swarm.completed', {
-				total_children: successfulWorktrees.length,
+				total_children: swarmResult.childMetadata.length,
 				succeeded,
 				failed,
 				duration_minutes: Math.round((swarmEndTime - swarmStartTime) / 60000),

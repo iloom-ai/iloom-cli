@@ -23,7 +23,7 @@ il finish <epic>   Merge epic branch back to main
 | Area | Files |
 |------|-------|
 | CLI entry | `src/commands/ignite.ts` — detects epic, calls `SwarmSetupService`, launches orchestrator |
-| Setup | `src/lib/SwarmSetupService.ts` — creates child worktrees, renders agents, generates MCP configs |
+| Setup | `src/lib/SwarmSetupService.ts` — creates metadata entries for child issues, renders agents, generates MCP configs (worktrees created on-demand by orchestrator) |
 | Dependencies | `src/utils/dependency-map.ts` — builds DAG from issue tracker APIs (sibling deps only) |
 | Child data | `src/utils/list-children.ts` — fetches child issue details from tracker |
 | Metadata | `src/lib/MetadataManager.ts` — stores `childIssues`, `dependencyMap`, per-loom state |
@@ -31,18 +31,21 @@ il finish <epic>   Merge epic branch back to main
 | Worker prompt | `templates/prompts/issue-prompt.txt` (rendered with `SWARM_MODE=true`) |
 | Phase agents | `templates/agents/*.md` — analyzer, planner, implementer, etc. |
 | State tracking | `src/mcp/recap-server.ts` — `set_loom_state`, `add_artifact`, `add_entry` tools |
+| Worktree MCP | `src/mcp/worktree-server.ts` — MCP tool for just-in-time child worktree creation |
 
 ## Branch & Worktree Layout
 
 ```
 main
-└── issue/<epic-id>           # Epic branch + worktree
-    ├── issue/<child-1>       # Child branch + worktree
-    ├── issue/<child-2>       # Child branch + worktree
+└── issue/<epic-id>           # Epic branch + worktree (created at spin time)
+    ├── issue/<child-1>       # Child branch + worktree (created on-demand by orchestrator)
+    ├── issue/<child-2>       # Child branch + worktree (created on-demand by orchestrator)
     └── ...
 ```
 
-Each child worktree gets its own `iloom-metadata.json` with `parentLoom` reference and state tracking (`pending` → `in_progress` → `done`/`failed`).
+Child worktrees are created on-demand by the orchestrator (not at `il spin` time) via the `mcp__worktree__create_worktree` MCP tool. This ensures each child branches from the latest epic branch HEAD, which includes all previously merged work from earlier waves.
+
+Each child has metadata written at spin time (state: `pending`, with `parentLoom` reference). The actual worktree and branch are created just-in-time when the orchestrator is ready to spawn an agent for that child. State tracking: `pending` → `in_progress` → `done`/`failed`.
 
 ## Merge Strategy
 

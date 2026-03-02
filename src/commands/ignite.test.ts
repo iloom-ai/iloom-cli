@@ -56,9 +56,9 @@ vi.mock('../lib/SwarmSetupService.js', () => ({
 		setupSwarm: vi.fn().mockResolvedValue({
 			epicWorktreePath: '/path/to/epic',
 			epicBranch: 'feat/epic-branch',
-			childWorktrees: [
-				{ issueId: '101', worktreePath: '/path/to/child-101', branch: 'feat/issue-101', success: true },
-				{ issueId: '102', worktreePath: '/path/to/child-102', branch: 'feat/issue-102', success: true },
+			childMetadata: [
+				{ issueId: '101', branch: 'feat/issue-101', worktreePath: '/path/to/child-101', status: 'pending' },
+				{ issueId: '102', branch: 'feat/issue-102', worktreePath: '/path/to/child-102', status: 'pending' },
 			],
 			agentsRendered: [],
 			workerAgentRendered: false,
@@ -3311,8 +3311,8 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/child-epic',
 					epicBranch: 'feat/issue-100__child-epic',
-					childWorktrees: [
-						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
+					childMetadata: [
+						{ issueId: '301', branch: 'feat/issue-301', worktreePath: '/path/to/child-301', status: 'pending' },
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,
@@ -3416,7 +3416,7 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm = vi.fn().mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [],
+				childMetadata: [],
 				agentsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
@@ -3517,9 +3517,9 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm.mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-					{ issueId: '203', worktreePath: '/path/to/child-203', branch: 'feat/issue-203', success: true },
+				childMetadata: [
+					{ issueId: '202', branch: 'feat/issue-202', worktreePath: '/path/to/child-202', status: 'pending' },
+					{ issueId: '203', branch: 'feat/issue-203', worktreePath: '/path/to/child-203', status: 'pending' },
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
@@ -3540,7 +3540,6 @@ describe('IgniteCommand', () => {
 				]),
 				expect.any(String),
 				expect.any(String),
-				expect.any(Object),
 			)
 			// Verify the done child was NOT passed
 			const passedChildren = mockSetupSwarm.mock.calls[0][3]
@@ -3562,9 +3561,9 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm.mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				childMetadata: [
+					{ issueId: '201', branch: 'feat/issue-201', worktreePath: '/path/to/child-201', status: 'pending' },
+					{ issueId: '202', branch: 'feat/issue-202', worktreePath: '/path/to/child-202', status: 'pending' },
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
@@ -3595,7 +3594,7 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm.mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [],
+				childMetadata: [],
 				agentsRendered: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
@@ -3624,9 +3623,9 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm.mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				childMetadata: [
+					{ issueId: '201', branch: 'feat/issue-201', worktreePath: '/path/to/child-201', status: 'pending' },
+					{ issueId: '202', branch: 'feat/issue-202', worktreePath: '/path/to/child-202', status: 'pending' },
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
@@ -3659,8 +3658,8 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm.mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+				childMetadata: [
+					{ issueId: '202', branch: 'feat/issue-202', worktreePath: '/path/to/child-202', status: 'pending' },
 				],
 				agentsRendered: [],
 				workerAgentRendered: true,
@@ -3775,9 +3774,9 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/epic',
 					epicBranch: 'feat/issue-100__epic',
-					childWorktrees: [
-						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+					childMetadata: [
+						{ issueId: '201', branch: 'feat/issue-201', worktreePath: '/path/to/child-201', status: 'pending' },
+						{ issueId: '202', branch: 'feat/issue-202', worktreePath: '/path/to/child-202', status: 'pending' },
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,
@@ -4124,8 +4123,8 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/child-epic',
 					epicBranch: 'feat/issue-400__child-epic',
-					childWorktrees: [
-						{ issueId: '501', worktreePath: '/path/to/child-501', branch: 'feat/issue-501', success: true },
+					childMetadata: [
+						{ issueId: '501', branch: 'feat/issue-501', worktreePath: '/path/to/child-501', status: 'pending' },
 					],
 					agentsRendered: [],
 					workerAgentRendered: true,

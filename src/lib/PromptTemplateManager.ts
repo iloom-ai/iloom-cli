@@ -109,7 +109,7 @@ export interface TemplateVariables {
 	EPIC_ISSUE_NUMBER?: string | number
 	EPIC_WORKTREE_PATH?: string
 	EPIC_METADATA_PATH?: string  // Path to the epic's metadata JSON file
-	CHILD_ISSUES?: string  // JSON stringified array of child issues with worktree paths
+	CHILD_ISSUES?: string  // JSON stringified array of child issues (worktree paths assigned on-demand by orchestrator)
 	DEPENDENCY_MAP?: string  // JSON stringified dependency map
 	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
 	WAVE_VERIFICATION?: boolean  // True when wave verification is enabled (planner generates verification child issues)

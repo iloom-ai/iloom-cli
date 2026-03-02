@@ -2,18 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs-extra'
 import { SwarmSetupService, type SwarmChildIssue, type SwarmAgentMetadata } from './SwarmSetupService.js'
 import type { GitWorktreeManager } from './GitWorktreeManager.js'
-import type { MetadataManager, LoomMetadata } from './MetadataManager.js'
+import type { MetadataManager } from './MetadataManager.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager, IloomSettings } from './SettingsManager.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
-
-// Mock dependencies
-vi.mock('../utils/claude-trust.js', () => ({
-	preAcceptClaudeTrust: vi.fn().mockResolvedValue(undefined),
-}))
-vi.mock('../utils/package-manager.js', () => ({
-	installDependencies: vi.fn().mockResolvedValue(undefined),
-}))
 
 vi.mock('../utils/logger-context.js', () => ({
 	getLogger: () => ({
@@ -32,14 +24,6 @@ vi.mock('fs-extra', () => ({
 		pathExists: vi.fn().mockResolvedValue(true),
 		copy: vi.fn().mockResolvedValue(undefined),
 	},
-}))
-
-const { mockGenerateAndWriteMcpConfigFile } = vi.hoisted(() => ({
-	mockGenerateAndWriteMcpConfigFile: vi.fn().mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json'),
-}))
-
-vi.mock('../utils/mcp.js', () => ({
-	generateAndWriteMcpConfigFile: mockGenerateAndWriteMcpConfigFile,
 }))
 
 vi.mock('./IssueTrackerFactory.js', () => ({
@@ -61,37 +45,6 @@ describe('SwarmSetupService', () => {
 		{ number: '#102', title: 'Child issue 2', body: 'Body 2', url: 'https://github.com/org/repo/issues/102' },
 	]
 
-	const mockLoomMetadata: LoomMetadata = {
-		description: 'Child issue 1',
-		created_at: '2024-01-01T00:00:00Z',
-		branchName: 'issue/101',
-		worktreePath: '/Users/dev/project__issue-101',
-		issueType: 'issue',
-		issueKey: null,
-		issue_numbers: ['101'],
-		pr_numbers: [],
-		issueTracker: 'github',
-		colorHex: '#808080',
-		sessionId: '',
-		projectPath: '/Users/dev/project',
-		issueUrls: { '101': 'https://github.com/org/repo/issues/101' },
-		prUrls: {},
-		draftPrNumber: null,
-		oneShot: null,
-		capabilities: [],
-		state: 'pending',
-		childIssueNumbers: [],
-		parentLoom: {
-			type: 'epic',
-			identifier: '610',
-			branchName: 'epic/610',
-			worktreePath: '/Users/dev/project-epic-610',
-		},
-		childIssues: [],
-		dependencyMap: {},
-		mcpConfigPath: null,
-	}
-
 	beforeEach(() => {
 		mockGitWorktree = {
 			createWorktree: vi.fn().mockResolvedValue(undefined),
@@ -100,7 +53,7 @@ describe('SwarmSetupService', () => {
 
 		mockMetadataManager = {
 			writeMetadata: vi.fn().mockResolvedValue(undefined),
-			readMetadata: vi.fn().mockResolvedValue(mockLoomMetadata),
+			readMetadata: vi.fn().mockResolvedValue(null),
 			updateMetadata: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MetadataManager
 
@@ -124,8 +77,6 @@ describe('SwarmSetupService', () => {
 			getPrompt: vi.fn().mockResolvedValue('# Rendered swarm skill content'),
 		} as unknown as PromptTemplateManager
 
-		// Re-configure mocks after vitest's automatic mockReset
-		mockGenerateAndWriteMcpConfigFile.mockResolvedValue('/Users/test/.config/iloom-ai/mcp-configs/test.json')
 		vi.mocked(fs.pathExists).mockResolvedValue(true as never)
 		vi.mocked(fs.copy).mockResolvedValue(undefined)
 
@@ -138,9 +89,9 @@ describe('SwarmSetupService', () => {
 		)
 	})
 
-	describe('createChildWorktrees', () => {
-		it('creates worktrees for each child issue with standard naming', async () => {
-			const results = await service.createChildWorktrees(
+	describe('createChildMetadata', () => {
+		it('creates metadata entries for each child issue with standard naming', async () => {
+			const results = await service.createChildMetadata(
 				childIssues,
 				'epic/610',
 				'/Users/dev/project-epic-610',
@@ -150,16 +101,16 @@ describe('SwarmSetupService', () => {
 			)
 
 			expect(results).toHaveLength(2)
-			expect(results[0]!.success).toBe(true)
 			expect(results[0]!.issueId).toBe('101')
 			expect(results[0]!.branch).toBe('issue/101')
-			expect(results[1]!.success).toBe(true)
+			expect(results[0]!.status).toBe('pending')
 			expect(results[1]!.issueId).toBe('102')
 			expect(results[1]!.branch).toBe('issue/102')
+			expect(results[1]!.status).toBe('pending')
 		})
 
-		it('creates worktrees branched from the epic branch', async () => {
-			await service.createChildWorktrees(
+		it('computes planned worktree paths without creating actual worktrees', async () => {
+			const results = await service.createChildMetadata(
 				childIssues,
 				'epic/610',
 				'/Users/dev/project-epic-610',
@@ -168,17 +119,14 @@ describe('SwarmSetupService', () => {
 				'github',
 			)
 
-			expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
-				expect.objectContaining({
-					branch: 'issue/101',
-					createBranch: true,
-					baseBranch: 'epic/610',
-				}),
-			)
+			// Worktree paths should be computed but no git worktree should be created
+			expect(results[0]!.worktreePath).toBeTruthy()
+			expect(results[1]!.worktreePath).toBeTruthy()
+			expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
 		})
 
 		it('writes metadata with state pending and parentLoom reference', async () => {
-			await service.createChildWorktrees(
+			await service.createChildMetadata(
 				childIssues,
 				'epic/610',
 				'/Users/dev/project-epic-610',
@@ -202,8 +150,8 @@ describe('SwarmSetupService', () => {
 			})
 		})
 
-		it('generates MCP config file for each child worktree', async () => {
-			await service.createChildWorktrees(
+		it('does not create worktrees, install dependencies, or generate MCP configs', async () => {
+			await service.createChildMetadata(
 				childIssues,
 				'epic/610',
 				'/Users/dev/project-epic-610',
@@ -212,89 +160,45 @@ describe('SwarmSetupService', () => {
 				'github',
 			)
 
-			// Should be called once per child
-			expect(mockGenerateAndWriteMcpConfigFile).toHaveBeenCalledTimes(2)
-			// Should update metadata with mcpConfigPath
-			expect(mockMetadataManager.updateMetadata).toHaveBeenCalledTimes(2)
-			expect(mockMetadataManager.updateMetadata).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({
-					mcpConfigPath: '/Users/test/.config/iloom-ai/mcp-configs/test.json',
-				}),
-			)
+			// Should NOT call any worktree-related operations
+			expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
+			// Should NOT update metadata with mcpConfigPath (no MCP config generation)
+			expect(mockMetadataManager.updateMetadata).not.toHaveBeenCalled()
+			// Should NOT read metadata (no MCP config generation)
+			expect(mockMetadataManager.readMetadata).not.toHaveBeenCalled()
 		})
 
-		it('writes iloom-swarm-mcp-config-path file to .claude/ in each child worktree', async () => {
-			await service.createChildWorktrees(
-				childIssues,
-				'epic/610',
-				'/Users/dev/project-epic-610',
-				'/Users/dev/project',
-				'610',
-				'github',
-			)
-
-			// Should write iloom-swarm-mcp-config-path for each child
-			const writeFileCalls = vi.mocked(fs.writeFile).mock.calls
-			const configPathWrites = writeFileCalls.filter(
-				(call) => typeof call[0] === 'string' && (call[0] as string).endsWith('iloom-swarm-mcp-config-path'),
-			)
-			expect(configPathWrites).toHaveLength(2)
-			// Each file should contain just the MCP config path string
-			expect(configPathWrites[0]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
-			expect(configPathWrites[1]![1]).toBe('/Users/test/.config/iloom-ai/mcp-configs/test.json')
-		})
-
-		it('handles individual worktree creation failures gracefully', async () => {
-			vi.mocked(mockGitWorktree.createWorktree)
-				.mockResolvedValueOnce(undefined)
-				.mockRejectedValueOnce(new Error('Branch already exists'))
-
-			const results = await service.createChildWorktrees(
-				childIssues,
-				'epic/610',
-				'/Users/dev/project-epic-610',
-				'/Users/dev/project',
-				'610',
-				'github',
-			)
-
-			expect(results).toHaveLength(2)
-			expect(results[0]!.success).toBe(true)
-			expect(results[1]!.success).toBe(false)
-			expect(results[1]!.error).toBe('Branch already exists')
-		})
-
-		it('cleans up worktree if metadata write fails', async () => {
+		it('propagates metadata write failures', async () => {
 			vi.mocked(mockMetadataManager.writeMetadata).mockRejectedValueOnce(new Error('Write failed'))
 
-			const results = await service.createChildWorktrees(
-				[childIssues[0]!],
-				'epic/610',
-				'/Users/dev/project-epic-610',
-				'/Users/dev/project',
-				'610',
-				'github',
-			)
-
-			expect(results[0]!.success).toBe(false)
-			expect(mockGitWorktree.removeWorktree).toHaveBeenCalled()
+			await expect(
+				service.createChildMetadata(
+					[childIssues[0]!],
+					'epic/610',
+					'/Users/dev/project-epic-610',
+					'/Users/dev/project',
+					'610',
+					'github',
+				),
+			).rejects.toThrow('Write failed')
 		})
 
-		it('continues if MCP config generation fails', async () => {
-			mockGenerateAndWriteMcpConfigFile.mockRejectedValueOnce(new Error('MCP config failed'))
+		it('sanitizes non-alphanumeric characters in issue IDs for branch naming', async () => {
+			const linearIssues: SwarmChildIssue[] = [
+				{ number: 'ENG-456', title: 'Linear issue', body: 'Body', url: 'https://linear.app/team/ENG-456' },
+			]
 
-			const results = await service.createChildWorktrees(
-				[childIssues[0]!],
+			const results = await service.createChildMetadata(
+				linearIssues,
 				'epic/610',
 				'/Users/dev/project-epic-610',
 				'/Users/dev/project',
 				'610',
-				'github',
+				'linear',
 			)
 
-			// Should still succeed despite MCP config failure
-			expect(results[0]!.success).toBe(true)
+			expect(results[0]!.issueId).toBe('ENG-456')
+			expect(results[0]!.branch).toBe('issue/ENG-456')
 		})
 	})
 
@@ -738,69 +642,45 @@ describe('SwarmSetupService', () => {
 		})
 	})
 
-	describe('copyAgentsToChildWorktrees', () => {
-		it('copies .claude/agents/ from epic to each successful child worktree', async () => {
-			const childWorktrees = [
-				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
-				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
-			]
+	describe('copyAgentsToChildWorktree', () => {
+		it('copies .claude/agents/ from epic to the child worktree', async () => {
+			await service.copyAgentsToChildWorktree(
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project__issue-101',
+			)
 
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
-
-			expect(fs.copy).toHaveBeenCalledTimes(2)
 			expect(fs.copy).toHaveBeenCalledWith(
 				'/Users/dev/project-epic-610/.claude/agents',
 				'/Users/dev/project__issue-101/.claude/agents',
 				{ overwrite: true },
 			)
-			expect(fs.copy).toHaveBeenCalledWith(
-				'/Users/dev/project-epic-610/.claude/agents',
-				'/Users/dev/project__issue-102/.claude/agents',
-				{ overwrite: true },
-			)
-		})
-
-		it('skips failed child worktrees', async () => {
-			const childWorktrees = [
-				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
-				{ issueId: '102', worktreePath: '', branch: '', success: false, error: 'Branch already exists' },
-			]
-
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
-
-			expect(fs.copy).toHaveBeenCalledTimes(1)
 		})
 
 		it('skips copy when epic agents directory does not exist', async () => {
 			vi.mocked(fs.pathExists).mockResolvedValueOnce(false as never)
 
-			const childWorktrees = [
-				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
-			]
-
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+			await service.copyAgentsToChildWorktree(
+				'/Users/dev/project-epic-610',
+				'/Users/dev/project__issue-101',
+			)
 
 			expect(fs.copy).not.toHaveBeenCalled()
 		})
 
-		it('continues if copy fails for one child', async () => {
-			vi.mocked(fs.copy)
-				.mockRejectedValueOnce(new Error('Permission denied'))
-				.mockResolvedValueOnce(undefined)
+		it('does not throw if copy fails (non-fatal)', async () => {
+			vi.mocked(fs.copy).mockRejectedValueOnce(new Error('Permission denied'))
 
-			const childWorktrees = [
-				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
-				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
-			]
-
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
-
-			expect(fs.copy).toHaveBeenCalledTimes(2)
+			await expect(
+				service.copyAgentsToChildWorktree(
+					'/Users/dev/project-epic-610',
+					'/Users/dev/project__issue-101',
+				),
+			).resolves.toBeUndefined()
 		})
 	})
 
 	describe('setupSwarm', () => {
-		it('runs full setup: child worktrees, agents, and worker agent', async () => {
+		it('runs full setup: child metadata, agents, and worker agent', async () => {
 			const result = await service.setupSwarm(
 				'610',
 				'epic/610',
@@ -812,12 +692,14 @@ describe('SwarmSetupService', () => {
 
 			expect(result.epicWorktreePath).toBe('/Users/dev/project-epic-610')
 			expect(result.epicBranch).toBe('epic/610')
-			expect(result.childWorktrees).toHaveLength(2)
+			expect(result.childMetadata).toHaveLength(2)
+			expect(result.childMetadata[0]!.status).toBe('pending')
+			expect(result.childMetadata[1]!.status).toBe('pending')
 			expect(result.agentsRendered.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
 		})
 
-		it('copies agents to child worktrees after rendering', async () => {
+		it('does not create worktrees or copy agents to child worktrees', async () => {
 			await service.setupSwarm(
 				'610',
 				'epic/610',
@@ -827,11 +709,10 @@ describe('SwarmSetupService', () => {
 				'github',
 			)
 
-			// Should check for agents dir and copy to each successful child
-			expect(fs.pathExists).toHaveBeenCalledWith(
-				'/Users/dev/project-epic-610/.claude/agents',
-			)
-			expect(fs.copy).toHaveBeenCalledTimes(2)
+			// Should NOT create any git worktrees
+			expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
+			// Should NOT copy agents to children (deferred to MCP tool)
+			expect(fs.copy).not.toHaveBeenCalled()
 		})
 
 		it('passes agent metadata to renderSwarmWorkerAgent (no mcpConfigJson)', async () => {
@@ -855,6 +736,19 @@ describe('SwarmSetupService', () => {
 			)
 			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
 			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
+		})
+
+		it('writes metadata for all child issues', async () => {
+			await service.setupSwarm(
+				'610',
+				'epic/610',
+				'/Users/dev/project-epic-610',
+				childIssues,
+				'/Users/dev/project',
+				'github',
+			)
+
+			expect(mockMetadataManager.writeMetadata).toHaveBeenCalledTimes(2)
 		})
 	})
 })
