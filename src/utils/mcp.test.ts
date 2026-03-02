@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { generateRecapMcpConfig, generateHarnessMcpConfig } from './mcp.js'
+import { generateRecapMcpConfig, generateHarnessMcpConfig, generateClaudeExecutorMcpConfig } from './mcp.js'
 import os from 'os'
 import path from 'path'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
@@ -185,5 +185,51 @@ describe('generateHarnessMcpConfig', () => {
 		const serverPath = (harnessConfig.args as string[])[0]
 
 		expect(path.isAbsolute(serverPath)).toBe(true)
+	})
+})
+
+describe('generateClaudeExecutorMcpConfig', () => {
+	it('should generate MCP config with correct structure', () => {
+		const config = generateClaudeExecutorMcpConfig()
+
+		expect(config).toHaveLength(1)
+		expect(config[0]).toHaveProperty('mcpServers')
+		expect(config[0].mcpServers).toHaveProperty('claude_executor')
+	})
+
+	it('should use claude_executor as the server name', () => {
+		const config = generateClaudeExecutorMcpConfig()
+
+		const servers = config[0].mcpServers as Record<string, unknown>
+		expect(Object.keys(servers)).toEqual(['claude_executor'])
+	})
+
+	it('should use node as command and point to claude-executor-server.js', () => {
+		const config = generateClaudeExecutorMcpConfig()
+
+		const executorConfig = (config[0].mcpServers as Record<string, unknown>).claude_executor as Record<string, unknown>
+
+		expect(executorConfig.transport).toBe('stdio')
+		expect(executorConfig.command).toBe('node')
+		expect(executorConfig.args).toBeInstanceOf(Array)
+		expect((executorConfig.args as string[])[0]).toContain('claude-executor-server.js')
+	})
+
+	it('should use absolute path for claude executor server JS file', () => {
+		const config = generateClaudeExecutorMcpConfig()
+
+		const executorConfig = (config[0].mcpServers as Record<string, unknown>).claude_executor as Record<string, unknown>
+		const serverPath = (executorConfig.args as string[])[0]
+
+		expect(path.isAbsolute(serverPath)).toBe(true)
+	})
+
+	it('should resolve JS path to dist/mcp/claude-executor-server.js', () => {
+		const config = generateClaudeExecutorMcpConfig()
+
+		const executorConfig = (config[0].mcpServers as Record<string, unknown>).claude_executor as Record<string, unknown>
+		const serverPath = (executorConfig.args as string[])[0]
+
+		expect(serverPath).toMatch(/dist\/mcp\/claude-executor-server\.js$/)
 	})
 })

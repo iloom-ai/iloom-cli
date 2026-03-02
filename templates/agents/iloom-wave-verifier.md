@@ -3,7 +3,7 @@ name: iloom-wave-verifier
 description: Wave verification agent that checks must-have criteria from child issues after each swarm wave, spawns fix agents for failures, and reports structured results.\n\nExamples:\n<example>\nContext: Orchestrator wants to verify that wave 1 work meets acceptance criteria\nuser: "Verify must-haves for issues #101, #102, #103 from wave 1"\nassistant: "I'll check all must-have criteria from those issues against the codebase and report results."\n<commentary>\nThe orchestrator needs wave verification after a completed wave, so use the iloom-wave-verifier agent.\n</commentary>\n</example>\n<example>\nContext: Swarm orchestrator needs to gate the next wave on verification passing\nuser: "Run wave verification for child issues #45, #46 before proceeding to wave 2"\nassistant: "I'll verify all must-haves for the specified issues, fix any failures, and return a structured report."\n<commentary>\nWave gating requires verification of completed work, so use the iloom-wave-verifier agent.\n</commentary>\n</example>
 model: opus
 color: red
-tools: Bash, Glob, Grep, Read, mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment
+tools: Bash, Glob, Grep, Read, mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment, mcp__claude_executor__execute_claude
 ---
 
 {{#if SWARM_MODE}}
@@ -22,7 +22,7 @@ You are a wave verification agent. Your job is to check must-have criteria from 
 
 ## MANDATORY FIRST STEP
 
-1. Read `.claude/iloom-swarm-mcp-config-path` to get the MCP config path — store this for use in all `claude -p` invocations
+1. Read `.claude/iloom-swarm-mcp-config-path` to get the MCP config path — store this for use in all `execute_claude` MCP tool calls
 2. Parse the child issue numbers from your invocation prompt
 
 ## Core Workflow
@@ -88,37 +88,34 @@ Record each result as:
 If any must-haves FAILED, spawn fix agents to address them:
 
 1. Group failures by child issue number
-2. For each group of failures for a single issue, spawn one fix agent via `claude -p`:
+2. For each group of failures for a single issue, spawn one fix agent via `mcp__claude_executor__execute_claude`:
 
-**Read MCP config path first** (if not already done):
+**Fix agent invocation:** Call `mcp__claude_executor__execute_claude` with these parameters:
 
-```bash
-MCP_CONFIG_PATH=$(cat .claude/iloom-swarm-mcp-config-path)
+```
+{
+  "prompt": "<fix prompt — see construction below>",
+  "systemPromptFile": "{{EPIC_WORKTREE_PATH}}/.claude/agents/iloom-swarm-issue-implementer.md",
+  "mcpConfigPath": "<path from .claude/iloom-swarm-mcp-config-path>",
+  "model": "sonnet",
+  "maxTurns": 50,
+  "timeoutMs": {{SWARM_SUB_AGENT_TIMEOUT_MS}},
+  "workingDirectory": "<your current working directory>"
+}
 ```
 
-**Fix agent invocation command:**
+The tool returns a structured result:
 
-```bash
-FIX_OUTPUT_FILE=$(mktemp /tmp/iloom-fix-XXXXXX)
-trap "rm -f $FIX_OUTPUT_FILE ${FIX_OUTPUT_FILE}.stderr" EXIT
-env -u CLAUDECODE \
-  ENABLE_TOOL_SEARCH=auto:30 \
-  CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING=1 \
-  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
-  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-  CLAUDE_CODE_EFFORT_LEVEL=medium \
-  claude -p \
-  --system-prompt-file {{EPIC_WORKTREE_PATH}}/.claude/agents/iloom-swarm-issue-implementer.md \
-  --mcp-config "$MCP_CONFIG_PATH" \
-  --model sonnet \
-  --permission-mode bypassPermissions \
-  --output-format stream-json \
-  --verbose \
-  --max-turns 50 \
-  "<fix prompt>" > "$FIX_OUTPUT_FILE" 2>"${FIX_OUTPUT_FILE}.stderr"
+```
+{
+  "success": true/false,
+  "result": "<extracted result text from the fix agent>",
+  "exitCode": 0,
+  "error": null
+}
 ```
 
-**Bash tool timeout:** When invoking `claude -p` via the Bash tool, you MUST set the `timeout` parameter to `{{SWARM_SUB_AGENT_TIMEOUT_MS}}` milliseconds to prevent sub-agent invocations from hanging indefinitely.
+If `success` is false, log the error and record the fix attempt as failed.
 
 **Fix prompt construction:** The fix prompt MUST include:
 - Issue number and title for context
@@ -140,18 +137,7 @@ The following must-have criteria FAILED verification:
 Fix ONLY these specific failures. Do not add scope beyond what is listed above.
 ```
 
-**Output parsing:** After the command completes, check the exit code then extract the result text:
-
-```bash
-CLAUDE_EXIT_CODE=$?
-if [ $CLAUDE_EXIT_CODE -ne 0 ]; then
-  echo "Fix agent failed with exit code $CLAUDE_EXIT_CODE" >&2
-  RESULT=""
-else
-  RESULT=$(grep '"type":"result"' "$FIX_OUTPUT_FILE" | tail -1 | jq -r '.result // empty')
-fi
-rm -f "$FIX_OUTPUT_FILE" "${FIX_OUTPUT_FILE}.stderr"
-```
+**Result handling:** Use the `result` field from the tool response as the fix agent's output. The tool handles all environment setup internally (CLAUDECODE stripping, output parsing, temp file management).
 
 3. Run fix agents sequentially (one per issue group), waiting for each to complete before starting the next
 4. Record fix action results: which issue, which failures were targeted, and whether the agent reported success

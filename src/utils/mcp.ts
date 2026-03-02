@@ -288,6 +288,36 @@ export function generateHarnessMcpConfig(socketPath: string): Record<string, unk
 }
 
 /**
+ * Generate MCP configuration for the claude executor server
+ *
+ * The claude executor server provides Claude with an `execute_claude` tool that spawns
+ * headless `claude -p` subprocesses with proper env setup, output parsing, and timeout
+ * enforcement. This replaces the unreliable bash-based `claude -p` invocation mechanism.
+ */
+export function generateClaudeExecutorMcpConfig(): Record<string, unknown>[] {
+	const executorServerJsPath = path.resolve(
+		path.join(
+			path.dirname(new globalThis.URL(import.meta.url).pathname),
+			'../dist/mcp/claude-executor-server.js'
+		)
+	)
+
+	logger.debug('Generated MCP config for claude executor server')
+
+	return [
+		{
+			mcpServers: {
+				claude_executor: {
+					transport: 'stdio',
+					command: 'node',
+					args: [executorServerJsPath],
+				},
+			},
+		},
+	]
+}
+
+/**
  * Get the MCP configs directory path
  */
 export function getMcpConfigsDir(): string {
@@ -340,6 +370,14 @@ export async function generateAndWriteMcpConfigFile(
 		mcpConfigs.push(...recapMcpConfigs)
 	} catch (error) {
 		logger.warn(`Failed to generate recap MCP config for loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+	}
+
+	// Generate claude executor MCP config
+	try {
+		const executorMcpConfigs = generateClaudeExecutorMcpConfig()
+		mcpConfigs.push(...executorMcpConfigs)
+	} catch (error) {
+		logger.warn(`Failed to generate claude executor MCP config for loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
 	}
 
 	// Merge all mcpServers into a single config object

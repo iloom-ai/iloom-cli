@@ -6,7 +6,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateClaudeExecutorMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
@@ -976,6 +976,14 @@ export class IgniteCommand {
 			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
+		// Claude executor MCP for spawning claude -p subprocesses
+		try {
+			const executorMcpConfigs = generateClaudeExecutorMcpConfig()
+			mcpConfigs.push(...executorMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate claude executor MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
 		// Filter out children that are already done (finished looms may have metadata
 		// in the "looms/finished" directory, not just in active worktree metadata)
 		const finishedMetadata = await metadataManager.listFinishedMetadata()
@@ -1100,6 +1108,7 @@ export class IgniteCommand {
 			'mcp__recap__set_complexity',
 			'mcp__recap__set_loom_state',
 			'mcp__recap__get_loom_state',
+			'mcp__claude_executor__execute_claude',
 		]
 
 		// Launch Claude with agent teams enabled
