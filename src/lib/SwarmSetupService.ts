@@ -366,7 +366,7 @@ export class SwarmSetupService {
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
 			// Build the agent file with frontmatter
-			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'opus'
+			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
 
 			const frontmatter = [
 				'---',
@@ -423,7 +423,7 @@ export class SwarmSetupService {
 			}
 
 			// Get model from settings or use the template's declared model
-			const verifierModel = settings?.agents?.['iloom-wave-verifier']?.model ?? verifierConfig.model ?? 'opus'
+			const verifierModel = settings?.agents?.['iloom-wave-verifier']?.model ?? verifierConfig.model ?? 'sonnet'
 
 			// Build the agent file WITH frontmatter (standalone custom agent type)
 			const frontmatter = [
