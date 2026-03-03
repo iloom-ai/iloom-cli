@@ -1,3 +1,6 @@
+import path from 'path'
+import os from 'os'
+import { unlink, access } from 'fs/promises'
 import { execa } from 'execa'
 import { logger } from '../utils/logger.js'
 import {
@@ -369,6 +372,128 @@ export class DockerManager {
 	 */
 	private static async forceRemoveContainer(containerName: string): Promise<void> {
 		await execa('docker', ['rm', '-f', containerName], { reject: false })
+	}
+
+	/**
+	 * Build the compose project name for a given identifier.
+	 * Convention: `iloom-{sanitizedIdentifier}`
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns Compose project name
+	 */
+	static buildComposeProjectName(identifier: string | number): string {
+		const sanitized = sanitizeContainerName(String(identifier))
+		return `iloom-${sanitized}`
+	}
+
+	/**
+	 * Get the directory where compose override files are stored.
+	 * Files are stored at `~/.config/iloom-ai/compose-overrides/`
+	 *
+	 * @returns Absolute path to the compose overrides directory
+	 */
+	static getComposeOverrideDir(): string {
+		return path.join(os.homedir(), '.config', 'iloom-ai', 'compose-overrides')
+	}
+
+	/**
+	 * Get the full path to the compose override file for a given identifier.
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns Absolute path to the override file
+	 */
+	static getComposeOverridePath(identifier: string | number): string {
+		const projectName = DockerManager.buildComposeProjectName(identifier)
+		return path.join(DockerManager.getComposeOverrideDir(), `${projectName}.yml`)
+	}
+
+	/**
+	 * Check if a compose stack is currently running (has at least one running container).
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns true if the compose stack has running containers, false otherwise
+	 */
+	static async isComposeStackRunning(identifier: string | number): Promise<boolean> {
+		const projectName = DockerManager.buildComposeProjectName(identifier)
+		try {
+			const result = await execa('docker', [
+				'compose',
+				'--project-name', projectName,
+				'ps',
+				'--status', 'running',
+				'-q',
+			], { reject: false })
+			return result.exitCode === 0 && result.stdout.trim().length > 0
+		} catch {
+			return false
+		}
+	}
+
+	/**
+	 * Tear down a compose stack by project name.
+	 * Gracefully handles stacks that are already stopped or don't exist.
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns true if the stack was torn down (was running), false if it was already stopped
+	 */
+	static async teardownComposeStack(identifier: string | number): Promise<void> {
+		const projectName = DockerManager.buildComposeProjectName(identifier)
+		logger.info(`Tearing down compose stack "${projectName}"...`)
+		const result = await execa('docker', [
+			'compose',
+			'--project-name', projectName,
+			'down',
+		], { reject: false })
+
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`docker compose down failed with exit code ${result.exitCode}: ${result.stderr}`
+			)
+		}
+
+		logger.success(`Compose stack "${projectName}" torn down`)
+	}
+
+	/**
+	 * Check if a compose override file exists for a given identifier.
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns true if the override file exists, false otherwise
+	 */
+	static async hasComposeOverrideFile(identifier: string | number): Promise<boolean> {
+		const overridePath = DockerManager.getComposeOverridePath(identifier)
+		try {
+			await access(overridePath)
+			return true
+		} catch (error) {
+			if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return false
+			}
+			throw error
+		}
+	}
+
+	/**
+	 * Remove the compose override file for a given identifier from the data directory.
+	 * Returns false (non-fatal) if the file does not exist.
+	 * Throws for unexpected errors.
+	 *
+	 * @param identifier - Issue number, branch name, or other identifier
+	 * @returns true if the file was removed, false if it did not exist
+	 */
+	static async removeComposeOverrideFile(identifier: string | number): Promise<boolean> {
+		const overridePath = DockerManager.getComposeOverridePath(identifier)
+		try {
+			await unlink(overridePath)
+			logger.debug(`Removed compose override file: ${overridePath}`)
+			return true
+		} catch (error) {
+			if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+				logger.debug(`Compose override file not found: ${overridePath}`)
+				return false
+			}
+			throw error
+		}
 	}
 
 	/**
