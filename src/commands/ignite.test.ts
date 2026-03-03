@@ -4405,6 +4405,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						NO_CLEANUP: true,
 						EPIC_ISSUE_NUMBER: '100',
+						SWARM_TEAM_NAME: expect.stringMatching(/^swarm-main-100-\d+$/),
 					}),
 				)
 			} finally {
@@ -4494,6 +4495,7 @@ describe('Swarm orchestrator template content', () => {
 			CHILD_ISSUES: '[]',
 			DEPENDENCY_MAP: '{}',
 			ISSUE_PREFIX: '#',
+			SWARM_TEAM_NAME: 'swarm-test-999-1234567890',
 		})
 
 		// Verify install step uses il install-deps command

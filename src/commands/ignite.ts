@@ -1087,8 +1087,17 @@ export class IgniteCommand {
 		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
 		const postSwarmReview = settings.spin?.postSwarmReview !== false
 
+		// Reuse existing swarm team name from metadata, or generate a new one
+		let swarmTeamName = metadata.swarmTeamName
+		if (!swarmTeamName) {
+			const projectSlug = path.basename(mainWorktreePath).replace(/[^a-zA-Z0-9_-]/g, '-')
+			swarmTeamName = `swarm-${projectSlug}-${epicIssueNumber}-${Date.now()}`
+			await metadataManager.updateMetadata(epicWorktreePath, { swarmTeamName })
+		}
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
+			SWARM_TEAM_NAME: swarmTeamName,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
 			EPIC_METADATA_PATH: epicMetadataPath,
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),

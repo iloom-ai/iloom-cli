@@ -175,7 +175,7 @@ Mark todo #1 and #2 as completed.
 ### Step 2.1: Create the Team
 
 Use `TeamCreate` to create a team:
-- Team name: `swarm-epic-{{EPIC_ISSUE_NUMBER}}`
+- Team name: `{{SWARM_TEAM_NAME}}`
 
 ### Step 2.2: Create Worktrees and Spawn Agents for Unblocked Issues
 
@@ -212,7 +212,7 @@ Before spawning, check if a child issue is a **verification task** by examining 
 For regular child issues (non-verification), use these parameters:
 - `subagent_type`: `"iloom-swarm-worker"`
 - `mode`: `"delegate"`
-- `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
+- `team_name`: `"{{SWARM_TEAM_NAME}}"`
 - `name`: `"issue-<child-number>"`
 
 **CRITICAL: The task prompt MUST contain only the issue number and worktree path. Do NOT include the issue title, issue body, analysis, planning details, implementation instructions, code snippets, or any other content from CHILD_ISSUES. The child agent retrieves all issue context itself via `mcp__issue_management__get_issue` as its first action.**
@@ -234,7 +234,7 @@ For verification child issues (title starts with "Verify"), use the wave verifie
 
 - `subagent_type`: `"iloom-swarm-wave-verifier"`
 - `mode`: `"delegate"`
-- `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
+- `team_name`: `"{{SWARM_TEAM_NAME}}"`
 - `name`: `"verifier-<child-number>"`
 
 The prompt for each verification agent should be exactly:
@@ -447,7 +447,7 @@ Send `shutdown_request` to all teammates that are still active:
 
 ### Step 5.2: Clean Up Team
 
-Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
+Use `TeamDelete` to clean up the team `{{SWARM_TEAM_NAME}}`.
 
 {{#if POST_SWARM_REVIEW}}
 ### Step 5.2.5: Post-Swarm Code Review and Auto-Fix

@@ -117,6 +117,7 @@ export interface TemplateVariables {
 	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
 	POST_SWARM_REVIEW?: boolean  // True when post-swarm code review is enabled (defaults to true)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
+	SWARM_TEAM_NAME?: string  // Unique team name for swarm orchestrator (project-epic-timestamp)
 }
 
 /**

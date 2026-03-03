@@ -381,6 +381,7 @@ describe('MetadataManager', () => {
         childIssues: [],
         dependencyMap: {},
         mcpConfigPath: null,
+        swarmTeamName: null,
       })
     })
 
@@ -513,6 +514,7 @@ describe('MetadataManager', () => {
         childIssues: [],
         dependencyMap: {},
         mcpConfigPath: null,
+        swarmTeamName: null,
       })
     })
 
@@ -883,6 +885,7 @@ describe('MetadataManager', () => {
         childIssues: [],
         dependencyMap: {},
         mcpConfigPath: null,
+        swarmTeamName: null,
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -909,6 +912,7 @@ describe('MetadataManager', () => {
         childIssues: [],
         dependencyMap: {},
         mcpConfigPath: null,
+        swarmTeamName: null,
       })
     })
 
@@ -1019,6 +1023,7 @@ describe('MetadataManager', () => {
         childIssues: [],
         dependencyMap: {},
         mcpConfigPath: null,
+        swarmTeamName: null,
       })
     })
 
