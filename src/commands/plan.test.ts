@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PlanCommand } from './plan.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
+import * as claudeTrust from '../utils/claude-trust.js'
 import * as mcpUtils from '../utils/mcp.js'
 import * as firstRunSetup from '../utils/first-run-setup.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
@@ -14,6 +15,7 @@ import type { HarnessHandler } from '../lib/HarnessServer.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
+vi.mock('../utils/claude-trust.js')
 vi.mock('../utils/mcp.js')
 vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
@@ -81,6 +83,7 @@ describe('PlanCommand', () => {
 		command = new PlanCommand(mockTemplateManager)
 
 		// Setup default mocks
+		vi.mocked(claudeTrust.preAcceptClaudeTrust).mockResolvedValue(undefined)
 		vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
 		vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue([
@@ -259,6 +262,12 @@ describe('PlanCommand', () => {
 				'Help me plan a feature or decompose work into issues.',
 				expect.any(Object)
 			)
+		})
+
+		it('should pre-accept Claude trust for cwd before launching Claude', async () => {
+			await command.execute()
+
+			expect(claudeTrust.preAcceptClaudeTrust).toHaveBeenCalledWith(process.cwd())
 		})
 
 		it('should pass allowedTools configuration', async () => {

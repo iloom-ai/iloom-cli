@@ -3,6 +3,7 @@ import { logger, createStderrLogger } from '../utils/logger.js'
 import { withLogger } from '../utils/logger-context.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
 import { HarnessServer } from '../lib/HarnessServer.js'
@@ -550,6 +551,13 @@ export class PlanCommand {
 			yolo,
 			print: isHeadless,
 		})
+
+		// Pre-accept Claude Code trust for the working directory
+		try {
+			await preAcceptClaudeTrust(process.cwd())
+		} catch (error) {
+			logger.warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
+		}
 
 		// Launch Claude in interactive mode
 		// Construct initial message based on mode
