@@ -370,7 +370,11 @@ Report back with status: "success" or "failed" and any error output.
 
 {{/if}}
 {{/if}}
-#### Step 3.3.6: Clean Up Child Worktree
+#### Step 3.3.6: Shut Down Finished Teammate
+
+After merging and updating state, send a `shutdown_request` to the child's teammate so it releases resources. Use `SendMessage` with `type: "shutdown_request"` and `recipient: "<teammate-name>"` (e.g., `"issue-123"` or `"verifier-456"`). Do not wait for the shutdown response — proceed immediately.
+
+#### Step 3.3.7: Clean Up Child Worktree
 
 {{#unless NO_CLEANUP}}
 After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il cleanup --archive`. Since the child's work is already rebased and merged into the epic branch, we only need to remove the worktree and branch while preserving metadata.
@@ -417,8 +421,9 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
 2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
 3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. Log the comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Failure comment for #<child-number>", worktreePath: "<child-worktree-path>" }`.
 4. **Log the failure as a recap entry**: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<child-number> failed: <brief reason>", worktreePath: "<child-worktree-path>" }` to record the failure in the child's recap
-5. **Do NOT block other children**: Continue processing remaining children
-6. **Handle downstream dependencies**: For any children that depend on the failed child:
+5. **Shut down the failed teammate**: Send `shutdown_request` to the child's teammate to release resources. Do not wait for the response.
+6. **Do NOT block other children**: Continue processing remaining children
+7. **Handle downstream dependencies**: For any children that depend on the failed child:
    - Mark them as `failed` with reason: "Blocked by failed dependency #<failed-child-number>"
    - Update their loom state: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<downstream-child-worktree-path>" }`
    - Log a recap entry for each: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Blocked by failed dependency #<failed-child-number>", worktreePath: "<downstream-child-worktree-path>" }`

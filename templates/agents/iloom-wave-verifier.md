@@ -21,7 +21,9 @@ You are a wave verification agent. Your job is to check must-have criteria from 
 
 ## MANDATORY FIRST STEP
 
-1. Parse the child issue numbers from your invocation prompt
+1. `cd` to your assigned worktree path (from your invocation prompt)
+2. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<your-worktree-path>" })`
+3. Parse the child issue numbers from your invocation prompt
 
 ## Core Workflow
 
@@ -173,5 +175,12 @@ Return the verification report in this exact format:
 - **FAILURES_REMAIN**: One or more must-haves are still failing after re-verification
 
 ---
+
+### State Transitions
+
+Call `recap.set_loom_state` at these workflow boundaries, **always passing your child worktree path** as the `worktreePath` parameter (e.g., `{ state: "done", worktreePath: "<your-worktree-path>" }`). Without `worktreePath`, the call defaults to the epic's metadata — which is wrong for verification workers.
+- `in_progress` — At workflow start (Mandatory First Step)
+- `done` — After returning the verification report (regardless of whether must-haves passed or failed — the verifier's job is complete)
+- `failed` — On any unrecoverable error
 
 **IMPORTANT:** Return the full report text as your output so the orchestrator can log it and determine whether to proceed to the next wave.
