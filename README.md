@@ -111,9 +111,9 @@ Each loom is a fully isolated container for your work:
     `ILOOM_COLOR_HEX` is useful for downstream tools that want to visually distinguish looms. For example, a Vite app can read it via `import.meta.env.VITE_ILOOM_COLOR_HEX` to tint the UI. See [Vite Integration Guide](docs/vite-iloom-color.md) for details.
 
 *   **Unique Runtime:**
-    
-    *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
-        
+
+    *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025). Optionally supports [Docker mode](#docker-dev-server) for frameworks that don't respect `PORT`.
+
     *   **CLI Tools:** Creates an isolated binary copy (e.g., my-tool-25). You can run issue #25's version of your CLI alongside issue #99's version without conflicts. (Fun fact: iloom was built with iloom using this feature).
         
 *   **Context Persistence:** All reasoning is stored in issue comments. This makes the "why" behind the code visible to your teammates and your future self.
@@ -667,6 +667,27 @@ iloom provides first-class support for building CLI tools. When you start a loom
 > my-cli --version     # Unaffected by other looms' CLIs
 ```
 
+### Docker Dev Server
+
+By default, iloom runs your dev server as a native process and sets the `PORT` environment variable so each loom gets its own port. If your framework ignores `PORT` (e.g., Angular CLI hardcodes its listen port), you can opt in to Docker mode instead. You provide a Dockerfile, and iloom uses Docker's `-p` flag to map the container's port to the workspace port on the host — no changes to your app required.
+
+To enable it, create a Dockerfile that builds and runs your dev server, then set `devServer` to `"docker"` in `.iloom/settings.json`:
+
+```json
+{
+  "capabilities": {
+    "web": {
+      "devServer": "docker",
+      "containerPort": 4200
+    }
+  }
+}
+```
+
+Then use `il dev-server`, `il open`, or `il run` as normal.
+
+Docker Compose multi-service stacks are not yet supported — see [#332](https://github.com/iloom-ai/iloom-cli/issues/332) for the roadmap. For full configuration options and known limitations, see the [Complete Command Reference](docs/iloom-commands.md#docker-dev-server-mode).
+
 ### Epic Planning and Decomposition
 
 The `il plan` command launches an interactive Architect session that helps you break down complex features into manageable child issues.
@@ -789,7 +810,9 @@ This is an early-stage product.
 *   ✅ **Runtime:** Node.js 16+, Git 2.5+.
     
 *   ✅ **AI:** Claude CLI installed. A Claude Max subscription is recommended (iloom uses your subscription).
-    
+
+*   ☑️ **Docker** (optional): Only required if using [Docker dev server mode](#docker-dev-server). Docker Desktop or Docker Engine must be installed and running.
+
 
 **Project Support:**
 
