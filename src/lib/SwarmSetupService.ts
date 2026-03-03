@@ -288,7 +288,8 @@ export class SwarmSetupService {
 				`name: ${skillDirName}`,
 				`description: ${agentConfig.description}`,
 				`model: ${agentConfig.model}`,
-				...(agentConfig.tools ? [`allowed-tools: ${agentConfig.tools.join(', ')}`] : []),
+				'context: fork',
+				'agent: general-purpose',
 				'---',
 			].join('\n')
 

@@ -340,26 +340,12 @@ describe('SwarmSetupService', () => {
 			expect(writtenContent).toContain('name: iloom-swarm-issue-implementer')
 			expect(writtenContent).toContain('description: Implementer agent')
 			expect(writtenContent).toContain('model: ')
+			expect(writtenContent).toContain('context: fork')
+			expect(writtenContent).toContain('agent: general-purpose')
 			expect(writtenContent).not.toContain('disable-model-invocation')
-			expect(writtenContent).toContain('allowed-tools: Bash, Read')
+			expect(writtenContent).not.toContain('allowed-tools')
 			// Should contain the prompt body
 			expect(writtenContent).toContain('Implement things')
-		})
-
-		it('omits allowed-tools from frontmatter when agent has no tools defined', async () => {
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-				'iloom-issue-analyzer': {
-					description: 'Analyzer agent',
-					prompt: 'Analyze things',
-					model: 'sonnet',
-				},
-			})
-
-			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-			expect(result.renderedSkills).toHaveLength(1)
-			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
-			expect(writtenContent).not.toContain('allowed-tools')
 		})
 
 		describe('phase agent swarmModel overrides', () => {
@@ -547,7 +533,7 @@ describe('SwarmSetupService', () => {
 				expect(contentBySkill.get('iloom-swarm-issue-planner')).toContain('model: haiku')
 			})
 
-			it('swarmModel override preserves tools in frontmatter', async () => {
+			it('swarmModel override does not emit allowed-tools even when agent has tools', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { swarmModel: 'haiku' },
@@ -567,7 +553,7 @@ describe('SwarmSetupService', () => {
 
 				const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
 				expect(writtenContent).toContain('model: haiku')
-				expect(writtenContent).toContain('allowed-tools: Bash, Read')
+				expect(writtenContent).not.toContain('allowed-tools')
 			})
 		})
 	})

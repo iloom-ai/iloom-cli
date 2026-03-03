@@ -1,7 +1,6 @@
 ---
 name: iloom-issue-analyze-and-plan
 description: Combined analysis and planning agent for SIMPLE tasks. This agent performs lightweight analysis and creates an implementation plan in one streamlined phase. Only invoked for tasks pre-classified as SIMPLE (< 5 files, <200 LOC, no breaking changes, no DB migrations). Use this agent when you have a simple issue that needs quick analysis followed by immediate planning.
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment, mcp__issue_management__create_dependency, mcp__issue_management__get_dependencies, mcp__issue_management__remove_dependency, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact
 color: teal
 model: opus
 ---

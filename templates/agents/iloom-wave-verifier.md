@@ -3,7 +3,6 @@ name: iloom-wave-verifier
 description: Wave verification agent that checks must-have criteria from child issues after each swarm wave, invokes fix skills for failures, and reports structured results.\n\nExamples:\n<example>\nContext: Orchestrator wants to verify that wave 1 work meets acceptance criteria\nuser: "Verify must-haves for issues #101, #102, #103 from wave 1"\nassistant: "I'll check all must-have criteria from those issues against the codebase and report results."\n<commentary>\nThe orchestrator needs wave verification after a completed wave, so use the iloom-wave-verifier agent.\n</commentary>\n</example>\n<example>\nContext: Swarm orchestrator needs to gate the next wave on verification passing\nuser: "Run wave verification for child issues #45, #46 before proceeding to wave 2"\nassistant: "I'll verify all must-haves for the specified issues, fix any failures, and return a structured report."\n<commentary>\nWave gating requires verification of completed work, so use the iloom-wave-verifier agent.\n</commentary>\n</example>
 model: opus
 color: red
-tools: Bash, Glob, Grep, Read, mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment
 ---
 
 {{#if SWARM_MODE}}
@@ -91,8 +90,10 @@ If any must-haves FAILED, invoke the fix skill to address them:
 
 **Fix skill invocation:**
 
+CRITICAL: Skills run with `context: fork` and start at the project root. You MUST include the child worktree path so the forked agent works in the correct location.
+
 ```
-/iloom-swarm-issue-implementer "Implement the following missing must-haves for issue #NNN '[issue title]'. DO NOT create your own issue comment.
+/iloom-swarm-issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the following missing must-haves for issue #NNN '[issue title]'. DO NOT create your own issue comment.
 
 The following must-have criteria FAILED verification:
 1. [exists] src/components/Foo.tsx — File does not exist

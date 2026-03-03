@@ -361,8 +361,15 @@ Skill output is returned directly in your conversation. Extract the relevant
 result (comment URLs, complexity classification, plan content, etc.) from
 the skill's response text.
 
-**Working directory:**
-Ensure you are in the child worktree before invoking phase skills.
+**CRITICAL - Working directory:**
+Skills run with `context: fork`, which means the forked agent starts at the
+project root, NOT your current working directory. You MUST include the worktree
+path in every skill invocation prompt so the forked agent works in the correct
+location. Example:
+```
+/iloom-swarm-issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the plan..."
+```
+Always prepend: `"Your working directory is <worktree-path>. cd there before doing any work."`
 
 **Todo List:**
 1. Initialize: cd to worktree, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
