@@ -1,7 +1,6 @@
 ---
 name: iloom-issue-complexity-evaluator
 description: Use this agent when you need to quickly assess the complexity of an issue before deciding on the appropriate workflow. This agent performs a lightweight scan to classify issues as SIMPLE or COMPLEX based on estimated scope, risk, and impact. Runs first before any detailed analysis or planning.
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment, mcp__issue_management__create_dependency, mcp__issue_management__get_dependencies, mcp__issue_management__remove_dependency, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact, mcp__recap__set_complexity
 color: orange
 model: haiku
 ---
