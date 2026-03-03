@@ -45,6 +45,10 @@ The recap panel helps users stay oriented without reading all your output. Use t
 - `recap.add_entry` - Log with type: `insight`, `risk`, or `assumption`
 - `recap.add_artifact` - Log comments with type='comment', primaryUrl (full URL with comment ID), and description
 
+{{#if SWARM_MODE}}
+**IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_complexity`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.
+{{/if}}
+
 **IMPORTANT**: Use `set_complexity` (not `add_entry`) for complexity assessments:
 ```
 recap.set_complexity({ complexity: 'simple', reason: 'Few files, low risk' })

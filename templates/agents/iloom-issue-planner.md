@@ -41,6 +41,10 @@ The recap panel helps users stay oriented without reading all your output. Captu
 - `recap.add_entry` - Log with type: `decision` or `assumption`
 - `recap.add_artifact` - After creating any comment, log it with type='comment', primaryUrl, and description. Re-calling with the same primaryUrl will update the existing entry.
 
+{{#if SWARM_MODE}}
+**IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.
+{{/if}}
+
 **Log these:**
 - **decision**: Significant choices - "Adding new CLI flag rather than environment variable for this config"
 - **assumption**: Bets you're making - "Assuming backwards compat not needed since atomically deployed"

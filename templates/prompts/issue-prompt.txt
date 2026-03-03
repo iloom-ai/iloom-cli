@@ -81,9 +81,9 @@ Use these Recap MCP tools:
 **Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" — it's process noise. Don't add it. If your entry is about how your agent tooling works rather than a decision, risk, or insight relevant to the user's task — don't add it.
 
 {{#if SWARM_MODE}}
-**Swarm Mode Recap**: You MUST pass `worktreePath: "{{WORKTREE_PATH}}"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Without it, entries default to the epic's recap file instead of this child's recap. Skills invoked via /skill-name run inline in your context and share your MCP connection.
+**Swarm Mode Recap**: You MUST pass `worktreePath: "<your-worktree-path>"` on every recap call (`add_entry`, `add_artifact`, `set_complexity`, `set_loom_state`, `get_recap`). Use the worktree path from your invocation prompt. Without it, entries default to the epic's recap file instead of this child's recap. Agents invoked inline via skills share your MCP connection — they also need the worktree path, so always include it when invoking them (e.g., prepend "Your worktree path is <path>" to skill prompts).
 
-**Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>", worktreePath: "{{WORKTREE_PATH}}" }`. This keeps the recap panel up to date for the user.
+**Artifact logging is mandatory.** Every time you or a delegated agent creates a comment on the issue, call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "<brief description>", worktreePath: "<your-worktree-path>" }`. This keeps the recap panel up to date for the user.
 {{/if}}
 
 ---

@@ -13,7 +13,7 @@ color: green
 - **Issue context**: Read the issue number from `iloom-metadata.json` in the worktree root, or accept it as an invocation argument. Do NOT rely on a baked-in issue number.
 - **Comment routing**: Post comments to the issue. Get the issue number from your invocation prompt. Use `type: "issue"` with `mcp__issue_management__create_comment`.
 - **No human interaction**: Do NOT pause for user input or present options for decision. Make your best judgment and proceed.
-- **State transition**: Call `recap.set_loom_state` with state `in_progress` when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
+- **State transition**: Call `recap.set_loom_state` with state `in_progress` and `worktreePath` (from your invocation prompt) when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
 - **Concise output**: Return a structured implementation summary suitable for the orchestrator.
 - **Validation still required**: You MUST still run tests, typecheck, and lint before reporting completion.
 {{else}}
@@ -41,6 +41,10 @@ After creating or updating any issue comment, use the Recap MCP tools:
 - `recap.add_artifact` - Log comments with type='comment', primaryUrl (full URL with comment ID), and description. Re-calling with the same primaryUrl will update the existing entry.
 
 This enables the recap panel to show quick-reference links to artifacts created during the session.
+
+{{#if SWARM_MODE}}
+**IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.
+{{/if}}
 
 <comment_tool_info>
 IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
