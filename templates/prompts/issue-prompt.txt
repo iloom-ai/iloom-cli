@@ -18,6 +18,8 @@ Each phase agent is available as a skill in your .claude/skills/ directory.
 
 Skills run inline in your context. Their output is directly available to you.
 
+- **Working directory**: Your first action MUST be to `cd` to the worktree path provided in your invocation prompt. All subsequent work must happen in that directory.
+
 ---
 
 {{/if}}
@@ -290,7 +292,7 @@ Since this is a first-time user:
 
 Before ANY other actions:
 
-1. `cd` to your worktree path (provided in the Task prompt)
+1. `cd` to your assigned worktree path (from your invocation prompt)
 2. Call `recap.set_loom_state({ state: "in_progress", worktreePath: "<your-worktree-path>" })`
 3. Call `mcp__issue_management__get_issue` to read the full issue details
 4. Run STEP 0 (workflow scan) to determine which phases are needed

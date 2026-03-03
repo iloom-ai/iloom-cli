@@ -19,14 +19,8 @@ import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
 export interface SwarmSetupResult {
 	epicWorktreePath: string
 	epicBranch: string
-	childWorktrees: Array<{
-		issueId: string
-		worktreePath: string
-		branch: string
-		success: boolean
-		error?: string
-	}>
 	skillsRendered: string[]
+	renderedAgents: string[]
 	workerAgentRendered: boolean
 	verifierAgentRendered: boolean
 }
@@ -81,7 +75,13 @@ export class SwarmSetupService {
 		epicIssueNumber: string | number,
 		issueTrackerName: string,
 		settings?: IloomSettings,
-	): Promise<SwarmSetupResult['childWorktrees']> {
+	): Promise<Array<{
+		issueId: string
+		worktreePath: string
+		branch: string
+		success: boolean
+		error?: string
+	}>> {
 		return Promise.all(childIssues.map(async (child) => {
 			try {
 				// Strip prefix from child number (e.g., "#123" -> "123", "ENG-123" stays as-is for branch naming)
@@ -217,17 +217,25 @@ export class SwarmSetupService {
 	}
 
 	/**
-	 * Render swarm-mode agent templates as skills to the epic worktree's .claude/skills/ directory.
+	 * Render swarm-mode agent templates as custom agent files AND thin skill wrappers.
 	 *
-	 * Each phase agent is rendered as a SKILL.md file WITH frontmatter (name, description,
-	 * model, allowed-tools, disable-model-invocation) inside its own skill directory.
+	 * For each phase agent, two files are written:
+	 * 1. Agent file at `.claude/agents/iloom-swarm-<phase>.md` - contains frontmatter
+	 *    (name, description, model) and the full agent prompt as body.
+	 * 2. Thin skill wrapper at `.claude/skills/iloom-swarm-<phase>/SKILL.md` - contains
+	 *    frontmatter with `agent: iloom-swarm-<phase>` and a minimal body.
+	 *
 	 * Skills are auto-discovered by Claude Code and invoked via /skill-name syntax.
+	 * The agent file carries the real prompt; the skill just delegates to it.
 	 */
 	async renderSwarmAgents(epicWorktreePath: string): Promise<{
 		renderedSkills: string[]
+		renderedAgents: string[]
 	}> {
 		const claudeSkillsDir = path.join(epicWorktreePath, '.claude', 'skills')
+		const claudeAgentsDir = path.join(epicWorktreePath, '.claude', 'agents')
 		await fs.ensureDir(claudeSkillsDir)
+		await fs.ensureDir(claudeAgentsDir)
 
 		const settings = await this.settingsManager.loadSettings()
 
@@ -263,6 +271,7 @@ export class SwarmSetupService {
 		}
 
 		const renderedSkills: string[] = []
+		const renderedAgents: string[] = []
 
 		// Agents that are rendered as standalone custom agent types (with frontmatter
 		// in .claude/agents/) rather than as skills. These are skipped here
@@ -274,33 +283,47 @@ export class SwarmSetupService {
 				continue
 			}
 
-			// Compute skill directory name: iloom-swarm-<phase>
-			const skillDirName = agentName.startsWith('iloom-')
+			// Compute agent/skill name: iloom-swarm-<phase>
+			const swarmName = agentName.startsWith('iloom-')
 				? `iloom-swarm-${agentName.slice('iloom-'.length)}`
 				: `iloom-swarm-${agentName}`
 
-			const skillDir = path.join(claudeSkillsDir, skillDirName)
-			await fs.ensureDir(skillDir)
-
-			// Build SKILL.md with frontmatter
-			const frontmatter = [
+			// 1. Write agent file to .claude/agents/<swarmName>.md
+			const agentFrontmatter = [
 				'---',
-				`name: ${skillDirName}`,
+				`name: ${swarmName}`,
 				`description: ${agentConfig.description}`,
 				`model: ${agentConfig.model}`,
-				'context: fork',
-				'agent: general-purpose',
 				'---',
 			].join('\n')
 
-			const content = `${frontmatter}\n\n${agentConfig.prompt}\n`
-			await fs.writeFile(path.join(skillDir, 'SKILL.md'), content, 'utf-8')
-			renderedSkills.push(skillDirName)
-			getLogger().debug(`Rendered swarm skill: ${skillDirName}`)
+			const agentContent = `${agentFrontmatter}\n\n${agentConfig.prompt}\n`
+			await fs.writeFile(path.join(claudeAgentsDir, `${swarmName}.md`), agentContent, 'utf-8')
+			renderedAgents.push(swarmName)
+			getLogger().debug(`Rendered swarm agent: ${swarmName}`)
+
+			// 2. Write thin skill wrapper to .claude/skills/<swarmName>/SKILL.md
+			const skillDir = path.join(claudeSkillsDir, swarmName)
+			await fs.ensureDir(skillDir)
+
+			const skillFrontmatter = [
+				'---',
+				`name: ${swarmName}`,
+				`description: ${agentConfig.description}`,
+				`model: ${agentConfig.model}`,
+				'context: fork',
+				`agent: ${swarmName}`,
+				'---',
+			].join('\n')
+
+			const skillContent = `${skillFrontmatter}\n\nProceed via your system prompt.\n`
+			await fs.writeFile(path.join(skillDir, 'SKILL.md'), skillContent, 'utf-8')
+			renderedSkills.push(swarmName)
+			getLogger().debug(`Rendered swarm skill wrapper: ${swarmName}`)
 		}
 
-		getLogger().success(`Rendered ${renderedSkills.length} swarm skills to ${claudeSkillsDir}`)
-		return { renderedSkills }
+		getLogger().success(`Rendered ${renderedAgents.length} swarm agents and ${renderedSkills.length} skill wrappers`)
+		return { renderedSkills, renderedAgents }
 	}
 
 	/**
@@ -434,7 +457,13 @@ export class SwarmSetupService {
 	 */
 	async copyAgentsAndSkillsToChildWorktrees(
 		epicWorktreePath: string,
-		childWorktrees: SwarmSetupResult['childWorktrees'],
+		childWorktrees: Array<{
+			issueId: string
+			worktreePath: string
+			branch: string
+			success: boolean
+			error?: string
+		}>,
 	): Promise<void> {
 		const agentsSourceDir = path.join(epicWorktreePath, '.claude', 'agents')
 		const skillsSourceDir = path.join(epicWorktreePath, '.claude', 'skills')
@@ -473,56 +502,32 @@ export class SwarmSetupService {
 	}
 
 	/**
-	 * Run the full swarm setup: child worktrees, agents, and worker agent.
+	 * Run the full swarm setup: render agents, worker agent, and wave verifier.
 	 *
 	 * The epic worktree already exists (created by `il start`).
+	 * Child worktrees are created on-the-fly by the orchestrator as issues become unblocked.
 	 */
 	async setupSwarm(
-		epicIssueNumber: string | number,
 		epicBranch: string,
 		epicWorktreePath: string,
-		childIssues: SwarmChildIssue[],
-		mainWorktreePath: string,
-		issueTrackerName: string,
-		settings?: IloomSettings,
 	): Promise<SwarmSetupResult> {
-		// 1. Create child worktrees (with per-loom MCP config generation)
-		const childWorktrees = await this.createChildWorktrees(
-			childIssues,
-			epicBranch,
-			epicWorktreePath,
-			mainWorktreePath,
-			epicIssueNumber,
-			issueTrackerName,
-			settings,
-		)
-
-		// 2. Render swarm skills to epic worktree's .claude/skills/ directory
-		const { renderedSkills: skillsRendered } =
+		// 1. Render swarm agents and skill wrappers to epic worktree
+		const { renderedSkills: skillsRendered, renderedAgents } =
 			await this.renderSwarmAgents(epicWorktreePath)
 
-		// 3. Render the swarm worker agent file
+		// 2. Render the swarm worker agent file
 		const workerAgentRendered = await this.renderSwarmWorkerAgent(epicWorktreePath)
 
-		// 3b. Render the wave verifier agent file (standalone custom agent type with frontmatter)
+		// 3. Render the wave verifier agent file (standalone custom agent type with frontmatter)
 		const verifierAgentRendered = await this.renderSwarmWaveVerifierAgent(epicWorktreePath)
 
-		// 4. Copy .claude/agents/ and .claude/skills/ from epic worktree to each child worktree
-		await this.copyAgentsAndSkillsToChildWorktrees(epicWorktreePath, childWorktrees)
-
-		const successCount = childWorktrees.filter((c) => c.success).length
-		const failCount = childWorktrees.filter((c) => !c.success).length
-
-		getLogger().success(
-			`Swarm setup complete: ${successCount} child worktrees` +
-				(failCount > 0 ? ` (${failCount} failed)` : ''),
-		)
+		getLogger().success('Swarm setup complete: agents and skills rendered')
 
 		return {
 			epicWorktreePath,
 			epicBranch,
-			childWorktrees,
 			skillsRendered,
+			renderedAgents,
 			workerAgentRendered,
 			verifierAgentRendered,
 		}

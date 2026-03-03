@@ -177,9 +177,31 @@ Mark todo #1 and #2 as completed.
 Use `TeamCreate` to create a team:
 - Team name: `swarm-epic-{{EPIC_ISSUE_NUMBER}}`
 
-### Step 2.2: Spawn Agents for Unblocked Issues
+### Step 2.2: Create Worktrees and Spawn Agents for Unblocked Issues
 
-For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
+For each unblocked child issue:
+
+#### Step 2.2a: Create the Child Worktree
+
+Before spawning the child agent, create its worktree from the epic branch:
+
+```bash
+git worktree add <child-worktree-path> -b <child-branch-name> HEAD
+```
+
+The `worktreePath` and `branchName` for each child come from the `CHILD_ISSUES` data parsed in Phase 1.
+
+**Error handling**: If `git worktree add` fails (e.g., branch already exists from a previous run), try without `-b`:
+```bash
+git worktree add <child-worktree-path> <child-branch-name>
+```
+If both fail, mark the child as `failed` with the error and skip spawning.
+
+**Do NOT use `il start` to create worktrees. Worktrees are created by this orchestrator via `git worktree add`.**
+
+#### Step 2.2b: Spawn the Child Agent
+
+**Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
 
 #### Detecting Verification Issues
 
@@ -200,6 +222,8 @@ The prompt for each regular child agent should be exactly:
 ```
 Issue: #<child-number>
 Worktree: <child-worktree-path>
+
+IMPORTANT: Your working directory is <child-worktree-path>. Run `cd <child-worktree-path>` as your FIRST action before doing ANY work.
 ```
 
 Nothing else. No title. No body. No instructions. No context. The child's system prompt defines everything it needs to do.
@@ -218,6 +242,8 @@ The prompt for each verification agent should be exactly:
 ```
 Issue: #<child-number>
 Worktree: <child-worktree-path>
+
+IMPORTANT: Your working directory is <child-worktree-path>. Run `cd <child-worktree-path>` as your FIRST action before doing ANY work.
 ```
 
 The wave verifier agent reads the verification issue body to determine which child issues to verify (from its dependencies in the DAG), parses their must-have criteria, and checks them against the codebase. It spawns fix agents for failures and returns a structured report.
