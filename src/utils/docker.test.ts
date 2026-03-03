@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { execa } from 'execa'
 import { readFile } from 'fs/promises'
+import { existsSync } from 'fs'
 import {
 	isDockerInstalled,
 	isDockerRunning,
@@ -10,10 +11,12 @@ import {
 	sanitizeContainerName,
 	buildContainerName,
 	buildImageName,
+	detectComposeFile,
 } from './docker.js'
 
 vi.mock('execa')
 vi.mock('fs/promises')
+vi.mock('fs')
 
 describe('isDockerInstalled', () => {
 	it('should return true when docker --version succeeds', async () => {
@@ -393,5 +396,236 @@ describe('buildImageName', () => {
 	it('should sanitize branch names with slashes', () => {
 		expect(buildImageName('feat/issue-548'))
 			.toBe('iloom-dev-feat-issue-548')
+	})
+})
+
+describe('detectComposeFile', () => {
+	it('should return null when no compose file exists', async () => {
+		vi.mocked(existsSync).mockReturnValue(false)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).toBeNull()
+	})
+
+	it('should detect compose.yml', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).not.toBeNull()
+		expect(result?.fileName).toBe('compose.yml')
+		expect(result?.services).toHaveLength(1)
+		expect(result?.services[0].name).toBe('web')
+		expect(result?.services[0].ports).toEqual([{ host: 8080, container: 80 }])
+		expect(result?.services[0].image).toBe('nginx')
+	})
+
+	it('should detect docker-compose.yml when compose.yml does not exist', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('docker-compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  api:
+    ports:
+      - "3000:3000"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).not.toBeNull()
+		expect(result?.fileName).toBe('docker-compose.yml')
+	})
+
+	it('should prefer compose.yaml over all other candidates when all exist', async () => {
+		// All files exist — compose.yaml should win (first candidate)
+		vi.mocked(existsSync).mockReturnValue(true)
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    image: nginx
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.fileName).toBe('compose.yaml')
+	})
+
+	it('should return result with empty services when compose file has no services key', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue('version: "3"')
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).not.toBeNull()
+		expect(result?.services).toEqual([])
+	})
+
+	it('should return null for malformed YAML', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(': invalid: yaml: [unclosed')
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).toBeNull()
+	})
+
+	it('should handle services without port mappings', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  worker:
+    image: myapp
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services[0].ports).toEqual([])
+	})
+
+	it('should parse long-form port syntax (target/published)', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    ports:
+      - target: 80
+        published: 8080
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services[0].ports).toEqual([{ host: 8080, container: 80 }])
+	})
+
+	it('should handle multiple services with mixed port formats', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    ports:
+      - "3000:3000"
+  db:
+    image: postgres
+    ports:
+      - target: 5432
+        published: 5432
+  worker:
+    image: redis
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services).toHaveLength(3)
+		const web = result?.services.find((s) => s.name === 'web')
+		const db = result?.services.find((s) => s.name === 'db')
+		const worker = result?.services.find((s) => s.name === 'worker')
+		expect(web?.ports).toEqual([{ host: 3000, container: 3000 }])
+		expect(db?.ports).toEqual([{ host: 5432, container: 5432 }])
+		expect(worker?.ports).toEqual([])
+	})
+
+	it('should parse port without host mapping (container-only short syntax)', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    ports:
+      - "3000"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services[0].ports).toEqual([{ container: 3000 }])
+	})
+
+	it('should detect compose.yaml (.yaml extension)', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yaml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).not.toBeNull()
+		expect(result?.fileName).toBe('compose.yaml')
+		expect(result?.services[0].ports).toEqual([{ host: 8080, container: 80 }])
+	})
+
+	it('should detect docker-compose.yaml when no .yml variants exist', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('docker-compose.yaml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  api:
+    ports:
+      - "3000:3000"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result).not.toBeNull()
+		expect(result?.fileName).toBe('docker-compose.yaml')
+	})
+
+	it('should prefer compose.yaml over docker-compose.yaml when both exist', async () => {
+		vi.mocked(existsSync).mockImplementation(
+			(p) => String(p).endsWith('compose.yaml') || String(p).endsWith('docker-compose.yaml')
+		)
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    image: nginx
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.fileName).toBe('compose.yaml')
+	})
+
+	it('should handle IP:HOST:CONTAINER three-part short port syntax', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    ports:
+      - "127.0.0.1:8080:80"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services[0].ports).toEqual([{ host: 8080, container: 80 }])
+	})
+
+	it('should handle long-form port syntax with string published value', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		vi.mocked(readFile).mockResolvedValue(`
+services:
+  web:
+    ports:
+      - target: 80
+        published: "8080"
+`)
+
+		const result = await detectComposeFile('/project')
+
+		expect(result?.services[0].ports).toEqual([{ host: 8080, container: 80 }])
+	})
+
+	it('should rethrow unexpected errors (non-YAML errors)', async () => {
+		vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('compose.yml'))
+		const permissionError = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
+		vi.mocked(readFile).mockRejectedValue(permissionError)
+
+		await expect(detectComposeFile('/project')).rejects.toThrow('EACCES')
 	})
 })
