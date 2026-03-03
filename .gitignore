@@ -52,3 +52,4 @@ tmp/
 
 # Added by iloom CLI
 .iloom/settings.local.json
+.claude/iloom-system-prompt.md
