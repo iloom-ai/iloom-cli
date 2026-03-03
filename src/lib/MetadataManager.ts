@@ -50,6 +50,7 @@ export interface MetadataFile {
   }>
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
   mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
+  swarmTeamName?: string // Unique team name for swarm orchestrator (persisted for re-runs)
 }
 
 /**
@@ -93,6 +94,7 @@ export interface WriteMetadataInput {
   }>
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
   mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
+  swarmTeamName?: string // Unique team name for swarm orchestrator (persisted for re-runs)
 }
 
 /**
@@ -137,6 +139,7 @@ export interface LoomMetadata {
   }>
   dependencyMap: Record<string, string[]>
   mcpConfigPath: string | null // Path to per-loom MCP config file (null for non-swarm looms)
+  swarmTeamName: string | null // Unique team name for swarm orchestrator (null for non-swarm looms)
 }
 
 /**
@@ -188,6 +191,7 @@ export class MetadataManager {
       childIssues: data.childIssues ?? [],
       dependencyMap: data.dependencyMap ?? {},
       mcpConfigPath: data.mcpConfigPath ?? null,
+      swarmTeamName: data.swarmTeamName ?? null,
     }
   }
 

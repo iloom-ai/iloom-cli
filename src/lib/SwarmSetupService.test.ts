@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs-extra'
-import { SwarmSetupService, type SwarmChildIssue, type SwarmAgentMetadata } from './SwarmSetupService.js'
+import { SwarmSetupService, type SwarmChildIssue } from './SwarmSetupService.js'
 import type { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { MetadataManager, LoomMetadata } from './MetadataManager.js'
 import type { AgentManager } from './AgentManager.js'
@@ -299,14 +299,40 @@ describe('SwarmSetupService', () => {
 	})
 
 	describe('renderSwarmAgents', () => {
-		it('renders agents with swarm naming convention', async () => {
+		it('writes agent files to .claude/agents/ and skill wrappers to .claude/skills/', async () => {
 			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			expect(result.renderedFiles).toHaveLength(1)
-			expect(result.renderedFiles[0]).toBe('iloom-swarm-issue-implementer.md')
+			expect(result.renderedSkills).toHaveLength(1)
+			expect(result.renderedSkills[0]).toBe('iloom-swarm-issue-implementer')
+			expect(result.renderedAgents).toHaveLength(1)
+			expect(result.renderedAgents[0]).toBe('iloom-swarm-issue-implementer')
+
+			// Verify agents directory was created
+			expect(fs.ensureDir).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+			)
+
+			// Verify agent file was written
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents/iloom-swarm-issue-implementer.md',
+				expect.any(String),
+				'utf-8',
+			)
+
+			// Verify skill directory was created
+			expect(fs.ensureDir).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills/iloom-swarm-issue-implementer',
+			)
+
+			// Verify thin SKILL.md was written to the skill directory
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills/iloom-swarm-issue-implementer/SKILL.md',
+				expect.any(String),
+				'utf-8',
+			)
 		})
 
-		it('loads agents with SWARM_MODE, EPIC_WORKTREE_PATH, and SWARM_SUB_AGENT_TIMEOUT_MS', async () => {
+		it('loads agents with SWARM_MODE and EPIC_WORKTREE_PATH', async () => {
 			await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
@@ -314,46 +340,53 @@ describe('SwarmSetupService', () => {
 				expect.objectContaining({
 					SWARM_MODE: true,
 					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
-					SWARM_SUB_AGENT_TIMEOUT_MS: 600000,
 				}),
 			)
 		})
 
-		it('writes agent files WITHOUT frontmatter (prompt body only)', async () => {
+		it('writes agent file with full prompt and skill wrapper with delegation body', async () => {
 			await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
-			// Should NOT start with ---
-			expect(writtenContent).not.toMatch(/^---/)
-			// Should contain the prompt body
-			expect(writtenContent).toContain('Implement things')
-		})
+			const writeFileCalls = vi.mocked(fs.writeFile).mock.calls
+			const agentFileCall = writeFileCalls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-issue-implementer.md'),
+			)
+			const skillFileCall = writeFileCalls.find(
+				(call) => (call[0] as string).endsWith('SKILL.md'),
+			)
 
-		it('returns metadata with model and tools for each agent', async () => {
-			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+			// Agent file should contain full prompt
+			const agentContent = agentFileCall![1] as string
+			expect(agentContent).toMatch(/^---/)
+			expect(agentContent).toContain('name: iloom-swarm-issue-implementer')
+			expect(agentContent).toContain('description: Implementer agent')
+			expect(agentContent).toContain('model: ')
+			expect(agentContent).not.toContain('context: fork')
+			expect(agentContent).not.toContain('agent:')
+			expect(agentContent).toContain('Implement things')
 
-			expect(result.metadata).toHaveProperty('iloom-swarm-issue-implementer')
-			// iloom-issue-implementer is in the default swarmModel map, so model is overridden to sonnet
-			expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-			expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
-		})
-
-		it('omits tools from metadata when agent has no tools defined', async () => {
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-				'iloom-issue-analyzer': {
-					description: 'Analyzer agent',
-					prompt: 'Analyze things',
-					model: 'sonnet',
-				},
-			})
-
-			const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-			expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
-			expect(result.metadata['iloom-swarm-issue-analyzer']).not.toHaveProperty('tools')
+			// Skill wrapper should be thin with agent reference
+			const skillContent = skillFileCall![1] as string
+			expect(skillContent).toMatch(/^---/)
+			expect(skillContent).toContain('name: iloom-swarm-issue-implementer')
+			expect(skillContent).toContain('description: Implementer agent')
+			expect(skillContent).toContain('model: ')
+			expect(skillContent).toContain('context: fork')
+			expect(skillContent).toContain('agent: iloom-swarm-issue-implementer')
+			expect(skillContent).not.toContain('agent: general-purpose')
+			expect(skillContent).toContain('Proceed via your system prompt.')
+			expect(skillContent).not.toContain('Implement things')
 		})
 
 		describe('phase agent swarmModel overrides', () => {
+			// Helper to extract agent file content by swarm name
+			const getAgentContent = (swarmName: string): string | undefined => {
+				const call = vi.mocked(fs.writeFile).mock.calls.find(
+					(c) => (c[0] as string).endsWith(`${swarmName}.md`),
+				)
+				return call ? (call[1] as string) : undefined
+			}
+
 			it('uses per-agent swarmModel when configured', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
@@ -370,9 +403,9 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: haiku')
 			})
 
 			it('applies default swarmModel (sonnet) for agents in default map when no swarmModel configured', async () => {
@@ -391,10 +424,10 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 				// iloom-issue-implementer is in the default swarmModel map, so it should be sonnet
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
 			})
 
 			it('applies default swarmModel (opus) for analyzer agent', async () => {
@@ -408,10 +441,10 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 				// iloom-issue-analyzer is in the default swarmModel map as opus
-				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: opus')
 			})
 
 			it('non-swarm model override does not affect swarm mode when default map covers the agent', async () => {
@@ -441,12 +474,13 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 				// Even though non-swarm model is set to haiku, swarm defaults override
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('opus')
-				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('sonnet')
+				// Check agent files (which carry the full prompt and model)
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: opus')
+				expect(getAgentContent('iloom-swarm-issue-planner')).toContain('model: sonnet')
 			})
 
 			it('explicit swarmModel overrides both non-swarm model and default map', async () => {
@@ -470,11 +504,11 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
 				// Explicit swarmModel always wins over both non-swarm model and default map
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('opus')
-				expect(result.metadata['iloom-swarm-issue-analyzer']!.model).toBe('haiku')
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: opus')
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: haiku')
 			})
 
 			it('different agents can have different swarmModels', async () => {
@@ -499,13 +533,13 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('sonnet')
-				expect(result.metadata['iloom-swarm-issue-planner']!.model).toBe('haiku')
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
+				expect(getAgentContent('iloom-swarm-issue-planner')).toContain('model: haiku')
 			})
 
-			it('swarmModel override preserves tools metadata', async () => {
+			it('swarmModel override does not emit allowed-tools even when agent has tools', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { swarmModel: 'haiku' },
@@ -521,10 +555,11 @@ describe('SwarmSetupService', () => {
 					},
 				})
 
-				const result = await service.renderSwarmAgents('/Users/dev/project-epic-610')
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				expect(result.metadata['iloom-swarm-issue-implementer']!.model).toBe('haiku')
-				expect(result.metadata['iloom-swarm-issue-implementer']!.tools).toEqual(['Bash', 'Read'])
+				const agentContent = getAgentContent('iloom-swarm-issue-implementer')
+				expect(agentContent).toContain('model: haiku')
+				expect(agentContent).not.toContain('allowed-tools')
 			})
 		})
 	})
@@ -553,35 +588,13 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		it('passes SWARM_AGENT_METADATA as template variable when provided', async () => {
-			const agentMetadata: SwarmAgentMetadata = {
-				'iloom-swarm-issue-implementer': { model: 'opus', tools: ['Bash'] },
-			}
-			await service.renderSwarmWorkerAgent(
-				'/Users/dev/project-epic-610',
-				agentMetadata,
-			)
-
-			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-				'issue',
-				expect.objectContaining({
-					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
-				}),
-			)
-		})
-
-		it('does not pass MCP_CONFIG_JSON as template variable', async () => {
+		it('does not pass MCP_CONFIG_JSON or SWARM_AGENT_METADATA as template variables', async () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
 
 			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
 			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
-		})
-
-		it('omits SWARM_AGENT_METADATA when not provided', async () => {
-			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
-
-			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
 			expect(calledVariables).not.toHaveProperty('SWARM_AGENT_METADATA')
+			expect(calledVariables).not.toHaveProperty('SWARM_SUB_AGENT_TIMEOUT_MS')
 		})
 
 		it('writes agent file with frontmatter to .claude/agents/iloom-swarm-worker.md', async () => {
@@ -686,76 +699,37 @@ describe('SwarmSetupService', () => {
 			)
 		})
 
-		describe('sub-agent timeout', () => {
-			it('passes default SWARM_SUB_AGENT_TIMEOUT_MS of 600000 (10 minutes) when not configured', async () => {
-				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
-
-				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-					'issue',
-					expect.objectContaining({
-						SWARM_SUB_AGENT_TIMEOUT_MS: 600000,
-					}),
-				)
-			})
-
-			it('converts configured subAgentTimeout from minutes to milliseconds', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							subAgentTimeout: 30,
-						},
-					},
-				} as unknown as IloomSettings)
-
-				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
-
-				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-					'issue',
-					expect.objectContaining({
-						SWARM_SUB_AGENT_TIMEOUT_MS: 1800000, // 30 * 60 * 1000
-					}),
-				)
-			})
-
-			it('uses configured subAgentTimeout of 1 minute correctly', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
-					agents: {
-						'iloom-swarm-worker': {
-							subAgentTimeout: 1,
-						},
-					},
-				} as unknown as IloomSettings)
-
-				await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
-
-				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-					'issue',
-					expect.objectContaining({
-						SWARM_SUB_AGENT_TIMEOUT_MS: 60000, // 1 * 60 * 1000
-					}),
-				)
-			})
-		})
 	})
 
-	describe('copyAgentsToChildWorktrees', () => {
-		it('copies .claude/agents/ from epic to each successful child worktree', async () => {
+	describe('copyAgentsAndSkillsToChildWorktrees', () => {
+		it('copies both .claude/agents/ and .claude/skills/ from epic to each successful child worktree', async () => {
 			const childWorktrees = [
 				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
 				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
 			]
 
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
 
-			expect(fs.copy).toHaveBeenCalledTimes(2)
+			// 2 children x 2 directories (agents + skills) = 4 copy calls
+			expect(fs.copy).toHaveBeenCalledTimes(4)
 			expect(fs.copy).toHaveBeenCalledWith(
 				'/Users/dev/project-epic-610/.claude/agents',
 				'/Users/dev/project__issue-101/.claude/agents',
 				{ overwrite: true },
 			)
 			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills',
+				'/Users/dev/project__issue-101/.claude/skills',
+				{ overwrite: true },
+			)
+			expect(fs.copy).toHaveBeenCalledWith(
 				'/Users/dev/project-epic-610/.claude/agents',
 				'/Users/dev/project__issue-102/.claude/agents',
+				{ overwrite: true },
+			)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills',
+				'/Users/dev/project__issue-102/.claude/skills',
 				{ overwrite: true },
 			)
 		})
@@ -766,95 +740,122 @@ describe('SwarmSetupService', () => {
 				{ issueId: '102', worktreePath: '', branch: '', success: false, error: 'Branch already exists' },
 			]
 
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
 
-			expect(fs.copy).toHaveBeenCalledTimes(1)
+			// 1 child x 2 directories = 2 copy calls
+			expect(fs.copy).toHaveBeenCalledTimes(2)
 		})
 
-		it('skips copy when epic agents directory does not exist', async () => {
-			vi.mocked(fs.pathExists).mockResolvedValueOnce(false as never)
+		it('skips copy when neither agents nor skills directories exist', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
 
 			const childWorktrees = [
 				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
 			]
 
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
 
 			expect(fs.copy).not.toHaveBeenCalled()
+		})
+
+		it('copies only agents when skills directory does not exist', async () => {
+			vi.mocked(fs.pathExists)
+				.mockResolvedValueOnce(true as never)  // agents exists
+				.mockResolvedValueOnce(false as never)  // skills does not exist
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+			]
+
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(1)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/agents',
+				'/Users/dev/project__issue-101/.claude/agents',
+				{ overwrite: true },
+			)
+		})
+
+		it('copies only skills when agents directory does not exist', async () => {
+			vi.mocked(fs.pathExists)
+				.mockResolvedValueOnce(false as never)  // agents does not exist
+				.mockResolvedValueOnce(true as never)   // skills exists
+
+			const childWorktrees = [
+				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
+			]
+
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+
+			expect(fs.copy).toHaveBeenCalledTimes(1)
+			expect(fs.copy).toHaveBeenCalledWith(
+				'/Users/dev/project-epic-610/.claude/skills',
+				'/Users/dev/project__issue-101/.claude/skills',
+				{ overwrite: true },
+			)
 		})
 
 		it('continues if copy fails for one child', async () => {
 			vi.mocked(fs.copy)
 				.mockRejectedValueOnce(new Error('Permission denied'))
-				.mockResolvedValueOnce(undefined)
+				.mockResolvedValue(undefined)
 
 			const childWorktrees = [
 				{ issueId: '101', worktreePath: '/Users/dev/project__issue-101', branch: 'issue/101', success: true },
 				{ issueId: '102', worktreePath: '/Users/dev/project__issue-102', branch: 'issue/102', success: true },
 			]
 
-			await service.copyAgentsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
+			await service.copyAgentsAndSkillsToChildWorktrees('/Users/dev/project-epic-610', childWorktrees)
 
-			expect(fs.copy).toHaveBeenCalledTimes(2)
+			// Should attempt all copies despite first failure
+			expect(fs.copy).toHaveBeenCalled()
 		})
 	})
 
 	describe('setupSwarm', () => {
-		it('runs full setup: child worktrees, agents, and worker agent', async () => {
+		it('runs full setup: renders agents, worker agent, and verifier agent (no child worktrees)', async () => {
 			const result = await service.setupSwarm(
-				'610',
 				'epic/610',
 				'/Users/dev/project-epic-610',
-				childIssues,
-				'/Users/dev/project',
-				'github',
 			)
 
 			expect(result.epicWorktreePath).toBe('/Users/dev/project-epic-610')
 			expect(result.epicBranch).toBe('epic/610')
-			expect(result.childWorktrees).toHaveLength(2)
-			expect(result.agentsRendered.length).toBeGreaterThan(0)
+			expect(result.skillsRendered.length).toBeGreaterThan(0)
+			expect(result.renderedAgents.length).toBeGreaterThan(0)
 			expect(result.workerAgentRendered).toBe(true)
+			expect(result.verifierAgentRendered).toBeDefined()
 		})
 
-		it('copies agents to child worktrees after rendering', async () => {
+		it('does not create child worktrees or copy agents/skills to children', async () => {
 			await service.setupSwarm(
-				'610',
 				'epic/610',
 				'/Users/dev/project-epic-610',
-				childIssues,
-				'/Users/dev/project',
-				'github',
 			)
 
-			// Should check for agents dir and copy to each successful child
-			expect(fs.pathExists).toHaveBeenCalledWith(
-				'/Users/dev/project-epic-610/.claude/agents',
-			)
-			expect(fs.copy).toHaveBeenCalledTimes(2)
+			// Should NOT have called createWorktree (child worktrees are created on-the-fly by orchestrator)
+			expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
+			// Should NOT have checked for agents/skills dirs to copy (no child worktrees to copy to)
+			expect(fs.copy).not.toHaveBeenCalled()
 		})
 
-		it('passes agent metadata to renderSwarmWorkerAgent (no mcpConfigJson)', async () => {
+		it('does not pass SWARM_AGENT_METADATA or MCP_CONFIG_JSON to worker agent', async () => {
 			await service.setupSwarm(
-				'610',
 				'epic/610',
 				'/Users/dev/project-epic-610',
-				childIssues,
-				'/Users/dev/project',
-				'github',
 			)
 
-			// Verify that getPrompt was called with SWARM_AGENT_METADATA containing agent metadata
-			// but NOT with MCP_CONFIG_JSON (removed in favor of per-loom config files)
+			// Verify getPrompt was called for the worker agent
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'issue',
 				expect.objectContaining({
-					SWARM_AGENT_METADATA: expect.stringContaining('iloom-swarm-issue-implementer'),
 					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
 				}),
 			)
 			const calledVariables = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]![1]
 			expect(calledVariables).not.toHaveProperty('MCP_CONFIG_JSON')
+			expect(calledVariables).not.toHaveProperty('SWARM_AGENT_METADATA')
 		})
 	})
 })

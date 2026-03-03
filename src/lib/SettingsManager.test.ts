@@ -54,11 +54,10 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			// subAgentTimeout defaults to 10 for each agent
 			expect(result).toEqual({
 				agents: {
-					'iloom-issue-analyzer': { model: 'sonnet', subAgentTimeout: 10 },
-					'iloom-issue-planner': { model: 'opus', subAgentTimeout: 10 },
+					'iloom-issue-analyzer': { model: 'sonnet' },
+					'iloom-issue-planner': { model: 'opus' },
 				},
 				sourceEnvOnStart: false,
 				attribution: 'upstreamOnly',
@@ -192,10 +191,9 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings()
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			// subAgentTimeout defaults to 10 for each agent
 			expect(result).toEqual({
 				agents: {
-					'test-agent': { model: 'haiku', subAgentTimeout: 10 },
+					'test-agent': { model: 'haiku' },
 				},
 				sourceEnvOnStart: false,
 				attribution: 'upstreamOnly',

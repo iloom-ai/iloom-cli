@@ -1937,29 +1937,6 @@ These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavio
 
 To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
 
-**Sub-Agent Timeout:**
-
-When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
-
-- **Default:** 20 minutes
-- **Setting:** `agents.iloom-swarm-worker.subAgentTimeout` (in minutes)
-- **Range:** 1 to 120 minutes
-
-```json
-{
-  "agents": {
-    "iloom-swarm-worker": {
-      "subAgentTimeout": 30
-    }
-  }
-}
-```
-
-```bash
-# Override via CLI flag
-il spin --set agents.iloom-swarm-worker.subAgentTimeout=30
-```
-
 ### Merge Strategy
 
 When a child agent completes successfully:

@@ -67,11 +67,8 @@ vi.mock('../lib/SwarmSetupService.js', () => ({
 		setupSwarm: vi.fn().mockResolvedValue({
 			epicWorktreePath: '/path/to/epic',
 			epicBranch: 'feat/epic-branch',
-			childWorktrees: [
-				{ issueId: '101', worktreePath: '/path/to/child-101', branch: 'feat/issue-101', success: true },
-				{ issueId: '102', worktreePath: '/path/to/child-102', branch: 'feat/issue-102', success: true },
-			],
-			agentsRendered: [],
+			skillsRendered: [],
+			renderedAgents: [],
 			workerAgentRendered: false,
 			verifierAgentRendered: false,
 		}),
@@ -3316,10 +3313,8 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/child-epic',
 					epicBranch: 'feat/issue-100__child-epic',
-					childWorktrees: [
-						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
-					],
-					agentsRendered: [],
+					skillsRendered: [],
+					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),
@@ -3421,8 +3416,8 @@ describe('IgniteCommand', () => {
 			mockSetupSwarm = vi.fn().mockResolvedValue({
 				epicWorktreePath: '/path/to/epic',
 				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [],
-				agentsRendered: [],
+				skillsRendered: [],
+				renderedAgents: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
 			})
@@ -3518,39 +3513,23 @@ describe('IgniteCommand', () => {
 				null,
 			]
 
-			// Update setupSwarm to return results matching the pending children
-			mockSetupSwarm.mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-					{ issueId: '203', worktreePath: '/path/to/child-203', branch: 'feat/issue-203', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-				verifierAgentRendered: false,
-			})
-
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
 			await cmd.execute()
 
-			// setupSwarm should have been called with only 2 pending children (not 3)
+			// setupSwarm should have been called with just epicBranch and epicWorktreePath
 			expect(mockSetupSwarm).toHaveBeenCalledWith(
-				'100',
 				expect.any(String),
 				expect.any(String),
-				expect.arrayContaining([
-					expect.objectContaining({ number: '#202' }),
-					expect.objectContaining({ number: '#203' }),
-				]),
-				expect.any(String),
-				expect.any(String),
-				expect.any(Object),
 			)
-			// Verify the done child was NOT passed
-			const passedChildren = mockSetupSwarm.mock.calls[0][3]
-			expect(passedChildren).toHaveLength(2)
-			expect(passedChildren.find((c: { number: string }) => c.number === '#201')).toBeUndefined()
+
+			// Verify CHILD_ISSUES template variable only contains pending children (not done ones)
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			const childIssuesJson = JSON.parse(templateCall![1].CHILD_ISSUES as string)
+			expect(childIssuesJson).toHaveLength(2)
+			expect(childIssuesJson.find((c: { number: string }) => c.number === '201')).toBeUndefined()
 		})
 
 		it('should NOT skip children in "failed" state (failed children should be recreated)', async () => {
@@ -3564,26 +3543,18 @@ describe('IgniteCommand', () => {
 				null,
 			]
 
-			mockSetupSwarm.mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-				verifierAgentRendered: false,
-			})
-
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
 			await cmd.execute()
 
-			// Both children should be passed to setupSwarm (failed is NOT skipped)
-			const passedChildren = mockSetupSwarm.mock.calls[0][3]
-			expect(passedChildren).toHaveLength(2)
-			expect(passedChildren[0]).toEqual(expect.objectContaining({ number: '#201' }))
-			expect(passedChildren[1]).toEqual(expect.objectContaining({ number: '#202' }))
+			// Both children should be in CHILD_ISSUES template variable (failed is NOT skipped)
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			const childIssuesJson = JSON.parse(templateCall![1].CHILD_ISSUES as string)
+			expect(childIssuesJson).toHaveLength(2)
+			expect(childIssuesJson[0]).toEqual(expect.objectContaining({ number: '201' }))
+			expect(childIssuesJson[1]).toEqual(expect.objectContaining({ number: '202' }))
 		})
 
 		it('should still launch orchestrator when all children are done (idempotent re-spin)', async () => {
@@ -3597,22 +3568,18 @@ describe('IgniteCommand', () => {
 				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
 			]
 
-			mockSetupSwarm.mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [],
-				agentsRendered: [],
-				workerAgentRendered: true,
-				verifierAgentRendered: false,
-			})
-
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
 			await cmd.execute()
 
-			// setupSwarm should be called with empty pending list — orchestrator handles finalization
+			// setupSwarm should be called — orchestrator handles finalization
 			expect(mockSetupSwarm).toHaveBeenCalled()
-			const passedChildren = mockSetupSwarm.mock.calls[0][3]
-			expect(passedChildren).toHaveLength(0)
+			// CHILD_ISSUES template variable should be an empty array
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			const childIssuesJson = JSON.parse(templateCall![1].CHILD_ISSUES as string)
+			expect(childIssuesJson).toHaveLength(0)
 		})
 
 		it('should treat children without existing metadata as pending', async () => {
@@ -3626,24 +3593,16 @@ describe('IgniteCommand', () => {
 				null,
 			]
 
-			mockSetupSwarm.mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-				verifierAgentRendered: false,
-			})
-
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata)
 			await cmd.execute()
 
-			// setupSwarm should be called with both children
-			const passedChildren = mockSetupSwarm.mock.calls[0][3]
-			expect(passedChildren).toHaveLength(2)
+			// Both children should be in CHILD_ISSUES template variable
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			const childIssuesJson = JSON.parse(templateCall![1].CHILD_ISSUES as string)
+			expect(childIssuesJson).toHaveLength(2)
 		})
 
 		it('should find done state from finished metadata when active worktree metadata is null', async () => {
@@ -3661,24 +3620,17 @@ describe('IgniteCommand', () => {
 				{ issue_numbers: ['201'], state: 'done' },
 			]
 
-			mockSetupSwarm.mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-				verifierAgentRendered: false,
-			})
-
 			const cmd = createFilteringCommand(childIssues, childFilterMetadata, finishedMeta)
 			await cmd.execute()
 
-			// Only child #202 should be passed (child #201 is done via finished metadata)
-			const passedChildren = mockSetupSwarm.mock.calls[0][3]
-			expect(passedChildren).toHaveLength(1)
-			expect(passedChildren[0]).toEqual(expect.objectContaining({ number: '#202' }))
+			// Only child #202 should be in CHILD_ISSUES (child #201 is done via finished metadata)
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			const childIssuesJson = JSON.parse(templateCall![1].CHILD_ISSUES as string)
+			expect(childIssuesJson).toHaveLength(1)
+			expect(childIssuesJson[0]).toEqual(expect.objectContaining({ number: '202' }))
 		})
 	})
 
@@ -3780,11 +3732,8 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/epic',
 					epicBranch: 'feat/issue-100__epic',
-					childWorktrees: [
-						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-					],
-					agentsRendered: [],
+					skillsRendered: [],
+					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),
@@ -4129,10 +4078,8 @@ describe('IgniteCommand', () => {
 				setupSwarm: vi.fn().mockResolvedValue({
 					epicWorktreePath: '/path/to/child-epic',
 					epicBranch: 'feat/issue-400__child-epic',
-					childWorktrees: [
-						{ issueId: '501', worktreePath: '/path/to/child-501', branch: 'feat/issue-501', success: true },
-					],
-					agentsRendered: [],
+					skillsRendered: [],
+					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
 				}),
@@ -4463,6 +4410,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						NO_CLEANUP: true,
 						EPIC_ISSUE_NUMBER: '100',
+						SWARM_TEAM_NAME: expect.stringMatching(/^swarm-main-100-\d+$/),
 					}),
 				)
 			} finally {
@@ -4552,6 +4500,7 @@ describe('Swarm orchestrator template content', () => {
 			CHILD_ISSUES: '[]',
 			DEPENDENCY_MAP: '{}',
 			ISSUE_PREFIX: '#',
+			SWARM_TEAM_NAME: 'swarm-test-999-1234567890',
 		})
 
 		// Verify install step uses il install-deps command

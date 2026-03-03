@@ -977,6 +977,11 @@ export class IgniteCommand {
 		const finishedMetadata = await metadataManager.listFinishedMetadata()
 		const finishedByIssueNumber = new Map<string, LoomMetadata>()
 		for (const meta of finishedMetadata) {
+			// Only consider finished metadata from the same project to avoid
+			// cross-project collisions (issue numbers are not globally unique)
+			if (meta.projectPath && meta.projectPath !== mainWorktreePath) {
+				continue
+			}
 			for (const issueNum of meta.issue_numbers) {
 				// listFinishedMetadata returns newest first; preserve the newest entry
 				if (!finishedByIssueNumber.has(issueNum)) {
@@ -1011,34 +1016,63 @@ export class IgniteCommand {
 			}
 		}
 
-		// Run swarm setup for any pending child issues (may be empty if all are done)
-		const swarmResult = await swarmSetup.setupSwarm(
-			epicIssueNumber,
+		// Run swarm setup (renders agents, worker agent, and wave verifier to epic worktree)
+		await swarmSetup.setupSwarm(
 			epicBranch,
 			epicWorktreePath,
-			pendingChildIssues,
-			mainWorktreePath,
-			providerName,
-			settings,
 		)
 
 		// Build template variables for orchestrator prompt
-		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
-		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
-
 		const childIssuesData = pendingChildIssues
-			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
 			.map((ci) => {
 				const rawId = ci.number.replace(/^#/, '')
-				const wt = worktreeMap.get(rawId)
+				const safeId = rawId.replace(/[^a-zA-Z0-9-_]/g, '-')
+				const branchName = `issue/${safeId}`
+				const worktreePath = generateWorktreePath(branchName, mainWorktreePath)
 				return {
 					number: rawId,
 					title: ci.title,
 					body: ci.body,
-					worktreePath: wt?.worktreePath ?? '',
-					branchName: wt?.branch ?? '',
+					worktreePath,
+					branchName,
 				}
 			})
+
+		// Pre-create metadata and recap files for each child worktree.
+		// On main, SwarmSetupService created worktrees + metadata together.
+		// Now the orchestrator creates worktrees via `git worktree add`, but
+		// metadata and recap files are still needed for set_loom_state and recap tracking.
+		for (const child of childIssuesData) {
+			try {
+				await metadataManager.writeMetadata(child.worktreePath, {
+					description: child.title,
+					branchName: child.branchName,
+					worktreePath: child.worktreePath,
+					issueType: 'issue',
+					issue_numbers: [child.number],
+					pr_numbers: [],
+					issueTracker: metadata.issueTracker ?? 'github',
+					colorHex: '#808080',
+					sessionId: '',
+					projectPath: mainWorktreePath,
+					issueUrls: {},
+					prUrls: {},
+					capabilities: [],
+					state: 'pending',
+					parentLoom: {
+						type: 'epic',
+						identifier: epicIssueNumber,
+						branchName: epicBranch,
+						worktreePath: epicWorktreePath,
+					},
+				})
+
+				const recapFilePath = resolveRecapFilePath(child.worktreePath)
+				await writeRecapFile(recapFilePath, { goal: child.title })
+			} catch (error) {
+				logger.warn(`Failed to pre-create metadata/recap for child #${child.number}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			}
+		}
 
 		// Get metadata file path for the orchestrator prompt template
 		const epicMetadataPath = metadataManager.getMetadataFilePath(epicWorktreePath)
@@ -1049,8 +1083,17 @@ export class IgniteCommand {
 		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
 		const postSwarmReview = settings.spin?.postSwarmReview !== false
 
+		// Reuse existing swarm team name from metadata, or generate a new one
+		let swarmTeamName = metadata.swarmTeamName
+		if (!swarmTeamName) {
+			const projectSlug = path.basename(mainWorktreePath).replace(/[^a-zA-Z0-9_-]/g, '-')
+			swarmTeamName = `swarm-${projectSlug}-${epicIssueNumber}-${Date.now()}`
+			await metadataManager.updateMetadata(epicWorktreePath, { swarmTeamName })
+		}
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
+			SWARM_TEAM_NAME: swarmTeamName,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
 			EPIC_METADATA_PATH: epicMetadataPath,
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
@@ -1105,7 +1148,7 @@ export class IgniteCommand {
 		logger.info(`   Model: ${model ?? 'default'}`)
 		logger.info(`   Permission mode: bypassPermissions`)
 		logger.info(`   Agent teams: enabled`)
-		logger.info(`   Child worktrees: ${successfulWorktrees.length}`)
+		logger.info(`   Pending child issues: ${pendingChildIssues.length}`)
 
 		// Load agents for the orchestrator
 		let agents: Record<string, unknown> | undefined
@@ -1130,7 +1173,7 @@ export class IgniteCommand {
 		const swarmStartTime = Date.now()
 		try {
 			TelemetryService.getInstance().track('swarm.started', {
-				child_count: successfulWorktrees.length,
+				child_count: pendingChildIssues.length,
 				tracker: providerName,
 			})
 		} catch (error) {
@@ -1173,8 +1216,12 @@ export class IgniteCommand {
 			let succeeded = 0
 			let failed = 0
 
-			for (const child of successfulWorktrees) {
-				const childMeta = await metadataManager.readMetadata(child.worktreePath)
+			for (const child of pendingChildIssues) {
+				const rawId = child.number.replace(/^#/, '')
+				const safeId = rawId.replace(/[^a-zA-Z0-9-_]/g, '-')
+				const childBranch = `issue/${safeId}`
+				const childWorktreePath = generateWorktreePath(childBranch, mainWorktreePath)
+				const childMeta = await metadataManager.readMetadata(childWorktreePath)
 				const isSuccess = childMeta?.state === 'done'
 				if (isSuccess) {
 					succeeded++
@@ -1193,7 +1240,7 @@ export class IgniteCommand {
 			}
 
 			TelemetryService.getInstance().track('swarm.completed', {
-				total_children: successfulWorktrees.length,
+				total_children: pendingChildIssues.length,
 				succeeded,
 				failed,
 				duration_minutes: Math.round((swarmEndTime - swarmStartTime) / 60000),
