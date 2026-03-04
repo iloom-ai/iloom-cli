@@ -2,7 +2,7 @@ import { execa } from 'execa'
 import { readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
-import yaml from 'js-yaml'
+import { parse as yamlParse, YAMLParseError } from 'yaml'
 
 /**
  * Maximum length for Docker container names.
@@ -254,8 +254,14 @@ function parseComposePorts(
 			const parts = portStr.split(':')
 			if (parts.length >= 2) {
 				// Take last part as container, second-to-last as host (handles IP:HOST:CONTAINER)
-				const containerPart = parseInt(parts[parts.length - 1]!, 10)
-				const hostPart = parseInt(parts[parts.length - 2]!, 10)
+				const rawContainer = parts[parts.length - 1]
+				const rawHost = parts[parts.length - 2]
+				// Guard for TypeScript strict mode (length >= 2 guarantees both exist)
+				if (rawContainer === undefined || rawHost === undefined) {
+					continue
+				}
+				const containerPart = parseInt(rawContainer, 10)
+				const hostPart = parseInt(rawHost, 10)
 				if (!isNaN(containerPart) && containerPart >= 1 && containerPart <= 65535) {
 					const validHost = !isNaN(hostPart) && hostPart >= 1 && hostPart <= 65535
 					if (validHost) {
@@ -304,7 +310,7 @@ function parseComposePorts(
 export async function detectComposeFile(
 	projectRoot: string
 ): Promise<ComposeDetectionResult | null> {
-	const candidates = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml']
+	const candidates = ['compose.yml', 'compose.yaml', 'docker-compose.yml', 'docker-compose.yaml']
 
 	for (const fileName of candidates) {
 		const filePath = path.join(projectRoot, fileName)
@@ -314,7 +320,7 @@ export async function detectComposeFile(
 
 		try {
 			const content = await readFile(filePath, 'utf-8')
-			const parsed = yaml.load(content)
+			const parsed = yamlParse(content)
 
 			if (typeof parsed !== 'object' || parsed === null) {
 				return { filePath, fileName, services: [] }
@@ -348,7 +354,7 @@ export async function detectComposeFile(
 
 			return { filePath, fileName, services }
 		} catch (error) {
-			if (error instanceof yaml.YAMLException) {
+			if (error instanceof YAMLParseError) {
 				// Expected: malformed YAML — detection is non-fatal
 				return null
 			}

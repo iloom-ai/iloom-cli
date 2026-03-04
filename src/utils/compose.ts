@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises'
 import fs from 'fs-extra'
 import path from 'path'
 import { parse, stringify } from 'yaml'
+import { sanitizeContainerName } from './docker.js'
 import { wrapPort } from './port.js'
 
 /**
@@ -68,10 +69,15 @@ export async function parseComposeFile(filePath: string): Promise<ComposePortMap
 				// The container part is always the last segment (may include protocol: "80/tcp")
 				const rawContainerPart = parts[parts.length - 1]
 				const rawHostPart = parts[parts.length - 2]
+				// Guard for TypeScript strict mode (length >= 2 guarantees both exist)
+				if (rawContainerPart === undefined || rawHostPart === undefined) {
+					continue
+				}
 				const hostIp = parts.length >= 3 ? parts.slice(0, parts.length - 2).join(':') : undefined
 
 				// Detect and skip port ranges (e.g., "8080-8081")
-				if (rawHostPart.includes('-') || rawContainerPart.split('/')[0].includes('-')) {
+				const containerBase = rawContainerPart.split('/')[0] ?? ''
+				if (rawHostPart.includes('-') || containerBase.includes('-')) {
 					continue
 				}
 
@@ -205,7 +211,8 @@ export async function generateOverrideFile(
 
 	await fs.ensureDir(dataDir)
 
-	const filePath = path.join(dataDir, 'docker-compose.override.yml')
+	const projectName = `iloom-${sanitizeContainerName(String(identifier))}`
+	const filePath = path.join(dataDir, `${projectName}.yml`)
 	await fs.writeFile(filePath, yamlContent, 'utf-8')
 
 	return filePath

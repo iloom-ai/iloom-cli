@@ -3,17 +3,9 @@ import path from 'path'
 import { execa } from 'execa'
 import net from 'net'
 import { logger } from '../utils/logger.js'
+import type { ComposePortMapping } from '../utils/compose.js'
 
-/**
- * Port mapping for a single compose service.
- * Consumed from the "compose file parser" sibling issue.
- */
-export interface ComposePortMapping {
-	service: string
-	hostPort: number
-	containerPort: number
-	protocol?: string | undefined
-}
+export type { ComposePortMapping }
 
 /**
  * Injected compose file utility functions.

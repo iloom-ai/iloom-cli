@@ -243,11 +243,11 @@ describe('generateOverrideFile', () => {
 		const result = await generateOverrideFile(mappings, 42, '/data/issue-42')
 
 		// hostPort 3000 + identifier 42 = 3042
-		expect(result).toBe('/data/issue-42/docker-compose.override.yml')
+		expect(result).toBe('/data/issue-42/iloom-42.yml')
 		expect(fs.ensureDir).toHaveBeenCalledWith('/data/issue-42')
 
 		const writeCallArgs = vi.mocked(fs.writeFile).mock.calls[0]
-		expect(writeCallArgs[0]).toBe('/data/issue-42/docker-compose.override.yml')
+		expect(writeCallArgs[0]).toBe('/data/issue-42/iloom-42.yml')
 		const writtenContent = String(writeCallArgs[1])
 		expect(writtenContent).toContain('3042:3000')
 	})
@@ -259,7 +259,7 @@ describe('generateOverrideFile', () => {
 
 		const result = await generateOverrideFile(mappings, '42', '/data/issue-42')
 
-		expect(result).toBe('/data/issue-42/docker-compose.override.yml')
+		expect(result).toBe('/data/issue-42/iloom-42.yml')
 
 		const writeCallArgs = vi.mocked(fs.writeFile).mock.calls[0]
 		const writtenContent = String(writeCallArgs[1])
@@ -284,7 +284,7 @@ describe('generateOverrideFile', () => {
 		// 65000 + 1000 = 66000, which exceeds 65535, should wrap
 		const result = await generateOverrideFile(mappings, 1000, '/data/issue-1000')
 
-		expect(result).toBe('/data/issue-1000/docker-compose.override.yml')
+		expect(result).toBe('/data/issue-1000/iloom-1000.yml')
 
 		const writeCallArgs = vi.mocked(fs.writeFile).mock.calls[0]
 		const writtenContent = String(writeCallArgs[1])
@@ -302,10 +302,10 @@ describe('generateOverrideFile', () => {
 
 		const resultPath = await generateOverrideFile(mappings, 100, '/tmp/iloom/issue-100')
 
-		expect(resultPath).toBe('/tmp/iloom/issue-100/docker-compose.override.yml')
+		expect(resultPath).toBe('/tmp/iloom/issue-100/iloom-100.yml')
 		expect(fs.ensureDir).toHaveBeenCalledWith('/tmp/iloom/issue-100')
 		expect(fs.writeFile).toHaveBeenCalledWith(
-			'/tmp/iloom/issue-100/docker-compose.override.yml',
+			'/tmp/iloom/issue-100/iloom-100.yml',
 			expect.any(String),
 			'utf-8'
 		)
@@ -356,7 +356,7 @@ describe('generateOverrideFile', () => {
 	it('handles empty mappings array', async () => {
 		const result = await generateOverrideFile([], 42, '/data/issue-42')
 
-		expect(result).toBe('/data/issue-42/docker-compose.override.yml')
+		expect(result).toBe('/data/issue-42/iloom-42.yml')
 		expect(fs.ensureDir).toHaveBeenCalledWith('/data/issue-42')
 		expect(fs.writeFile).toHaveBeenCalled()
 	})

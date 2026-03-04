@@ -443,8 +443,8 @@ services:
 		expect(result?.fileName).toBe('docker-compose.yml')
 	})
 
-	it('should prefer compose.yaml over all other candidates when all exist', async () => {
-		// All files exist — compose.yaml should win (first candidate)
+	it('should prefer compose.yml over all other candidates when all exist', async () => {
+		// All files exist — compose.yml should win (first candidate)
 		vi.mocked(existsSync).mockReturnValue(true)
 		vi.mocked(readFile).mockResolvedValue(`
 services:
@@ -454,7 +454,7 @@ services:
 
 		const result = await detectComposeFile('/project')
 
-		expect(result?.fileName).toBe('compose.yaml')
+		expect(result?.fileName).toBe('compose.yml')
 	})
 
 	it('should return result with empty services when compose file has no services key', async () => {
