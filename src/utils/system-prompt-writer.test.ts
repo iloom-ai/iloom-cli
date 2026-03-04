@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import path from 'path'
+import os from 'os'
+import crypto from 'crypto'
 import fs from 'fs-extra'
 import { prepareSystemPromptForPlatform } from './system-prompt-writer.js'
 
@@ -7,25 +9,36 @@ vi.mock('fs-extra')
 
 const mockFs = vi.mocked(fs)
 
+function expectedPromptFilePath(workspacePath: string): string {
+	const hash = crypto.createHash('sha256').update(workspacePath).digest('hex').slice(0, 12)
+	return path.join(os.tmpdir(), `iloom-system-prompt-${hash}.md`)
+}
+
 describe('system-prompt-writer', () => {
 	describe('prepareSystemPromptForPlatform', () => {
 		const systemPrompt = 'You are a helpful assistant.\nFollow these instructions.'
 		const workspacePath = '/home/user/project'
 
-		it('should write prompt to file and return appendSystemPromptFile path', async () => {
+		it('should write prompt to temp file and return appendSystemPromptFile path', async () => {
 			const result = await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
 
-			const claudeDir = path.join(workspacePath, '.claude')
-			const promptFilePath = path.join(claudeDir, 'iloom-system-prompt.md')
+			const promptFilePath = expectedPromptFilePath(workspacePath)
 
-			// Should create .claude directory
-			expect(mockFs.ensureDir).toHaveBeenCalledWith(claudeDir)
+			// Should NOT create .claude directory inside workspace
+			expect(mockFs.ensureDir).not.toHaveBeenCalled()
 
-			// Should write prompt to file
+			// Should write prompt to temp file
 			expect(mockFs.writeFile).toHaveBeenCalledWith(promptFilePath, systemPrompt, 'utf-8')
 
 			// Should return file path
 			expect(result).toEqual({ appendSystemPromptFile: promptFilePath })
+		})
+
+		it('should write to os.tmpdir(), not inside the workspace', async () => {
+			const result = await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
+
+			expect(result.appendSystemPromptFile).toContain(os.tmpdir())
+			expect(result.appendSystemPromptFile).not.toContain(workspacePath)
 		})
 
 		it('should NOT return appendSystemPrompt, pluginDir, or initialPromptOverride', async () => {
@@ -36,27 +49,20 @@ describe('system-prompt-writer', () => {
 			expect(result).not.toHaveProperty('initialPromptOverride')
 		})
 
-		it('should work identically regardless of platform', async () => {
-			// The function no longer accepts a platform parameter - it always writes to file.
-			// Run it twice to confirm consistent behavior.
+		it('should produce different file paths for different workspace paths', async () => {
 			const result1 = await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
 			const result2 = await prepareSystemPromptForPlatform(systemPrompt, '/other/workspace')
 
-			expect(result1.appendSystemPromptFile).toBe(
-				path.join(workspacePath, '.claude', 'iloom-system-prompt.md'),
-			)
-			expect(result2.appendSystemPromptFile).toBe(
-				path.join('/other/workspace', '.claude', 'iloom-system-prompt.md'),
-			)
+			expect(result1.appendSystemPromptFile).toBe(expectedPromptFilePath(workspacePath))
+			expect(result2.appendSystemPromptFile).toBe(expectedPromptFilePath('/other/workspace'))
+			expect(result1.appendSystemPromptFile).not.toBe(result2.appendSystemPromptFile)
 		})
 
-		it('should ensure .claude directory exists before writing', async () => {
-			await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
+		it('should produce the same file path for the same workspace path', async () => {
+			const result1 = await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
+			const result2 = await prepareSystemPromptForPlatform(systemPrompt, workspacePath)
 
-			// ensureDir should be called before writeFile
-			const ensureDirOrder = mockFs.ensureDir.mock.invocationCallOrder[0]
-			const writeFileOrder = mockFs.writeFile.mock.invocationCallOrder[0]
-			expect(ensureDirOrder).toBeLessThan(writeFileOrder!)
+			expect(result1.appendSystemPromptFile).toBe(result2.appendSystemPromptFile)
 		})
 	})
 })
