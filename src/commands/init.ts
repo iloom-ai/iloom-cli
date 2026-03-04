@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js'
+import { detectComposeFile } from '../utils/docker.js'
 import { ShellCompletion } from '../lib/ShellCompletion.js'
 import chalk from 'chalk'
 import { mkdir, readFile } from 'fs/promises'
@@ -76,6 +77,15 @@ export class InitCommand {
         return
       }
 
+      // Detect compose file for telemetry (non-fatal if detection fails)
+      let composeDetectedForTelemetry = false
+      try {
+        const composeResult = await detectComposeFile(process.cwd())
+        composeDetectedForTelemetry = !!composeResult
+      } catch {
+        // Non-fatal — telemetry only
+      }
+
       // Launch guided Claude configuration if available
       const guidedInitSucceeded = await this.launchGuidedInit(customInitialMessage)
 
@@ -87,6 +97,11 @@ export class InitCommand {
           await this.markProjectConfigured()
         } else {
           logger.debug('Project already marked as configured, skipping')
+        }
+        try {
+          TelemetryService.getInstance().track('init.completed', { mode, compose_detected: composeDetectedForTelemetry })
+        } catch (e) {
+          logger.debug('Telemetry tracking failed', { error: e })
         }
       } else {
         logger.debug('Skipping project marker - guided init did not complete successfully')
@@ -368,6 +383,37 @@ export class InitCommand {
       const hasPackageJson = existsSync(packageJsonPath)
       logger.debug('Package.json detection', { packageJsonPath, hasPackageJson })
 
+      // Detect compose files for Docker dev server suggestion
+      const composeResult = await detectComposeFile(process.cwd())
+      logger.debug('Compose file detection', {
+        found: !!composeResult,
+        fileName: composeResult?.fileName,
+        serviceCount: composeResult?.services.length ?? 0,
+      })
+
+      // Build compose template variables
+      let composeServicesInfo = ''
+      if (composeResult) {
+        if (composeResult.services.length === 0) {
+          composeServicesInfo = '_(No services defined in compose file)_'
+        } else {
+          composeServicesInfo = composeResult.services
+            .map((svc) => {
+              const portList =
+                svc.ports.length === 0
+                  ? 'no ports mapped'
+                  : svc.ports
+                      .map((p) =>
+                        p.host !== undefined ? `${p.host}:${p.container}` : `${p.container}`
+                      )
+                      .join(', ')
+              const imagePart = svc.image ? ` (image: ${svc.image})` : ''
+              return `- **${svc.name}**${imagePart}: ${portList}`
+            })
+            .join('\n')
+        }
+      }
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -388,6 +434,10 @@ export class InitCommand {
         // Multi-language support - mutually exclusive booleans
         HAS_PACKAGE_JSON: hasPackageJson,
         NO_PACKAGE_JSON: !hasPackageJson,
+        // Docker Compose detection
+        HAS_COMPOSE_FILE: !!composeResult,
+        COMPOSE_FILE_NAME: composeResult?.fileName ?? '',
+        COMPOSE_SERVICES_INFO: composeServicesInfo,
       }
 
       logger.debug('Building template variables', {

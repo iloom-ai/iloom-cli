@@ -93,6 +93,7 @@ export interface InitStartedProperties {
 
 export interface InitCompletedProperties {
   mode: 'accept-defaults' | 'guided' | 'guided-custom-prompt'
+  compose_detected?: boolean
 }
 
 export interface AutoSwarmStartedProperties {

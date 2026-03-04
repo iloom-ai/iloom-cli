@@ -109,6 +109,7 @@ export class ResourceCleanup {
 
 		// Step 1.5: Terminate dev server if applicable
 		// Done after worktree is found so we can use getWorkspacePort which checks .env PORT overrides
+		// Step 1.6: Remove compose override file from data directory (if compose-based loom)
 		{
 			const settings = await this.settingsManager.loadSettings()
 			const port = await getWorkspacePort({
@@ -147,6 +148,29 @@ export class ResourceCleanup {
 						message: `Failed to terminate dev server`,
 						error: err.message,
 					})
+				}
+
+				// Step 1.6: Remove compose override file (non-fatal, only in docker mode)
+				if (dockerIdentifier) {
+					try {
+						const removed = await DockerManager.removeComposeOverrideFile(dockerIdentifier)
+						operations.push({
+							type: 'compose-override',
+							success: true,
+							message: removed
+								? `Compose override file removed for identifier: ${dockerIdentifier}`
+								: `No compose override file found for identifier: ${dockerIdentifier}`,
+						})
+					} catch (error) {
+						const err = error instanceof Error ? error : new Error('Unknown error')
+						getLogger().warn(`Failed to remove compose override file: ${err.message}`)
+						operations.push({
+							type: 'compose-override',
+							success: false,
+							message: `Failed to remove compose override file for identifier: ${dockerIdentifier}`,
+							error: err.message,
+						})
+					}
 				}
 			}
 		}
@@ -587,8 +611,19 @@ export class ResourceCleanup {
 	async terminateDevServer(port: number, dockerIdentifier?: string | number): Promise<boolean> {
 		getLogger().debug(`Checking for dev server on port ${port}`)
 
-		// Try Docker container cleanup first if identifier provided
+		// Try Docker cleanup first if identifier provided
 		if (dockerIdentifier !== undefined) {
+			// Check for compose stack first (identified by presence of override file)
+			const hasOverrideFile = await DockerManager.hasComposeOverrideFile(dockerIdentifier)
+
+			if (hasOverrideFile) {
+				getLogger().info(`Compose override file found, tearing down compose stack for identifier: ${dockerIdentifier}`)
+				// teardownComposeStack throws on failure, so reaching here means success
+				await DockerManager.teardownComposeStack(dockerIdentifier)
+				return true
+			}
+
+			// Fall back to single-container Docker cleanup
 			const containerName = DockerManager.buildContainerName(dockerIdentifier)
 			const isRunning = await DockerManager.isContainerRunning(containerName)
 			if (isRunning) {

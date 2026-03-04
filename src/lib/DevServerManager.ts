@@ -1,7 +1,10 @@
 import path from 'path'
+import os from 'os'
+import fs from 'fs/promises'
 import { ProcessManager } from './process/ProcessManager.js'
 import { DockerManager, type DockerConfig } from './DockerManager.js'
 import { DockerDevServerStrategy, type DockerConfig as StrategyDockerConfig, type DockerUtils } from './DockerDevServerStrategy.js'
+import { ComposeDevServerStrategy, findComposeFile, type ComposeUtils } from './ComposeDevServerStrategy.js'
 import { NativeDevServerStrategy } from './NativeDevServerStrategy.js'
 import { logger } from '../utils/logger.js'
 
@@ -21,6 +24,16 @@ const dockerUtils: DockerUtils = {
 	buildContainerName: (id: string | number) => DockerManager.buildContainerName(id),
 	buildImageName: (id: string | number) => DockerManager.buildImageName(id),
 	assertDockerAvailable: () => DockerManager.assertAvailable(),
+}
+
+/**
+ * Ensure the compose override directory exists and return its path.
+ * Located under the global iloom config dir to keep worktrees clean.
+ */
+async function getComposeOverrideDir(): Promise<string> {
+	const dirPath = path.join(os.homedir(), '.config', 'iloom-ai', 'compose-overrides')
+	await fs.mkdir(dirPath, { recursive: true })
+	return dirPath
 }
 
 function getStartupTimeout(): number {
@@ -52,6 +65,9 @@ export interface DevServerManagerOptions {
 // Re-export DockerConfig from DockerManager for backward compatibility
 export type { DockerConfig } from './DockerManager.js'
 
+// Re-export compose types for callers that need them
+export type { ComposeUtils } from './ComposeDevServerStrategy.js'
+
 /**
  * Convert a DockerConfig (from DockerManager) to a StrategyDockerConfig
  * (for DockerDevServerStrategy).
@@ -72,17 +88,26 @@ function toStrategyConfig(config: DockerConfig): StrategyDockerConfig {
  *
  * When devServer config is absent OR mode is not 'docker', behavior is identical
  * to the native process-based implementation via NativeDevServerStrategy.
- * When Docker mode is configured, all operations delegate to DockerDevServerStrategy.
+ * When Docker mode is configured, auto-detects compose files (compose.yml,
+ * docker-compose.yml). If a compose file is found, delegates to
+ * ComposeDevServerStrategy; otherwise falls back to DockerDevServerStrategy.
  */
 export class DevServerManager {
 	private readonly processManager: ProcessManager
 	private readonly options: Required<DevServerManagerOptions>
 	private readonly nativeStrategy: NativeDevServerStrategy
+	private readonly composeUtils: ComposeUtils
 	private runningDockerContainers: Map<number, string> = new Map()
+	/**
+	 * Tracks running compose stacks: projectName -> { port, composeFile, overrideFile }
+	 * Keyed by projectName (not port) to avoid overwrite collisions on retry.
+	 */
+	private runningComposeStacks: Map<string, { port: number; composeFile: string; overrideFile: string }> = new Map()
 
 	constructor(
 		processManager?: ProcessManager,
-		options: DevServerManagerOptions = {}
+		options: DevServerManagerOptions = {},
+		composeUtils?: ComposeUtils
 	) {
 		this.processManager = processManager ?? new ProcessManager()
 		this.options = {
@@ -94,6 +119,23 @@ export class DevServerManager {
 			this.options.startupTimeout,
 			this.options.checkInterval
 		)
+		// Default compose utils will be replaced by real implementations once
+		// the compose-file-parser module is merged (sibling issue).
+		// For now, provide a placeholder that throws informative errors.
+		this.composeUtils = composeUtils ?? {
+			parseComposeFile: async (): Promise<never> => {
+				throw new Error(
+					'Compose file parsing is not yet available. ' +
+					'The compose-file-parser module has not been merged.'
+				)
+			},
+			generateOverrideFile: async (): Promise<never> => {
+				throw new Error(
+					'Compose override file generation is not yet available. ' +
+					'The compose-file-parser module has not been merged.'
+				)
+			},
+		}
 	}
 
 	/**
@@ -105,8 +147,19 @@ export class DevServerManager {
 	}
 
 	/**
+	 * Create a ComposeDevServerStrategy backed by the injected compose utils.
+	 */
+	private createComposeStrategy(): ComposeDevServerStrategy {
+		return new ComposeDevServerStrategy(this.composeUtils)
+	}
+
+	/**
 	 * Ensure dev server is running on the specified port.
 	 * If not running, start it and wait for it to be ready.
+	 *
+	 * When dockerConfig is provided, auto-detects compose files in the worktree:
+	 * - If a compose file exists, uses ComposeDevServerStrategy
+	 * - Otherwise falls back to DockerDevServerStrategy (single Dockerfile)
 	 *
 	 * @param worktreePath - Path to the worktree
 	 * @param port - Port the server should run on
@@ -116,8 +169,33 @@ export class DevServerManager {
 	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig): Promise<boolean> {
 		logger.debug(`Checking if dev server is running on port ${port}...`)
 
-		// Docker mode: check if container is already running
+		// Docker mode: auto-detect compose file vs. single Dockerfile
 		if (dockerConfig) {
+			const composeFile = await findComposeFile(worktreePath)
+
+			if (composeFile) {
+				// Compose mode
+				const projectName = ComposeDevServerStrategy.buildProjectName(dockerConfig.identifier)
+				const strategy = this.createComposeStrategy()
+				const isRunning = await strategy.isStackRunning(projectName)
+				if (isRunning) {
+					logger.debug(`Compose stack "${projectName}" already running on port ${port}`)
+					return true
+				}
+
+				logger.info(`Compose stack not running on port ${port}, starting...`)
+				try {
+					await this.startComposeServer(composeFile, projectName, port, dockerConfig.identifier, strategy)
+					return true
+				} catch (error) {
+					logger.error(
+						`Failed to start compose stack: ${error instanceof Error ? error.message : 'Unknown error'}`
+					)
+					return false
+				}
+			}
+
+			// Single Dockerfile mode
 			const strategy = this.createDockerStrategy(dockerConfig)
 			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
 			const isRunning = await strategy.isContainerRunning(containerName)
@@ -159,6 +237,49 @@ export class DevServerManager {
 			)
 			return false
 		}
+	}
+
+	/**
+	 * Start compose stack in background and wait for the primary port to be ready.
+	 */
+	private async startComposeServer(
+		composeFile: string,
+		projectName: string,
+		port: number,
+		identifier: string,
+		strategy: ComposeDevServerStrategy
+	): Promise<void> {
+		const overrideFile = await strategy.prepareOverrideFile(
+			composeFile,
+			identifier,
+			port,
+			await getComposeOverrideDir()
+		)
+
+		await strategy.startDetached(composeFile, overrideFile, projectName)
+
+		// Track for cleanup
+		this.runningComposeStacks.set(projectName, { port, composeFile, overrideFile })
+
+		// Wait for the primary service port to be ready
+		logger.info(`Waiting for compose stack "${projectName}" to start on port ${port}...`)
+		const ready = await strategy.waitForReady(
+			port,
+			this.options.startupTimeout,
+			this.options.checkInterval,
+			projectName
+		)
+
+		if (!ready) {
+			// Attempt cleanup on failure
+			await strategy.stop(composeFile, overrideFile, projectName).catch(() => undefined)
+			this.runningComposeStacks.delete(projectName)
+			throw new Error(
+				`Compose stack "${projectName}" failed to start within ${this.options.startupTimeout}ms timeout`
+			)
+		}
+
+		logger.success(`Compose stack "${projectName}" started successfully on port ${port}`)
 	}
 
 	/**
@@ -220,14 +341,25 @@ export class DevServerManager {
 	}
 
 	/**
-	 * Check if a dev server is running on the specified port
+	 * Check if a dev server is running on the specified port.
+	 * In docker mode, auto-detects compose vs. single Dockerfile strategy.
 	 *
 	 * @param port - Port to check
-	 * @param dockerConfig - Optional Docker configuration; when provided, checks container status
+	 * @param dockerConfig - Optional Docker configuration; when provided, checks container/stack status
+	 * @param worktreePath - Required when dockerConfig is provided for compose detection
 	 * @returns true if server is running, false otherwise
 	 */
-	async isServerRunning(port: number, dockerConfig?: DockerConfig): Promise<boolean> {
+	async isServerRunning(port: number, dockerConfig?: DockerConfig, worktreePath?: string): Promise<boolean> {
 		if (dockerConfig) {
+			// Check for compose file if worktreePath is provided
+			const composeFile = worktreePath ? await findComposeFile(worktreePath) : null
+
+			if (composeFile) {
+				const projectName = ComposeDevServerStrategy.buildProjectName(dockerConfig.identifier)
+				const strategy = this.createComposeStrategy()
+				return strategy.isStackRunning(projectName)
+			}
+
 			const strategy = this.createDockerStrategy(dockerConfig)
 			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
 			return strategy.isContainerRunning(containerName)
@@ -239,6 +371,7 @@ export class DevServerManager {
 	/**
 	 * Run dev server in foreground mode (blocking).
 	 * This method blocks until the server is stopped (e.g., via Ctrl+C).
+	 * In docker mode, auto-detects compose files to choose the right strategy.
 	 *
 	 * @param worktreePath - Path to the worktree
 	 * @param port - Port the server should run on
@@ -254,8 +387,41 @@ export class DevServerManager {
 		envOverrides?: Record<string, string>,
 		dockerConfig?: DockerConfig
 	): Promise<{ pid?: number }> {
-		// Docker mode: build image and run container in foreground
+		// Docker mode: auto-detect compose vs. single Dockerfile
 		if (dockerConfig) {
+			const composeFile = await findComposeFile(worktreePath)
+
+			if (composeFile) {
+				// Compose foreground mode
+				logger.debug(`Starting compose stack in foreground on port ${port}`)
+				const projectName = ComposeDevServerStrategy.buildProjectName(dockerConfig.identifier)
+				const strategy = this.createComposeStrategy()
+
+				const overrideFile = await strategy.prepareOverrideFile(
+					composeFile,
+					dockerConfig.identifier,
+					port,
+					await getComposeOverrideDir()
+				)
+
+				if (onProcessStarted) {
+					onProcessStarted(undefined)
+				}
+
+				this.runningComposeStacks.set(projectName, { port, composeFile, overrideFile })
+				try {
+					await strategy.startForeground(composeFile, overrideFile, projectName, {
+						redirectToStderr,
+						envOverrides,
+					})
+				} finally {
+					this.runningComposeStacks.delete(projectName)
+				}
+
+				return {}
+			}
+
+			// Single Dockerfile foreground mode
 			logger.debug(`Starting Docker dev server in foreground on port ${port}`)
 
 			const strategy = this.createDockerStrategy(dockerConfig)
@@ -306,7 +472,7 @@ export class DevServerManager {
 	}
 
 	/**
-	 * Clean up all running server processes and Docker containers.
+	 * Clean up all running server processes, Docker containers, and compose stacks.
 	 * This should be called when the manager is being disposed.
 	 */
 	async cleanup(): Promise<void> {
@@ -327,5 +493,21 @@ export class DevServerManager {
 			}
 		}
 		this.runningDockerContainers.clear()
+
+		// Clean up compose stacks
+		for (const [projectName, { port, composeFile, overrideFile }] of this.runningComposeStacks.entries()) {
+			try {
+				logger.debug(`Cleaning up compose stack "${projectName}" on port ${port}`)
+				const strategy = this.createComposeStrategy()
+				await strategy.stop(composeFile, overrideFile, projectName)
+			} catch (error) {
+				logger.warn(
+					`Failed to stop compose stack "${projectName}" on port ${port}: ${error instanceof Error ? error.message : 'Unknown error'}`
+				)
+			}
+			// Clean up the generated override file regardless of whether stop succeeded
+			await fs.unlink(overrideFile).catch(() => undefined)
+		}
+		this.runningComposeStacks.clear()
 	}
 }

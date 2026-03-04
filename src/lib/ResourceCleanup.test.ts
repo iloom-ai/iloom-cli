@@ -619,6 +619,47 @@ describe('ResourceCleanup', () => {
 			expect(DockerManager.buildContainerName).toHaveBeenCalledWith('feat/issue-25')
 			expect(result).toBe(true)
 		})
+
+		it('should tear down compose stack when override file exists for identifier', async () => {
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.teardownComposeStack).mockResolvedValueOnce(undefined)
+
+			const result = await resourceCleanup.terminateDevServer(3025, 25)
+
+			expect(DockerManager.hasComposeOverrideFile).toHaveBeenCalledWith(25)
+			expect(DockerManager.teardownComposeStack).toHaveBeenCalledWith(25)
+			expect(result).toBe(true)
+			// Should NOT fall through to single-container or process detection
+			expect(DockerManager.isContainerRunning).not.toHaveBeenCalled()
+			expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+		})
+
+		it('should fall back to single-container cleanup when no compose override file exists', async () => {
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(false)
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.stopAndRemoveContainer).mockResolvedValueOnce(true)
+
+			const result = await resourceCleanup.terminateDevServer(3025, 25)
+
+			expect(DockerManager.hasComposeOverrideFile).toHaveBeenCalledWith(25)
+			expect(DockerManager.teardownComposeStack).not.toHaveBeenCalled()
+			expect(DockerManager.isContainerRunning).toHaveBeenCalledWith('iloom-dev-25')
+			expect(result).toBe(true)
+		})
+
+		it('should propagate error when compose stack teardown fails', async () => {
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(true)
+			vi.mocked(DockerManager.teardownComposeStack).mockRejectedValueOnce(
+				new Error('docker compose down failed with exit code 1: error')
+			)
+
+			await expect(resourceCleanup.terminateDevServer(3025, 25)).rejects.toThrow(
+				'docker compose down failed with exit code 1: error'
+			)
+
+			expect(DockerManager.teardownComposeStack).toHaveBeenCalledWith(25)
+		})
 	})
 
 	describe('cleanupWorktree - Docker mode', () => {
@@ -760,6 +801,162 @@ describe('ResourceCleanup', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.operations[0]?.message).toContain('No dev server running')
+		})
+
+		it('should remove compose override file and report compose-override operation when docker mode is configured', async () => {
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			// No compose stack running (no override file in terminateDevServer)
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(false)
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			// Override file removed in Step 1.6
+			vi.mocked(DockerManager.removeComposeOverrideFile).mockResolvedValueOnce(true)
+
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(DockerManager.removeComposeOverrideFile).toHaveBeenCalledWith('25')
+			const composeOp = result.operations.find(op => op.type === 'compose-override')
+			expect(composeOp).toBeDefined()
+			expect(composeOp?.success).toBe(true)
+			expect(composeOp?.message).toContain('removed')
+		})
+
+		it('should report compose-override operation as not found when override file is absent', async () => {
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(false)
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			// Override file not found
+			vi.mocked(DockerManager.removeComposeOverrideFile).mockResolvedValueOnce(false)
+
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			expect(result.success).toBe(true)
+			const composeOp = result.operations.find(op => op.type === 'compose-override')
+			expect(composeOp).toBeDefined()
+			expect(composeOp?.success).toBe(true)
+			expect(composeOp?.message).toContain('No compose override file found')
+		})
+
+		it('should handle compose override file removal failure as non-fatal', async () => {
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'docker',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			vi.mocked(DockerManager.hasComposeOverrideFile).mockResolvedValueOnce(false)
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-25')
+			vi.mocked(DockerManager.isContainerRunning).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+
+			// Override file removal fails
+			vi.mocked(DockerManager.removeComposeOverrideFile).mockRejectedValueOnce(
+				new Error('Permission denied')
+			)
+
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			// Cleanup should still succeed despite override file removal failure
+			expect(result.success).toBe(true)
+			const composeOp = result.operations.find(op => op.type === 'compose-override')
+			expect(composeOp).toBeDefined()
+			expect(composeOp?.success).toBe(false)
+			expect(composeOp?.error).toContain('Permission denied')
+		})
+
+		it('should not attempt compose override file removal when devServer is not docker mode', async () => {
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+				capabilities: {
+					web: {
+						basePort: 3000,
+						devServer: 'process',
+					},
+				},
+			})
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25',
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(DockerManager.removeComposeOverrideFile).not.toHaveBeenCalled()
+			const composeOp = result.operations.find(op => op.type === 'compose-override')
+			expect(composeOp).toBeUndefined()
 		})
 	})
 

@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DevServerManager, type DockerConfig } from './DevServerManager.js'
+import fs from 'fs/promises'
+import { DevServerManager, type DockerConfig, type ComposeUtils } from './DevServerManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
 import { DockerManager } from './DockerManager.js'
 import { DockerDevServerStrategy } from './DockerDevServerStrategy.js'
+import { ComposeDevServerStrategy } from './ComposeDevServerStrategy.js'
+import * as ComposeStrategyModule from './ComposeDevServerStrategy.js'
 import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import * as devServerUtils from '../utils/dev-server.js'
@@ -12,9 +15,11 @@ import * as packageJsonUtils from '../utils/package-json.js'
 // Mock dependencies
 vi.mock('execa')
 vi.mock('timers/promises')
+vi.mock('fs/promises')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./DockerManager.js')
 vi.mock('./DockerDevServerStrategy.js')
+vi.mock('./ComposeDevServerStrategy.js')
 vi.mock('../utils/dev-server.js')
 vi.mock('../utils/package-manager.js')
 vi.mock('../utils/package-json.js')
@@ -974,6 +979,353 @@ describe('DevServerManager', () => {
 
 				// Should not throw
 				await expect(manager.cleanup()).resolves.not.toThrow()
+			})
+		})
+	})
+
+	describe('Compose mode (auto-detection)', () => {
+		const dockerConfig: DockerConfig = {
+			dockerFile: './Dockerfile',
+			containerPort: 3000,
+			identifier: '872',
+		}
+
+		let mockComposeUtils: ComposeUtils
+		let mockComposeStrategyInstance: {
+			isStackRunning: ReturnType<typeof vi.fn>
+			startDetached: ReturnType<typeof vi.fn>
+			startForeground: ReturnType<typeof vi.fn>
+			stop: ReturnType<typeof vi.fn>
+			waitForReady: ReturnType<typeof vi.fn>
+			prepareOverrideFile: ReturnType<typeof vi.fn>
+		}
+
+		beforeEach(() => {
+			mockComposeUtils = {
+				parseComposeFile: vi.fn().mockResolvedValue([
+					{ service: 'web', hostPort: 3000, containerPort: 3000 },
+				]),
+				generateOverrideFile: vi.fn().mockResolvedValue('/override.yml'),
+			}
+
+			mockComposeStrategyInstance = {
+				isStackRunning: vi.fn(),
+				startDetached: vi.fn(),
+				startForeground: vi.fn(),
+				stop: vi.fn(),
+				waitForReady: vi.fn(),
+				prepareOverrideFile: vi.fn().mockResolvedValue('/override.yml'),
+			}
+
+			vi.mocked(ComposeDevServerStrategy).mockImplementation(
+				() => mockComposeStrategyInstance as unknown as ComposeDevServerStrategy
+			)
+
+			// Mock the static buildProjectName method
+			vi.mocked(ComposeDevServerStrategy.buildProjectName).mockImplementation(
+				(id: string | number) => `iloom-${id}`
+			)
+
+			vi.mocked(DockerManager.buildContainerName).mockReturnValue('iloom-dev-872')
+			vi.mocked(DockerManager.buildImageName).mockReturnValue('iloom-dev-872')
+
+			// Mock fs.mkdir and fs.unlink to allow getComposeOverrideDir/cleanup to succeed
+			vi.mocked(fs.mkdir).mockResolvedValue(undefined)
+			vi.mocked(fs.unlink).mockResolvedValue(undefined)
+
+			// findComposeFile returns a compose file path by default
+			vi.mocked(ComposeStrategyModule.findComposeFile).mockResolvedValue(
+				`${mockWorktreePath}/compose.yml`
+			)
+		})
+
+		describe('ensureServerRunning with compose file', () => {
+			it('should detect running compose stack and skip start', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(true)
+
+				// Create manager with injected composeUtils
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(mockComposeStrategyInstance.isStackRunning).toHaveBeenCalledWith('iloom-872')
+				expect(mockComposeStrategyInstance.startDetached).not.toHaveBeenCalled()
+			})
+
+			it('should prepare override file and start compose stack when not running', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(false)
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startDetached.mockResolvedValue(undefined)
+				mockComposeStrategyInstance.waitForReady.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(mockComposeStrategyInstance.prepareOverrideFile).toHaveBeenCalledWith(
+					`${mockWorktreePath}/compose.yml`,
+					'872',
+					3872,
+					expect.stringContaining('compose-overrides')
+				)
+				expect(mockComposeStrategyInstance.startDetached).toHaveBeenCalledWith(
+					`${mockWorktreePath}/compose.yml`,
+					'/override.yml',
+					'iloom-872'
+				)
+			})
+
+			it('should return false when compose stack fails to start', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(false)
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startDetached.mockRejectedValue(new Error('compose failed'))
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				expect(result).toBe(false)
+			})
+
+			it('should clean up and return false when port does not become ready within timeout', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(false)
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startDetached.mockResolvedValue(undefined)
+				mockComposeStrategyInstance.waitForReady.mockResolvedValue(false)
+				mockComposeStrategyInstance.stop.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 500,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				expect(result).toBe(false)
+				expect(mockComposeStrategyInstance.stop).toHaveBeenCalled()
+			})
+
+			it('should not use DockerDevServerStrategy when compose file is found', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				// Docker container strategy should not have been used
+				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('ensureServerRunning falls back to Dockerfile when no compose file', () => {
+			it('should use DockerDevServerStrategy when no compose file exists', async () => {
+				// No compose file found
+				vi.mocked(ComposeStrategyModule.findComposeFile).mockResolvedValue(null)
+
+				const mockDockerStrategyInstance = {
+					isContainerRunning: vi.fn().mockResolvedValue(true),
+					buildImage: vi.fn(),
+					resolveContainerPort: vi.fn(),
+					runContainerDetached: vi.fn(),
+					runContainerForeground: vi.fn(),
+					stopContainer: vi.fn(),
+					waitForReady: vi.fn(),
+				}
+				vi.mocked(DockerDevServerStrategy).mockImplementation(
+					() => mockDockerStrategyInstance as unknown as DockerDevServerStrategy
+				)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.ensureServerRunning(mockWorktreePath, 3548, dockerConfig)
+
+				expect(result).toBe(true)
+				expect(mockDockerStrategyInstance.isContainerRunning).toHaveBeenCalled()
+				expect(mockComposeStrategyInstance.isStackRunning).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('isServerRunning with compose detection', () => {
+			it('should check compose stack status when compose file found', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.isServerRunning(3872, dockerConfig, mockWorktreePath)
+
+				expect(result).toBe(true)
+				expect(mockComposeStrategyInstance.isStackRunning).toHaveBeenCalledWith('iloom-872')
+			})
+
+			it('should use Docker container status when no compose file', async () => {
+				vi.mocked(ComposeStrategyModule.findComposeFile).mockResolvedValue(null)
+
+				const mockDockerStrategyInstance = {
+					isContainerRunning: vi.fn().mockResolvedValue(true),
+				}
+				vi.mocked(DockerDevServerStrategy).mockImplementation(
+					() => mockDockerStrategyInstance as unknown as DockerDevServerStrategy
+				)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.isServerRunning(3548, dockerConfig, mockWorktreePath)
+
+				expect(result).toBe(true)
+				expect(mockDockerStrategyInstance.isContainerRunning).toHaveBeenCalled()
+				expect(mockComposeStrategyInstance.isStackRunning).not.toHaveBeenCalled()
+			})
+
+			it('should not check compose file when worktreePath is not provided', async () => {
+				const mockDockerStrategyInstance = {
+					isContainerRunning: vi.fn().mockResolvedValue(false),
+				}
+				vi.mocked(DockerDevServerStrategy).mockImplementation(
+					() => mockDockerStrategyInstance as unknown as DockerDevServerStrategy
+				)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				// No worktreePath = no compose detection
+				await managerWithCompose.isServerRunning(3548, dockerConfig)
+
+				expect(ComposeStrategyModule.findComposeFile).not.toHaveBeenCalled()
+				expect(mockDockerStrategyInstance.isContainerRunning).toHaveBeenCalled()
+			})
+		})
+
+		describe('runServerForeground with compose detection', () => {
+			it('should run compose stack in foreground when compose file found', async () => {
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startForeground.mockResolvedValue({})
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				const result = await managerWithCompose.runServerForeground(
+					mockWorktreePath, 3872, false, undefined, undefined, dockerConfig
+				)
+
+				expect(result).toEqual({})
+				expect(mockComposeStrategyInstance.startForeground).toHaveBeenCalledWith(
+					`${mockWorktreePath}/compose.yml`,
+					'/override.yml',
+					'iloom-872',
+					expect.objectContaining({ redirectToStderr: false })
+				)
+			})
+
+			it('should pass redirectToStderr to compose startForeground', async () => {
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startForeground.mockResolvedValue({})
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				await managerWithCompose.runServerForeground(
+					mockWorktreePath, 3872, true, undefined, undefined, dockerConfig
+				)
+
+				expect(mockComposeStrategyInstance.startForeground).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.any(String),
+					'iloom-872',
+					expect.objectContaining({ redirectToStderr: true })
+				)
+			})
+
+			it('should call onProcessStarted with undefined in compose mode', async () => {
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startForeground.mockResolvedValue({})
+				const onStart = vi.fn()
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				await managerWithCompose.runServerForeground(
+					mockWorktreePath, 3872, false, onStart, undefined, dockerConfig
+				)
+
+				expect(onStart).toHaveBeenCalledWith(undefined)
+			})
+		})
+
+		describe('cleanup with compose stacks', () => {
+			it('should stop tracked compose stacks during cleanup', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(false)
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startDetached.mockResolvedValue(undefined)
+				mockComposeStrategyInstance.waitForReady.mockResolvedValue(true)
+				mockComposeStrategyInstance.stop.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				mockComposeStrategyInstance.stop.mockClear()
+				mockComposeStrategyInstance.stop.mockResolvedValue(true)
+
+				await managerWithCompose.cleanup()
+
+				expect(mockComposeStrategyInstance.stop).toHaveBeenCalledWith(
+					`${mockWorktreePath}/compose.yml`,
+					'/override.yml',
+					'iloom-872'
+				)
+			})
+
+			it('should handle compose cleanup errors gracefully', async () => {
+				mockComposeStrategyInstance.isStackRunning.mockResolvedValue(false)
+				mockComposeStrategyInstance.prepareOverrideFile.mockResolvedValue('/override.yml')
+				mockComposeStrategyInstance.startDetached.mockResolvedValue(undefined)
+				mockComposeStrategyInstance.waitForReady.mockResolvedValue(true)
+
+				const managerWithCompose = new DevServerManager(mockProcessManager, {
+					startupTimeout: 5000,
+					checkInterval: 100,
+				}, mockComposeUtils)
+
+				await managerWithCompose.ensureServerRunning(mockWorktreePath, 3872, dockerConfig)
+
+				mockComposeStrategyInstance.stop.mockRejectedValue(new Error('Docker daemon unreachable'))
+
+				// Should not throw
+				await expect(managerWithCompose.cleanup()).resolves.not.toThrow()
 			})
 		})
 	})

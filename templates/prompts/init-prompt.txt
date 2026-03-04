@@ -279,6 +279,23 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
    - Validation: Number between 1 and 65535
    - Store answer as: `capabilities.web.basePort`
 
+{{#if HAS_COMPOSE_FILE}}
+4. **Docker Dev Server Mode** _(compose file detected)_
+
+   A Docker Compose file (`{{COMPOSE_FILE_NAME}}`) was detected in this project with the following services:
+
+   {{COMPOSE_SERVICES_INFO}}
+
+   Since this project uses Docker Compose, consider enabling Docker-based dev server mode so iloom can manage port mapping for isolated development environments.
+
+   - Question format: "A Docker Compose file was detected. Would you like to enable Docker-based dev server mode?"
+   - Options:
+     - "Yes" - Enable docker dev server mode
+     - "No" - Keep default process-based dev server
+   - Default: "Yes"
+   - Store answer as: `capabilities.web.devServer` — use value `"docker"` for Yes, `"process"` for No
+
+{{/if}}
 **Implementation Details:**
 - Set multiSelect: false for all questions (user picks one answer per question)
 - Use the AskUserQuestion tool with all questions in the questions array
