@@ -115,6 +115,66 @@ describe('generateRecapMcpConfig', () => {
 		expect(env.RECAP_FILE_PATH).toContain('___path___with-spaces___and-dots.json')
 	})
 
+	it('should set RECAP_DISABLE_SET_GOAL for issue loom type', () => {
+		const loomPath = '/Users/test/projects/my-repo'
+		const loomMetadata = createMockMetadata({ issueType: 'issue' })
+
+		const config = generateRecapMcpConfig(loomPath, loomMetadata)
+
+		const recapConfig = (config[0].mcpServers as Record<string, unknown>).recap as Record<string, unknown>
+		const env = recapConfig.env as Record<string, string>
+
+		expect(env.RECAP_DISABLE_SET_GOAL).toBe('true')
+	})
+
+	it('should set RECAP_DISABLE_SET_GOAL for epic loom type', () => {
+		const loomPath = '/Users/test/projects/my-repo'
+		const loomMetadata = createMockMetadata({ issueType: 'epic' })
+
+		const config = generateRecapMcpConfig(loomPath, loomMetadata)
+
+		const recapConfig = (config[0].mcpServers as Record<string, unknown>).recap as Record<string, unknown>
+		const env = recapConfig.env as Record<string, string>
+
+		expect(env.RECAP_DISABLE_SET_GOAL).toBe('true')
+	})
+
+	it('should not set RECAP_DISABLE_SET_GOAL for pr loom type', () => {
+		const loomPath = '/Users/test/projects/my-repo'
+		const loomMetadata = createMockMetadata({ issueType: 'pr' })
+
+		const config = generateRecapMcpConfig(loomPath, loomMetadata)
+
+		const recapConfig = (config[0].mcpServers as Record<string, unknown>).recap as Record<string, unknown>
+		const env = recapConfig.env as Record<string, string>
+
+		expect(env.RECAP_DISABLE_SET_GOAL).toBeUndefined()
+	})
+
+	it('should not set RECAP_DISABLE_SET_GOAL for branch loom type', () => {
+		const loomPath = '/Users/test/projects/my-repo'
+		const loomMetadata = createMockMetadata({ issueType: 'branch' })
+
+		const config = generateRecapMcpConfig(loomPath, loomMetadata)
+
+		const recapConfig = (config[0].mcpServers as Record<string, unknown>).recap as Record<string, unknown>
+		const env = recapConfig.env as Record<string, string>
+
+		expect(env.RECAP_DISABLE_SET_GOAL).toBeUndefined()
+	})
+
+	it('should not set RECAP_DISABLE_SET_GOAL when issueType is null', () => {
+		const loomPath = '/Users/test/projects/my-repo'
+		const loomMetadata = createMockMetadata({ issueType: null })
+
+		const config = generateRecapMcpConfig(loomPath, loomMetadata)
+
+		const recapConfig = (config[0].mcpServers as Record<string, unknown>).recap as Record<string, unknown>
+		const env = recapConfig.env as Record<string, string>
+
+		expect(env.RECAP_DISABLE_SET_GOAL).toBeUndefined()
+	})
+
 	it('should strip trailing slashes from path', () => {
 		const loomPath = '/path/to/dir/'
 		const loomMetadata = createMockMetadata()

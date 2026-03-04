@@ -221,10 +221,16 @@ export function generateRecapMcpConfig(
 	// - RECAP_FILE_PATH: where to read/write recap data
 	// - LOOM_METADATA_JSON: stringified loom metadata (parsed by MCP using LoomMetadata type)
 	// - METADATA_FILE_PATH: path to loom metadata file (for state transition tools)
-	const envVars = {
+	const envVars: Record<string, string> = {
 		RECAP_FILE_PATH: recapFilePath,
 		LOOM_METADATA_JSON: JSON.stringify(loomMetadata),
 		METADATA_FILE_PATH: metadataFilePath,
+	}
+
+	// Disable set_goal for issue and epic workflows
+	// (set_goal should only be available in PR and regular/branch workflows)
+	if (loomMetadata.issueType === 'issue' || loomMetadata.issueType === 'epic') {
+		envVars.RECAP_DISABLE_SET_GOAL = 'true'
 	}
 
 	logger.debug('Generated MCP config for recap server', {

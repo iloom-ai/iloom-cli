@@ -165,31 +165,35 @@ const server = new McpServer({
 	version: '0.1.0',
 })
 
-// Register set_goal tool
-server.registerTool(
-	'set_goal',
-	{
-		title: 'Set Goal',
-		description: 'Set the initial goal (called once at session start)',
-		inputSchema: {
-			goal: z.string().describe('The original problem statement'),
-			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
+// Register set_goal tool conditionally
+// In issue/epic workflows, set_goal is disabled via RECAP_DISABLE_SET_GOAL env var
+// to prevent agents from overwriting the goal set by the PR-level prompt
+if (!process.env.RECAP_DISABLE_SET_GOAL) {
+	server.registerTool(
+		'set_goal',
+		{
+			title: 'Set Goal',
+			description: 'Set the initial goal (called once at session start)',
+			inputSchema: {
+				goal: z.string().describe('The original problem statement'),
+				worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
+			},
+			outputSchema: {
+				success: z.literal(true),
+			},
 		},
-		outputSchema: {
-			success: z.literal(true),
-		},
-	},
-	async ({ goal, worktreePath }) => {
-		const filePath = resolveRecapFilePath(worktreePath)
-		const recap = await readRecapFile(filePath)
-		recap.goal = goal
-		await writeRecapFile(filePath, recap)
-		return {
-			content: [{ type: 'text' as const, text: JSON.stringify({ success: true }) }],
-			structuredContent: { success: true },
+		async ({ goal, worktreePath }) => {
+			const filePath = resolveRecapFilePath(worktreePath)
+			const recap = await readRecapFile(filePath)
+			recap.goal = goal
+			await writeRecapFile(filePath, recap)
+			return {
+				content: [{ type: 'text' as const, text: JSON.stringify({ success: true }) }],
+				structuredContent: { success: true },
+			}
 		}
-	}
-)
+	)
+}
 
 // Register set_complexity tool
 server.registerTool(
