@@ -24,6 +24,7 @@ import { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
+import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
 import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 
 /**
@@ -514,10 +515,16 @@ export class IgniteCommand {
 
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
-			// Step 5: Launch Claude with system instructions and user prompt
+			// Prepare system prompt by writing to file
+			const systemPromptConfig = await prepareSystemPromptForPlatform(
+				systemInstructions,
+				context.workspacePath,
+			)
+
+			// Step 5: Launch Claude with system instructions file and user prompt
 			const claudeResult = await launchClaude(userPrompt, {
 				...claudeOptions,
-				appendSystemPrompt: systemInstructions,
+				appendSystemPromptFile: systemPromptConfig.appendSystemPromptFile,
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
@@ -1173,6 +1180,12 @@ export class IgniteCommand {
 			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
 		}
 
+		// Prepare orchestrator prompt by writing to file
+		const orchestratorPromptConfig = await prepareSystemPromptForPlatform(
+			orchestratorPrompt,
+			epicWorktreePath,
+		)
+
 		const swarmUserPrompt = `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
 
 		// Set env vars directly on process.env so they propagate to Claude Code
@@ -1191,7 +1204,7 @@ export class IgniteCommand {
 			addDir: epicWorktreePath,
 			headless: false,
 			...(metadata.sessionId && { sessionId: metadata.sessionId }),
-			appendSystemPrompt: orchestratorPrompt,
+			appendSystemPromptFile: orchestratorPromptConfig.appendSystemPromptFile,
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
