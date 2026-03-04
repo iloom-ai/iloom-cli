@@ -486,6 +486,11 @@ export class PlanCommand {
 			// Web research tools
 			'WebFetch',
 			'WebSearch',
+			// Context7 research tools (available if user has Context7 configured)
+			'mcp__context7__resolve-library-id',
+			'mcp__context7__get-library-docs',
+			// Tool discovery
+			'ToolSearch',
 			// Git commands for understanding repo state
 			'Bash(git status:*)',
 			'Bash(git log:*)',
