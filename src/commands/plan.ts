@@ -5,6 +5,7 @@ import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
+import { AgentManager } from '../lib/AgentManager.js'
 import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
 import { HarnessServer } from '../lib/HarnessServer.js'
 import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
@@ -70,9 +71,11 @@ function formatDependencies(dependencies: DependenciesResult, issuePrefix: strin
  */
 export class PlanCommand {
 	private readonly templateManager: PromptTemplateManager
+	private readonly agentManager: AgentManager
 
-	constructor(templateManager?: PromptTemplateManager) {
+	constructor(templateManager?: PromptTemplateManager, agentManager?: AgentManager) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
+		this.agentManager = agentManager ?? new AgentManager()
 	}
 
 	/**
@@ -465,43 +468,16 @@ export class PlanCommand {
 			mode: decompositionContext ? 'decomposition' : 'fresh',
 		})
 
-		// Define allowed tools for the Architect persona
-		const allowedTools = [
-			// Issue management tools
-			'mcp__issue_management__create_issue',
-			'mcp__issue_management__create_child_issue',
-			'mcp__issue_management__get_issue',
-			'mcp__issue_management__get_child_issues',
-			'mcp__issue_management__get_comment',
-			'mcp__issue_management__create_comment',
-			// Dependency management tools
-			'mcp__issue_management__create_dependency',
-			'mcp__issue_management__get_dependencies',
-			'mcp__issue_management__remove_dependency',
-			// Codebase exploration tools (read-only)
-			'Read',
-			'Glob',
-			'Grep',
-			'Task',
-			// Web research tools
-			'WebFetch',
-			'WebSearch',
-			// Context7 research tools (available if user has Context7 configured)
-			'mcp__context7__resolve-library-id',
-			'mcp__context7__get-library-docs',
-			// Tool discovery
-			'ToolSearch',
-			// Git commands for understanding repo state
-			'Bash(git status:*)',
-			'Bash(git log:*)',
-			'Bash(git branch:*)',
-			'Bash(git remote:*)',
-			'Bash(git diff:*)',
-			'Bash(git show:*)',
-		]
-
-		if (autoSwarm) {
-			allowedTools.push('mcp__harness__signal')
+		// Load analyzer agent for research delegation
+		let agents: Record<string, unknown> | undefined
+		try {
+			agents = await this.agentManager.loadAndPrepare(
+				settings ?? undefined,
+				templateVariables,
+				['iloom-issue-analyzer.md']
+			)
+		} catch (error) {
+			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
 		// Determine if we're in print/headless mode
@@ -514,7 +490,7 @@ export class PlanCommand {
 			appendSystemPrompt: architectPrompt,
 			mcpConfig,
 			addDir: process.cwd(),
-			allowedTools,
+			...(agents && { agents }),
 		}
 
 		// Add output format and verbose options if provided (print mode only)

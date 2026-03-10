@@ -236,6 +236,44 @@ export class AgentManager {
 	}
 
 	/**
+	 * Load agents and prepare them for the current platform.
+	 * On macOS, returns agents formatted for the --agents CLI flag.
+	 * On Linux/Windows, renders agents to disk for auto-discovery and returns undefined.
+	 *
+	 * @param settings - Project settings for model overrides
+	 * @param templateVariables - Variables to substitute in agent prompts
+	 * @param patterns - Glob patterns for which agent files to load
+	 * @param targetDir - Directory for disk rendering (Linux/Windows). Defaults to cwd/.claude/agents/
+	 * @returns Agents object for CLI flag (macOS) or undefined (Linux/Windows, agents on disk)
+	 */
+	async loadAndPrepare(
+		settings: IloomSettings | undefined,
+		templateVariables: TemplateVariables,
+		patterns: string[],
+		targetDir?: string
+	): Promise<Record<string, unknown> | undefined> {
+		const loadedAgents = await this.loadAgents(settings, templateVariables, patterns)
+
+		if (process.platform === 'darwin') {
+			const agents = this.formatForCli(loadedAgents)
+			logger.debug('Loaded agent configurations for CLI', {
+				agentCount: Object.keys(agents).length,
+				agentNames: Object.keys(agents),
+			})
+			return agents
+		}
+
+		const dir = targetDir ?? path.join(process.cwd(), '.claude', 'agents')
+		const rendered = await this.renderAgentsToDisk(loadedAgents, dir)
+		logger.debug('Rendered agent files to disk for auto-discovery', {
+			agentCount: rendered.length,
+			agentNames: rendered,
+			targetDir: dir,
+		})
+		return undefined
+	}
+
+	/**
 	 * Render loaded agents to disk as markdown files with YAML frontmatter.
 	 * Claude Code auto-discovers agents from .claude/agents/ directory.
 	 *

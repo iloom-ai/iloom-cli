@@ -1308,17 +1308,17 @@ describe('IgniteCommand', () => {
 				name: 'testrepo',
 			})
 
+			const agentsResult = {
+				'test-agent': {
+					description: 'Test agent',
+					prompt: 'Test prompt',
+					tools: ['Read'],
+					model: 'sonnet',
+				},
+			}
+
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'sonnet',
-					},
-				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue(agentsResult),
 			}
 
 			const originalCwd = process.cwd
@@ -1336,20 +1336,12 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				// Verify agents were loaded and passed to launchClaude
-				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
-				expect(mockAgentManager.formatForCli).toHaveBeenCalled()
+				// Verify loadAndPrepare was called and agents passed to launchClaude
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
-				expect(launchClaudeCall[1].agents).toEqual({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'sonnet',
-					},
-				})
+				expect(launchClaudeCall[1].agents).toEqual(agentsResult)
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
@@ -1366,7 +1358,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'pr-agent': {
 						description: 'PR agent',
 						prompt: 'PR prompt',
@@ -1374,8 +1366,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1392,8 +1382,7 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
-				expect(mockAgentManager.formatForCli).toHaveBeenCalled()
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
@@ -1409,7 +1398,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'regular-agent': {
 						description: 'Regular agent',
 						prompt: 'Regular prompt',
@@ -1417,8 +1406,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1435,8 +1422,7 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
-				expect(mockAgentManager.formatForCli).toHaveBeenCalled()
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
@@ -1452,9 +1438,7 @@ describe('IgniteCommand', () => {
 			const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockRejectedValue(new Error('Failed to load agents')),
-				formatForCli: vi.fn(),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockRejectedValue(new Error('Failed to load agents')),
 			}
 
 			const originalCwd = process.cwd
@@ -1470,8 +1454,7 @@ describe('IgniteCommand', () => {
 				// Should not throw - execution continues without agents
 				await commandWithAgents.execute()
 
-				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
-				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				// Verify Claude was still launched (without agents)
 				expect(launchClaudeSpy).toHaveBeenCalled()
@@ -1492,7 +1475,7 @@ describe('IgniteCommand', () => {
 			})
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'combined-agent': {
 						description: 'Combined test agent',
 						prompt: 'Combined prompt',
@@ -1500,8 +1483,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1550,17 +1531,9 @@ describe('IgniteCommand', () => {
 				name: 'testrepo',
 			})
 
+			// On Linux, loadAndPrepare renders to disk and returns undefined
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'sonnet',
-					},
-				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue(['test-agent.md']),
+				loadAndPrepare: vi.fn().mockResolvedValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -1578,14 +1551,15 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				// Verify renderAgentsToDisk was called instead of formatForCli
-				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalledWith(
-					expect.objectContaining({ 'test-agent': expect.any(Object) }),
+				// Verify loadAndPrepare was called with correct args including targetDir
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalledWith(
+					expect.anything(), // settings
+					expect.anything(), // template variables
+					['*.md', '!iloom-framework-detector.md'],
 					'/path/to/feat/issue-123__test/.claude/agents',
 				)
-				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
 
-				// Verify agents is NOT passed to launchClaude
+				// Verify agents is NOT passed to launchClaude (loadAndPrepare returned undefined)
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1].agents).toBeUndefined()
 
@@ -1606,17 +1580,9 @@ describe('IgniteCommand', () => {
 				name: 'testrepo',
 			})
 
+			// On win32, loadAndPrepare renders to disk and returns undefined
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'sonnet',
-					},
-				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue(['test-agent.md']),
+				loadAndPrepare: vi.fn().mockResolvedValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -1634,9 +1600,8 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				// Verify renderAgentsToDisk was called (non-darwin platform)
-				expect(mockAgentManager.renderAgentsToDisk).toHaveBeenCalled()
-				expect(mockAgentManager.formatForCli).not.toHaveBeenCalled()
+				// Verify loadAndPrepare was called (non-darwin platform)
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				// Verify launchClaude uses appendSystemPromptFile (not plugin-dir or /clear)
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
@@ -1653,15 +1618,16 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should use formatForCli and inline agents on macOS (unchanged behavior)', async () => {
+		it('should use loadAndPrepare and inline agents on macOS (unchanged behavior)', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
 				owner: 'testowner',
 				name: 'testrepo',
 			})
 
+			// On macOS, loadAndPrepare returns the agents object
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'test-agent': {
 						description: 'Test agent',
 						prompt: 'Test prompt',
@@ -1669,8 +1635,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1689,9 +1653,8 @@ describe('IgniteCommand', () => {
 			try {
 				await commandWithAgents.execute()
 
-				// Verify formatForCli was called (darwin path)
-				expect(mockAgentManager.formatForCli).toHaveBeenCalled()
-				expect(mockAgentManager.renderAgentsToDisk).not.toHaveBeenCalled()
+				// Verify loadAndPrepare was called (darwin path)
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalled()
 
 				// Verify agents ARE passed to launchClaude
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
@@ -1728,7 +1691,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'test-agent': {
 						description: 'Test agent',
 						prompt: 'Test prompt',
@@ -1736,8 +1699,6 @@ describe('IgniteCommand', () => {
 						model: 'haiku', // Should be overridden
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1756,14 +1717,15 @@ describe('IgniteCommand', () => {
 				// Verify settings were loaded
 				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
 
-				// Verify settings and template variables were passed to loadAgents
-				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+				// Verify settings and template variables were passed to loadAndPrepare
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalledWith(
 					mockSettings,
 					expect.objectContaining({
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
 					}),
-					['*.md', '!iloom-framework-detector.md']
+					['*.md', '!iloom-framework-detector.md'],
+					'/path/to/feat/issue-123__test/.claude/agents'
 				)
 			} finally {
 				process.cwd = originalCwd
@@ -1785,7 +1747,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'test-agent': {
 						description: 'Test agent',
 						prompt: 'Test prompt',
@@ -1793,8 +1755,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1812,14 +1772,15 @@ describe('IgniteCommand', () => {
 
 				// Should still execute successfully
 				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
-				// loadAgents receives empty settings and template variables
-				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+				// loadAndPrepare receives empty settings and template variables
+				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalledWith(
 					{},
 					expect.objectContaining({
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
 					}),
-					['*.md', '!iloom-framework-detector.md']
+					['*.md', '!iloom-framework-detector.md'],
+					'/path/to/feat/issue-123__test/.claude/agents'
 				)
 				expect(launchClaudeSpy).toHaveBeenCalled()
 			} finally {
@@ -1841,7 +1802,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
+				loadAndPrepare: vi.fn().mockResolvedValue({
 					'test-agent': {
 						description: 'Test agent',
 						prompt: 'Test prompt',
@@ -1849,8 +1810,6 @@ describe('IgniteCommand', () => {
 						model: 'sonnet',
 					},
 				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
 			}
 
 			const originalCwd = process.cwd
@@ -1868,8 +1827,8 @@ describe('IgniteCommand', () => {
 				await expect(commandWithSettings.execute()).rejects.toThrow('Failed to load settings')
 
 				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
-				// loadAgents should not be called since settings loading failed
-				expect(mockAgentManager.loadAgents).not.toHaveBeenCalled()
+				// loadAndPrepare should not be called since settings loading failed
+				expect(mockAgentManager.loadAndPrepare).not.toHaveBeenCalled()
 				expect(launchClaudeSpy).not.toHaveBeenCalled()
 			} finally {
 				process.cwd = originalCwd
@@ -1898,17 +1857,17 @@ describe('IgniteCommand', () => {
 				getSpinModel: vi.fn().mockReturnValue('opus'),
 			}
 
+			const agentsResult = {
+				'test-agent': {
+					description: 'Test agent',
+					prompt: 'Test prompt',
+					tools: ['Read'],
+					model: 'haiku', // Overridden by settings
+				},
+			}
+
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'haiku', // Overridden by settings
-					},
-				}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue(agentsResult),
 			}
 
 			const originalCwd = process.cwd
@@ -1928,14 +1887,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('agents')
-				expect(launchClaudeCall[1].agents).toEqual({
-					'test-agent': {
-						description: 'Test agent',
-						prompt: 'Test prompt',
-						tools: ['Read'],
-						model: 'haiku', // Should reflect the override
-					},
-				})
+				expect(launchClaudeCall[1].agents).toEqual(agentsResult)
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 				process.cwd = originalCwd
@@ -1971,9 +1923,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const originalCwd = process.cwd
@@ -2767,9 +2717,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithDraftPr = new IgniteCommand(
@@ -2831,9 +2779,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithDraftPr = new IgniteCommand(
@@ -2895,9 +2841,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandStandard = new IgniteCommand(
@@ -2956,9 +2900,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithValidRemote = new IgniteCommand(
@@ -3017,9 +2959,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithInvalidRemote = new IgniteCommand(
@@ -3075,9 +3015,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithSpaceRemote = new IgniteCommand(
@@ -3133,9 +3071,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn((agents) => agents),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const commandWithDefaultRemote = new IgniteCommand(
@@ -3379,9 +3315,7 @@ describe('IgniteCommand', () => {
 					}),
 				} as unknown as GitWorktreeManager,
 				{
-					loadAgents: vi.fn().mockResolvedValue([]),
-					formatForCli: vi.fn().mockReturnValue({}),
-					renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+					loadAndPrepare: vi.fn().mockResolvedValue({}),
 				} as never,
 				{
 					loadSettings: vi.fn().mockResolvedValue({
@@ -3487,9 +3421,7 @@ describe('IgniteCommand', () => {
 					}),
 				} as unknown as GitWorktreeManager,
 				{
-					loadAgents: vi.fn().mockResolvedValue([]),
-					formatForCli: vi.fn().mockReturnValue({}),
-					renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+					loadAndPrepare: vi.fn().mockResolvedValue({}),
 				} as never,
 				{
 					loadSettings: vi.fn().mockResolvedValue({
@@ -3703,9 +3635,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue([]),
-				formatForCli: vi.fn().mockReturnValue({}),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			return new IgniteCommand(
@@ -4145,9 +4075,7 @@ describe('IgniteCommand', () => {
 					}),
 				} as unknown as GitWorktreeManager,
 				{
-					loadAgents: vi.fn().mockResolvedValue([]),
-					formatForCli: vi.fn().mockReturnValue({}),
-					renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+					loadAndPrepare: vi.fn().mockResolvedValue({}),
 				} as never,
 				{
 					loadSettings: vi.fn().mockResolvedValue({
@@ -4366,9 +4294,7 @@ describe('IgniteCommand', () => {
 			}
 
 			const mockAgentManager = {
-				loadAgents: vi.fn().mockResolvedValue({}),
-				formatForCli: vi.fn().mockReturnValue({}),
-				renderAgentsToDisk: vi.fn().mockResolvedValue([]),
+				loadAndPrepare: vi.fn().mockResolvedValue({}),
 			}
 
 			const mockFirstRunManager = {

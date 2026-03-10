@@ -460,41 +460,20 @@ export class IgniteCommand {
 			// Step 4.6: Load agent configurations using cached settings
 			let agents: Record<string, unknown> | undefined
 			try {
-				// Use cached settings from Step 2.5
 				if (this.settings?.agents && Object.keys(this.settings.agents).length > 0) {
 					logger.debug('Loaded project settings', {
 						agentOverrides: Object.keys(this.settings.agents),
 					})
 				}
 
-				// Load agents with settings overrides and template variables for substitution
 				// Exclude init-only agents (e.g., framework-detector which is only for il init)
-				const loadedAgents = await this.agentManager.loadAgents(
+				agents = await this.agentManager.loadAndPrepare(
 					this.settings,
 					variables,
-					['*.md', '!iloom-framework-detector.md']
+					['*.md', '!iloom-framework-detector.md'],
+					path.join(context.workspacePath, '.claude', 'agents')
 				)
-
-				if (process.platform === 'darwin') {
-					// macOS: pass agents inline via --agents flag (unchanged behavior)
-					agents = this.agentManager.formatForCli(loadedAgents)
-					logger.debug('Loaded agent configurations for CLI', {
-						agentCount: Object.keys(agents).length,
-						agentNames: Object.keys(agents),
-					})
-				} else {
-					// Linux/Windows: render agents to .claude/agents/ for auto-discovery
-					const agentsDir = path.join(context.workspacePath, '.claude', 'agents')
-					const rendered = await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
-					logger.debug('Rendered agent files to disk for auto-discovery', {
-						agentCount: rendered.length,
-						agentNames: rendered,
-						targetDir: agentsDir,
-					})
-					// agents remains undefined - not passed to launchClaude
-				}
 			} catch (error) {
-				// Log warning but continue without agents
 				logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			}
 
@@ -1153,18 +1132,12 @@ export class IgniteCommand {
 		// Load agents for the orchestrator
 		let agents: Record<string, unknown> | undefined
 		try {
-			const loadedAgents = await this.agentManager.loadAgents(
+			agents = await this.agentManager.loadAndPrepare(
 				settings,
 				variables,
-				['*.md', '!iloom-framework-detector.md']
+				['*.md', '!iloom-framework-detector.md'],
+				path.join(epicWorktreePath, '.claude', 'agents')
 			)
-
-			if (process.platform === 'darwin') {
-				agents = this.agentManager.formatForCli(loadedAgents)
-			} else {
-				const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
-				await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
-			}
 		} catch (error) {
 			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}

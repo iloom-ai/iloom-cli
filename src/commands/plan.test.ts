@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PlanCommand } from './plan.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
+import type { AgentManager } from '../lib/AgentManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as claudeTrust from '../utils/claude-trust.js'
 import * as mcpUtils from '../utils/mcp.js'
@@ -72,6 +73,9 @@ vi.mock('../utils/logger.js', () => ({
 describe('PlanCommand', () => {
 	let command: PlanCommand
 	let mockTemplateManager: PromptTemplateManager
+	let mockAgentManager: {
+		loadAndPrepare: ReturnType<typeof vi.fn>
+	}
 
 	beforeEach(() => {
 		// Create mock template manager
@@ -79,8 +83,19 @@ describe('PlanCommand', () => {
 			getPrompt: vi.fn().mockResolvedValue('mocked plan prompt content'),
 		} as unknown as PromptTemplateManager
 
+		// Create mock agent manager
+		mockAgentManager = {
+			loadAndPrepare: vi.fn().mockResolvedValue({
+				'iloom-issue-analyzer': {
+					description: 'Issue analyzer agent',
+					prompt: 'Analyze issues',
+					model: 'opus',
+				},
+			}),
+		}
+
 		// Create command with mocked dependencies
-		command = new PlanCommand(mockTemplateManager)
+		command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
 
 		// Setup default mocks
 		vi.mocked(claudeTrust.preAcceptClaudeTrust).mockResolvedValue(undefined)
@@ -270,22 +285,42 @@ describe('PlanCommand', () => {
 			expect(claudeTrust.preAcceptClaudeTrust).toHaveBeenCalledWith(process.cwd())
 		})
 
-		it('should pass allowedTools configuration', async () => {
+		it('should not restrict allowedTools', async () => {
 			await command.execute()
 
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({
-					allowedTools: expect.arrayContaining([
-						'mcp__issue_management__create_issue',
-						'mcp__issue_management__create_child_issue',
-						'mcp__issue_management__get_issue',
-						'Read',
-						'Glob',
-						'Grep',
-					]),
-				})
+			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const options = call[1] as Record<string, unknown>
+			expect(options.allowedTools).toBeUndefined()
+		})
+
+		it('should load analyzer agent and pass to launchClaude', async () => {
+			await command.execute()
+
+			expect(mockAgentManager.loadAndPrepare).toHaveBeenCalledWith(
+				undefined,
+				expect.objectContaining({ PLANNER: 'claude' }),
+				['iloom-issue-analyzer.md']
 			)
+
+			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const options = call[1] as Record<string, unknown>
+			expect(options.agents).toEqual({
+				'iloom-issue-analyzer': expect.objectContaining({
+					description: 'Issue analyzer agent',
+					model: 'opus',
+				}),
+			})
+		})
+
+		it('should continue without agents if loading fails', async () => {
+			mockAgentManager.loadAndPrepare.mockRejectedValue(new Error('Agent loading failed'))
+
+			await command.execute()
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalled()
+			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const options = call[1] as Record<string, unknown>
+			expect(options.agents).toBeUndefined()
 		})
 	})
 
@@ -651,15 +686,12 @@ describe('PlanCommand', () => {
 			)
 		})
 
-		it('adds mcp__harness__signal to allowed tools', async () => {
+		it('does not restrict allowedTools in autoSwarm mode', async () => {
 			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
 
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({
-					allowedTools: expect.arrayContaining(['mcp__harness__signal']),
-				})
-			)
+			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
+			const options = call[1] as Record<string, unknown>
+			expect(options.allowedTools).toBeUndefined()
 		})
 
 		it('sets AUTO_SWARM_MODE: true in template variables', async () => {
