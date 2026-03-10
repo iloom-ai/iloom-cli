@@ -2203,6 +2203,15 @@ iloom supports database branching to create isolated database copies per workspa
 | `databaseProviders.supabase.parentBranch` | string | (required) | Branch from which new database branches are created |
 | `databaseProviders.supabase.withData` | boolean | `true` | Whether to include data when creating a new branch |
 
+**Prerequisites (Supabase):**
+
+- Supabase CLI installed and authenticated (`supabase login`)
+- Supabase project with database branching enabled
+
+> **Paid plan required:** Supabase database branching requires a paid Supabase plan (Pro or higher). Free-tier projects do not support branching.
+
+**`withData` option:** When `withData` is `true` (the default), new branches include a copy of the parent branch's data. Set to `false` to create branches with schema only (no data), which is faster for large databases.
+
 **Example Configuration (Neon):**
 
 `.iloom/settings.json`:

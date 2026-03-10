@@ -78,6 +78,7 @@ export interface ContributeStartedProperties {
 
 export interface SessionStartedProperties {
   has_neon: boolean
+  has_supabase: boolean
   language: string
 }
 

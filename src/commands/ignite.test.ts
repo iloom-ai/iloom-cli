@@ -3190,6 +3190,7 @@ describe('IgniteCommand', () => {
 				const mockTrack = TelemetryService.getInstance().track
 				expect(mockTrack).toHaveBeenCalledWith('session.started', {
 					has_neon: false,
+					has_supabase: false,
 					language: 'typescript',
 				})
 			} finally {
@@ -3226,6 +3227,7 @@ describe('IgniteCommand', () => {
 				const mockTrack = TelemetryService.getInstance().track
 				expect(mockTrack).toHaveBeenCalledWith('session.started', {
 					has_neon: true,
+					has_supabase: false,
 					language: 'typescript',
 				})
 			} finally {
@@ -3260,6 +3262,79 @@ describe('IgniteCommand', () => {
 				const mockTrack = TelemetryService.getInstance().track
 				expect(mockTrack).toHaveBeenCalledWith('session.started', {
 					has_neon: false,
+					has_supabase: false,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_supabase is true when supabase settings are configured', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {
+						supabase: { projectRef: 'abcdefghijklmnop', parentBranch: 'main' },
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-53__supabase-test')
+
+			const commandWithSupabase = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSupabase.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					has_supabase: true,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_supabase is false when supabase settings are absent', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-54__no-supabase')
+
+			const commandWithoutSupabase = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithoutSupabase.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					has_supabase: false,
 					language: 'typescript',
 				})
 			} finally {
