@@ -1,3 +1,4 @@
+import { execSync } from 'child_process'
 import { execa } from 'execa'
 import type { Platform } from '../types/index.js'
 import { getTerminalBackend } from './terminal-backends/index.js'
@@ -104,4 +105,25 @@ export async function openDualTerminalWindow(
 	options2: TerminalWindowOptions
 ): Promise<void> {
 	await openMultipleTerminalWindows([options1, options2])
+}
+
+/**
+ * Restore terminal state after a child process may have left it in a bad state.
+ *
+ * Uses `stty sane` which resets terminal line settings to reasonable defaults.
+ * This is more reliable than Node's `setRawMode(false)` because child processes
+ * (e.g., dev servers) may change tty settings directly on the shared fd, and
+ * Node's API doesn't reliably undo those changes.
+ *
+ * This function never throws — terminal restoration is best-effort.
+ */
+export function restoreTerminalState(): void {
+	if (!process.stdin.isTTY) {
+		return
+	}
+	try {
+		execSync('stty sane', { stdio: 'ignore' })
+	} catch {
+		// Best-effort: if stty fails, there's nothing more we can do
+	}
 }

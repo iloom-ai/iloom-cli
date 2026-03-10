@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { detectPlatform, detectDarkMode, openTerminalWindow, openDualTerminalWindow } from './terminal.js'
+import { detectPlatform, detectDarkMode, openTerminalWindow, openDualTerminalWindow, restoreTerminalState } from './terminal.js'
 import { execa } from 'execa'
+import { execSync } from 'child_process'
 import { existsSync } from 'node:fs'
 
 // Mock execa
 vi.mock('execa')
+// Mock child_process
+vi.mock('child_process', () => ({
+	execSync: vi.fn(),
+}))
 // Mock fs
 vi.mock('node:fs', () => ({
 	existsSync: vi.fn(),
@@ -603,5 +608,50 @@ describe('openDualTerminalWindow', () => {
 		// Should include source commands for all dotenv-flow files in both tabs (4 files × 2 tabs = 8 occurrences)
 		const envCount = (applescript.match(/source \.env/g) || []).length
 		expect(envCount).toBe(8)
+	})
+})
+
+describe('restoreTerminalState', () => {
+	const originalIsTTY = process.stdin.isTTY
+
+	afterEach(() => {
+		Object.defineProperty(process.stdin, 'isTTY', {
+			value: originalIsTTY,
+			configurable: true,
+		})
+	})
+
+	it('should call stty sane when stdin is a TTY', () => {
+		Object.defineProperty(process.stdin, 'isTTY', {
+			value: true,
+			configurable: true,
+		})
+
+		restoreTerminalState()
+
+		expect(execSync).toHaveBeenCalledWith('stty sane', { stdio: 'ignore' })
+	})
+
+	it('should not call stty sane when stdin is not a TTY', () => {
+		Object.defineProperty(process.stdin, 'isTTY', {
+			value: false,
+			configurable: true,
+		})
+
+		restoreTerminalState()
+
+		expect(execSync).not.toHaveBeenCalled()
+	})
+
+	it('should not throw when execSync throws', () => {
+		Object.defineProperty(process.stdin, 'isTTY', {
+			value: true,
+			configurable: true,
+		})
+		vi.mocked(execSync).mockImplementation(() => {
+			throw new Error('stty: command not found')
+		})
+
+		expect(() => restoreTerminalState()).not.toThrow()
 	})
 })

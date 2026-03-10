@@ -1,6 +1,7 @@
 import { execa, type ExecaError } from 'execa'
 import { getLogger } from './logger-context.js'
 import { getPackageScripts } from './package-json.js'
+import { restoreTerminalState } from './terminal.js'
 import fs from 'fs-extra'
 import path from 'path'
 
@@ -206,6 +207,14 @@ export async function runScript(
   // Determine stdio mode
   const stdio = options.foreground ? 'inherit' : (options.quiet ? 'pipe' : 'inherit')
 
+  // For foreground mode, register a no-op SIGINT handler to prevent signal-exit
+  // (used internally by execa) from re-raising SIGINT and killing the process
+  // before finally blocks can run. This ensures terminal state is restored on Ctrl+C.
+  const onSigint = (): void => {}
+  if (options.foreground) {
+    process.on('SIGINT', onSigint)
+  }
+
   try {
     let execaProcess
 
@@ -252,7 +261,16 @@ export async function runScript(
     return result
   } catch (error) {
     const execaError = error as ExecaError
+    // If the process was killed by SIGINT, the user intentionally cancelled — return silently
+    if (options.foreground && execaError.signal === 'SIGINT') {
+      return {}
+    }
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'
     throw new Error(`Failed to run script '${scriptName}': ${stderr}`)
+  } finally {
+    if (options.foreground) {
+      process.removeListener('SIGINT', onSigint)
+      restoreTerminalState()
+    }
   }
 }

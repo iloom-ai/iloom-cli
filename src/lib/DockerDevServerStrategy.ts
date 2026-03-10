@@ -1,6 +1,7 @@
 import { execa } from 'execa'
 import net from 'net'
 import { logger } from '../utils/logger.js'
+import { restoreTerminalState } from '../utils/terminal.js'
 
 /**
  * Docker configuration shape consumed by DockerDevServerStrategy.
@@ -314,6 +315,7 @@ export class DockerDevServerStrategy {
 			// Clean up signal handlers to avoid leaks
 			process.removeListener('SIGINT', onSigint)
 			process.removeListener('SIGTERM', onSigterm)
+			restoreTerminalState()
 		}
 
 		return {}

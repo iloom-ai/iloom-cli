@@ -1,10 +1,11 @@
-import { execa, type ExecaChildProcess } from 'execa'
+import { execa, type ExecaChildProcess, type ExecaError } from 'execa'
 import { setTimeout } from 'timers/promises'
 import { ProcessManager } from './process/ProcessManager.js'
 import { buildDevServerCommand } from '../utils/dev-server.js'
 import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
+import { restoreTerminalState } from '../utils/terminal.js'
 import type { DevServerStrategy, ForegroundOpts } from './DevServerStrategy.js'
 
 /**
@@ -117,7 +118,24 @@ export class NativeDevServerStrategy implements DevServerStrategy {
 				onProcessStarted(processInfo.pid)
 			}
 
-			await serverProcess
+			// Register no-op SIGINT handler to prevent signal-exit from re-raising SIGINT
+			// before finally blocks can run, ensuring terminal state is restored on Ctrl+C.
+			const onSigint = (): void => {}
+			process.on('SIGINT', onSigint)
+
+			try {
+				await serverProcess
+			} catch (error) {
+				const execaError = error as ExecaError
+				// If killed by SIGINT, the user intentionally cancelled — return silently
+				if (execaError.signal !== 'SIGINT') {
+					throw error
+				}
+			} finally {
+				process.removeListener('SIGINT', onSigint)
+				restoreTerminalState()
+			}
+
 			return processInfo
 		}
 

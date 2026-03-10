@@ -1,5 +1,6 @@
 import { execa } from 'execa'
 import { logger } from '../utils/logger.js'
+import { restoreTerminalState } from '../utils/terminal.js'
 import {
 	isDockerInstalled,
 	isDockerRunning,
@@ -217,6 +218,7 @@ export class DockerManager {
 			// Clean up signal handlers to avoid leaks
 			process.removeListener('SIGINT', onSigint)
 			process.removeListener('SIGTERM', onSigterm)
+			restoreTerminalState()
 		}
 	}
 
