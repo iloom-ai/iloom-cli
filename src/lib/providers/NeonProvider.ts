@@ -52,6 +52,8 @@ export function validateNeonConfig(config: {
  * Ports functionality from bash/utils/neon-utils.sh
  */
 export class NeonProvider implements DatabaseProvider {
+  readonly displayName = 'Neon'
+  readonly installHint = 'npm install -g neonctl'
   private _isConfigured: boolean = false
 
   constructor(private config: NeonConfig) {

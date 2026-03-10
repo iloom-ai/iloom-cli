@@ -38,6 +38,8 @@ describe('DatabaseManager', () => {
   beforeEach(() => {
     // Create mock provider
     mockProvider = {
+      displayName: 'TestDB',
+      installHint: 'npm install -g testdb-cli',
       isCliAvailable: vi.fn().mockResolvedValue(true),
       isAuthenticated: vi.fn().mockResolvedValue(true),
       isConfigured: vi.fn().mockReturnValue(true),
@@ -52,8 +54,6 @@ describe('DatabaseManager', () => {
       branchExists: vi.fn().mockResolvedValue(false),
       listBranches: vi.fn().mockResolvedValue([]),
       getConnectionString: vi.fn().mockResolvedValue('postgresql://test-connection'),
-      findPreviewBranch: vi.fn().mockResolvedValue(null),
-      getBranchNameFromEndpoint: vi.fn().mockResolvedValue(null),
     }
 
     // Create mock environment
@@ -368,7 +368,7 @@ describe('DatabaseManager', () => {
           success: false,
           deleted: false,
           notFound: true,
-          error: 'CLI tool not available',
+          error: 'TestDB CLI not available',
           branchName: 'feature-branch'
         })
       })
@@ -386,7 +386,7 @@ describe('DatabaseManager', () => {
           success: false,
           deleted: false,
           notFound: false,
-          error: 'Not authenticated with DB Provider',
+          error: 'Not authenticated with TestDB',
           branchName: 'feature-branch'
         })
       })
