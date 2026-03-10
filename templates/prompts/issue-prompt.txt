@@ -226,7 +226,7 @@ The `il` command can also be used as a shorter alias.
 ### Loom Isolation Features
 Each loom provides:
 - Dedicated Git worktree (no branch conflicts)
-- Unique database branch via Neon integration
+- Unique database branch via database branching integration
 - Color-coded terminal/VS Code for visual context switching
 - Deterministic port assignment (3000 + issue number)
 

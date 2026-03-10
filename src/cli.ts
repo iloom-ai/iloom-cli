@@ -2171,58 +2171,60 @@ testJiraCommand
     }
   })
 
-// Test command for Neon integration
+// Test command for database provider integration
 program
-  .command('test-neon')
-  .description('Test Neon integration and debug configuration')
+  .command('test-db')
+  .description('Test database provider integration and debug configuration')
   .action(async () => {
     try {
       const { SettingsManager } = await import('./lib/SettingsManager.js')
-      const { createNeonProviderFromSettings } = await import('./utils/neon-helpers.js')
+      const { createDatabaseProviderFromSettings } = await import('./utils/database-helpers.js')
 
-      logger.info('Testing Neon Integration\n')
+      logger.info('Testing Database Provider Integration\n')
 
       // Test 1: Settings Configuration
       logger.info('1. Settings Configuration:')
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()
-      const neonConfig = settings.databaseProviders?.neon
-      logger.info(`   projectId: ${neonConfig?.projectId ?? '(not configured)'}`)
-      logger.info(`   parentBranch: ${neonConfig?.parentBranch ?? '(not configured)'}`)
 
       // Test 2: Create provider and test initialization
-      logger.info('\n2. Creating NeonProvider...')
+      logger.info('\n2. Creating database provider...')
       try {
-        const neonProvider = createNeonProviderFromSettings(settings)
-        logger.success('   NeonProvider created successfully')
+        const provider = createDatabaseProviderFromSettings(settings)
+        logger.info(`   Provider: ${provider.displayName}`)
+        const isConfigured = provider.isConfigured()
+        if (isConfigured) {
+          logger.success(`   ${provider.displayName} is configured`)
+        } else {
+          logger.warn(`   ${provider.displayName} is not configured`)
+        }
 
         // Test 3: CLI availability
-        logger.info('\n3. Testing Neon CLI availability...')
-        const isAvailable = await neonProvider.isCliAvailable()
+        logger.info(`\n3. Testing ${provider.displayName} CLI availability...`)
+        const isAvailable = await provider.isCliAvailable()
         if (isAvailable) {
-          logger.success('   Neon CLI is available')
+          logger.success(`   ${provider.displayName} CLI is available`)
         } else {
-          logger.error('   Neon CLI not found')
-          logger.info('   Install with: npm install -g @neon/cli')
+          logger.error(`   ${provider.displayName} CLI not found`)
+          logger.info(`   Install with: ${provider.installHint}`)
           return
         }
 
         // Test 4: Authentication
-        logger.info('\n4. Testing Neon CLI authentication...')
-        const isAuthenticated = await neonProvider.isAuthenticated()
+        logger.info(`\n4. Testing ${provider.displayName} CLI authentication...`)
+        const isAuthenticated = await provider.isAuthenticated()
         if (isAuthenticated) {
-          logger.success('   Neon CLI is authenticated')
+          logger.success(`   ${provider.displayName} CLI is authenticated`)
         } else {
-          logger.error('   Neon CLI not authenticated')
-          logger.info('   Run: neon auth')
+          logger.error(`   ${provider.displayName} CLI not authenticated`)
           return
         }
 
         // Test 5: List branches (if config is valid)
-        if (neonConfig?.projectId) {
+        if (isConfigured) {
           logger.info('\n5. Testing branch listing...')
           try {
-            const branches = await neonProvider.listBranches()
+            const branches = await provider.listBranches()
             logger.success(`   Found ${branches.length} branches:`)
             for (const branch of branches.slice(0, 5)) { // Show first 5
               logger.info(`     - ${branch}`)
@@ -2234,19 +2236,19 @@ program
             logger.error(`   Failed to list branches: ${error instanceof Error ? error.message : 'Unknown error'}`)
           }
         } else {
-          logger.warn('\n5. Skipping branch listing (Neon not configured in settings)')
+          logger.warn(`\n5. Skipping branch listing (${provider.displayName} not configured in settings)`)
         }
 
       } catch (error) {
-        logger.error(`   Failed to create NeonProvider: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        logger.error(`   Failed to create database provider: ${error instanceof Error ? error.message : 'Unknown error'}`)
         if (error instanceof Error && error.message.includes('not configured')) {
-          logger.info('\n   This is expected if Neon is not configured.')
-          logger.info('   Configure databaseProviders.neon in .iloom/settings.json to test fully.')
+          logger.info('\n   This is expected if no database provider is configured.')
+          logger.info('   Configure databaseProviders in .iloom/settings.json to test fully.')
         }
       }
 
       logger.info('\n' + '='.repeat(50))
-      logger.success('Neon integration test complete!')
+      logger.success('Database provider integration test complete!')
 
     } catch (error) {
       logger.error(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)

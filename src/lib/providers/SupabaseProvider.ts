@@ -223,6 +223,7 @@ export class SupabaseProvider implements DatabaseProvider {
       const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
 
       // Only return false for explicit "not found" error signatures
+      // Note: Supabase CLI uses exitCode=1 for "not found" and exitCode=2 for auth errors
       const isNotFound =
         stderr.includes('not found') ||
         stderr.includes('does not exist') ||

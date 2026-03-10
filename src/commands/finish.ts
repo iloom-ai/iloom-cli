@@ -21,7 +21,7 @@ import { SessionSummaryService } from '../lib/SessionSummaryService.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber, getMergeTargetBranch, isPlaceholderCommit, findPlaceholderCommitSha, removePlaceholderCommitFromHead, removePlaceholderCommitFromHistory, executeGitCommand } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { createDatabaseProviderFromSettings } from '../utils/database-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { UserAbortedCommitError, type FinishResult } from '../types/index.js'
@@ -116,8 +116,8 @@ export class FinishCommand {
 		const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
 		const environmentManager = new EnvironmentManager()
-		const neonProvider = createNeonProviderFromSettings(settings)
-		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
+		const databaseProvider = createDatabaseProviderFromSettings(settings)
+		const databaseManager = new DatabaseManager(databaseProvider, environmentManager, databaseUrlEnvVarName)
 		const cliIsolationManager = new CLIIsolationManager()
 
 		// Initialize LoomManager if not provided

@@ -2,7 +2,6 @@ import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { SupabaseProvider } from '../lib/providers/SupabaseProvider.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import type { DatabaseProvider } from '../types/index.js'
-export { createNeonProviderFromSettings } from './neon-helpers.js'
 
 /**
  * Create the appropriate database provider from iloom settings.
