@@ -105,8 +105,19 @@ describe('SupabaseProvider', () => {
       expect(result).toBe(false)
     })
 
+    it('should return false when supabase CLI has no execute permission (EACCES)', async () => {
+      const eaccesError = Object.assign(new Error('spawn supabase EACCES'), {
+        code: 'EACCES',
+      })
+      vi.mocked(execa).mockRejectedValue(eaccesError)
+
+      const result = await provider.isCliAvailable()
+
+      expect(result).toBe(false)
+    })
+
     it('should return true when CLI is present but version flag fails for other reasons', async () => {
-      // Non-ENOENT errors mean CLI is present but something else is wrong
+      // Non-ENOENT/EACCES errors mean CLI is present but something else is wrong
       const otherError = Object.assign(new Error('some other error'), {
         code: 'EPERM',
         exitCode: 1,
@@ -218,10 +229,28 @@ describe('SupabaseProvider', () => {
       expect(result).toBe('issue-25')
     })
 
-    it('should handle empty string', () => {
+    it('should return unnamed-branch for empty string', () => {
       const result = provider.sanitizeBranchName('')
 
-      expect(result).toBe('')
+      expect(result).toBe('unnamed-branch')
+    })
+
+    it('should strip leading hyphens to prevent CLI flag injection', () => {
+      const result = provider.sanitizeBranchName('--malicious-flag')
+
+      expect(result).toBe('malicious-flag')
+    })
+
+    it('should remove invalid characters', () => {
+      const result = provider.sanitizeBranchName('feat@issue#5!test')
+
+      expect(result).toBe('featissue5test')
+    })
+
+    it('should return unnamed-branch when all characters are invalid', () => {
+      const result = provider.sanitizeBranchName('!@#$%')
+
+      expect(result).toBe('unnamed-branch')
     })
   })
 
@@ -256,6 +285,27 @@ describe('SupabaseProvider', () => {
       const result = await provider.listBranches()
 
       expect(result).toEqual([])
+    })
+
+    it('should handle stdout with warning prefix before JSON', async () => {
+      const mockBranches = [{ name: 'main', id: 'branch-main-123' }]
+      vi.mocked(execa).mockResolvedValue({
+        stdout: `WARNING: some deprecation notice\n${JSON.stringify(mockBranches)}`,
+        stderr: '',
+      } as ExecaReturnValue<string>)
+
+      const result = await provider.listBranches()
+
+      expect(result).toEqual(['main'])
+    })
+
+    it('should throw descriptive error on invalid JSON output', async () => {
+      vi.mocked(execa).mockResolvedValue({
+        stdout: 'this is not valid json',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+
+      await expect(provider.listBranches()).rejects.toThrow('Failed to parse Supabase branch list as JSON')
     })
 
     it('should throw on CLI error', async () => {
@@ -306,16 +356,14 @@ describe('SupabaseProvider', () => {
       expect(result).toBe(false)
     })
 
-    it('should return false when branch does not exist (exit code 1)', async () => {
-      const notFoundError = Object.assign(new Error('command failed'), {
+    it('should rethrow when exit code is 1 but no "not found" message (ambiguous error)', async () => {
+      const ambiguousError = Object.assign(new Error('command failed'), {
         stderr: '',
         exitCode: 1,
       })
-      vi.mocked(execa).mockRejectedValue(notFoundError)
+      vi.mocked(execa).mockRejectedValue(ambiguousError)
 
-      const result = await provider.branchExists('nonexistent-branch')
-
-      expect(result).toBe(false)
+      await expect(provider.branchExists('nonexistent-branch')).rejects.toThrow('command failed')
     })
 
     it('should rethrow auth errors instead of returning false', async () => {
@@ -633,23 +681,4 @@ describe('SupabaseProvider', () => {
     })
   })
 
-  describe('findPreviewBranch', () => {
-    it('should always return null (Neon-specific concept not applicable to Supabase)', async () => {
-      const result = await provider.findPreviewBranch('feat-issue-5')
-
-      expect(result).toBeNull()
-      // Should not make any CLI calls
-      expect(execa).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('getBranchNameFromEndpoint', () => {
-    it('should always return null (Neon-specific concept not applicable to Supabase)', async () => {
-      const result = await provider.getBranchNameFromEndpoint('ep-some-endpoint')
-
-      expect(result).toBeNull()
-      // Should not make any CLI calls
-      expect(execa).not.toHaveBeenCalled()
-    })
-  })
 })

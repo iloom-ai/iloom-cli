@@ -72,6 +72,11 @@ export class SupabaseProvider implements DatabaseProvider {
     } else {
       this._isConfigured = true
     }
+
+    // parentBranch is stored for future use but Supabase currently always branches from the default (production) branch
+    getLogger().debug(
+      `parentBranch '${config.parentBranch}' is stored but Supabase currently always branches from the default branch`
+    )
   }
 
   /**
@@ -125,8 +130,10 @@ export class SupabaseProvider implements DatabaseProvider {
       })
       return true
     } catch (error) {
+      const errorCode = (error as NodeJS.ErrnoException).code
       // ENOENT means the binary was not found on the system
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // EACCES means the binary exists but has no execute permission
+      if (errorCode === 'ENOENT' || errorCode === 'EACCES') {
         return false
       }
       // Any other error (e.g., non-zero exit) still means CLI is present
@@ -180,7 +187,11 @@ export class SupabaseProvider implements DatabaseProvider {
    * Supabase uses hyphens as separator (not underscores like Neon)
    */
   sanitizeBranchName(branchName: string): string {
-    return branchName.replace(/\//g, '-')
+    let sanitized = branchName
+      .replace(/\//g, '-') // replace slashes with hyphens
+      .replace(/[^a-zA-Z0-9_-]/g, '') // remove chars that aren't alphanumeric, hyphens, or underscores
+      .replace(/^-+/, '') // strip leading hyphens (prevents CLI flag injection)
+    return sanitized || 'unnamed-branch'
   }
 
   /**
@@ -198,7 +209,22 @@ export class SupabaseProvider implements DatabaseProvider {
       name: string
       [key: string]: unknown
     }
-    const branches: SupabaseBranch[] = JSON.parse(output)
+
+    let jsonString = output
+    // CLI tools can prepend warnings to stdout; strip non-JSON prefixes
+    const firstBracket = output.indexOf('[')
+    if (firstBracket > 0) {
+      jsonString = output.slice(firstBracket)
+    }
+
+    let branches: SupabaseBranch[]
+    try {
+      branches = JSON.parse(jsonString)
+    } catch (parseError) {
+      throw new Error(
+        `Failed to parse Supabase branch list as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+      )
+    }
     return branches.map((branch) => branch.name)
   }
 
@@ -230,8 +256,7 @@ export class SupabaseProvider implements DatabaseProvider {
         stderr.includes('no branch') ||
         stdout.includes('not found') ||
         message.includes('not found') ||
-        message.includes('does not exist') ||
-        execaError.exitCode === 1
+        message.includes('does not exist')
 
       if (isNotFound) {
         return false
@@ -371,25 +396,4 @@ export class SupabaseProvider implements DatabaseProvider {
     }
   }
 
-  /**
-   * Stub: findPreviewBranch is a Neon-specific concept (Vercel preview databases)
-   * Not applicable to Supabase - always returns null
-   *
-   * @param branchName - Branch name (unused)
-   * @param cwd - Working directory (unused)
-   */
-  async findPreviewBranch(_branchName: string, _cwd?: string): Promise<string | null> {
-    return null
-  }
-
-  /**
-   * Stub: getBranchNameFromEndpoint is a Neon-specific concept
-   * Not applicable to Supabase - always returns null
-   *
-   * @param endpointId - Endpoint ID (unused)
-   * @param cwd - Working directory (unused)
-   */
-  async getBranchNameFromEndpoint(_endpointId: string, _cwd?: string): Promise<string | null> {
-    return null
-  }
 }
