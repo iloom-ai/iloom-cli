@@ -486,6 +486,47 @@ describe('StartCommand', () => {
 				)
 			})
 
+			it('should detect short title as description when --body is provided (#884)', async () => {
+				// VS Code extension sends short titles with --body for new issue creation
+				const shortTitle = 'A Test Loom'
+				const body = 'As a User I want to be able to create a loom straight from the dialog'
+
+				// Mock GitHubService.createIssue to return issue data
+				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
+					number: 891,
+					url: 'https://github.com/owner/repo/issues/891',
+				})
+
+				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
+
+				await expect(
+					command.execute({
+						identifier: shortTitle,
+						options: { body },
+					})
+				).resolves.not.toThrow()
+
+				// Should create issue with the short title and provided body
+				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
+					'A Test Loom',
+					body
+				)
+			})
+
+			it('should still reject short text with spaces when no --body is provided', async () => {
+				const shortText = 'A Test Loom'
+
+				// Without --body, short text with spaces should fail as invalid branch name
+				await expect(
+					command.execute({
+						identifier: shortText,
+						options: {},
+					})
+				).rejects.toThrow('Invalid branch name')
+
+				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
+			})
+
 		})
 
 		describe('validation', () => {

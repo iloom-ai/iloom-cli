@@ -169,7 +169,7 @@ export class StartCommand {
 			let parentLoom = await this.detectParentLoom(loomManager)
 
 			// Step 1: Parse and validate input (pass repo to methods)
-			const parsed = await this.parseInput(input.identifier, repo)
+			const parsed = await this.parseInput(input.identifier, repo, input.options)
 
 			// Step 2: Validate based on type
 			await this.validateInput(parsed, repo)
@@ -445,7 +445,7 @@ export class StartCommand {
 	/**
 	 * Parse input to determine type and extract relevant data
 	 */
-	private async parseInput(identifier: string, repo?: string): Promise<ParsedInput> {
+	private async parseInput(identifier: string, repo?: string, options?: StartOptions): Promise<ParsedInput> {
 		// Check if user wants to skip capitalization by prefixing with space
 		// We preserve this for description types so capitalizeFirstLetter() can handle it
 		const hasLeadingSpace = identifier.startsWith(' ')
@@ -457,9 +457,10 @@ export class StartCommand {
 		}
 
 		// Check for description: >15 chars AND has spaces (likely a natural language description)
-		// Short inputs with spaces are rejected later as invalid branch names
+		// Also treat as description if --body is provided with a multi-word input,
+		// since the VS Code extension passes short titles with a --body flag for new issue creation
 		const spaceCount = (trimmedIdentifier.match(/ /g) ?? []).length
-		if (trimmedIdentifier.length > 15 && spaceCount >= 1) {
+		if ((trimmedIdentifier.length > 15 && spaceCount >= 1) || (options?.body && spaceCount >= 1)) {
 			// Preserve leading space if present so capitalizeFirstLetter() can detect the override
 			return {
 				type: 'description',
