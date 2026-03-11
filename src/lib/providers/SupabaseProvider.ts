@@ -4,7 +4,7 @@ import { getLogger } from '../../utils/logger-context.js'
 
 export interface SupabaseConfig {
   projectRef: string
-  parentBranch: string
+  parentBranch?: string
   withData?: boolean // default: true
 }
 
@@ -24,13 +24,7 @@ export function validateSupabaseConfig(config: {
     }
   }
 
-  if (!config.parentBranch) {
-    return {
-      valid: false,
-      error:
-        'Supabase parentBranch is required. Configure in .iloom/settings.json under databaseProviders.supabase',
-    }
-  }
+  // parentBranch is optional — Supabase currently always branches from the default branch
 
   // Basic validation for project ref format (alphanumeric and hyphens)
   if (!/^[a-zA-Z0-9-]+$/.test(config.projectRef)) {
@@ -73,10 +67,11 @@ export class SupabaseProvider implements DatabaseProvider {
       this._isConfigured = true
     }
 
-    // parentBranch is stored for future use but Supabase currently always branches from the default (production) branch
-    getLogger().debug(
-      `parentBranch '${config.parentBranch}' is stored but Supabase currently always branches from the default branch`
-    )
+    if (config.parentBranch) {
+      getLogger().debug(
+        `parentBranch '${config.parentBranch}' is stored but Supabase currently always branches from the default branch`
+      )
+    }
   }
 
   /**
@@ -94,7 +89,7 @@ export class SupabaseProvider implements DatabaseProvider {
    * @param args - Command arguments to pass to supabase CLI
    * @param cwd - Optional working directory to run the command from (defaults to current directory)
    */
-  private async executeSupabaseCommand(args: string[], cwd?: string): Promise<string> {
+  private async executeSupabaseCommand(args: string[], cwd?: string, timeout: number = 30000): Promise<string> {
     // Check if provider is properly configured
     if (!this._isConfigured) {
       throw new Error(
@@ -111,7 +106,7 @@ export class SupabaseProvider implements DatabaseProvider {
     }
 
     const result = await execa('supabase', args, {
-      timeout: 30000,
+      timeout,
       encoding: 'utf8',
       stdio: 'pipe',
       ...(cwd && { cwd }),
@@ -236,9 +231,10 @@ export class SupabaseProvider implements DatabaseProvider {
    * @param cwd - Optional working directory to run commands from
    */
   async branchExists(name: string, cwd?: string): Promise<boolean> {
+    const sanitizedName = this.sanitizeBranchName(name)
     try {
       await this.executeSupabaseCommand(
-        ['branches', 'get', name, '--project-ref', this.config.projectRef],
+        ['branches', 'get', sanitizedName, '--project-ref', this.config.projectRef],
         cwd
       )
       return true
@@ -276,8 +272,9 @@ export class SupabaseProvider implements DatabaseProvider {
    * @param cwd - Optional working directory to run commands from
    */
   async getConnectionString(branch: string, cwd?: string): Promise<string> {
+    const sanitizedBranch = this.sanitizeBranchName(branch)
     const output = await this.executeSupabaseCommand(
-      ['branches', 'get', branch, '--project-ref', this.config.projectRef, '-o', 'env'],
+      ['branches', 'get', sanitizedBranch, '--project-ref', this.config.projectRef, '-o', 'env'],
       cwd
     )
 
@@ -327,7 +324,7 @@ export class SupabaseProvider implements DatabaseProvider {
       args.push('--with-data')
     }
 
-    await this.executeSupabaseCommand(args, cwd)
+    await this.executeSupabaseCommand(args, cwd, 300000)
 
     getLogger().success('Database branch created successfully')
 

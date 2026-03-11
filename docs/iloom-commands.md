@@ -2200,7 +2200,6 @@ iloom supports database branching to create isolated database copies per workspa
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `databaseProviders.supabase.projectRef` | string | (required) | Supabase project reference ID (e.g., `"abcdefghijklmnop"`) |
-| `databaseProviders.supabase.parentBranch` | string | (required) | Branch from which new database branches are created |
 | `databaseProviders.supabase.withData` | boolean | `true` | Whether to include data when creating a new branch |
 
 **Prerequisites (Supabase):**
@@ -2233,9 +2232,7 @@ iloom supports database branching to create isolated database copies per workspa
 {
   "databaseProviders": {
     "supabase": {
-      "projectRef": "abcdefghijklmnop",
-      "parentBranch": "main",
-      "withData": true
+      "projectRef": "abcdefghijklmnop"
     }
   }
 }

@@ -32,10 +32,9 @@ describe('SupabaseProvider', () => {
       expect(result.error).toContain('projectRef is required')
     })
 
-    it('should return invalid when parentBranch is missing', () => {
+    it('should return valid when parentBranch is omitted (optional for Supabase)', () => {
       const result = validateSupabaseConfig({ projectRef: 'test-ref' })
-      expect(result.valid).toBe(false)
-      expect(result.error).toContain('parentBranch is required')
+      expect(result.valid).toBe(true)
     })
 
     it('should return invalid when projectRef contains invalid characters', () => {
@@ -61,12 +60,11 @@ describe('SupabaseProvider', () => {
       expect(unconfiguredProvider.isConfigured()).toBe(false)
     })
 
-    it('should return false when parentBranch is missing', () => {
+    it('should return true when parentBranch is omitted (optional for Supabase)', () => {
       const unconfiguredProvider = new SupabaseProvider({
         projectRef: 'test-ref',
-        parentBranch: '',
       })
-      expect(unconfiguredProvider.isConfigured()).toBe(false)
+      expect(unconfiguredProvider.isConfigured()).toBe(true)
     })
 
     it('should not throw when config is invalid (graceful degradation)', () => {

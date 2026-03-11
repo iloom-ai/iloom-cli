@@ -416,7 +416,8 @@ export const SupabaseSettingsSchema = z.object({
 	parentBranch: z
 		.string()
 		.min(1)
-		.describe('Branch from which new database branches are created'),
+		.optional()
+		.describe('Reserved for future use. Supabase currently always branches from the default branch.'),
 	withData: z
 		.boolean()
 		.optional()

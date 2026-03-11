@@ -97,7 +97,7 @@ Each loom is a fully isolated container for your work:
 
 *   **Git Worktree:** A separate filesystem at ~/project-looms/issue-25/. No stashing, no branch switching overhead.
     
-*   **Database Branch:** (Neon support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
+*   **Database Branch:** (Neon and Supabase support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
 
 *   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`. See [Secret Storage Limitations](#multi-language-project-support) for frameworks with encrypted credentials.
 
@@ -153,7 +153,7 @@ Configuration
 
 ### 1. Interactive Setup (Recommended)
 
-The easiest way to configure iloom is the interactive wizard. It guides you through setting up your environment (GitHub/Linear, Neon, IDE).
+The easiest way to configure iloom is the interactive wizard. It guides you through setting up your environment (GitHub/Linear, Neon/Supabase, IDE).
 
 You can even use natural language to jump-start the process:
 
@@ -205,6 +205,21 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
   }
 }
 ```
+
+Or, if using Supabase (requires a paid plan):
+
+```json
+{
+  "databaseProviders": {
+    "supabase": {
+      "projectRef": "abcdefghijklmnop",
+      "parentBranch": "main"
+    }
+  }
+}
+```
+
+> Only one database provider can be active at a time. See [Database Branching](docs/iloom-commands.md#database-branching) for full details.
 
 **.iloom/settings.local.json (Gitignored)**
 

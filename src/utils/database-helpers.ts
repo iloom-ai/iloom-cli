@@ -25,7 +25,7 @@ export function createDatabaseProviderFromSettings(settings: IloomSettings): Dat
 	if (supabaseConfig) {
 		return new SupabaseProvider({
 			projectRef: supabaseConfig.projectRef,
-			parentBranch: supabaseConfig.parentBranch,
+			...(supabaseConfig.parentBranch && { parentBranch: supabaseConfig.parentBranch }),
 			...(supabaseConfig.withData !== undefined && { withData: supabaseConfig.withData }),
 		})
 	}
