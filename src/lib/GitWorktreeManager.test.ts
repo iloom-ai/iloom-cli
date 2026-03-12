@@ -1083,6 +1083,69 @@ describe('GitWorktreeManager', () => {
       expect(result).toEqual(targetWorktree)
       expect(result?.branch).toBe('feat/issue-mark-1__nextjs-vercel')
     })
+
+    it('should find worktree with issue/{id} branch pattern (swarm child worktrees)', async () => {
+      // SwarmSetupService creates child branches as issue/{id} (slash separator)
+      const targetWorktree = {
+        path: '/test/worktree-issue-random-3',
+        branch: 'issue/RANDOM-3',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        targetWorktree,
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.findWorktreeForIssue('RANDOM-3')
+
+      expect(result).toEqual(targetWorktree)
+      expect(result?.branch).toBe('issue/RANDOM-3')
+    })
+
+    it('should find worktree with issue/{N} branch pattern for numeric issues', async () => {
+      const targetWorktree = {
+        path: '/test/worktree-issue-42',
+        branch: 'issue/42',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        targetWorktree,
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.findWorktreeForIssue(42)
+
+      expect(result).toEqual(targetWorktree)
+      expect(result?.branch).toBe('issue/42')
+    })
   })
 
   describe('isMainWorktree', () => {

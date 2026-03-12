@@ -421,9 +421,10 @@ export class GitWorktreeManager {
   async findWorktreeForIssue(issueNumber: string | number): Promise<GitWorktree | null> {
     const worktrees = await this.listWorktrees({ porcelain: true })
 
-    // Pattern: starts with 'issue-{N}' OR has '/issue-{N}', '-issue-{N}', '_issue-{N}' but not 'issue-{N}{digit}'
+    // Pattern: starts with 'issue-{N}' or 'issue/{N}' OR has '/issue-{N}', '-issue-{N}', '_issue-{N}' etc.
+    // Uses [-/] after 'issue' to match both dash (feat/issue-42__desc) and slash (issue/42) conventions
     // Case-insensitive to handle Linear IDs (MARK-1 vs mark-1)
-    const pattern = new RegExp(`(?:^|[/_-])issue-${issueNumber}(?:-|__|$)`, 'i')
+    const pattern = new RegExp(`(?:^|[/_-])issue[-/]${issueNumber}(?:-|__|$)`, 'i')
 
     return worktrees.find(wt => pattern.test(wt.branch)) ?? null
   }
