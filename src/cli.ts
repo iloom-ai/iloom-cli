@@ -1033,7 +1033,7 @@ program
   .argument('[identifier]', 'Branch name or issue number to cleanup (auto-detected)')
   .option('-l, --list', 'List all worktrees')
   .option('-a, --all', 'Remove all worktrees (interactive confirmation)')
-  .option('-i, --issue <number>', 'Cleanup by issue number', parseInt)
+  .option('-i, --issue <number>', 'Cleanup by issue number', parseIssueIdentifier)
   .option('-f, --force', 'Skip confirmations and force removal')
   .option('--dry-run', 'Show what would be done without doing it')
   .option('--json', 'Output result as JSON')

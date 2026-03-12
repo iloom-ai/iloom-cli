@@ -205,8 +205,8 @@ export interface CleanupOptions {
   list?: boolean
   /** Remove all worktrees (interactive confirmation required unless --force) */
   all?: boolean
-  /** Cleanup by specific issue number */
-  issue?: number
+  /** Cleanup by specific issue identifier (numeric or alphanumeric like RANDOM-13) */
+  issue?: string | number
   /** Skip confirmations and force removal */
   force?: boolean
   /** Show what would be done without actually doing it */
