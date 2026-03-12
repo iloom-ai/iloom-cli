@@ -83,6 +83,48 @@ Record each result as:
 }
 ```
 
+### Step 2.5: Post Initial Verification Report Comment
+
+After verifying all must-haves, post the initial results as a comment on the verifier's own issue:
+
+1. Construct a markdown report using the same format as Step 5, but with only the "Initial" column populated (no "After Fix" column yet since fixes haven't been attempted):
+
+```markdown
+## Wave Verification Report
+
+### Summary
+- **Total must-haves checked:** N
+- **Passed (initial):** N
+- **Failed (initial):** N
+
+### Results by Issue
+
+#### Issue #NNN: [issue title]
+
+| Must-Have | Type | Initial |
+|-----------|------|---------|
+| `src/Foo.tsx` | exists | ✅ PASS |
+| `src/Foo.tsx` — exports default component | substantive | ❌ FAIL |
+
+### Overall Status: [ALL_PASSED | FAILURES_FOUND]
+
+*Fix attempts will follow. This comment will be updated with final results.*
+```
+
+2. Call `mcp__issue_management__create_comment` with:
+   - `number`: your own issue number (from invocation prompt)
+   - `type`: `"issue"`
+   - `body`: the initial verification report markdown above
+   - `markupLanguage`: `"GFM"`
+
+3. Save the returned `commentId` — you will need it in Step 4 to update the comment with fix results
+
+4. Log the comment as a recap artifact:
+   - Call `recap.add_artifact` with `type: 'comment'`, `primaryUrl`: the returned comment URL, and `description`: `"Wave verification report"`
+   - If in swarm mode, include `worktreePath` in the recap call
+
+**If all must-haves passed** (no failures), the initial report is already the final report. Skip Steps 3 and 4 entirely and proceed to Step 5. The comment does not need updating.
+
 ### Step 3: Fix Failures (if any)
 
 If any must-haves FAILED, invoke the fix skill to address them:
@@ -118,7 +160,7 @@ The skill runs inline and returns its result directly. Check the skill's output 
 3. Run fix skill invocations sequentially (one per issue group), waiting for each to complete before starting the next
 4. Record fix action results: which issue, which failures were targeted, and whether the skill reported success
 
-### Step 4: Re-Verify (Single Pass Only)
+### Step 4: Re-Verify and Update Report Comment (Single Pass Only)
 
 After ALL fix skill invocations have completed:
 
@@ -126,6 +168,16 @@ After ALL fix skill invocations have completed:
 2. Update the result records with new status (pass/fail) and updated detail
 3. **Do NOT invoke additional fix skills** — this is a single re-verification pass
 4. If a criterion still fails after the fix attempt, record `status: 'fail'` and note "Still failing after fix attempt"
+
+**Update the verification report comment:**
+
+5. Construct the full report in the Step 5 format (with "After Fix" column populated for previously-failed criteria)
+6. Call `mcp__issue_management__update_comment` with:
+   - `commentId`: the ID saved from Step 2.5
+   - `number`: your own issue number
+   - `body`: the updated full report
+   - `markupLanguage`: `"GFM"`
+7. Update the recap artifact by calling `recap.add_artifact` again with the same `primaryUrl` (this replaces the existing entry)
 
 ### Step 5: Return Structured Report
 
@@ -183,4 +235,4 @@ Call `recap.set_loom_state` at these workflow boundaries, **always passing your 
 - `done` — After returning the verification report (regardless of whether must-haves passed or failed — the verifier's job is complete)
 - `failed` — On any unrecoverable error
 
-**IMPORTANT:** Return the full report text as your output so the orchestrator can log it and determine whether to proceed to the next wave.
+**IMPORTANT:** Return the full report text as your output so the orchestrator can log it and determine whether to proceed to the next wave. The report has already been posted (or posted and updated) as a comment on the verification issue — the orchestrator does not need to post it separately.
