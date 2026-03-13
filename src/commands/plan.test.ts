@@ -285,12 +285,21 @@ describe('PlanCommand', () => {
 			expect(claudeTrust.preAcceptClaudeTrust).toHaveBeenCalledWith(process.cwd())
 		})
 
-		it('should not restrict allowedTools', async () => {
+		it('should pre-approve issue management tools', async () => {
 			await command.execute()
 
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
-			expect(options.allowedTools).toBeUndefined()
+			expect(options.allowedTools).toEqual([
+				'mcp__issue_management__get_issue',
+				'mcp__issue_management__get_child_issues',
+				'mcp__issue_management__create_issue',
+				'mcp__issue_management__create_child_issue',
+				'mcp__issue_management__create_comment',
+				'mcp__issue_management__create_dependency',
+				'mcp__issue_management__get_dependencies',
+				'mcp__issue_management__remove_dependency',
+			])
 		})
 
 		it('should load analyzer agent and pass to launchClaude', async () => {
@@ -686,12 +695,22 @@ describe('PlanCommand', () => {
 			)
 		})
 
-		it('does not restrict allowedTools in autoSwarm mode', async () => {
+		it('includes harness signal tool in allowedTools for autoSwarm mode', async () => {
 			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
 
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
-			expect(options.allowedTools).toBeUndefined()
+			expect(options.allowedTools).toEqual([
+				'mcp__issue_management__get_issue',
+				'mcp__issue_management__get_child_issues',
+				'mcp__issue_management__create_issue',
+				'mcp__issue_management__create_child_issue',
+				'mcp__issue_management__create_comment',
+				'mcp__issue_management__create_dependency',
+				'mcp__issue_management__get_dependencies',
+				'mcp__issue_management__remove_dependency',
+				'mcp__harness__signal',
+			])
 		})
 
 		it('sets AUTO_SWARM_MODE: true in template variables', async () => {

@@ -220,9 +220,10 @@ Return the verification report in this exact format:
 
 *(If no fix skills were invoked: "None — all must-haves passed on initial verification.")*
 
-### Overall Status: [ALL_PASSED | PARTIALLY_FIXED | FAILURES_REMAIN]
+### Overall Status: [ALL_PASSED | ALL_FIXED | PARTIALLY_FIXED | FAILURES_REMAIN]
 
 - **ALL_PASSED**: All must-haves passed initial verification (no fix skills needed)
+- **ALL_FIXED**: Some must-haves failed initially but ALL were fixed after re-verification
 - **PARTIALLY_FIXED**: Some failures were fixed but others remain
 - **FAILURES_REMAIN**: One or more must-haves are still failing after re-verification
 

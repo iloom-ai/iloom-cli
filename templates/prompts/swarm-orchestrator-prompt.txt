@@ -468,23 +468,19 @@ git log --oneline -5
 
 #### Step 5.2.5a: Run Code Review
 
-**Delegate this to a subagent.** Spawn a Task subagent to invoke the code reviewer:
+**Delegate this to a subagent.** Spawn a Task subagent using the code reviewer agent directly:
 
-- `subagent_type`: `"general-purpose"`
+- `subagent_type`: `"iloom-swarm-code-reviewer"`
 - Prompt:
 
 ```
 Run a full code review of the integrated epic branch.
 
-## Instructions
-
 You are in the epic worktree at `{{EPIC_WORKTREE_PATH}}`. All child agents' work has been merged into this branch.
 
-1. Execute: @agent-iloom-code-reviewer with prompt "Run code review."
-2. Wait for the review to complete.
-3. Report back with the full review results, including all findings with their confidence scores, file locations, and recommendations.
-   - If no issues found, report "No issues found."
-   - If issues found, include the full structured report (Critical issues 95-100, Warnings 80-94).
+Report the full review results, including all findings with their confidence scores, file locations, and recommendations.
+- If no issues found, report "No issues found."
+- If issues found, include the full structured report (Critical issues 95-100, Warnings 80-94).
 ```
 
 **Handle the subagent result:**

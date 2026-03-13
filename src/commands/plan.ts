@@ -483,6 +483,19 @@ export class PlanCommand {
 		// Determine if we're in print/headless mode
 		const isHeadless = printOptions?.print ?? false
 
+		// Pre-approve issue management tools so the plan agent can use them without prompting
+		const allowedTools = [
+			'mcp__issue_management__get_issue',
+			'mcp__issue_management__get_child_issues',
+			'mcp__issue_management__create_issue',
+			'mcp__issue_management__create_child_issue',
+			'mcp__issue_management__create_comment',
+			'mcp__issue_management__create_dependency',
+			'mcp__issue_management__get_dependencies',
+			'mcp__issue_management__remove_dependency',
+			...(autoSwarm ? ['mcp__harness__signal'] : []),
+		]
+
 		// Build Claude options
 		const claudeOptions: Parameters<typeof launchClaude>[1] = {
 			model: effectiveModel,
@@ -490,6 +503,7 @@ export class PlanCommand {
 			appendSystemPrompt: architectPrompt,
 			mcpConfig,
 			addDir: process.cwd(),
+			allowedTools,
 			...(agents && { agents }),
 		}
 
