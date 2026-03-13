@@ -308,8 +308,46 @@ async function main() {
 
     // Special handling for UserPromptSubmit - output JSON additionalContext instead of broadcasting
     if (status === 'user_prompt_submit') {
-      // In swarm mode, agents handle their own workflow — only remind about code reviewer
+      // In swarm mode, check if swarm has completed to show appropriate reminder
       if (process.env.ILOOM_SWARM === '1') {
+        // Read epic metadata to check if swarm has finished
+        let swarmCompleted = false;
+        try {
+          const metadataPath = getMetadataFilePath(cwd);
+          if (fs.existsSync(metadataPath)) {
+            const content = fs.readFileSync(metadataPath, 'utf8');
+            const metadata = JSON.parse(content);
+            swarmCompleted = metadata.state === 'done' || metadata.state === 'failed';
+          }
+        } catch {
+          // If we can't read metadata, assume swarm is still running → use minimal reminder
+        }
+
+        if (swarmCompleted) {
+          // Swarm finished — show full routing table with swarm-prefixed agents
+          const reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
+
+| Request Type | Action |
+|--------------|--------|
+| Trivial (quick answer, single-line fix) | Handle directly |
+| Bug investigation / analysis - ESPECIALLY INVOLVING 3rd PARTY APIs/LIBRARIES | \`@agent-iloom-swarm-issue-analyzer\` → present findings → offer to fix |
+| Code changes | \`@agent-iloom-swarm-issue-implementer\` - TELL THE AGENT NOT TO MAKE/UPDATE ISSUE COMMENTS TO AVOID POLLUTION |
+| On 3rd repeated attempt at fixing the same problem | \`@agent-iloom-swarm-issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm-issue-implementer\` - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
+| New features / complex changes | \`@agent-iloom-swarm-issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm-issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
+| Deep questions (how/why something works) | \`@agent-iloom-swarm-issue-analyzer\` |
+| Code review request | \`@agent-iloom-swarm-code-reviewer\` |`;
+          const output = {
+            hookSpecificOutput: {
+              hookEventName: 'UserPromptSubmit',
+              additionalContext: reminder
+            }
+          };
+          console.log(JSON.stringify(output));
+          debug('UserPromptSubmit: swarm completed, output full swarm routing reminder');
+          process.exit(0);
+        }
+
+        // Swarm still in progress — agents handle their own workflow, only remind about code reviewer
         const swarmReminder = `**REMINDER**: When the user requests a code review, use \`@agent-iloom-code-reviewer\`.`;
         const output = {
           hookSpecificOutput: {
@@ -318,7 +356,7 @@ async function main() {
           }
         };
         console.log(JSON.stringify(output));
-        debug('UserPromptSubmit: swarm mode, output code reviewer reminder');
+        debug('UserPromptSubmit: swarm in progress, output code reviewer reminder');
         process.exit(0);
       }
 

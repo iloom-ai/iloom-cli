@@ -199,7 +199,16 @@ If both fail, mark the child as `failed` with the error and skip spawning.
 
 **Do NOT use `il start` to create worktrees. Worktrees are created by this orchestrator via `git worktree add`.**
 
-#### Step 2.2b: Spawn the Child Agent
+#### Step 2.2b: Capture Pre-Wave Commit and Spawn the Child Agent
+
+**Before spawning this wave**, capture the current epic branch HEAD so the wave verifier can diff only the changes introduced by this wave:
+
+```bash
+cd "{{EPIC_WORKTREE_PATH}}"
+PRE_WAVE_COMMIT=$(git rev-parse HEAD)
+```
+
+Save `PRE_WAVE_COMMIT` — you will pass it to any verification agents spawned for this wave.
 
 **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
 
@@ -242,6 +251,8 @@ The prompt for each verification agent should be exactly:
 ```
 Issue: #<child-number>
 Worktree: <child-worktree-path>
+Epic Worktree: {{EPIC_WORKTREE_PATH}}
+Pre-wave commit: <PRE_WAVE_COMMIT>
 
 IMPORTANT: Your working directory is <child-worktree-path>. Run `cd <child-worktree-path>` as your FIRST action before doing ANY work.
 ```
@@ -397,7 +408,9 @@ If the `il cleanup` command fails, log the error but continue with the orchestra
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
 2. Check if any previously blocked children are now unblocked (empty `blockedBy` list)
-3. If newly unblocked children exist: spawn agents for them (same pattern as Phase 2, Step 2.2)
+3. If newly unblocked children exist:
+   - Capture a fresh `PRE_WAVE_COMMIT` before spawning (same as Step 2.2b)
+   - Spawn agents for them (same pattern as Phase 2, Step 2.2)
 
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
@@ -476,7 +489,7 @@ git log --oneline -5
 ```
 Run a full code review of the integrated epic branch.
 
-You are in the epic worktree at `{{EPIC_WORKTREE_PATH}}`. All child agents' work has been merged into this branch.
+You are in the epic worktree at `{{EPIC_WORKTREE_PATH}}`. All child agents' work has been merged into this branch. Individual file changes have already been reviewed per-wave. Focus on cross-wave integration concerns: duplicate implementations across child issues, inconsistent patterns where children touched the same areas, conflicts introduced by combining waves.
 
 Report the full review results, including all findings with their confidence scores, file locations, and recommendations.
 - If no issues found, report "No issues found."
@@ -635,3 +648,7 @@ Mark todo #9, #10, #11, and #12 as completed.
 Mark todo #9, #10, and #11 as completed.
 {{/if}}
 {{/if}}
+
+### Step 5.5: Mark Epic as Complete
+
+Call `mcp__recap__set_loom_state` with `{ "state": "done" }` (omit `worktreePath` — this targets the epic loom itself). This lets the iloom hook detect swarm completion and show appropriate agent guidance for follow-up questions.
