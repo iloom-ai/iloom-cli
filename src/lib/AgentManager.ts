@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import fs from 'fs-extra'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
-import type { IloomSettings } from './SettingsManager.js'
+import { VALID_CLAUDE_MODELS, type IloomSettings } from './SettingsManager.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from './PromptTemplateManager.js'
 
 // Agent schema interface
@@ -200,7 +200,7 @@ export class AgentManager {
 			}
 
 			// Validate model and warn if non-standard
-			const validModels = ['sonnet', 'opus', 'haiku']
+			const validModels: readonly string[] = VALID_CLAUDE_MODELS
 			if (!validModels.includes(data.model)) {
 				logger.warn(
 					`Agent ${data.name} uses model "${data.model}" which may not be recognized by Claude CLI, and your workflow may fail or produce unexpected results. ` +

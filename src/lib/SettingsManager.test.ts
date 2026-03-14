@@ -688,12 +688,12 @@ describe('SettingsManager', () => {
 			}
 
 			expect(() => settingsManager['validateSettings'](invalidSettings as never)).toThrow(
-				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku'/,
+				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku' \| 'sonnet\[1m\]' \| 'opus\[1m\]'/,
 			)
 		})
 
 		it('should accept all valid shorthand model names', () => {
-			const validModels = ['sonnet', 'opus', 'haiku'] as const
+			const validModels = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const
 
 			validModels.forEach(model => {
 				const settings = {
@@ -3002,7 +3002,7 @@ const error: { code?: string; message: string } = {
 		})
 
 		it('accepts all valid model values for swarmModel on BaseAgentSettingsSchema', () => {
-			for (const model of ['sonnet', 'opus', 'haiku'] as const) {
+			for (const model of ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const) {
 				const result = BaseAgentSettingsSchema.safeParse({ swarmModel: model })
 				expect(result.success).toBe(true)
 			}

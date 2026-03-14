@@ -13,16 +13,20 @@ const mergeModeTransform = (val: string): MergeMode => {
 	return (map[val] ?? val) as MergeMode
 }
 
+// Valid Claude model shorthands: standard + 1M context window variants
+export const VALID_CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const
+export type ClaudeModel = (typeof VALID_CLAUDE_MODELS)[number]
+
 /**
  * Zod schema for base agent settings (without nested agents)
  */
 export const BaseAgentSettingsSchema = z.object({
 	model: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.optional()
-		.describe('Claude model shorthand: sonnet, opus, or haiku'),
+		.describe('Claude model shorthand: sonnet, opus, haiku, sonnet[1m], or opus[1m]'),
 	swarmModel: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.optional()
 		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
 	enabled: z
@@ -57,11 +61,11 @@ export const AgentSettingsSchema = BaseAgentSettingsSchema
  */
 export const SpinAgentSettingsSchema = z.object({
 	model: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.default('opus')
 		.describe('Claude model shorthand for spin orchestrator'),
 	swarmModel: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.optional()
 		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
 	postSwarmReview: z
@@ -76,7 +80,7 @@ export const SpinAgentSettingsSchema = z.object({
  */
 export const PlanCommandSettingsSchema = z.object({
 	model: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.default('opus')
 		.describe('Claude model shorthand for plan command'),
 	planner: z
@@ -99,7 +103,7 @@ export const PlanCommandSettingsSchema = z.object({
  */
 export const SummarySettingsSchema = z.object({
 	model: z
-		.enum(['sonnet', 'opus', 'haiku'])
+		.enum(VALID_CLAUDE_MODELS)
 		.default('sonnet')
 		.describe('Claude model shorthand for session summary generation'),
 })
@@ -777,15 +781,15 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		),
 	spin: z
 		.object({
-			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
-			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			model: z.enum(VALID_CLAUDE_MODELS).optional(),
+			swarmModel: z.enum(VALID_CLAUDE_MODELS).optional(),
 			postSwarmReview: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),
 	plan: z
 		.object({
-			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			model: z.enum(VALID_CLAUDE_MODELS).optional(),
 			planner: z.enum(['claude', 'gemini', 'codex']).optional(),
 			reviewer: z.enum(['claude', 'gemini', 'codex', 'none']).optional(),
 			waveVerification: z.boolean().optional(),
@@ -794,7 +798,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Plan command configuration'),
 	summary: z
 		.object({
-			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			model: z.enum(VALID_CLAUDE_MODELS).optional(),
 		})
 		.optional()
 		.describe('Session summary generation configuration'),
@@ -1341,9 +1345,9 @@ export class SettingsManager {
 	 * Default is defined in SpinAgentSettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 * @returns Model shorthand (e.g. 'opus', 'sonnet', 'haiku', 'sonnet[1m]', 'opus[1m]')
 	 */
-	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): 'sonnet' | 'opus' | 'haiku' {
+	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): ClaudeModel {
 		if (mode === 'swarm') {
 			if (settings?.spin?.swarmModel) {
 				return settings.spin.swarmModel
@@ -1359,9 +1363,9 @@ export class SettingsManager {
 	 * Default is defined in PlanCommandSettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 * @returns Model shorthand (e.g. 'opus', 'sonnet', 'haiku', 'sonnet[1m]', 'opus[1m]')
 	 */
-	getPlanModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+	getPlanModel(settings?: IloomSettings): ClaudeModel {
 		return settings?.plan?.model ?? PlanCommandSettingsSchema.parse({}).model
 	}
 
@@ -1403,9 +1407,9 @@ export class SettingsManager {
 	 * Default is defined in SummarySettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 * @returns Model shorthand (e.g. 'opus', 'sonnet', 'haiku', 'sonnet[1m]', 'opus[1m]')
 	 */
-	getSummaryModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+	getSummaryModel(settings?: IloomSettings): ClaudeModel {
 		return settings?.summary?.model ?? SummarySettingsSchema.parse({}).model
 	}
 }

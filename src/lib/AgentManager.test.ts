@@ -491,7 +491,7 @@ Prompt`
 
 	describe('validateAgentConfig - model validation', () => {
 		it('should accept valid model aliases', async () => {
-			const validModels = ['sonnet', 'opus', 'haiku']
+			const validModels = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]']
 
 			for (const model of validModels) {
 				vi.clearAllMocks()

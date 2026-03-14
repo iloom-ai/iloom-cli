@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager } from './SettingsManager.js'
+import { SettingsManager, type ClaudeModel } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
@@ -65,7 +65,7 @@ export class SwarmSetupService {
 		// listed explicitly so that swarm mode never accidentally inherits a
 		// non-swarm model override. User-configured swarmModel values always
 		// take precedence.
-		const defaultSwarmModels: Record<string, 'sonnet' | 'opus' | 'haiku'> = {
+		const defaultSwarmModels: Record<string, ClaudeModel> = {
 			'iloom-issue-analyzer': 'opus',
 			'iloom-issue-analyze-and-plan': 'opus',
 			'iloom-issue-planner': 'sonnet',

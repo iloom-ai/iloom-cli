@@ -1368,7 +1368,7 @@ il plan <issue-number> [options]
 
 | Flag | Values | Description |
 |------|--------|-------------|
-| `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
+| `--model <model>` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]` | Model to use (default: from settings `plan.model`, falls back to 'opus'). The `[1m]` variants use the 1M context window. `opus[1m]` requires a Max or Team plan. |
 | `--one-shot <mode>` | `default`, `noReview`, `bypassPermissions` | One-shot automation mode (`noReview` skips confirmation gates; `bypassPermissions` skips both gates and permission prompts) |
 | `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping confirmation gates (composable with `--one-shot`) |
 | `--autonomous` | - | Alias for `--one-shot=bypassPermissions` (backwards compat) |
@@ -1516,7 +1516,7 @@ Settings file (`.iloom/settings.json`):
 
 | Setting | Values | Default | Description |
 |---------|--------|---------|-------------|
-| `plan.model` | `opus`, `sonnet`, `haiku` | `opus` | Claude model for the planning session |
+| `plan.model` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]` | `opus` | Claude model for the planning session. The `[1m]` variants use the 1M context window. `opus[1m]` requires a Max or Team plan. |
 | `plan.planner` | `claude`, `gemini`, `codex` | `claude` | AI provider for generating plans |
 | `plan.reviewer` | `claude`, `gemini`, `codex`, `none` | `none` | AI provider for reviewing plans |
 | `plan.waveVerification` | `true`, `false` | `true` | Generate verification child issues between dependency waves |

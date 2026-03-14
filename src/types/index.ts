@@ -1,3 +1,5 @@
+import type { ClaudeModel } from '../lib/SettingsManager.js'
+
 // Core types
 export interface Workspace {
   id: string
@@ -132,7 +134,7 @@ export interface DatabaseProvider {
 export interface Config {
   defaultPort: number
   databaseProvider?: 'neon' | 'supabase' | 'planetscale'
-  claudeModel?: 'opus' | 'sonnet' | 'haiku'
+  claudeModel?: ClaudeModel
   skipClaude?: boolean
   customWorkspaceRoot?: string
 }
