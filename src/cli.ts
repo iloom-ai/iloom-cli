@@ -1107,7 +1107,12 @@ program
       let currentProjectPath: string | null = null
       if (!options.global) {
         try {
-          currentProjectPath = await findMainWorktreePathWithSettings()
+          // Load settings from the primary git worktree (first in porcelain output),
+          // not cwd, so that settings.local.json overrides in child worktrees
+          // don't affect project path resolution
+          const primaryWorktrees = await manager.listWorktrees({ porcelain: true })
+          const primaryPath = primaryWorktrees[0]?.path
+          currentProjectPath = await findMainWorktreePathWithSettings(primaryPath)
         } catch (error) {
           // Only catch expected errors (not in a git repo or settings validation failed)
           // For these cases, we show all looms since we can't determine the current project
