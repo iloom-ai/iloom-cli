@@ -118,6 +118,11 @@ export interface TemplateVariables {
 	POST_SWARM_REVIEW?: boolean  // True when post-swarm code review is enabled (defaults to true)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
 	SWARM_TEAM_NAME?: string  // Unique team name for swarm orchestrator (project-epic-timestamp)
+	// Issue tracker and VCS provider context
+	ISSUE_TRACKER?: string  // Configured issue tracker: 'github', 'linear', 'jira'
+	IS_GITHUB_TRACKER?: boolean  // True when issue tracker is GitHub
+	VCS_PROVIDER?: string  // Configured VCS provider: 'github', 'bitbucket'
+	IS_GITHUB_VCS?: boolean  // True when VCS provider is GitHub
 }
 
 /**

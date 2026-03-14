@@ -331,6 +331,21 @@ Do NOT add "Implementation Details", "Technical Approach", or similar sections â
 
 ---
 
+## Issue Tracker
+
+The configured issue tracker for this project is **{{ISSUE_TRACKER}}**.
+
+**All issue operations** (creating issues, fetching issue details, managing dependencies, posting comments) **MUST use the `mcp__issue_management__*` MCP tools** listed below. These tools abstract across tracker backends (GitHub, Linear, Jira) and handle authentication, format conversion, and API differences automatically.
+
+{{#unless IS_GITHUB_TRACKER}}
+**Do NOT use `gh` CLI for issue or project management** (e.g., `gh issue`, `gh search`, `gh project`, `gh api` for issues) â€” the configured tracker is {{ISSUE_TRACKER}}, not GitHub. The `gh` CLI only works with GitHub issues and will fail or return irrelevant results. Use the MCP tools above instead.
+{{#if IS_GITHUB_VCS}}
+`gh` is still available for GitHub VCS operations: `gh pr`, `gh repo`.
+{{/if}}
+{{/unless}}
+
+---
+
 ## Issue Creation
 
 At the end of the planning session, you have MCP tools to create issues:

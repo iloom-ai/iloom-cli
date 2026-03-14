@@ -214,6 +214,94 @@ describe('PlanCommand', () => {
 		})
 	})
 
+	describe('Issue tracker and VCS provider variables', () => {
+		it('should pass github tracker variables by default', async () => {
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({
+					ISSUE_TRACKER: 'github',
+					IS_GITHUB_TRACKER: true,
+					VCS_PROVIDER: 'github',
+					IS_GITHUB_VCS: true,
+				})
+			)
+		})
+
+		it('should pass linear tracker with github VCS when configured', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({ issueManagement: { provider: 'linear' } }),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({
+					ISSUE_TRACKER: 'linear',
+					IS_GITHUB_TRACKER: false,
+					VCS_PROVIDER: 'github',
+					IS_GITHUB_VCS: true,
+				})
+			)
+		})
+
+		it('should pass jira tracker when configured', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({ issueManagement: { provider: 'jira' } }),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('jira')
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({
+					ISSUE_TRACKER: 'jira',
+					IS_GITHUB_TRACKER: false,
+				})
+			)
+		})
+
+		it('should pass bitbucket VCS when configured', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({
+					versionControl: { provider: 'bitbucket' },
+				}),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			await command.execute()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({
+					VCS_PROVIDER: 'bitbucket',
+					IS_GITHUB_VCS: false,
+				})
+			)
+		})
+	})
+
 	describe('Claude CLI availability', () => {
 		it('should throw error when Claude CLI is not available', async () => {
 			vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(false)

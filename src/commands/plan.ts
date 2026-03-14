@@ -445,6 +445,10 @@ export class PlanCommand {
 		const templateVariables: TemplateVariables = {
 			IS_VSCODE_MODE: isVscodeMode,
 			WAVE_VERIFICATION: waveVerification,
+			ISSUE_TRACKER: provider,
+			IS_GITHUB_TRACKER: provider === 'github',
+			VCS_PROVIDER: settings?.versionControl?.provider ?? 'github',
+			IS_GITHUB_VCS: (settings?.versionControl?.provider ?? 'github') === 'github',
 			EXISTING_ISSUE_MODE: !!decompositionContext,
 			FRESH_PLANNING_MODE: !decompositionContext,
 			PARENT_ISSUE_NUMBER: decompositionContext?.identifier,
