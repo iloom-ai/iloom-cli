@@ -158,6 +158,8 @@ export interface StartOptions {
   createOnly?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
+  // Skip Claude permission prompts without affecting one-shot mode
+  dangerouslySkipPermissions?: boolean
   // Complexity override (skips complexity evaluation)
   complexity?: ComplexityOverride
   // Optional body text for issue creation

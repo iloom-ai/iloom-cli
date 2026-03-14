@@ -435,12 +435,13 @@ program
       .default('default')
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
+  .option('--dangerously-skip-permissions', 'Skip Claude permission prompts without skipping workflow gates')
   .addOption(
     new Option('--complexity <level>', 'Override complexity evaluation (persists in loom metadata)')
       .choices(['trivial', 'simple', 'complex'])
   )
   .option('--create-only', 'Create workspace only (skip Claude, IDE, terminal, dev server)')
-  .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
+  .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean; dangerouslySkipPermissions?: boolean }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
       options.oneShot = 'bypassPermissions'
@@ -1576,7 +1577,13 @@ program
   .description('Launch interactive planning session with Architect persona')
   .argument('[prompt]', 'Initial planning prompt or topic')
   .option('--model <model>', 'Model to use (default: opus)')
-  .option('--yolo', 'Enable autonomous mode - Claude proceeds without user interaction')
+  .addOption(
+    new Option('--one-shot <mode>', 'One-shot automation mode')
+      .choices(['default', 'noReview', 'bypassPermissions'])
+  )
+  .option('--dangerously-skip-permissions', 'Skip Claude permission prompts without skipping confirmation gates')
+  .option('--autonomous', 'Alias for --one-shot=bypassPermissions (backwards compat)')
+  .option('--yolo', 'Full autonomy shorthand (--one-shot=bypassPermissions + --auto-swarm)')
   .option('--planner <provider>', 'AI provider for planning: claude, gemini, codex (default: claude)')
   .option('--reviewer <provider>', 'AI provider for review: claude, gemini, codex, none (default: none)')
   .option('-p, --print', 'Enable print/headless mode for CI/CD (uses bypassPermissions)')
@@ -1590,6 +1597,9 @@ program
   .option('--auto-swarm', 'Enable auto-swarm: plan, start epic, and spin automatically')
   .action(async (prompt?: string, options?: {
     model?: string
+    oneShot?: 'default' | 'noReview' | 'bypassPermissions'
+    dangerouslySkipPermissions?: boolean
+    autonomous?: boolean
     yolo?: boolean
     planner?: string
     reviewer?: string
@@ -1620,6 +1630,31 @@ program
         logger.warn('--json and --json-stream flags are ignored without --print')
       }
 
+      // Resolve flag hierarchy:
+      // --yolo sets: oneShot='bypassPermissions', autoSwarm=true
+      // --autonomous is alias for --one-shot=bypassPermissions (backwards compat)
+      // --dangerously-skip-permissions is standalone: permissionMode only, no AUTONOMOUS_MODE
+      // --auto-swarm is independent
+      let resolvedOneShot = options?.oneShot
+      let resolvedAutoSwarm = options?.autoSwarm ?? false
+      const resolvedDangerouslySkipPermissions = options?.dangerouslySkipPermissions ?? false
+
+      if (options?.yolo) {
+        if (resolvedOneShot !== undefined && resolvedOneShot !== 'bypassPermissions') {
+          logger.debug(`--yolo overrides --one-shot value to bypassPermissions`)
+        }
+        resolvedOneShot = 'bypassPermissions'
+        resolvedAutoSwarm = true
+      }
+
+      // --autonomous is just an alias for --one-shot=bypassPermissions
+      if (options?.autonomous) {
+        if (resolvedOneShot !== undefined && resolvedOneShot !== 'bypassPermissions') {
+          logger.debug(`--autonomous overrides --one-shot value to bypassPermissions`)
+        }
+        resolvedOneShot = 'bypassPermissions'
+      }
+
       const printOptions = options?.print
         ? {
             print: true,
@@ -1629,7 +1664,11 @@ program
             ...(options?.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions, options?.autoSwarm)
+      await command.execute(prompt, options?.model, {
+        ...(resolvedOneShot !== undefined && { oneShot: resolvedOneShot }),
+        ...(resolvedDangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
+        autoSwarm: resolvedAutoSwarm,
+      }, options?.planner, options?.reviewer, printOptions)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

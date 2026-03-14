@@ -365,6 +365,7 @@ export class StartCommand {
 					enableDevServer,
 					enableTerminal,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
+					...(input.options.dangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
 					...(input.options.complexity && { complexity: input.options.complexity }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),

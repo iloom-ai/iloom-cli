@@ -67,6 +67,7 @@ il start "<issue-description>"
 |------|--------|-------------|
 | `--one-shot` | `default`, `noReview`, `bypassPermissions` | Automation level for Claude CLI workflow |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping workflow gates (composable with `--one-shot`) |
 | `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (persists in loom metadata) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
@@ -148,6 +149,12 @@ il start 25 --complexity=simple
 
 # Skip complexity evaluation and run full automation
 il start 25 --complexity=complex --yolo
+
+# Skip permission prompts only (keep workflow gates active)
+il start 25 --dangerously-skip-permissions
+
+# Skip permission prompts and workflow gates
+il start 25 --dangerously-skip-permissions --one-shot=noReview
 ```
 
 **Notes:**
@@ -1362,13 +1369,31 @@ il plan <issue-number> [options]
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
-| `--yolo` | - | Autonomous mode: skip permission prompts and proceed automatically |
-| `--auto-swarm` | - | Fully autonomous pipeline: plan → start --epic → spin (implies `--yolo`) |
+| `--one-shot <mode>` | `default`, `noReview`, `bypassPermissions` | One-shot automation mode (`noReview` skips confirmation gates; `bypassPermissions` skips both gates and permission prompts) |
+| `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping confirmation gates (composable with `--one-shot`) |
+| `--autonomous` | - | Alias for `--one-shot=bypassPermissions` (backwards compat) |
+| `--yolo` | - | Full autonomy shorthand: `--one-shot=bypassPermissions` + `--auto-swarm` |
+| `--auto-swarm` | - | Auto-start swarm after planning: plan → start --epic → spin |
 | `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
-| `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
+| `-p, --print` | - | Enable print/headless mode for CI/CD (implies autonomous + `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
-| `--verbose` | | Enable verbose output (requires `--print`) |
+| `--verbose` | - | Enable verbose output (requires `--print`) |
+
+**Flag Behavior Matrix:**
+
+| Flag | Confirmation Gates | Permission Prompts | Auto-Swarm |
+|------|-------------------|-------------------|------------|
+| `--dangerously-skip-permissions` | Active | Skipped | No |
+| `--one-shot=noReview` | Skipped | Active | No |
+| `--one-shot=bypassPermissions` | Skipped | Skipped | No |
+| `--autonomous` (alias) | Skipped | Skipped | No |
+| `--auto-swarm` | Active | Active | Yes |
+| `--yolo` | Skipped | Skipped | Yes |
+
+All flags are composable. For example:
+- `--dangerously-skip-permissions --auto-swarm` skips permission prompts and auto-starts the swarm but keeps confirmation gates active.
+- `--dangerously-skip-permissions --one-shot=noReview` skips both permission prompts and confirmation gates.
 
 **Behavior:**
 
@@ -1452,8 +1477,8 @@ il plan --auto-swarm "Build user authentication system"
 ```
 
 **Behavior:**
-- Implies `--yolo` (autonomous mode, no confirmation prompts)
-- Both plan and spin phases run with `bypassPermissions`
+- `--auto-swarm` is independent of `--one-shot` and `--dangerously-skip-permissions`
+- Combine with `--yolo` for fully autonomous operation (no gates, no permission prompts)
 - Pipeline: plan → start --epic → spin (swarm mode)
 - If no child issues are created, falls back to a normal autonomous loom
 
@@ -2362,8 +2387,9 @@ Some flags work across multiple commands:
 
 | Flag | Commands | Description |
 |------|----------|-------------|
-| `--one-shot` | `start`, `spin` | Automation level for Claude workflows |
+| `--one-shot` | `start`, `spin`, `plan` | Automation level for Claude workflows |
 | `--yolo` | `start`, `spin`, `plan` | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
+| `--dangerously-skip-permissions` | `start`, `plan` | Skip Claude permission prompts without skipping workflow gates |
 | `--force`, `-f` | `finish`, `rebase` | Skip confirmation prompts |
 | `--dry-run`, `-n` | `finish`, `rebase` | Preview without executing |
 | `--help`, `-h` | All commands | Display command help |

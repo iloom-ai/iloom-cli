@@ -2352,6 +2352,88 @@ describe('IgniteCommand', () => {
 				launchClaudeSpy.mockRestore()
 			}
 		})
+
+		it('should set permissionMode=bypassPermissions when dangerouslySkipPermissions is stored in metadata', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with dangerouslySkipPermissions: true
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					dangerouslySkipPermissions: true,
+					// No oneShot - should NOT activate one-shot mode
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithDSP = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				await commandWithDSP.execute(undefined)
+
+				// Verify permissionMode is set to bypassPermissions
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].permissionMode).toBe('bypassPermissions')
+
+				// Verify the user prompt is the default workflow prompt (NOT one-shot mode)
+				const userPrompt = launchClaudeCall[0]
+				expect(userPrompt).toBe('Guide the user through the iloom workflow!')
+				expect(userPrompt).not.toContain('without awaiting confirmation')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should NOT set permissionMode when dangerouslySkipPermissions is not in metadata', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata without dangerouslySkipPermissions
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					// No dangerouslySkipPermissions, no oneShot
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithoutDSP = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				await commandWithoutDSP.execute(undefined)
+
+				// Verify permissionMode is the workflow default (acceptEdits for issue), not bypassPermissions
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].permissionMode).toBe('acceptEdits')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
 	})
 
 	describe('Answer Table Instructions - Universal Behavior', () => {

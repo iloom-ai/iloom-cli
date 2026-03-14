@@ -426,10 +426,12 @@ Verify integration (depends on A, B, C)
 Skip verification tasks only when the DAG is trivially small (2 or fewer child issues).
 {{/if}}
 
+{{#unless AUTONOMOUS_MODE}}
 **Before Creating Issues:**
 1. Summarize the proposed issues and their relationships
 2. Ask for explicit confirmation: "Ready to create these issues?"
 3. Create issues only after user approval
+{{/unless}}
 
 {{#if EXISTING_ISSUE_MODE}}
 **Issue Decomposition Mode:**

@@ -317,8 +317,8 @@ export class IgniteCommand {
 			const model = this.settingsManager.getSpinModel(this.settings)
 			let permissionMode = this.getPermissionModeForWorkflow(context.type)
 
-			// Override permission mode if bypassPermissions oneShot mode
-			if (effectiveOneShot === 'bypassPermissions') {
+			// Override permission mode if bypassPermissions oneShot mode or dangerouslySkipPermissions
+			if (effectiveOneShot === 'bypassPermissions' || metadata?.dangerouslySkipPermissions) {
 				permissionMode = 'bypassPermissions'
 			}
 

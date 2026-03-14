@@ -82,7 +82,7 @@ export class PlanCommand {
 	 * Main entry point for the plan command
 	 * @param prompt - Optional initial planning prompt or topic
 	 * @param model - Optional model to use (defaults to 'opus')
-	 * @param yolo - Optional flag to enable autonomous mode (skip permission prompts)
+	 * @param flags - Optional flags object controlling permissions and auto-swarm
 	 * @param planner - Optional planner provider (defaults to 'claude')
 	 * @param reviewer - Optional reviewer provider (defaults to 'none')
 	 * @param printOptions - Print mode options for headless/CI execution
@@ -90,7 +90,11 @@ export class PlanCommand {
 	public async execute(
 		prompt?: string,
 		model?: string,
-		yolo?: boolean,
+		flags?: {
+			oneShot?: 'default' | 'noReview' | 'bypassPermissions'
+			dangerouslySkipPermissions?: boolean
+			autoSwarm?: boolean
+		},
 		planner?: string,
 		reviewer?: string,
 		printOptions?: {
@@ -99,17 +103,16 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		},
-		autoSwarm?: boolean
+		}
 	): Promise<void> {
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (printOptions?.json ?? false) || (printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions, autoSwarm))
+			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, flags, planner, reviewer, printOptions))
 		}
 
-		return this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions, autoSwarm)
+		return this.executeInternal(prompt, model, flags, planner, reviewer, printOptions)
 	}
 
 	/**
@@ -118,7 +121,11 @@ export class PlanCommand {
 	private async executeInternal(
 		prompt?: string,
 		model?: string,
-		yolo?: boolean,
+		flags?: {
+			oneShot?: 'default' | 'noReview' | 'bypassPermissions'
+			dangerouslySkipPermissions?: boolean
+			autoSwarm?: boolean
+		},
 		planner?: string,
 		reviewer?: string,
 		printOptions?: {
@@ -127,8 +134,7 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		},
-		autoSwarm?: boolean
+		}
 	): Promise<void> {
 		// Validate and normalize planner CLI argument
 		let normalizedPlanner: PlannerProvider | undefined
@@ -152,10 +158,13 @@ export class PlanCommand {
 			normalizedReviewer = normalized as ReviewerProvider
 		}
 
+		const resolvedFlags = flags ?? {}
+		const autoSwarm = resolvedFlags.autoSwarm ?? false
+
 		logger.debug('PlanCommand.execute() starting', {
 			cwd: process.cwd(),
 			hasPrompt: !!prompt,
-			yolo,
+			flags: resolvedFlags,
 			planner: normalizedPlanner ?? planner,
 			reviewer: normalizedReviewer ?? reviewer,
 		})
@@ -386,15 +395,12 @@ export class PlanCommand {
 				logger.debug(`Telemetry auto_swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
 			}
 
-			// 1. Force yolo mode
-			yolo = true
-
-			// 2. Check for external harness (e.g., VS Code extension provides its own socket)
+			// 1. Check for external harness (e.g., VS Code extension provides its own socket)
 			const externalSocket = process.env.ILOOM_HARNESS_SOCKET
 			externalHarness = !!externalSocket
 
 			if (!externalSocket) {
-				// 3. Create and start harness server
+				// 2. Create and start harness server
 				harness = new HarnessServer()
 				await harness.start()
 			}
@@ -404,7 +410,7 @@ export class PlanCommand {
 				throw new Error('Unexpected: no harness socket path available')
 			}
 
-			// 4. Register "done" handler (only when we own the harness server)
+			// 3. Register "done" handler (only when we own the harness server)
 			if (harness) {
 				harness.registerHandler('done', (data) => {
 					epicData = data as typeof epicData
@@ -416,7 +422,7 @@ export class PlanCommand {
 				}, { idempotent: true })
 			}
 
-			// 5. Merge harness MCP config
+			// 4. Merge harness MCP config
 			const harnessMcpConfig = generateHarnessMcpConfig(socketPath)
 			mcpConfig = [...mcpConfig, ...harnessMcpConfig]
 		}
@@ -439,6 +445,19 @@ export class PlanCommand {
 
 		// Get wave verification setting (default true)
 		const waveVerification = settingsManager.getPlanWaveVerification(settings ?? undefined)
+
+		// Determine if we're in print/headless mode (needed early for template variables)
+		const isHeadless = printOptions?.print ?? false
+
+		// Resolve effective flag values once, early, so they can be reused for both
+		// template variables and runtime logic (autonomous-mode gating, permission bypass, etc.).
+		// - oneShot='noReview' or 'bypassPermissions' enables AUTONOMOUS_MODE (skips confirmation gates)
+		// - oneShot='bypassPermissions' also sets permissionMode=bypassPermissions
+		// - dangerouslySkipPermissions sets permissionMode=bypassPermissions without AUTONOMOUS_MODE
+		// - Print/headless mode implies both autonomous and skip-permissions
+		const effectiveOneShot = isHeadless ? 'bypassPermissions' as const : (resolvedFlags.oneShot ?? 'default')
+		const effectiveAutonomous = effectiveOneShot === 'noReview' || effectiveOneShot === 'bypassPermissions'
+		const skipPermissions = effectiveOneShot === 'bypassPermissions' || (resolvedFlags.dangerouslySkipPermissions ?? false)
 
 		// Load plan prompt template with mode-specific variables
 		logger.debug('Loading plan prompt template')
@@ -463,7 +482,8 @@ export class PlanCommand {
 			PLANNER: effectivePlanner,
 			REVIEWER: effectiveReviewer,
 			HAS_REVIEWER: effectiveReviewer !== 'none',
-			AUTO_SWARM_MODE: autoSwarm ?? false,
+			AUTO_SWARM_MODE: autoSwarm,
+			AUTONOMOUS_MODE: effectiveAutonomous,
 			...providerFlags,
 		}
 		const architectPrompt = await this.templateManager.getPrompt('plan', templateVariables)
@@ -483,9 +503,6 @@ export class PlanCommand {
 		} catch (error) {
 			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
-
-		// Determine if we're in print/headless mode
-		const isHeadless = printOptions?.print ?? false
 
 		// Pre-approve issue management tools so the plan agent can use them without prompting
 		const allowedTools = [
@@ -528,18 +545,24 @@ export class PlanCommand {
 			claudeOptions.outputFormat = 'stream-json' // Force stream-json for streaming
 		}
 
-		// Force yolo mode when print mode is enabled (headless execution requires autonomous mode)
-		const effectiveYolo = (yolo ?? false) || isHeadless
-
-		// Handle --yolo mode
-		if (effectiveYolo) {
-			// Only require prompt for explicit --yolo flag, not for print mode auto-yolo
-			if (yolo && !prompt) {
-				throw new Error('--yolo requires a prompt or issue identifier (e.g., il plan --yolo "add gitlab support" or il plan --yolo 42)')
+		// Handle one-shot mode validation: require prompt when running autonomously
+		if (effectiveAutonomous && !isHeadless) {
+			if (!prompt) {
+				throw new Error('Autonomous mode (--one-shot=noReview, --one-shot=bypassPermissions, --autonomous, or --yolo) requires a prompt or issue identifier (e.g., il plan --autonomous "add gitlab support" or il plan --yolo 42)')
 			}
-			logger.warn(
-				'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
-			)
+		}
+
+		// Warn when skip-permissions is active
+		if (skipPermissions) {
+			if (effectiveAutonomous) {
+				logger.warn(
+					'Autonomous mode enabled - Claude will skip permission prompts and proceed without user interaction. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				)
+			} else {
+				logger.warn(
+					'Permission bypass enabled - Claude will skip permission prompts. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				)
+			}
 		}
 
 		logger.debug('Launching Claude with options', {
@@ -547,7 +570,9 @@ export class PlanCommand {
 			headless: claudeOptions.headless,
 			hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
 			addDir: claudeOptions.addDir,
-			yolo,
+			effectiveAutonomous,
+			effectiveOneShot,
+			autoSwarm,
 			print: isHeadless,
 		})
 
@@ -572,8 +597,8 @@ export class PlanCommand {
 			initialMessage = 'Help me plan a feature or decompose work into issues.'
 		}
 
-		// Apply yolo mode wrapper if enabled (includes print mode)
-		if (effectiveYolo) {
+		// Apply autonomous mode wrapper if enabled (includes print mode)
+		if (effectiveAutonomous) {
 			initialMessage = `[AUTONOMOUS MODE]
 Proceed through the flow without requiring user interaction. Make and document your assumptions and proceed to create the epic and child issues and dependencies if necessary. This guidance supersedes all previous guidance.
 
@@ -584,7 +609,7 @@ ${initialMessage}`
 		try {
 			const claudeResult = await launchClaude(initialMessage, {
 				...claudeOptions,
-				...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
+				...(skipPermissions && { permissionMode: 'bypassPermissions' as const }),
 				...(controller && { signal: controller.signal }),
 			})
 

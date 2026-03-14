@@ -114,6 +114,7 @@ export interface TemplateVariables {
 	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
 	WAVE_VERIFICATION?: boolean  // True when wave verification is enabled (planner generates verification child issues)
 	AUTO_SWARM_MODE?: boolean  // True when plan command launched with --auto-swarm flag
+	AUTONOMOUS_MODE?: boolean  // True when plan command launched with --autonomous or --yolo flag (skips confirmation gates)
 	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
 	POST_SWARM_REVIEW?: boolean  // True when post-swarm code review is enabled (defaults to true)
 	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates

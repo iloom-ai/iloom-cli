@@ -524,7 +524,7 @@ describe('PlanCommand', () => {
 			expect(launchClaudeCall[1].verbose).toBeUndefined()
 		})
 
-		it('should force yolo mode when print mode is enabled (AUTONOMOUS MODE prompt)', async () => {
+		it('should force autonomous mode when print mode is enabled (AUTONOMOUS MODE prompt)', async () => {
 			await command.execute('test prompt', undefined, undefined, undefined, undefined, { print: true })
 
 			// Print mode should automatically apply AUTONOMOUS MODE wrapper
@@ -538,8 +538,8 @@ describe('PlanCommand', () => {
 			)
 		})
 
-		it('should not require prompt when print mode enables yolo', async () => {
-			// Print mode with no prompt should work (unlike explicit --yolo which requires prompt)
+		it('should not require prompt when print mode enables autonomous', async () => {
+			// Print mode with no prompt should work (unlike explicit --autonomous which requires prompt)
 			await command.execute(undefined, undefined, undefined, undefined, undefined, { print: true })
 
 			// Should still apply AUTONOMOUS MODE and use default message
@@ -553,9 +553,9 @@ describe('PlanCommand', () => {
 			)
 		})
 
-		it('should force yolo even when explicit yolo=false is passed with print mode', async () => {
-			// Print mode should override explicit yolo=false
-			await command.execute('test prompt', undefined, false, undefined, undefined, { print: true })
+		it('should force autonomous even when no one-shot flags are passed with print mode', async () => {
+			// Print mode should force autonomous behavior regardless of other flags
+			await command.execute('test prompt', undefined, {}, undefined, undefined, { print: true })
 
 			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
 				expect.stringContaining('[AUTONOMOUS MODE]'),
@@ -570,73 +570,316 @@ describe('PlanCommand', () => {
 		})
 	})
 
-	describe('yolo mode', () => {
-		it('should add bypassPermissions when yolo is true', async () => {
-			await command.execute('test prompt', undefined, true)
+	describe('flag decoupling', () => {
+		describe('--one-shot=noReview', () => {
+			it('should set AUTONOMOUS_MODE but NOT permissionMode=bypassPermissions', async () => {
+				await command.execute('test prompt', undefined, { oneShot: 'noReview' })
 
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({
-					permissionMode: 'bypassPermissions',
+				// Should set AUTONOMOUS_MODE in template variables
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: true,
+					})
+				)
+
+				// Should wrap in [AUTONOMOUS MODE]
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+
+				// Should NOT set permissionMode=bypassPermissions
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.not.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+
+			it('should require a prompt', async () => {
+				await expect(command.execute(undefined, undefined, { oneShot: 'noReview' })).rejects.toThrow(
+					'Autonomous mode (--one-shot=noReview, --one-shot=bypassPermissions, --autonomous, or --yolo) requires a prompt or issue identifier'
+				)
+			})
+		})
+
+		describe('--one-shot=bypassPermissions', () => {
+			it('should set both AUTONOMOUS_MODE and permissionMode=bypassPermissions', async () => {
+				await command.execute('test prompt', undefined, { oneShot: 'bypassPermissions' })
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: true,
+					})
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+
+			it('should require a prompt', async () => {
+				await expect(command.execute(undefined, undefined, { oneShot: 'bypassPermissions' })).rejects.toThrow(
+					'Autonomous mode (--one-shot=noReview, --one-shot=bypassPermissions, --autonomous, or --yolo) requires a prompt or issue identifier'
+				)
+			})
+		})
+
+		describe('--dangerously-skip-permissions (standalone)', () => {
+			it('should set permissionMode=bypassPermissions but NOT AUTONOMOUS_MODE', async () => {
+				await command.execute('test prompt', undefined, { dangerouslySkipPermissions: true })
+
+				// Should NOT set AUTONOMOUS_MODE
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: false,
+					})
+				)
+
+				// Should NOT wrap in [AUTONOMOUS MODE]
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.not.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+
+				// Should set permissionMode=bypassPermissions
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+
+			it('should not require a prompt', async () => {
+				// dangerouslySkipPermissions alone doesn't require a prompt
+				await expect(command.execute(undefined, undefined, { dangerouslySkipPermissions: true })).resolves.toBeUndefined()
+			})
+		})
+
+		describe('--autonomous (alias for --one-shot=bypassPermissions)', () => {
+			it('should behave same as --one-shot=bypassPermissions (resolved at CLI level)', async () => {
+				// --autonomous is resolved in cli.ts to { oneShot: 'bypassPermissions' }
+				// Here we test PlanCommand with the resolved value
+				await command.execute('test prompt', undefined, { oneShot: 'bypassPermissions' })
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: true,
+					})
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+		})
+
+		describe('composability: --dangerously-skip-permissions + --one-shot=noReview', () => {
+			it('should set both AUTONOMOUS_MODE and permissionMode=bypassPermissions', async () => {
+				await command.execute('test prompt', undefined, { oneShot: 'noReview', dangerouslySkipPermissions: true })
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: true,
+					})
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+		})
+
+		describe('--auto-swarm without one-shot mode', () => {
+			let capturedHandlers: Map<string, HarnessHandler>
+			let mockHarnessInstance: {
+				path: string
+				start: ReturnType<typeof vi.fn>
+				stop: ReturnType<typeof vi.fn>
+				registerHandler: ReturnType<typeof vi.fn>
+			}
+
+			beforeEach(() => {
+				capturedHandlers = new Map<string, HarnessHandler>()
+				mockHarnessInstance = {
+					path: '/tmp/test-harness.sock',
+					start: vi.fn().mockResolvedValue(undefined),
+					stop: vi.fn().mockResolvedValue(undefined),
+					registerHandler: vi.fn((type: string, handler: HarnessHandler) => {
+						capturedHandlers.set(type, handler)
+					}),
+				}
+				vi.mocked(HarnessServer).mockImplementation(
+					() => mockHarnessInstance as unknown as HarnessServer
+				)
+				vi.mocked(mcpUtils.generateHarnessMcpConfig).mockReturnValue([
+					{ mcpServers: { harness: {} } },
+				])
+				vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+					const doneHandler = capturedHandlers.get('done')
+					if (doneHandler) {
+						await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+					}
+					return undefined
 				})
-			)
+			})
+
+			it('should NOT set permissionMode=bypassPermissions', async () => {
+				await command.execute('plan my epic', undefined, { autoSwarm: true })
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.not.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
+
+			it('should NOT wrap message in [AUTONOMOUS MODE]', async () => {
+				await command.execute('plan my epic', undefined, { autoSwarm: true })
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.not.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+			})
 		})
 
-		it('should not add bypassPermissions when yolo is false', async () => {
-			await command.execute(undefined, undefined, false)
-
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.not.objectContaining({
-					permissionMode: 'bypassPermissions',
+		describe('--yolo shorthand', () => {
+			it('should imply skip-permissions + autonomous + auto-swarm (via CLI resolution)', async () => {
+				// --yolo is resolved in cli.ts to { oneShot: 'bypassPermissions', autoSwarm: true }
+				// Here we test the PlanCommand with those resolved values
+				let capturedHandlers: Map<string, HarnessHandler> = new Map()
+				const mockHarnessInstance = {
+					path: '/tmp/test-harness.sock',
+					start: vi.fn().mockResolvedValue(undefined),
+					stop: vi.fn().mockResolvedValue(undefined),
+					registerHandler: vi.fn((type: string, handler: HarnessHandler) => {
+						capturedHandlers.set(type, handler)
+					}),
+				}
+				vi.mocked(HarnessServer).mockImplementation(
+					() => mockHarnessInstance as unknown as HarnessServer
+				)
+				vi.mocked(mcpUtils.generateHarnessMcpConfig).mockReturnValue([
+					{ mcpServers: { harness: {} } },
+				])
+				vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+					const doneHandler = capturedHandlers.get('done')
+					if (doneHandler) {
+						await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+					}
+					return undefined
 				})
-			)
+
+				await command.execute('plan my epic', undefined, {
+					oneShot: 'bypassPermissions',
+					autoSwarm: true,
+				})
+
+				// Verify bypassPermissions
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+				// Verify autonomous wrapper
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('[AUTONOMOUS MODE]'),
+					expect.any(Object)
+				)
+				// Verify harness was created (auto-swarm)
+				expect(HarnessServer).toHaveBeenCalled()
+			})
 		})
 
-		it('should structure prompt with AUTONOMOUS MODE and TOPIC sections when yolo is true', async () => {
-			const testPrompt = 'Help me plan a feature'
+		describe('no flags set', () => {
+			it('should not add bypassPermissions when no flags are set', async () => {
+				await command.execute()
 
-			await command.execute(testPrompt, undefined, true)
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.not.objectContaining({
+						permissionMode: 'bypassPermissions',
+					})
+				)
+			})
 
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining('[AUTONOMOUS MODE]'),
-				expect.any(Object)
-			)
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining('[TOPIC]'),
-				expect.any(Object)
-			)
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining(testPrompt),
-				expect.any(Object)
-			)
+			it('should not modify prompt when no flags are set', async () => {
+				const testPrompt = 'Help me plan a feature'
+
+				await command.execute(testPrompt)
+
+				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+					testPrompt,
+					expect.any(Object)
+				)
+			})
+
+			it('should pass AUTONOMOUS_MODE: false in template variables', async () => {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'plan',
+					expect.objectContaining({
+						AUTONOMOUS_MODE: false,
+					})
+				)
+			})
 		})
 
-		it('should throw error when yolo is true but no prompt provided', async () => {
-			await expect(command.execute(undefined, undefined, true)).rejects.toThrow(
-				'--yolo requires a prompt or issue identifier'
-			)
-		})
+		describe('warning messages', () => {
+			it('should log autonomous warning when oneShot=bypassPermissions is enabled', async () => {
+				const { logger } = await import('../utils/logger.js')
 
-		it('should not modify prompt when yolo is false', async () => {
-			const testPrompt = 'Help me plan a feature'
+				await command.execute('test prompt', undefined, { oneShot: 'bypassPermissions' })
 
-			await command.execute(testPrompt, undefined, false)
+				expect(logger.warn).toHaveBeenCalledWith(
+					'Autonomous mode enabled - Claude will skip permission prompts and proceed without user interaction. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				)
+			})
 
-			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
-				testPrompt,
-				expect.any(Object)
-			)
-		})
+			it('should log permission bypass warning when only dangerouslySkipPermissions is enabled', async () => {
+				const { logger } = await import('../utils/logger.js')
 
-		it('should log warning when yolo mode is enabled', async () => {
-			const { logger } = await import('../utils/logger.js')
+				await command.execute('test prompt', undefined, { dangerouslySkipPermissions: true })
 
-			await command.execute('test prompt', undefined, true)
-
-			expect(logger.warn).toHaveBeenCalledWith(
-				'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
-			)
+				expect(logger.warn).toHaveBeenCalledWith(
+					'Permission bypass enabled - Claude will skip permission prompts. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				)
+			})
 		})
 	})
 
@@ -748,7 +991,7 @@ describe('PlanCommand', () => {
 		it('creates and starts HarnessServer when ILOOM_HARNESS_SOCKET is not set', async () => {
 			delete process.env.ILOOM_HARNESS_SOCKET
 
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(HarnessServer).toHaveBeenCalled()
 			expect(mockHarnessInstance.start).toHaveBeenCalled()
@@ -759,7 +1002,7 @@ describe('PlanCommand', () => {
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 
 			// External harness mode: exits cleanly without checking epicData
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(HarnessServer).not.toHaveBeenCalled()
 		})
@@ -769,22 +1012,22 @@ describe('PlanCommand', () => {
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 
 			// External harness mode: exits cleanly, VS Code manages the pipeline
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith('/tmp/external.sock')
 		})
 
-		it('forces yolo mode (bypassPermissions) when autoSwarm is true', async () => {
-			await command.execute('plan my epic', undefined, false, undefined, undefined, undefined, true)
+		it('does not force bypassPermissions when only autoSwarm is true', async () => {
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
 				expect.any(String),
-				expect.objectContaining({ permissionMode: 'bypassPermissions' })
+				expect.not.objectContaining({ permissionMode: 'bypassPermissions' })
 			)
 		})
 
 		it('includes harness signal tool in allowedTools for autoSwarm mode', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
@@ -802,7 +1045,7 @@ describe('PlanCommand', () => {
 		})
 
 		it('sets AUTO_SWARM_MODE: true in template variables', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'plan',
@@ -811,7 +1054,7 @@ describe('PlanCommand', () => {
 		})
 
 		it('passes AbortSignal to launchClaude', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
 				expect.any(String),
@@ -820,14 +1063,14 @@ describe('PlanCommand', () => {
 		})
 
 		it('registers done handler on harness server', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(mockHarnessInstance.registerHandler).toHaveBeenCalledWith('done', expect.any(Function), { idempotent: true })
 		})
 
 		it('resolves successfully when done signal is received', async () => {
 			await expect(
-				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+				command.execute('plan my epic', undefined, { autoSwarm: true })
 			).resolves.toBeUndefined()
 		})
 
@@ -835,12 +1078,12 @@ describe('PlanCommand', () => {
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
 
 			await expect(
-				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+				command.execute('plan my epic', undefined, { autoSwarm: true })
 			).rejects.toThrow('Plan phase exited without completing. The Architect did not signal done.')
 		})
 
 		it('stops harness server in finally block on success', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(mockHarnessInstance.stop).toHaveBeenCalled()
 		})
@@ -849,7 +1092,7 @@ describe('PlanCommand', () => {
 			vi.mocked(claudeUtils.launchClaude).mockRejectedValue(new Error('Claude crashed'))
 
 			await expect(
-				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+				command.execute('plan my epic', undefined, { autoSwarm: true })
 			).rejects.toThrow('Claude crashed')
 
 			expect(mockHarnessInstance.stop).toHaveBeenCalled()
@@ -866,7 +1109,7 @@ describe('PlanCommand', () => {
 				return undefined
 			})
 
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			expect(doneResponse).toEqual({
 				type: 'instruction',
@@ -875,7 +1118,7 @@ describe('PlanCommand', () => {
 		})
 
 		it('merges harness MCP config with base MCP config', async () => {
-			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			await command.execute('plan my epic', undefined, { autoSwarm: true })
 
 			// generateHarnessMcpConfig called with the harness socket path
 			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith(mockHarnessInstance.path)

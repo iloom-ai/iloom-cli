@@ -47,6 +47,8 @@ export interface CreateLoomInput {
     enableTerminal?: boolean
     // One-shot automation mode
     oneShot?: import('./index.js').OneShotMode
+    // Skip Claude permission prompts without affecting one-shot mode
+    dangerouslySkipPermissions?: boolean
     // Complexity override (skips complexity evaluation)
     complexity?: import('./index.js').ComplexityOverride
     // Raw --set arguments to forward to spin
