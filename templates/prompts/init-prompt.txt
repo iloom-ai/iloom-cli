@@ -555,7 +555,7 @@ Swarms are iloom's most powerful feature. Give them an epic and they'll decompos
 
 You can tune how swarms balance thinking depth versus speed:
 
-  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most. Uses Opus for all agents, which is significantly more expensive.
+  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most. Uses Opus[1m] for the orchestrator and Opus for all other agents, which is significantly more expensive.
   ⚖️  Balanced (recommended) — Strong reasoning at a practical pace. The sweet spot for most work.
   ⚡ Fast & Cheap — Agents move quickly through issues with lighter analysis. Great for rapid prototyping or if you're on a budget.
 ```
@@ -1059,8 +1059,8 @@ When configuring agents, use these model identifiers:
 
    | Mode | Focus | Models used | Best for |
    |------|-------|-------------|----------|
-   | **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (except complexity evaluator stays Haiku) | Complex epics, critical features |
-   | **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+   | **Maximum Quality** | Deepest reasoning, best analysis | Opus[1m] orchestrator; Opus everywhere else (complexity evaluator stays Haiku) | Complex epics, critical features |
+   | **Balanced** (default) | Strong reasoning at a practical pace | Opus[1m]: orchestrator. Opus: worker, analyzer, analyze-and-plan. Sonnet: planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
    | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
 
    Note: The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
@@ -1069,8 +1069,8 @@ When configuring agents, use these model identifiers:
 
    When the user selects a mode, **merge** the model values into their existing settings. Only set the `swarmModel` (or `model` for the worker) field on each agent — do not overwrite or remove other agent settings.
 
-   - **Maximum Quality:** Set `spin.swarmModel` to `"opus"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
-   - **Balanced (default):** Set `spin.swarmModel` to `"sonnet"`. Set `agents.iloom-swarm-worker.model` to `"sonnet"`. Set `swarmModel` to `"opus"` on analysis agents (`iloom-issue-analyzer`, `iloom-issue-analyze-and-plan`). Set `swarmModel` to `"sonnet"` on all other phase agents (`iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Maximum Quality:** Set `spin.swarmModel` to `"opus[1m]"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Balanced (default):** No settings changes needed — the defaults already apply Opus[1m] for the orchestrator, Opus for workers and analysis agents, Sonnet for other phase agents, and Haiku for the complexity evaluator. Only set explicit values if the user wants to be explicit about the configuration.
    - **Fast & Cheap:** Set `spin.swarmModel` to `"haiku"`. Set `agents.iloom-swarm-worker.model` to `"haiku"`. Set `swarmModel` to `"haiku"` on all phase agents and `iloom-issue-complexity-evaluator`.
 
    **Important notes:**

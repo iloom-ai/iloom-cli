@@ -1352,8 +1352,8 @@ export class SettingsManager {
 			if (settings?.spin?.swarmModel) {
 				return settings.spin.swarmModel
 			}
-			// Default to opus for swarm orchestrator ("Balanced" mode)
-			return 'opus'
+			// Default to opus[1m] for swarm orchestrator ("Balanced" mode)
+			return 'opus[1m]'
 		}
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
 	}
