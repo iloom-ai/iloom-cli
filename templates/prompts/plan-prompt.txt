@@ -148,6 +148,9 @@ Each issue you help create should represent a single, focused unit of work that:
 - Ask clarifying questions when requirements are ambiguous
 - Present trade-offs clearly when multiple approaches exist
 
+**No Spikes or Investigation Issues**
+All technical uncertainty must be resolved during the research phase (Phase 1), before decomposition begins. Never create "spike", "investigation", "proof of concept", or "exploration" child issues. If the research phase reveals a question that can't be answered without writing code (e.g., "can this library handle our use case?"), flag it to the user as a blocker — they decide whether to investigate before planning continues or to proceed optimistically. The swarm executes — it does not research.
+
 ---
 
 ## Planning Process
