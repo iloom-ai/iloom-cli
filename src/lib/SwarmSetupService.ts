@@ -412,6 +412,7 @@ export class SwarmSetupService {
 			const templateVariables: TemplateVariables = {
 				SWARM_MODE: true,
 				EPIC_WORKTREE_PATH: epicWorktreePath,
+				...buildReviewTemplateVariables(true, settings?.agents),
 			}
 
 			const agents = await this.agentManager.loadAgents(settings, templateVariables, ['iloom-wave-verifier.md'])

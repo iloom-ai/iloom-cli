@@ -55,6 +55,13 @@ Codex review configured with model: {{REVIEW_CODEX_MODEL}}
 {{#if HAS_REVIEW_CLAUDE}}
 {{#unless HAS_REVIEW_GEMINI}}
 {{#unless HAS_REVIEW_CODEX}}
+### Pre-provided Diff Check
+
+**FIRST**: Check whether the invocation prompt contains a `## Pre-gathered Diff` section.
+
+- **If yes**: Use that diff directly as your working diff. Skip all of Step 0 (diff gathering) and Step 1 (context gathering from git). The diff and CLAUDE.md content have already been provided. Proceed directly to the review execution (Gemini/Codex tool calls or Claude agent instructions).
+- **If no**: Proceed with normal flow below.
+
 ## Claude-Only Configuration Detected
 
 **IMPORTANT: You are a SUBAGENT. You were spawned by an orchestrator (the main Claude session). The orchestrator has the Task tool and can spawn sub-agents - you cannot.**
@@ -264,6 +271,13 @@ Summary: X critical, Y warnings, Z suggestions
 {{!-- GEMINI/CODEX PATH: Agent gathers context and executes reviews --}}
 {{#if HAS_REVIEW_GEMINI}}
 ## Review Process
+
+### Pre-provided Diff Check
+
+**FIRST**: Check whether the invocation prompt contains a `## Pre-gathered Diff` section.
+
+- **If yes**: Use that diff directly as your working diff. Skip all of Step 0 (diff gathering) and Step 1 (context gathering from git). The diff and CLAUDE.md content have already been provided. Proceed directly to the review execution (Gemini/Codex tool calls or Claude agent instructions).
+- **If no**: Proceed with normal Step 0 diff gathering below.
 
 ### Step 0 - Determine What to Review
 
@@ -522,6 +536,13 @@ If ANY critical issues (95-100 confidence) are found from Gemini review:
 {{else}}
 {{#if HAS_REVIEW_CODEX}}
 ## Review Process
+
+### Pre-provided Diff Check
+
+**FIRST**: Check whether the invocation prompt contains a `## Pre-gathered Diff` section.
+
+- **If yes**: Use that diff directly as your working diff. Skip all of Step 0 (diff gathering) and Step 1 (context gathering from git). The diff and CLAUDE.md content have already been provided. Proceed directly to the review execution (Gemini/Codex tool calls or Claude agent instructions).
+- **If no**: Proceed with normal Step 0 diff gathering below.
 
 ### Step 0 - Determine What to Review
 

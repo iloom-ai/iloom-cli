@@ -308,6 +308,8 @@ Each child issue should include ONLY these sections:
    - `substantive: <file-path> — <what it should contain or export>` — the file has expected content, exports, or structure
    - `wired: <file-path> — <how it should be integrated>` — the code is properly connected to the rest of the system (e.g., registered in a router, imported by a parent module, called from an entry point)
 
+   For replacement or migration work, the `substantive` check type means "equivalent to the original in observable terms" — not just "file has expected content or exports." Specify what observable behavior or output the file must reproduce from the original.
+
    Example:
    ```
    ## Must-Haves
@@ -316,6 +318,14 @@ Each child issue should include ONLY these sections:
    - wired: src/lib/WaveVerifier.ts — imported and invoked in src/commands/finish.ts
    ```
 {{/if}}
+
+**Acceptance Criteria Quality Rules:**
+
+- **Observable over structural**: Criteria must describe what a user or developer can observe by using the app or running a command — not what exists in code. "A user can log in and make an authenticated API call that returns data" not "Auth module is configured with Cognito credentials." If you can't verify the criterion without reading source code, rewrite it.
+- **Replacement work requires comparison criteria**: When an issue replaces or rewrites existing functionality, at least one acceptance criterion must define equivalence to the original in observable terms — visual appearance, feature set, and behavior. Specify which dimensions must match. "Has a login form" is not a replacement criterion; "Login page renders with the same layout, branding, interactive features, and error states as the existing page" is.
+- **Integration points need cross-boundary criteria**: When work involves two systems communicating (shared auth, data passing between frameworks, synchronized state), at least one criterion must verify behavior across the boundary — not just that each side is configured. Pattern: "Action in system A produces expected result in system B."
+- **Criteria must specify the verification context**: State the conditions under which the criterion is verified. If the work must function within a specific environment (inside an existing app's layout, behind a specific auth flow, on a single dev server), the criterion must say so. "Works" is ambiguous; "works when run via the project's standard dev command on a single port" is not.
+- **Include constraint criteria for shared systems**: When work modifies or integrates with a shared system, at least one criterion must verify that existing behavior is preserved. "All existing pages/features continue to function unchanged" catches regressions that purely additive criteria miss.
 
 Do NOT add "Implementation Details", "Technical Approach", or similar sections — these violate the rule above.
 
@@ -355,8 +365,9 @@ Before presenting the plan to the user, audit it against these questions:
 1. **For each blocking dependency:** "Can I replace this with a shared contract so both issues run in parallel?" If yes, rewrite the issues with an explicit contract and remove the dependency.
 2. **DAG shape check:** Is the graph wide and shallow, or narrow and linear? If your longest chain is more than 2 deep, re-examine whether intermediate dependencies are truly hard blockers.
 3. **Contract completeness:** Does every issue that produces or consumes a shared API specify the exact contract (function signatures, types, module exports) in its description?
+4. **Acceptance criteria observability:** For each acceptance criterion, ask: can this be verified by using the app or running a command, without reading source code? If not, rewrite it.
 {{#if WAVE_VERIFICATION}}
-4. **Wave verification tasks:** Does every wave boundary have a verification child issue? Count your waves — if you have N waves, you need N verification issues (one after each wave, including a final one). If any wave boundary is missing a verification issue, add one now. This is mandatory, not optional.
+5. **Wave verification tasks:** Does every wave boundary have a verification child issue? Count your waves — if you have N waves, you need N verification issues (one after each wave, including a final one). If any wave boundary is missing a verification issue, add one now. This is mandatory, not optional.
 {{/if}}
 
 {{#if WAVE_VERIFICATION}}

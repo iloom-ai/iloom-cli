@@ -701,6 +701,153 @@ describe('SwarmSetupService', () => {
 
 	})
 
+	describe('renderSwarmWaveVerifierAgent', () => {
+		it('passes review template variables to loadAgents', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-code-reviewer': {
+						enabled: true,
+						providers: { claude: 'opus', gemini: 'pro', codex: 'o3' },
+					},
+				},
+			} as unknown as IloomSettings)
+
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					SWARM_MODE: true,
+					EPIC_WORKTREE_PATH: '/Users/dev/project-epic-610',
+					REVIEW_ENABLED: true,
+					REVIEW_CLAUDE_MODEL: 'opus',
+					HAS_REVIEW_CLAUDE: true,
+					REVIEW_GEMINI_MODEL: 'pro',
+					HAS_REVIEW_GEMINI: true,
+					REVIEW_CODEX_MODEL: 'o3',
+					HAS_REVIEW_CODEX: true,
+				}),
+				['iloom-wave-verifier.md'],
+			)
+		})
+
+		it('writes agent file with frontmatter and prompt body', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verification agent',
+					prompt: 'Verify the wave integration',
+					model: 'sonnet',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-wave-verifier.md'),
+			)?.[1] as string
+
+			expect(writtenContent).toContain('name: iloom-swarm-wave-verifier')
+			expect(writtenContent).toContain('description: Wave verification agent')
+			expect(writtenContent).toContain('model: sonnet')
+			expect(writtenContent).toContain('Verify the wave integration')
+		})
+
+		it('uses model from settings when configured', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-wave-verifier': { model: 'opus' },
+				},
+			} as unknown as IloomSettings)
+
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-wave-verifier.md'),
+			)?.[1] as string
+
+			expect(writtenContent).toContain('model: opus')
+		})
+
+		it('includes tools in frontmatter when agent defines them', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+					tools: ['Bash', 'Read', 'Grep'],
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-wave-verifier.md'),
+			)?.[1] as string
+
+			expect(writtenContent).toContain('tools: Bash, Read, Grep')
+		})
+
+		it('returns false when wave verifier template is not found', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({})
+
+			const result = await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			expect(result).toBe(false)
+		})
+
+		it('returns false and logs warning when loadAgents fails', async () => {
+			vi.mocked(mockAgentManager.loadAgents).mockRejectedValueOnce(
+				new Error('Failed to load agents'),
+			)
+
+			const result = await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			expect(result).toBe(false)
+		})
+
+		it('defaults review variables when no agent settings configured', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce(null)
+
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+				null,
+				expect.objectContaining({
+					REVIEW_ENABLED: true,
+					HAS_REVIEW_CLAUDE: true,
+					REVIEW_CLAUDE_MODEL: 'sonnet',
+					HAS_REVIEW_GEMINI: false,
+					HAS_REVIEW_CODEX: false,
+				}),
+				['iloom-wave-verifier.md'],
+			)
+		})
+	})
+
 	describe('copyAgentsAndSkillsToChildWorktrees', () => {
 		it('copies both .claude/agents/ and .claude/skills/ from epic to each successful child worktree', async () => {
 			const childWorktrees = [
