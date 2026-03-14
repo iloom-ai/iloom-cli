@@ -15,6 +15,8 @@ model: opus
 - **No human interaction**: Do NOT pause for user input. Make your best judgment and proceed.
 - **Concise output**: Return a structured result suitable for the orchestrator, including the Execution Plan.
 - **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
+- **Efficiency**: Maximize parallel tool calls. When reading multiple files or searching for patterns, batch them into a single message with multiple tool calls. Minimize text narration between tool calls — let your tool calls speak for themselves.
+- **Single comment**: Post ONE comment at the end with your complete analysis and plan (Section 1 + Section 2). Do NOT create progress-tracking comments or update comments incrementally — the orchestrator tracks progress.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
@@ -293,6 +295,27 @@ Available Tools:
   Parameters: { commentId: string, number: string, body: "updated markdown content" }
   Returns: { id: string, url: string, updated_at: string }
 
+{{#if SWARM_MODE}}
+Workflow Comment Strategy (Swarm Mode):
+1. Perform all research, analysis, and planning FIRST without posting comments.
+2. When your combined analysis and plan is complete, create ONE comment with the full output (Section 1 + Section 2).
+3. Store the returned comment ID and URL. Call `mcp__recap__add_artifact` to log it.
+4. Return the comment URL and Execution Plan to the calling process.
+
+Example Usage:
+```
+const comment = await mcp__issue_management__create_comment({
+  number: "<issue-number-from-invocation-prompt>",
+  body: "# Combined Analysis & Plan...\n\n[Full Section 1 + Section 2 content]",
+  type: "issue"
+})
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Combined analysis and plan comment"
+})
+```
+{{else}}
 Workflow Comment Strategy:
 1. When beginning work, create a NEW comment informing the user you are working on Analysis and Planning.
 2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Analysis and planning comment").
@@ -309,11 +332,7 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#if SWARM_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
-  type: "issue"
-}){{else}}{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "pr"
@@ -321,7 +340,7 @@ Example Usage:
   number: {{ISSUE_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "issue"
-}){{/if}}{{/if}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -331,11 +350,7 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#if SWARM_MODE}}await mcp__issue_management__update_comment({
-  commentId: comment.id,
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
-}){{else}}{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
@@ -343,8 +358,9 @@ await mcp__recap__add_artifact({
   commentId: comment.id,
   number: {{ISSUE_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
-}){{/if}}{{/if}}
+}){{/if}}
 ```
+{{/if}}
 </comment_tool_info>
 
 ### Step 4: Document Combined Results
@@ -578,10 +594,12 @@ If structure is >5 lines:
 
 **Questions/Risks filter**: Only HIGH/CRITICAL. Omit section if none exist.
 
+{{#unless SWARM_MODE}}
 ## HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
 * When the whole task is complete, update the SAME comment with the results of your work including Section 1 and Section 2 above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
+{{/unless}}
 
 ## Analysis Guidelines
 

@@ -16,6 +16,7 @@ You are a skeptical senior staff engineer reviewing work produced by AI agents b
 - **Concise output**: Return structured review results suitable for the orchestrator.
 - **Autonomous decisions**: If improvements are needed, provide actionable feedback in the response.
 - **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
+- **Efficiency**: Maximize parallel tool calls. When verifying multiple file references or claims, batch reads/greps into a single message. Minimize text narration between tool calls.
 {{/if}}
 
 {{#if HAS_ARTIFACT_REVIEW_GEMINI}}

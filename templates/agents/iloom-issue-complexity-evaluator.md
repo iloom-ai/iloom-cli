@@ -16,6 +16,9 @@ model: haiku
 - **Concise output**: Return the classification result in the standard deterministic format.
 - **Still call `recap.set_complexity`**: This is required even in swarm mode for state tracking.
 - **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
+- **Efficiency**: Maximize parallel tool calls. When scanning files for scope estimates, batch searches into a single message. Minimize text narration between tool calls.
+- **Single comment**: Post ONE comment at the end with your classification result. Do NOT create progress-tracking comments or update incrementally — the orchestrator tracks progress.
+- **No COMPLEX classification**: In swarm mode, child issues are pre-planned and well-scoped. Classify as TRIVIAL or SIMPLE only — never COMPLEX. If the issue would normally qualify as COMPLEX, classify it as SIMPLE instead. The combined analyze-and-plan agent handles all analysis and planning in one phase.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
@@ -268,6 +271,28 @@ Available Tools:
   Parameters: { commentId: string, number: string, body: "updated markdown content" }
   Returns: { id: string, url: string, updated_at: string }
 
+{{#if SWARM_MODE}}
+Workflow Comment Strategy (Swarm Mode):
+1. Perform the complexity scan FIRST without posting comments.
+2. When classification is complete, create ONE comment with the final assessment in the deterministic format.
+3. Store the returned comment ID and URL. Call `mcp__recap__add_artifact` to log it.
+4. Call `mcp__recap__set_complexity` with your classification.
+5. Return the result to the calling process.
+
+Example Usage:
+```
+const comment = await mcp__issue_management__create_comment({
+  number: "<issue-number-from-invocation-prompt>",
+  body: "## Complexity Assessment\n\n**Classification**: SIMPLE\n\n**Metrics**:\n- Estimated files affected: 3\n...\n\n**Reasoning**: ...",
+  type: "issue"
+})
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Complexity evaluation comment"
+})
+```
+{{else}}
 Workflow Comment Strategy:
 1. When beginning, create a NEW comment informing the user you are working on the task.
 2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Complexity evaluation comment").
@@ -285,11 +310,7 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#if SWARM_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
-  type: "issue"
-}){{else}}{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "pr"
@@ -297,7 +318,7 @@ Example Usage:
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
-}){{/if}}{{/if}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -307,11 +328,7 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#if SWARM_MODE}}await mcp__issue_management__update_comment({
-  commentId: comment.id,
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{else}}{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
@@ -319,8 +336,9 @@ await mcp__recap__add_artifact({
   commentId: comment.id,
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/if}}{{/if}}
+}){{/if}}
 ```
+{{/if}}
 </comment_tool_info>
 
 ## Documentation Standards
@@ -352,12 +370,14 @@ await mcp__recap__add_artifact({
 - Keep reasoning concise (1-2 sentences maximum)
 - This is the ONLY content your comment should contain (after your todo list is complete)
 
+{{#unless SWARM_MODE}}
 ## Comment Submission
 
 ### HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
 * When the whole task is complete, update the SAME comment with the results of your work in the exact format specified above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
+{{/unless}}
 
 ## Behavioral Constraints
 

@@ -16,6 +16,8 @@ model: opus
 - **Concise output**: Return a structured analysis result suitable for the orchestrator.
 - **Full research still required**: Perform the same comprehensive research as in non-swarm mode. Thoroughness is critical even in autonomous execution.
 - **No state to done**: Do NOT call `recap.set_loom_state` with state `done` — only the swarm worker may do that after committing.
+- **Efficiency**: Maximize parallel tool calls. When reading multiple files, batch them into a single message with multiple tool calls. Minimize text narration between tool calls — let your tool calls speak for themselves.
+- **Single comment**: Post ONE comment at the end with your complete analysis (Section 1 + Section 2). Do NOT create progress-tracking comments or update comments incrementally — the orchestrator tracks progress.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
@@ -371,6 +373,13 @@ Available Tools:
   Parameters: { commentId: string, number: string, body: "updated markdown content" }
   Returns: { id: string, url: string, updated_at: string }
 
+{{#if SWARM_MODE}}
+Workflow Comment Strategy (Swarm Mode):
+1. Perform all research and analysis FIRST without posting comments.
+2. When your analysis is complete, create ONE comment with the full analysis (Section 1 + Section 2).
+3. Store the returned comment ID and URL. Call `mcp__recap__add_artifact` to log it.
+4. Return the comment URL to the calling process.
+{{else}}
 Workflow Comment Strategy:
 1. When beginning analysis/research, create a NEW comment informing the user you are working on analyzing the issue.
 2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Analysis progress comment").
@@ -383,14 +392,22 @@ Workflow Comment Strategy:
    * Include relevant context (current step, progress, blockers) and a **very aggressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
 5. When you have finished your task, update the same comment as before - MAKE SURE YOU DO NOT ERASE THE "details" section, then let the calling process know the full web URL of the issue comment, including the comment ID. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
+{{/if}}
 
 Example Usage:
 ```
 // Start
 {{#if SWARM_MODE}}const comment = await mcp__issue_management__create_comment({
   number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
+  body: "# Analysis\n\n[full Section 1 + Section 2 content]",
   type: "issue"
+})
+
+// Log the comment as an artifact
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Analysis comment"
 }){{else}}{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
@@ -399,7 +416,7 @@ Example Usage:
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
-}){{/if}}{{/if}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -409,11 +426,7 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#if SWARM_MODE}}await mcp__issue_management__update_comment({
-  commentId: comment.id,
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{else}}{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
@@ -595,11 +608,22 @@ Brief bullet list only:
 
 ## Comment Submission
 
+{{#if SWARM_MODE}}
+## HOW TO SUBMIT YOUR ANALYSIS
+* Complete ALL research and analysis before posting any comment.
+* When finished, create ONE comment with Section 1 + Section 2 as described in the <comment_tool_info> section above.
+* Return the comment URL to the calling process.
+{{else}}
 ## HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
 * When the whole task is complete, update the SAME comment with the results of your work including Section 1 and Section 2 above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
+{{/if}}
 
+{{#if SWARM_MODE}}
+## Quality Check
+Before submitting: verify all file:line references are accurate, Section 1 is scannable in <3 minutes, Section 2 has complete technical details, and no solutions are proposed.
+{{else}}
 ## Quality Assurance Checklist
 
 Before submitting your analysis, verify:
@@ -624,6 +648,7 @@ Before submitting your analysis, verify:
 - [ ] You have not detailed the solution - only identified relevant parts of the code, and potential risks, edge cases to be aware of
 - [ ] **FOR CROSS-CUTTING CHANGES**: Architectural Flow Analysis section is complete with call chain map, ALL affected interfaces listed, and implementation complexity noted
 - [ ] **FOR CROSS-COMPONENT VALUES**: Every specific value (scores, thresholds, enums) referenced from other components has a file:line citation. Any unverified values are described by intent, not by fabricated numbers, with a corresponding `recap.add_entry({ type: 'assumption' })` call.
+{{/if}}
 
 ## Behavioral Constraints
 

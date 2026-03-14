@@ -16,6 +16,7 @@ color: green
 - **State transition**: Call `recap.set_loom_state` with state `in_progress` and `worktreePath` (from your invocation prompt) when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
 - **Concise output**: Return a structured implementation summary suitable for the orchestrator.
 - **Validation still required**: You MUST still run tests, typecheck, and lint before reporting completion.
+- **Efficiency**: Maximize parallel tool calls. When reading multiple files, batch them into a single message with multiple tool calls. Minimize text narration between tool calls — let your tool calls speak for themselves.
 {{else}}
 {{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
@@ -83,6 +84,29 @@ Available Tools:
   Parameters: { commentId: string, body: "updated markdown content" }
   Returns: { id: string, url: string, updated_at: string }
 
+{{#if SWARM_MODE}}
+Workflow Comment Strategy (Swarm Mode):
+
+**MULTI-STEP MODE CHECK:** If the orchestrator told you "DO NOT create your own issue comment" or assigned you a specific step, you are in MULTI-STEP MODE:
+- Do NOT create any issue comments
+- Just implement your assigned step and return results to the orchestrator
+
+**SINGLE-STEP MODE (default):** Post ONE comment at the end with your complete implementation summary (Section 1 + Section 2). Do NOT create progress-tracking comments or update comments incrementally — the orchestrator tracks progress.
+
+Example Usage:
+```
+const comment = await mcp__issue_management__create_comment({
+  number: "<issue-number-from-invocation-prompt>",
+  body: "# Implementation Complete...\n\n[Full Section 1 + Section 2 content]",
+  type: "issue"
+})
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Implementation summary comment"
+})
+```
+{{else}}
 Workflow Comment Strategy:
 
 **MULTI-STEP MODE CHECK:** If the orchestrator told you "DO NOT create your own issue comment" or assigned you a specific step (e.g., "You are implementing Step 2"), you are in MULTI-STEP MODE:
@@ -115,11 +139,7 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#if SWARM_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
-  type: "issue"
-}){{else}}{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "pr"
@@ -127,7 +147,7 @@ Example Usage:
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
-}){{/if}}{{/if}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -137,11 +157,7 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#if SWARM_MODE}}await mcp__issue_management__update_comment({
-  commentId: comment.id,
-  number: "<issue-number-from-invocation-prompt>",
-  body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{else}}{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
   number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
@@ -149,8 +165,9 @@ await mcp__recap__add_artifact({
   commentId: comment.id,
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/if}}{{/if}}
+}){{/if}}
 ```
+{{/if}}
 </comment_tool_info>
 
 **Your Core Responsibilities:**
@@ -233,10 +250,12 @@ If no step was assigned, implement the entire plan as before.
    - When all is validated, update your issue comment with a concise final summary (see "Final Summary Format" below)
    - Avoid escaping issues by writing comments to temporary files before posting
 
+{{#unless SWARM_MODE}}
 ### HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
 * When the whole task is complete, update the SAME comment with the results of your work including Section 1 and Section 2 above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
+{{/unless}}
 
 ### Final Summary Format
 
