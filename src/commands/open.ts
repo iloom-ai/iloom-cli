@@ -219,11 +219,13 @@ export class OpenCommand {
 	private async openWebBrowser(worktree: GitWorktree): Promise<void> {
 		const cliOverrides = extractSettingsOverrides()
 		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+		const isMainWorktree = await this.gitWorktreeManager.isMainWorktree(worktree, this.settingsManager)
 		const port = await getWorkspacePort({
 			worktreePath: worktree.path,
 			worktreeBranch: worktree.branch,
 			basePort: settings.capabilities?.web?.basePort,
 			checkEnvFile: true,
+			isMainWorktree,
 		})
 
 		// Extract Docker configuration if Docker mode is enabled

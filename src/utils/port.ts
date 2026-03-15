@@ -120,6 +120,10 @@ export interface GetWorkspacePortOptions {
 	worktreeBranch: string
 	/** If true, check .env files for PORT override before calculating. Defaults to false. */
 	checkEnvFile?: boolean
+	/** If true, this is the main worktree and should use basePort directly. */
+	isMainWorktree?: boolean
+	/** Path to the main worktree — if it matches worktreePath, basePort is returned. Alternative to isMainWorktree. */
+	mainWorktreePath?: string
 }
 
 export interface GetWorkspacePortDependencies {
@@ -181,6 +185,13 @@ export async function getWorkspacePort(
 		}
 
 		logger.debug('PORT not found in any dotenv-flow file, calculating from workspace identifier')
+	}
+
+	// Main worktree uses basePort directly
+	const isMain = options.isMainWorktree ?? (options.mainWorktreePath != null && options.mainWorktreePath === options.worktreePath)
+	if (isMain) {
+		logger.debug(`Using base port for main worktree: ${basePort}`)
+		return basePort
 	}
 
 	// Calculate based on workspace identifier

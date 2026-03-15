@@ -469,5 +469,77 @@ describe('Port utilities', () => {
 			expect(port).toBeGreaterThanOrEqual(3001)
 			expect(port).toBeLessThanOrEqual(65535)
 		})
+
+		it('should return basePort when isMainWorktree is true', async () => {
+			const port = await getWorkspacePort({
+				worktreePath: '/path/to/main',
+				worktreeBranch: 'main',
+				isMainWorktree: true,
+			})
+
+			expect(port).toBe(3000)
+		})
+
+		it('should return custom basePort when isMainWorktree is true', async () => {
+			const port = await getWorkspacePort({
+				worktreePath: '/path/to/main',
+				worktreeBranch: 'main',
+				basePort: 8080,
+				isMainWorktree: true,
+			})
+
+			expect(port).toBe(8080)
+		})
+
+		it('should return basePort when mainWorktreePath matches worktreePath', async () => {
+			const port = await getWorkspacePort({
+				worktreePath: '/path/to/main',
+				worktreeBranch: 'main',
+				mainWorktreePath: '/path/to/main',
+			})
+
+			expect(port).toBe(3000)
+		})
+
+		it('should calculate normally when mainWorktreePath does not match', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/issue-42-feature',
+					worktreeBranch: 'feat/issue-42-feature',
+					mainWorktreePath: '/path/to/main',
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			expect(port).toBe(3042)
+		})
+
+		it('should still check env file before returning basePort for main worktree', async () => {
+			mockFileExists.mockImplementation(async (path) => {
+				return path.includes('.env.development.local')
+			})
+			mockReadFile.mockResolvedValue('PORT=5000\nOTHER=value')
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/main',
+					worktreeBranch: 'main',
+					isMainWorktree: true,
+					checkEnvFile: true,
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			// env file PORT should take precedence even for main worktree
+			expect(port).toBe(5000)
+		})
 	})
 })
