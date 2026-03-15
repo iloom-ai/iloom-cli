@@ -1082,6 +1082,9 @@ If workflow plan determined SKIP_PLANNING AND complexity is COMPLEX:
 
 **Execute for both SIMPLE and COMPLEX workflows**
 
+**PREREQUISITE CHECK — Do not skip this:**
+Before executing implementation, verify that a plan comment exists on the issue (either from STEP 2-SIMPLE or STEP 3). If no plan comment exists and the workflow scan determined NEEDS_PLANNING, you MUST stop and run the appropriate analyze-and-plan or planning skill before proceeding. Do not implement without a documented plan.
+
 Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
 1. **Extract plan location from previous agent:**

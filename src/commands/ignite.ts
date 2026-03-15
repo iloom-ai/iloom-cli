@@ -896,8 +896,6 @@ export class IgniteCommand {
 
 		// Create SwarmSetupService
 		const swarmSetup = new SwarmSetupService(
-			this.gitWorktreeManager,
-			metadataManager,
 			this.agentManager,
 			this.settingsManager,
 			this.templateManager,
