@@ -343,6 +343,16 @@ describe('DockerDevServerStrategy', () => {
 			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
 		}
 
+		/** Helper to create an ExecaError-like object with exitCode and/or signal */
+		const makeExecaError = (props: { exitCode?: number; signal?: string; message?: string }): Error => {
+			const err = new Error(props.message ?? `Command failed with exit code ${props.exitCode ?? 1}`)
+			Object.assign(err, {
+				exitCode: props.exitCode,
+				signal: props.signal,
+			})
+			return err
+		}
+
 		beforeEach(() => {
 			vi.mocked(utils.buildImageName).mockReturnValue('iloom-dev-test')
 			vi.mocked(utils.buildContainerName).mockReturnValue('iloom-dev-test')
@@ -441,6 +451,56 @@ describe('DockerDevServerStrategy', () => {
 
 			expect(removeSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function))
 			expect(removeSpy).toHaveBeenCalledWith('SIGTERM', expect.any(Function))
+		})
+
+		it('should silently swallow exit code 143 (SIGTERM via docker stop)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 143 }))
+
+			await expect(
+				strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
+			).resolves.toEqual({})
+		})
+
+		it('should silently swallow exit code 130 (SIGINT)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 130 }))
+
+			await expect(
+				strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
+			).resolves.toEqual({})
+		})
+
+		it('should silently swallow signal SIGTERM', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGTERM' }))
+
+			await expect(
+				strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
+			).resolves.toEqual({})
+		})
+
+		it('should silently swallow signal SIGINT', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGINT' }))
+
+			await expect(
+				strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
+			).resolves.toEqual({})
+		})
+
+		it('should re-throw unexpected errors (non-signal exit codes)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 1, message: 'container failed' }))
+
+			await expect(
+				strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
+			).rejects.toThrow('container failed')
 		})
 
 		it('should return empty object (no host PID)', async () => {

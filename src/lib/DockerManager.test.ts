@@ -337,6 +337,16 @@ describe('DockerManager', () => {
 	})
 
 	describe('runForeground', () => {
+		/** Helper to create an ExecaError-like object with exitCode and/or signal */
+		const makeExecaError = (props: { exitCode?: number; signal?: string; message?: string }): Error => {
+			const err = new Error(props.message ?? `Command failed with exit code ${props.exitCode ?? 1}`)
+			Object.assign(err, {
+				exitCode: props.exitCode,
+				signal: props.signal,
+			})
+			return err
+		}
+
 		it('should run attached with --rm flag and port mapping', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
@@ -428,6 +438,56 @@ describe('DockerManager', () => {
 			// Signal handlers should still be cleaned up
 			expect(processRemoveListenerSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function))
 			expect(processRemoveListenerSpy).toHaveBeenCalledWith('SIGTERM', expect.any(Function))
+		})
+
+		it('should silently swallow exit code 143 (SIGTERM via docker stop)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 143 }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow exit code 130 (SIGINT)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 130 }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow signal SIGTERM', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGTERM' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow signal SIGINT', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGINT' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should re-throw unexpected errors (non-signal exit codes)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 1, message: 'port already allocated' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).rejects.toThrow('port already allocated')
 		})
 	})
 

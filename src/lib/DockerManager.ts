@@ -1,4 +1,4 @@
-import { execa } from 'execa'
+import { execa, type ExecaError } from 'execa'
 import { logger } from '../utils/logger.js'
 import { restoreTerminalState } from '../utils/terminal.js'
 import {
@@ -231,6 +231,21 @@ export class DockerManager {
 
 		try {
 			await execa('docker', args, { stdio })
+		} catch (error) {
+			const execaError = error as ExecaError
+			// When the user presses Ctrl+C, the signal handler forwards the signal
+			// to the container, causing `docker run` to exit with code 143
+			// (128+SIGTERM) or 130 (128+SIGINT). Execa may also report the signal
+			// name directly. These are all expected shutdown paths and should not
+			// surface as errors.
+			const isExpectedShutdown =
+				execaError.exitCode === 143 ||
+				execaError.exitCode === 130 ||
+				execaError.signal === 'SIGTERM' ||
+				execaError.signal === 'SIGINT'
+			if (!isExpectedShutdown) {
+				throw error
+			}
 		} finally {
 			// Clean up signal handlers to avoid leaks
 			process.removeListener('SIGINT', onSigint)
