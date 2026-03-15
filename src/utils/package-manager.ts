@@ -164,6 +164,8 @@ export interface RunScriptOptions {
   onStart?: (pid?: number) => void
   /** Don't set CI=true (for dev servers, default: false) */
   noCi?: boolean
+  /** Callback for server output when using pipe mode (for TUI). When provided, stdio is piped instead of inherited. */
+  onOutput?: (data: Buffer) => void
 }
 
 /**
@@ -204,14 +206,20 @@ export async function runScript(
     env.CI = 'true'
   }
 
-  // Determine stdio mode
-  const stdio = options.foreground ? 'inherit' : (options.quiet ? 'pipe' : 'inherit')
+  // Determine stdio mode:
+  // - onOutput (TUI pipe mode): stdin ignored, stdout/stderr piped to callback
+  // - foreground: inherit all stdio
+  // - quiet: pipe all stdio (suppress output)
+  // - default: inherit
+  const stdio = options.onOutput
+    ? (['ignore', 'pipe', 'pipe'] as const)
+    : options.foreground ? 'inherit' : (options.quiet ? 'pipe' : 'inherit')
 
   // For foreground mode, register a no-op SIGINT handler to prevent signal-exit
   // (used internally by execa) from re-raising SIGINT and killing the process
   // before finally blocks can run. This ensures terminal state is restored on Ctrl+C.
   const onSigint = (): void => {}
-  if (options.foreground) {
+  if (options.foreground || options.onOutput) {
     process.on('SIGINT', onSigint)
   }
 
@@ -226,7 +234,7 @@ export async function runScript(
       execaProcess = execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
         cwd,
         stdio,
-        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+        ...(!options.foreground && !options.onOutput && { timeout: 600000 }), // No timeout for foreground/TUI mode
         env,
         verbose: isDebugMode,
       })
@@ -238,15 +246,21 @@ export async function runScript(
       execaProcess = execa(packageManager, [...command, ...args], {
         cwd,
         stdio,
-        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+        ...(!options.foreground && !options.onOutput && { timeout: 600000 }), // No timeout for foreground/TUI mode
         env,
         verbose: isDebugMode,
       })
     }
 
+    // When onOutput is provided, pipe stdout/stderr to the callback
+    if (options.onOutput) {
+      execaProcess.stdout?.on('data', options.onOutput)
+      execaProcess.stderr?.on('data', options.onOutput)
+    }
+
     // For foreground mode, get PID and call onStart callback immediately
     const result: { pid?: number } = {}
-    if (options.foreground && execaProcess.pid !== undefined) {
+    if ((options.foreground || options.onOutput) && execaProcess.pid !== undefined) {
       result.pid = execaProcess.pid
     }
 
@@ -262,13 +276,13 @@ export async function runScript(
   } catch (error) {
     const execaError = error as ExecaError
     // If the process was killed by SIGINT, the user intentionally cancelled — return silently
-    if (options.foreground && execaError.signal === 'SIGINT') {
+    if ((options.foreground || options.onOutput) && execaError.signal === 'SIGINT') {
       return {}
     }
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'
     throw new Error(`Failed to run script '${scriptName}': ${stderr}`)
   } finally {
-    if (options.foreground) {
+    if (options.foreground || options.onOutput) {
       process.removeListener('SIGINT', onSigint)
       restoreTerminalState()
     }

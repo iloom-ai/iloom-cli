@@ -254,7 +254,8 @@ export class DevServerManager {
 		redirectToStderr = false,
 		onProcessStarted?: (pid?: number) => void,
 		envOverrides?: Record<string, string>,
-		dockerConfig?: DockerConfig
+		dockerConfig?: DockerConfig,
+		onOutput?: (data: Buffer) => void
 	): Promise<{ pid?: number }> {
 		// Docker mode: build image and run container in foreground
 		if (dockerConfig) {
@@ -290,7 +291,7 @@ export class DevServerManager {
 					port,
 					containerPort,
 					strategyConfig,
-					{ redirectToStderr, envOverrides }
+					{ redirectToStderr, envOverrides, onOutput }
 				)
 			} finally {
 				this.runningDockerContainers.delete(port)
@@ -304,6 +305,7 @@ export class DevServerManager {
 			redirectToStderr,
 			...(onProcessStarted !== undefined && { onProcessStarted }),
 			...(envOverrides !== undefined && { envOverrides }),
+			...(onOutput !== undefined && { onOutput }),
 		})
 	}
 

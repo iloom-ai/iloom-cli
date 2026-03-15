@@ -35,6 +35,8 @@ export interface RunForegroundOptions {
 	onProcessStarted?: ((pid?: number) => void) | undefined
 	/** Additional environment variables to forward into the container */
 	envOverrides?: Record<string, string> | undefined
+	/** Callback for server output when using pipe mode (for TUI). When provided, stdio is piped instead of inherited. */
+	onOutput?: ((data: Buffer) => void) | undefined
 }
 
 /**
@@ -274,7 +276,7 @@ export class DockerDevServerStrategy {
 		const nameId = config.identifier ?? worktreePath
 		const imageName = this.utils.buildImageName(nameId)
 		const containerName = this.utils.buildContainerName(nameId)
-		const { redirectToStderr, onProcessStarted, envOverrides } = opts
+		const { redirectToStderr, onProcessStarted, envOverrides, onOutput } = opts
 
 		// Force-remove any existing container with same name (stale from previous ungraceful exit)
 		await execa('docker', ['rm', '-f', containerName], { reject: false })
@@ -309,9 +311,15 @@ export class DockerDevServerStrategy {
 		const displayProtocol = config.protocol ?? 'http'
 		logger.info(`Running Docker container "${containerName}" in foreground (${displayProtocol}://localhost:${hostPort} → container:${containerPort})...`)
 
-		const stdio = redirectToStderr
-			? [process.stdin, process.stderr, process.stderr] as const
-			: 'inherit' as const
+		// Determine stdio based on mode:
+		// - onOutput (TUI pipe mode): stdin ignored (TUI handles it), stdout/stderr piped to callback
+		// - redirectToStderr: stdout/stderr -> process.stderr, stdin inherited
+		// - default: inherit all stdio
+		const stdio = onOutput
+			? (['ignore', 'pipe', 'pipe'] as const)
+			: redirectToStderr
+				? ([process.stdin, process.stderr, process.stderr] as const)
+				: ('inherit' as const)
 
 		// Signal forwarding: trap SIGINT/SIGTERM and forward to container
 		const forwardSignal = (): void => {
@@ -330,7 +338,15 @@ export class DockerDevServerStrategy {
 		}
 
 		try {
-			await execa('docker', args, { stdio })
+			const dockerProcess = execa('docker', args, { stdio })
+
+			// When onOutput is provided, pipe stdout/stderr to the callback
+			if (onOutput) {
+				dockerProcess.stdout?.on('data', onOutput)
+				dockerProcess.stderr?.on('data', onOutput)
+			}
+
+			await dockerProcess
 		} catch (error) {
 			const execaError = error as ExecaError
 			// When the user presses Ctrl+C, the signal handler calls `docker stop`,

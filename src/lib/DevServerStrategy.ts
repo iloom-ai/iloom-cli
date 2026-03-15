@@ -8,6 +8,8 @@ export interface ForegroundOpts {
 	onProcessStarted?: (pid?: number) => void
 	/** Additional environment variables to pass to the server process/container */
 	envOverrides?: Record<string, string>
+	/** Callback for server output when using pipe mode (for TUI). When provided, stdio is piped instead of inherited. */
+	onOutput?: (data: Buffer) => void
 }
 
 /**

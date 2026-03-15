@@ -92,14 +92,21 @@ export class NativeDevServerStrategy implements DevServerStrategy {
 		port: number,
 		opts: ForegroundOpts
 	): Promise<{ pid?: number }> {
-		const { redirectToStderr = false, onProcessStarted, envOverrides } = opts
+		const { redirectToStderr = false, onProcessStarted, envOverrides, onOutput } = opts
 
 		logger.debug(`Starting dev server in foreground on port ${port}`)
 
-		if (redirectToStderr) {
-			// For redirectToStderr, we need direct execa control for custom stdio
+		if (redirectToStderr || onOutput) {
+			// For redirectToStderr or onOutput (TUI pipe mode), we need direct execa control for custom stdio
 			const devCommand = await buildDevServerCommand(worktreePath)
 			logger.debug(`Starting dev server with command: ${devCommand}`)
+
+			// Determine stdio based on mode:
+			// - redirectToStderr: stdout/stderr -> process.stderr, stdin inherited
+			// - onOutput (TUI mode): stdin ignored (TUI handles it), stdout/stderr piped to callback
+			const stdio = onOutput
+				? (['ignore', 'pipe', 'pipe'] as const)
+				: ([process.stdin, process.stderr, process.stderr] as const)
 
 			const serverProcess = execa('sh', ['-c', devCommand], {
 				cwd: worktreePath,
@@ -108,8 +115,14 @@ export class NativeDevServerStrategy implements DevServerStrategy {
 					...envOverrides,
 					PORT: port.toString(),
 				},
-				stdio: [process.stdin, process.stderr, process.stderr],
+				stdio,
 			})
+
+			// When onOutput is provided, pipe stdout/stderr to the callback
+			if (onOutput) {
+				serverProcess.stdout?.on('data', onOutput)
+				serverProcess.stderr?.on('data', onOutput)
+			}
 
 			const processInfo: { pid?: number } =
 				serverProcess.pid !== undefined ? { pid: serverProcess.pid } : {}
@@ -147,6 +160,7 @@ export class NativeDevServerStrategy implements DevServerStrategy {
 			},
 			foreground: true,
 			...(onProcessStarted && { onStart: onProcessStarted }),
+			...(onOutput !== undefined ? { onOutput } : {}),
 			noCi: true, // Dev servers should not have CI=true
 		})
 	}

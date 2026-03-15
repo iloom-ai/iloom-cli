@@ -3,6 +3,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { DevServerTUI } from '../lib/DevServerTUI.js'
 import { DockerManager } from '../lib/DockerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
@@ -181,25 +182,56 @@ export class DevServerCommand {
 			message,
 		}
 
-		// This will block until user stops the server (Ctrl+C)
-		// In JSON mode, redirect npm output to stderr so JSON can go to stdout
-		const processInfo = await this.devServerManager.runServerForeground(
-			worktree.path,
-			port,
-			!!input.json,
-			// Callback called immediately when process starts (for JSON output)
-			(pid) => {
-				if (input.json && pid) {
-					finalResult.pid = pid
-					this.outputJson(finalResult)
-				}
-			},
-			envOverrides,
-			dockerConfig
-		)
+		// Determine if TUI should be used:
+		// - Only when TTY is detected on both stdout and stdin
+		// - Disabled in JSON mode (JSON output goes to stdout)
+		const useTui = !input.json && process.stdout.isTTY === true && process.stdin.isTTY === true
 
-		if (processInfo.pid) {
-			finalResult.pid = processInfo.pid
+		let tui: DevServerTUI | undefined
+
+		if (useTui) {
+			tui = new DevServerTUI({
+				url,
+				port,
+				containerPort: dockerConfig?.containerPort,
+				onQuit: (): void => {
+					// Send SIGINT to self to trigger normal cleanup flow
+					process.kill(process.pid, 'SIGINT')
+				},
+			})
+			tui.start()
+		}
+
+		const onOutput = tui
+			? (data: Buffer): void => { tui?.handleOutput(data) }
+			: undefined
+
+		try {
+			// This will block until user stops the server (Ctrl+C)
+			// In JSON mode, redirect npm output to stderr so JSON can go to stdout
+			const processInfo = await this.devServerManager.runServerForeground(
+				worktree.path,
+				port,
+				!!input.json,
+				// Callback called immediately when process starts (for JSON output)
+				(pid) => {
+					if (input.json && pid) {
+						finalResult.pid = pid
+						this.outputJson(finalResult)
+					}
+				},
+				envOverrides,
+				dockerConfig,
+				onOutput
+			)
+
+			if (processInfo.pid) {
+				finalResult.pid = processInfo.pid
+			}
+		} finally {
+			if (tui) {
+				tui.cleanup()
+			}
 		}
 
 		return finalResult

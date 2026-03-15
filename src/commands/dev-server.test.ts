@@ -222,6 +222,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.any(Object),
+				undefined,
 				undefined
 			)
 		})
@@ -327,6 +328,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.any(Object),
+				undefined,
 				undefined
 			)
 		})
@@ -350,6 +352,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.any(Object),
+				undefined,
 				undefined
 			)
 		})
@@ -438,6 +441,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.any(Object),
+				undefined,
 				undefined
 			)
 		})
@@ -454,6 +458,7 @@ describe('DevServerCommand', () => {
 				true,
 				expect.any(Function),
 				expect.any(Object),
+				undefined,
 				undefined
 			)
 		})
@@ -496,6 +501,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ DATABASE_URL: 'postgres://test', API_KEY: 'secret', ILOOM_LOOM: '87' }),
+				undefined,
 				undefined
 			)
 		})
@@ -514,6 +520,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined,
 				undefined
 			)
 		})
@@ -530,6 +537,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined,
 				undefined
 			)
 		})
@@ -554,6 +562,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined,
 				undefined
 			)
 		})
@@ -707,7 +716,8 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
-				expectedDockerConfig
+				expectedDockerConfig,
+				undefined
 			)
 		})
 
@@ -741,7 +751,8 @@ describe('DevServerCommand', () => {
 				expect.objectContaining({
 					dockerFile: './Dockerfile',
 					identifier: '87',
-				})
+				}),
+				undefined
 			)
 		})
 
@@ -780,7 +791,8 @@ describe('DevServerCommand', () => {
 				expect.objectContaining({ ILOOM_LOOM: 'feat/docker-support' }),
 				expect.objectContaining({
 					identifier: 'feat/docker-support',
-				})
+				}),
+				undefined
 			)
 		})
 
@@ -838,6 +850,7 @@ describe('DevServerCommand', () => {
 				false,
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
+				undefined,
 				undefined
 			)
 		})
