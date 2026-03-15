@@ -121,6 +121,12 @@ export interface DevServerStartedEvent {
   buildDurationMs?: number
   /** Time in milliseconds from start to the server being ready */
   startDurationMs: number
+  /**
+   * Number of BuildKit secrets mounted during docker build.
+   * Only present when mode is 'docker' and secrets are configured.
+   * Tracks feature adoption without exposing secret IDs or paths.
+   */
+  docker_build_secrets_count?: number
 }
 
 export interface DevServerStoppedEvent {

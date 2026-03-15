@@ -2,10 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import net from 'net'
 import { DockerDevServerStrategy, type DockerConfig, type DockerUtils } from './DockerDevServerStrategy.js'
 import { execa } from 'execa'
+import { expandAndValidateSecretPaths } from '../utils/docker.js'
 
 // Mock dependencies
 vi.mock('execa')
 vi.mock('net')
+vi.mock('../utils/docker.js', () => ({
+	expandAndValidateSecretPaths: vi.fn().mockReturnValue({}),
+}))
 
 // Mock the logger
 vi.mock('../utils/logger.js', () => ({
@@ -102,6 +106,7 @@ describe('DockerDevServerStrategy', () => {
 		beforeEach(() => {
 			vi.mocked(utils.buildImageName).mockReturnValue('iloom-dev-test')
 			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({})
 		})
 
 		it('should call docker build with correct flags', async () => {
@@ -148,6 +153,109 @@ describe('DockerDevServerStrategy', () => {
 			await expect(
 				strategy.buildImage(WORKTREE, { dockerFile: './Dockerfile' })
 			).rejects.toThrow('Docker build failed for image "iloom-dev-test"')
+		})
+
+		it('should pass buildSecrets as --secret flags', async () => {
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+			})
+
+			await strategy.buildImage(WORKTREE, {
+				dockerFile: './Dockerfile',
+				buildSecrets: { npmrc: '~/.npmrc' },
+			})
+
+			expect(expandAndValidateSecretPaths).toHaveBeenCalledWith(
+				{ npmrc: '~/.npmrc' },
+				WORKTREE
+			)
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				[
+					'build', '-t', 'iloom-dev-test', '-f', './Dockerfile',
+					'--secret', 'id=npmrc,src=/home/user/.npmrc',
+					'.',
+				],
+				expect.objectContaining({
+					cwd: WORKTREE,
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should handle multiple secrets', async () => {
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+				dockerconfig: '/home/user/.docker/config.json',
+			})
+
+			await strategy.buildImage(WORKTREE, {
+				dockerFile: './Dockerfile',
+				buildSecrets: {
+					npmrc: '~/.npmrc',
+					dockerconfig: '~/.docker/config.json',
+				},
+			})
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				[
+					'build', '-t', 'iloom-dev-test', '-f', './Dockerfile',
+					'--secret', 'id=npmrc,src=/home/user/.npmrc',
+					'--secret', 'id=dockerconfig,src=/home/user/.docker/config.json',
+					'.',
+				],
+				expect.objectContaining({
+					cwd: WORKTREE,
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should not add --secret flags when buildSecrets is undefined', async () => {
+			await strategy.buildImage(WORKTREE, { dockerFile: './Dockerfile' })
+
+			expect(expandAndValidateSecretPaths).toHaveBeenCalledWith(undefined, WORKTREE)
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				['build', '-t', 'iloom-dev-test', '-f', './Dockerfile', '.'],
+				{ cwd: WORKTREE, stdio: 'inherit' }
+			)
+		})
+
+		it('should set DOCKER_BUILDKIT=1 env when secrets are present', async () => {
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+			})
+
+			await strategy.buildImage(WORKTREE, {
+				dockerFile: './Dockerfile',
+				buildSecrets: { npmrc: '~/.npmrc' },
+			})
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				expect.arrayContaining(['--secret', 'id=npmrc,src=/home/user/.npmrc']),
+				expect.objectContaining({
+					cwd: WORKTREE,
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should not set DOCKER_BUILDKIT env when no secrets are present', async () => {
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({})
+
+			await strategy.buildImage(WORKTREE, { dockerFile: './Dockerfile' })
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				['build', '-t', 'iloom-dev-test', '-f', './Dockerfile', '.'],
+				{ cwd: WORKTREE, stdio: 'inherit' }
+			)
 		})
 	})
 

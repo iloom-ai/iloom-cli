@@ -1,3 +1,7 @@
+import { statSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { execa } from 'execa'
 import { readFile } from 'fs/promises'
 
@@ -211,4 +215,82 @@ export function buildContainerName(identifier: string | number): string {
 export function buildImageName(identifier: string | number): string {
 	// Docker image tags must be lowercase
 	return sanitizeContainerName(`iloom-dev-${identifier}`).toLowerCase()
+}
+
+/**
+ * Regex for valid Docker secret IDs.
+ * Docker secret IDs are used in `--secret id=<ID>,src=<path>` format,
+ * so they must not contain commas or other characters that would break parsing.
+ * Restricting to alphanumeric, underscore, dot, and hyphen prevents injection.
+ */
+const VALID_SECRET_ID_PATTERN = /^[a-zA-Z0-9_.-]+$/
+
+/**
+ * Expand and validate secret source file paths for Docker BuildKit --secret flags.
+ *
+ * For each entry in the secrets record:
+ * - Validates the secret ID contains only safe characters `[a-zA-Z0-9_.-]`
+ * - Expands `~` to the user's home directory
+ * - Resolves relative paths against the provided `cwd`
+ * - Validates that the source path exists and is a file (not a directory)
+ * - Validates that the resolved path does not contain commas (Docker --secret parsing)
+ * - Throws with the secret ID and path if any validation fails
+ *
+ * @param secrets - Record mapping secret IDs to source file paths, or undefined
+ * @param cwd - Working directory to resolve relative paths against
+ * @returns Record with the same keys but expanded/resolved absolute paths
+ */
+export function expandAndValidateSecretPaths(
+	secrets: Record<string, string> | undefined,
+	cwd: string
+): Record<string, string> {
+	if (!secrets || Object.keys(secrets).length === 0) {
+		return {}
+	}
+
+	const expanded: Record<string, string> = {}
+
+	for (const [id, sourcePath] of Object.entries(secrets)) {
+		// Validate secret ID contains only safe characters
+		if (!VALID_SECRET_ID_PATTERN.test(id)) {
+			throw new Error(
+				`Invalid secret ID "${id}": secret IDs must contain only alphanumeric characters, underscores, dots, and hyphens [a-zA-Z0-9_.-]`
+			)
+		}
+
+		// Expand ~ to home directory
+		let resolvedPath = sourcePath.replace(/^~(?=$|[/\\])/, os.homedir())
+
+		// Resolve relative paths against cwd
+		if (!path.isAbsolute(resolvedPath)) {
+			resolvedPath = path.resolve(cwd, resolvedPath)
+		}
+
+		// Validate resolved path does not contain commas (breaks Docker --secret parsing)
+		if (resolvedPath.includes(',')) {
+			throw new Error(
+				`Secret source path for "${id}" contains a comma, which is not supported by Docker's --secret flag format: ${resolvedPath}`
+			)
+		}
+
+		// Validate the path exists and is a file (not a directory)
+		let stats
+		try {
+			stats = statSync(resolvedPath)
+		} catch {
+			throw new Error(
+				`Secret source file not found for secret "${id}": ${resolvedPath}`
+			)
+		}
+
+		if (!stats.isFile()) {
+			throw new Error(
+				`Secret source path for "${id}" is a directory, not a file: ${resolvedPath}`
+			)
+		}
+
+		expanded[id] = resolvedPath
+	}
+
+	return expanded
 }

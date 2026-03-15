@@ -834,6 +834,9 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
       "dockerBuildArgs": {
         "NODE_ENV": "development"
       },
+      "dockerBuildSecrets": {
+        "npmrc": "~/.npmrc"
+      },
       "dockerRunArgs": ["-v", "./src:/app/src"]
     }
   }
@@ -848,6 +851,7 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
 | `dockerFile` | `string` | `"./Dockerfile"` | Path to the Dockerfile relative to the worktree root. Only used when `devServer` is `"docker"`. |
 | `containerPort` | `number` | Auto-detected | Port the application listens on inside the Docker container. If not set, iloom attempts to detect it from `EXPOSE` directives in the built Docker image (via `docker image inspect`), falling back to Dockerfile parsing. |
 | `dockerBuildArgs` | `Record<string, string>` | - | Build arguments passed to `docker build` (e.g., `{"NODE_ENV": "development"}`). |
+| `dockerBuildSecrets` | `Record<string, string>` | - | Secret files to mount during `docker build` via BuildKit `--secret` flag. Keys are secret IDs, values are source file paths (supports `~` expansion). Example: `{"npmrc": "~/.npmrc"}` translates to `--secret id=npmrc,src=$HOME/.npmrc`. |
 | `dockerRunArgs` | `string[]` | - | Additional flags passed to `docker run`. Use this for volume mounts, environment variables, user mapping, and other Docker options. |
 
 **How Port Mapping Works:**

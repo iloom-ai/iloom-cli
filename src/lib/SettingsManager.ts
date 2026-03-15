@@ -230,6 +230,10 @@ export const CapabilitiesSettingsSchema = z
 					.record(z.string())
 					.optional()
 					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerBuildSecrets: z
+					.record(z.string())
+					.optional()
+					.describe('Secret files to mount during docker build via --secret (e.g., {"npmrc": "~/.npmrc"}). Keys are secret IDs, values are source file paths.'),
 				dockerRunArgs: z
 					.array(z.string())
 					.optional()
@@ -282,6 +286,10 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.record(z.string())
 					.optional()
 					.describe('Build arguments to pass to docker build (e.g., {"NODE_ENV": "development"})'),
+				dockerBuildSecrets: z
+					.record(z.string())
+					.optional()
+					.describe('Secret files to mount during docker build via --secret (e.g., {"npmrc": "~/.npmrc"}). Keys are secret IDs, values are source file paths.'),
 				dockerRunArgs: z
 					.array(z.string())
 					.optional()

@@ -2,6 +2,7 @@ import { execa } from 'execa'
 import net from 'net'
 import { logger } from '../utils/logger.js'
 import { restoreTerminalState } from '../utils/terminal.js'
+import { expandAndValidateSecretPaths } from '../utils/docker.js'
 
 /**
  * Docker configuration shape consumed by DockerDevServerStrategy.
@@ -14,6 +15,8 @@ export interface DockerConfig {
 	containerPort?: number | undefined
 	/** Build arguments passed as --build-arg to docker build */
 	buildArgs?: Record<string, string> | undefined
+	/** Secret files to mount during docker build via BuildKit --secret flag */
+	buildSecrets?: Record<string, string> | undefined
 	/** Additional docker run flags */
 	runArgs?: string[] | undefined
 	/** Identifier for naming containers/images (issue number, branch name). Falls back to worktreePath if not set. */
@@ -148,16 +151,29 @@ export class DockerDevServerStrategy {
 			}
 		}
 
+		// Mount secret files via BuildKit --secret flags
+		const expandedSecrets = expandAndValidateSecretPaths(config.buildSecrets, worktreePath)
+		for (const [id, srcPath] of Object.entries(expandedSecrets)) {
+			args.push('--secret', `id=${id},src=${srcPath}`)
+		}
+
 		// Context is always the worktree root
 		args.push('.')
 
 		logger.info(`Building Docker image "${imageName}" from ${dockerfilePath}...`)
 
+		const execaOptions: { cwd: string; stdio: 'inherit'; env?: Record<string, string> } = {
+			cwd: worktreePath,
+			stdio: 'inherit',
+		}
+
+		// Enable BuildKit when secrets are being used (required for --secret flag on older Docker versions)
+		if (Object.keys(expandedSecrets).length > 0) {
+			execaOptions.env = { ...process.env, DOCKER_BUILDKIT: '1' }
+		}
+
 		try {
-			await execa('docker', args, {
-				cwd: worktreePath,
-				stdio: 'inherit',
-			})
+			await execa('docker', args, execaOptions)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
 			throw new Error(`Docker build failed for image "${imageName}": ${message}`)

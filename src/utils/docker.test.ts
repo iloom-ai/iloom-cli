@@ -1,3 +1,7 @@
+import { statSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { describe, it, expect, vi } from 'vitest'
 import { execa } from 'execa'
 import { readFile } from 'fs/promises'
@@ -10,10 +14,14 @@ import {
 	sanitizeContainerName,
 	buildContainerName,
 	buildImageName,
+	expandAndValidateSecretPaths,
 } from './docker.js'
 
 vi.mock('execa')
 vi.mock('fs/promises')
+vi.mock('node:fs', () => ({
+	statSync: vi.fn(),
+}))
 
 describe('isDockerInstalled', () => {
 	it('should return true when docker --version succeeds', async () => {
@@ -393,5 +401,174 @@ describe('buildImageName', () => {
 	it('should sanitize branch names with slashes', () => {
 		expect(buildImageName('feat/issue-548'))
 			.toBe('iloom-dev-feat-issue-548')
+	})
+})
+
+describe('expandAndValidateSecretPaths', () => {
+	const mockFileStats = () => {
+		vi.mocked(statSync).mockReturnValue({ isFile: () => true } as never)
+	}
+
+	it('should return empty record for undefined input', () => {
+		const result = expandAndValidateSecretPaths(undefined, '/test/cwd')
+		expect(result).toEqual({})
+	})
+
+	it('should return empty record for empty input', () => {
+		const result = expandAndValidateSecretPaths({}, '/test/cwd')
+		expect(result).toEqual({})
+	})
+
+	it('should expand ~ to homedir in source paths', () => {
+		mockFileStats()
+
+		const result = expandAndValidateSecretPaths(
+			{ npmrc: '~/.npmrc' },
+			'/test/cwd'
+		)
+
+		expect(result.npmrc).toBe(path.join(os.homedir(), '.npmrc'))
+	})
+
+	it('should resolve relative paths against provided cwd', () => {
+		mockFileStats()
+
+		const result = expandAndValidateSecretPaths(
+			{ config: 'secrets/config.json' },
+			'/test/worktree'
+		)
+
+		expect(result.config).toBe(path.resolve('/test/worktree', 'secrets/config.json'))
+	})
+
+	it('should leave absolute paths unchanged', () => {
+		mockFileStats()
+
+		const result = expandAndValidateSecretPaths(
+			{ cert: '/etc/ssl/cert.pem' },
+			'/test/cwd'
+		)
+
+		expect(result.cert).toBe('/etc/ssl/cert.pem')
+	})
+
+	it('should throw when source file does not exist', () => {
+		vi.mocked(statSync).mockImplementation(() => {
+			throw new Error('ENOENT: no such file or directory')
+		})
+
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ npmrc: '~/.npmrc' },
+				'/test/cwd'
+			)
+		).toThrow('Secret source file not found')
+	})
+
+	it('should include the secret ID and missing path in error message', () => {
+		vi.mocked(statSync).mockImplementation(() => {
+			throw new Error('ENOENT: no such file or directory')
+		})
+
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ mytoken: '/nonexistent/token.txt' },
+				'/test/cwd'
+			)
+		).toThrow('"mytoken"')
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ mytoken: '/nonexistent/token.txt' },
+				'/test/cwd'
+			)
+		).toThrow('/nonexistent/token.txt')
+	})
+
+	it('should handle multiple secrets, expanding each independently', () => {
+		mockFileStats()
+
+		const result = expandAndValidateSecretPaths(
+			{
+				npmrc: '~/.npmrc',
+				cert: '/etc/ssl/cert.pem',
+				local: 'secrets/local.env',
+			},
+			'/test/worktree'
+		)
+
+		expect(result.npmrc).toBe(path.join(os.homedir(), '.npmrc'))
+		expect(result.cert).toBe('/etc/ssl/cert.pem')
+		expect(result.local).toBe(path.resolve('/test/worktree', 'secrets/local.env'))
+	})
+
+	it('should throw when secret ID contains invalid characters', () => {
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ 'my secret': '/path/to/file' },
+				'/test/cwd'
+			)
+		).toThrow('Invalid secret ID "my secret"')
+
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ 'id,injected=evil': '/path/to/file' },
+				'/test/cwd'
+			)
+		).toThrow('Invalid secret ID "id,injected=evil"')
+
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ 'id=bad': '/path/to/file' },
+				'/test/cwd'
+			)
+		).toThrow('Invalid secret ID')
+	})
+
+	it('should accept valid secret IDs with alphanumeric, underscore, dot, and hyphen', () => {
+		mockFileStats()
+
+		const result = expandAndValidateSecretPaths(
+			{
+				'my-secret': '/path/to/file1',
+				'my_secret': '/path/to/file2',
+				'my.secret': '/path/to/file3',
+				'mySecret123': '/path/to/file4',
+			},
+			'/test/cwd'
+		)
+
+		expect(Object.keys(result)).toHaveLength(4)
+	})
+
+	it('should throw when source path is a directory', () => {
+		vi.mocked(statSync).mockReturnValue({ isFile: () => false } as never)
+
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ config: '/etc/ssl' },
+				'/test/cwd'
+			)
+		).toThrow('is a directory, not a file')
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ config: '/etc/ssl' },
+				'/test/cwd'
+			)
+		).toThrow('"config"')
+	})
+
+	it('should throw when resolved path contains a comma', () => {
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ cert: '/path/with,comma/cert.pem' },
+				'/test/cwd'
+			)
+		).toThrow('contains a comma')
+		expect(() =>
+			expandAndValidateSecretPaths(
+				{ cert: '/path/with,comma/cert.pem' },
+				'/test/cwd'
+			)
+		).toThrow('"cert"')
 	})
 })

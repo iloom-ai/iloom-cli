@@ -10,6 +10,7 @@ import {
 	sanitizeContainerName,
 	buildContainerName,
 	buildImageName,
+	expandAndValidateSecretPaths,
 } from '../utils/docker.js'
 
 /**
@@ -24,6 +25,8 @@ export interface DockerConfig {
 	containerPort?: number | undefined
 	/** Build arguments passed as --build-arg to docker build */
 	dockerBuildArgs?: Record<string, string> | undefined
+	/** Secret files to mount during docker build via BuildKit --secret flag */
+	dockerBuildSecrets?: Record<string, string> | undefined
 	/** Additional docker run flags (e.g., volume mounts) */
 	dockerRunArgs?: string[] | undefined
 	/** Identifier for container naming (issue number, branch name) */
@@ -40,6 +43,7 @@ interface WebSettings {
 	dockerFile?: string | undefined
 	containerPort?: number | undefined
 	dockerBuildArgs?: Record<string, string> | undefined
+	dockerBuildSecrets?: Record<string, string> | undefined
 	dockerRunArgs?: string[] | undefined
 }
 
@@ -80,7 +84,8 @@ export class DockerManager {
 		cwd: string,
 		imageName: string,
 		dockerFile: string,
-		buildArgs?: Record<string, string>
+		buildArgs?: Record<string, string>,
+		buildSecrets?: Record<string, string>
 	): Promise<void> {
 		const args = ['build', '-t', imageName, '-f', dockerFile]
 
@@ -90,16 +95,28 @@ export class DockerManager {
 			}
 		}
 
+		const expandedSecrets = expandAndValidateSecretPaths(buildSecrets, cwd)
+		for (const [id, srcPath] of Object.entries(expandedSecrets)) {
+			args.push('--secret', `id=${id},src=${srcPath}`)
+		}
+
 		// Context directory is always cwd
 		args.push('.')
 
 		logger.info(`Building Docker image "${imageName}" from ${dockerFile}...`)
 
+		const execaOptions: { cwd: string; stdio: 'inherit'; env?: Record<string, string> } = {
+			cwd,
+			stdio: 'inherit',
+		}
+
+		// Enable BuildKit when secrets are being used (required for --secret flag on older Docker versions)
+		if (Object.keys(expandedSecrets).length > 0) {
+			execaOptions.env = { ...process.env, DOCKER_BUILDKIT: '1' }
+		}
+
 		try {
-			await execa('docker', args, {
-				cwd,
-				stdio: 'inherit',
-			})
+			await execa('docker', args, execaOptions)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
 			throw new Error(`Docker build failed for image "${imageName}": ${message}`)
@@ -393,6 +410,7 @@ export class DockerManager {
 			dockerFile: webSettings.dockerFile ?? './Dockerfile',
 			containerPort: webSettings.containerPort,
 			dockerBuildArgs: webSettings.dockerBuildArgs,
+			dockerBuildSecrets: webSettings.dockerBuildSecrets,
 			dockerRunArgs: webSettings.dockerRunArgs,
 			identifier,
 		}
