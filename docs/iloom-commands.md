@@ -828,6 +828,7 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
 {
   "capabilities": {
     "web": {
+      "protocol": "https",
       "devServer": "docker",
       "dockerFile": "./Dockerfile",
       "containerPort": 4200,
@@ -847,6 +848,7 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `protocol` | `"http"` \| `"https"` | `"http"` | Protocol for dev server URLs. Set to `"https"` if your app serves over HTTPS (e.g., Angular with `ssl: true`). Applies to all dev server modes (native process and Docker). |
 | `devServer` | `"process"` \| `"docker"` | `"process"` | Dev server execution mode. `"process"` runs natively, `"docker"` runs inside a Docker container with port mapping. |
 | `dockerFile` | `string` | `"./Dockerfile"` | Path to the Dockerfile relative to the worktree root. Only used when `devServer` is `"docker"`. |
 | `containerPort` | `number` | Auto-detected | Port the application listens on inside the Docker container. If not set, iloom attempts to detect it from `EXPOSE` directives in the built Docker image (via `docker image inspect`), falling back to Dockerfile parsing. |
@@ -862,7 +864,7 @@ Each loom workspace gets a unique port calculated as `basePort + issue/PR number
 2. The container runs with `-p <workspace-port>:<container-port>`
 3. Your app runs on `containerPort` inside the container (e.g., 4200 for Angular)
 4. Docker maps that to the workspace port on the host (e.g., 3025)
-5. You access the app at `http://localhost:3025` as usual
+5. You access the app at `http://localhost:3025` (or `https://` if `protocol` is set to `"https"`) as usual
 
 This means frameworks that hardcode their listen port work correctly -- Docker handles the port translation transparently.
 

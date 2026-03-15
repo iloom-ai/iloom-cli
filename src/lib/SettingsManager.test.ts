@@ -1358,6 +1358,120 @@ describe('SettingsManager', () => {
 		})
 	})
 
+	describe('capabilities.web.protocol configuration', () => {
+		it('should accept "http" as protocol value', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						protocol: 'http',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'File not found',
+			}
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.protocol).toBe('http')
+		})
+
+		it('should accept "https" as protocol value', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						protocol: 'https',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'File not found',
+			}
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.protocol).toBe('https')
+		})
+
+		it('should reject invalid protocol value (e.g., "ftp")', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						protocol: 'ftp',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'File not found',
+			}
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*capabilities\.web\.protocol/,
+			)
+		})
+
+		it('should default to "http" when not specified', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 3000,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'File not found',
+			}
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.protocol).toBe('http')
+		})
+
+		it('should accept missing capabilities.web.protocol (uses default)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'File not found',
+			}
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.protocol).toBeUndefined()
+		})
+	})
+
 	describe('WorkflowPermissionSchema - Component Launch Configuration', () => {
 		it('should validate workflow config with all component flags enabled', async () => {
 			const projectRoot = '/test/project'

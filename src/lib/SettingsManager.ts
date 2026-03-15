@@ -212,6 +212,10 @@ export const CapabilitiesSettingsSchema = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				protocol: z
+					.enum(['http', 'https'])
+					.default('http')
+					.describe('Protocol for dev server URLs (http or https)'),
 				devServer: z
 					.enum(['process', 'docker'])
 					.default('process')
@@ -268,6 +272,10 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.max(65535, 'Base port must be <= 65535')
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
+				protocol: z
+					.enum(['http', 'https'])
+					.optional()
+					.describe('Protocol for dev server URLs (http or https)'),
 				devServer: z
 					.enum(['process', 'docker'])
 					.optional()

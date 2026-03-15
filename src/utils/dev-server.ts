@@ -3,6 +3,13 @@ import { logger } from './logger.js'
 import type { Capability } from '../types/loom.js'
 
 /**
+ * Build the dev server URL from port and protocol
+ */
+export function buildDevServerUrl(port: number, protocol: 'http' | 'https' = 'http'): string {
+	return `${protocol}://localhost:${port}`
+}
+
+/**
  * Build dev server command for workspace
  * Detects package manager and constructs appropriate command
  */

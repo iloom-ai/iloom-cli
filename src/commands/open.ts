@@ -10,6 +10,7 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
+import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -254,7 +255,8 @@ export class OpenCommand {
 		}
 
 		// Construct URL and open browser
-		const url = `http://localhost:${port}`
+		const protocol = settings.capabilities?.web?.protocol ?? 'http'
+		const url = buildDevServerUrl(port, protocol)
 		logger.info(`Opening browser: ${url}`)
 		await openBrowser(url)
 		logger.success('Browser opened')

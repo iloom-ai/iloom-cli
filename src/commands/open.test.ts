@@ -18,12 +18,11 @@ vi.mock('../lib/DevServerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
 vi.mock('execa')
+const mockLoadSettings = vi.fn().mockResolvedValue({})
 vi.mock('../lib/SettingsManager.js', () => {
 	return {
 		SettingsManager: class MockSettingsManager {
-			async loadSettings() {
-				return {}
-			}
+			loadSettings = mockLoadSettings
 		},
 	}
 })
@@ -65,9 +64,6 @@ describe('OpenCommand', () => {
 		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 
-		// Mock DevServerManager to always return true (server ready)
-		vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
-
 		command = new OpenCommand(
 			mockGitWorktreeManager,
 			mockCapabilityDetector,
@@ -75,8 +71,14 @@ describe('OpenCommand', () => {
 			mockDevServerManager
 		)
 
-		// Reset all mocks
+		// Reset all mocks then set defaults
 		vi.clearAllMocks()
+
+		// Mock DevServerManager to always return true (server ready)
+		vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+
+		// Mock SettingsManager to return empty settings by default
+		mockLoadSettings.mockResolvedValue({})
 	})
 
 	describe('workspace detection', () => {
@@ -726,6 +728,19 @@ describe('OpenCommand', () => {
 
 			// Should not call ensureServerRunning for CLI-only projects
 			expect(mockDevServerManager.ensureServerRunning).not.toHaveBeenCalled()
+		})
+
+		it('should use https protocol when configured', async () => {
+			mockLoadSettings.mockResolvedValue({
+				capabilities: { web: { protocol: 'https' } },
+			})
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+
+			await command.execute({ identifier: '87' })
+
+			expect(openBrowser).toHaveBeenCalledWith('https://localhost:3087')
 		})
 	})
 })

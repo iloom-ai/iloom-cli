@@ -64,6 +64,7 @@ function toStrategyConfig(config: DockerConfig): StrategyDockerConfig {
 		buildSecrets: config.dockerBuildSecrets,
 		runArgs: config.dockerRunArgs,
 		identifier: config.identifier,
+		protocol: config.protocol,
 	}
 }
 

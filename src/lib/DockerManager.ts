@@ -31,6 +31,8 @@ export interface DockerConfig {
 	dockerRunArgs?: string[] | undefined
 	/** Identifier for container naming (issue number, branch name) */
 	identifier: string
+	/** Protocol for dev server URLs (http or https) */
+	protocol?: 'http' | 'https' | undefined
 }
 
 /**
@@ -45,6 +47,7 @@ interface WebSettings {
 	dockerBuildArgs?: Record<string, string> | undefined
 	dockerBuildSecrets?: Record<string, string> | undefined
 	dockerRunArgs?: string[] | undefined
+	protocol?: 'http' | 'https' | undefined
 }
 
 /**
@@ -428,6 +431,7 @@ export class DockerManager {
 			dockerBuildSecrets: webSettings.dockerBuildSecrets,
 			dockerRunArgs: webSettings.dockerRunArgs,
 			identifier,
+			protocol: webSettings.protocol,
 		}
 	}
 }

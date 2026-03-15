@@ -21,6 +21,8 @@ export interface DockerConfig {
 	runArgs?: string[] | undefined
 	/** Identifier for naming containers/images (issue number, branch name). Falls back to worktreePath if not set. */
 	identifier?: string | undefined
+	/** Protocol for displayed URLs (http or https, default http) */
+	protocol?: 'http' | 'https' | undefined
 }
 
 /**
@@ -236,7 +238,8 @@ export class DockerDevServerStrategy {
 
 		args.push(imageName)
 
-		logger.info(`Starting Docker container "${containerName}" in background (http://localhost:${hostPort} → container:${containerPort})...`)
+		const displayProtocol = config.protocol ?? 'http'
+		logger.info(`Starting Docker container "${containerName}" in background (${displayProtocol}://localhost:${hostPort} → container:${containerPort})...`)
 
 		try {
 			await execa('docker', args)
@@ -303,7 +306,8 @@ export class DockerDevServerStrategy {
 
 		args.push(imageName)
 
-		logger.info(`Running Docker container "${containerName}" in foreground (http://localhost:${hostPort} → container:${containerPort})...`)
+		const displayProtocol = config.protocol ?? 'http'
+		logger.info(`Running Docker container "${containerName}" in foreground (${displayProtocol}://localhost:${hostPort} → container:${containerPort})...`)
 
 		const stdio = redirectToStderr
 			? [process.stdin, process.stderr, process.stderr] as const

@@ -226,6 +226,26 @@ describe('DevServerCommand', () => {
 			)
 		})
 
+		it('should use https protocol when configured', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				capabilities: { web: { protocol: 'https' as const } },
+			})
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+
+			const result = await command.execute({ identifier: '87' })
+
+			expect(result.status).toBe('started')
+			expect(result.url).toBe('https://localhost:3087')
+			expect(result.port).toBe(3087)
+		})
+
 		it('should return gracefully for non-web project with info message', async () => {
 			const mockCapabilities: ProjectCapabilities = {
 				capabilities: ['cli'],

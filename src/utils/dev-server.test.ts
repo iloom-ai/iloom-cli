@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { buildDevServerCommand, getDevServerLaunchCommand } from './dev-server.js'
+import { buildDevServerCommand, buildDevServerUrl, getDevServerLaunchCommand } from './dev-server.js'
 import * as packageManager from './package-manager.js'
 
 // Mock package-manager module
@@ -128,5 +128,19 @@ describe('getDevServerLaunchCommand', () => {
 		const parts = command.split(' && ')
 		expect(parts).toHaveLength(1)
 		expect(parts[0]).toBe('npm run dev')
+	})
+})
+
+describe('buildDevServerUrl', () => {
+	it('should return http URL by default', () => {
+		expect(buildDevServerUrl(3087)).toBe('http://localhost:3087')
+	})
+
+	it('should return http URL when protocol is http', () => {
+		expect(buildDevServerUrl(3087, 'http')).toBe('http://localhost:3087')
+	})
+
+	it('should return https URL when protocol is https', () => {
+		expect(buildDevServerUrl(3087, 'https')).toBe('https://localhost:3087')
 	})
 })

@@ -9,6 +9,7 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
+import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -139,7 +140,8 @@ export class DevServerCommand {
 			basePort: settingsForPort.capabilities?.web?.basePort,
 			checkEnvFile: true,
 		})
-		const url = `http://localhost:${port}`
+		const protocol = settingsForPort.capabilities?.web?.protocol ?? 'http'
+		const url = buildDevServerUrl(port, protocol)
 
 		// 6. Check if server already running
 		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig)
