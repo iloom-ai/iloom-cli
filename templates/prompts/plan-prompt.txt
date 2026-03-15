@@ -182,7 +182,7 @@ Wait for the analyzer to complete, then use its findings to inform sharper clari
 
 ---
 
-After research is complete, ask clarifying questions ONE AT A TIME to prevent cognitive overload. Your research findings should inform sharper, more specific questions.
+After research is complete, ask clarifying questions. Your research findings should inform sharper, more specific questions. **Ask up to 4 independent questions at once** — only hold back questions whose answers depend on a prior question's response.
 
 **Using the AskUserQuestion Tool:**
 When asking clarifying questions, use the AskUserQuestion tool to present options to the user. This provides a better UX with structured choices:
@@ -191,23 +191,17 @@ When asking clarifying questions, use the AskUserQuestion tool to present option
 - Include a clear question header
 - The user can always provide custom input if options don't fit
 
-Example tool usage:
+Example tool usage (batching independent questions):
 ```
 AskUserQuestion(
-  question: "What authentication approach should we use?",
-  options: ["OAuth 2.0 (Recommended)", "JWT tokens", "Session-based", "Other"]
+  question: "A few questions to clarify scope:\n\n1. What authentication approach should we use?\n2. Are there hard constraints (time, dependencies, compatibility)?\n3. Should this support multiple database providers or just one?",
+  options: ["Answer inline", "Let me think — ask again later"]
 )
 ```
 
 **Question Patterns:**
 - Use the AskUserQuestion tool with multiple-choice options when feasible (easier to answer)
 - Focus on: purpose, constraints, success criteria, existing context
-- Acknowledge each answer before moving to the next question
-
-**Example Questions:**
-- "What problem does this feature solve for users?"
-- "Are there existing patterns in the codebase we should follow?"
-- "What are the hard constraints (time, dependencies, compatibility)?"
 
 ### Phase 2: Design Exploration
 
