@@ -243,29 +243,45 @@ Collect the skill output as the code review findings.
 {{/if}}
 {{/if}}
 
-### Step 7: Fix Critical Code Review Issues (if any)
+### Step 7: Fix Critical Code Review Issues
 
-If the code review returned findings with confidence 95-100 (Critical):
+**CRITICAL: You MUST execute this step after Step 6. Do NOT skip to Step 8 without processing code review results.**
 
-1. For each critical finding, invoke the fix agent:
+After the code reviewer skill returns its output:
 
+1. **Parse the findings**: Scan the code reviewer's output for findings under the "Critical Issues (95-100 confidence)" heading. Each finding follows the format: `[FILE:LINE] (Score: XX) Issue description` with a `Recommendation: ...` line below it. Extract every finding with a score of 95 or higher.
+
+2. **If no critical findings exist** (the "Critical Issues" section is empty or absent, or the summary shows "0 critical"), skip to Step 8. Warnings (80-94) are reported but not auto-fixed.
+
+3. **If critical findings exist**, group them by file path, then invoke one implementer skill per file — all in the **same response** so they run in parallel:
+
+CRITICAL: Skills run with `context: fork` and start at the project root. You MUST include the epic worktree path so the forked agent works in the correct location.
+
+For each file that has critical findings, invoke:
+
+```
 /iloom-swarm-issue-implementer "Your working directory is {{EPIC_WORKTREE_PATH}}. cd there before doing any work.
 
-Fix the following critical code review findings in the epic worktree:
+Fix the following critical code review findings in FILE_PATH. DO NOT create your own issue comment. Do NOT commit changes — just make the edits.
 
-<list the specific critical findings with file, line, issue, recommendation>
+1. [FILE:LINE] (Score: XX) Issue description — Recommendation: ...
+2. [FILE:LINE] (Score: XX) Issue description — Recommendation: ...
 
 Fix ONLY these specific issues. Do not refactor or make additional changes beyond what is listed."
+```
 
-2. After fixing, stage and commit from the epic worktree:
+**Parallel invocation:** If critical findings span 3 files, you invoke 3 separate `/iloom-swarm-issue-implementer` skills in a single response message. This runs them concurrently. Each invocation handles findings for ONE file only, preventing edit conflicts.
+
+**Fix prompt construction:** Copy each critical finding EXACTLY from the code reviewer's output (file path, line number, score, issue description, and recommendation). Do NOT paraphrase or summarize — the fix agent needs the precise details to locate and fix each issue.
+
+4. **After ALL fix agents return**, stage and commit once from the epic worktree:
    ```bash
    cd "{{EPIC_WORKTREE_PATH}}"
    git add -A
    git commit -m "fix(review): address critical wave code review findings"
    ```
-3. Record which issues were fixed
 
-If no critical findings, skip this step.
+5. Record which findings were sent for fixing for the Step 8 report
 
 ### Step 8: Return Structured Report
 
