@@ -750,9 +750,10 @@ export class LoomManager {
     // is handled separately in draft-pr mode
     const branchExistedLocally = await branchExists(branchName, process.cwd(), false)
 
-    // For non-PRs, throw error if branch exists
+    // For issues, throw error if branch exists (generated branch name collision means stale branch)
+    // For branches, allow reuse — the user explicitly named this branch
     // For PRs, we'll use this to determine if we need to reset later
-    if (input.type !== 'pr' && branchExistedLocally) {
+    if (input.type === 'issue' && branchExistedLocally) {
       throw new Error(
         `Cannot create worktree: branch '${branchName}' already exists. ` +
         `Use 'git branch -D ${branchName}' to delete it first if needed.`
@@ -803,7 +804,7 @@ export class LoomManager {
       await this.gitWorktree.createWorktree({
         path: worktreePath,
         branch: branchName,
-        createBranch: input.type !== 'pr', // PRs use existing branches
+        createBranch: input.type !== 'pr' && !branchExistedLocally, // PRs and existing branches use existing branches
         ...(baseBranch && { baseBranch }),
       })
 

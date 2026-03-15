@@ -1472,7 +1472,7 @@ describe('LoomManager', testOptions, () => {
       )
     })
 
-    it('should check branch existence before creating worktree for branches', async () => {
+    it('should reuse existing branch for branch type', async () => {
       vi.mocked(branchExists).mockResolvedValue(true)
 
       const input: CreateLoomInput = {
@@ -1482,10 +1482,18 @@ describe('LoomManager', testOptions, () => {
       }
 
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
-      await expect(manager.createIloom(input)).rejects.toThrow(
-        /branch .* already exists/
-      )
+      const result = await manager.createIloom(input)
+
+      expect(result.branch).toBe('existing-branch')
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith({
+        path: '/test/path',
+        branch: 'existing-branch',
+        createBranch: false,
+      })
     })
 
     it('should not check branch existence for PRs', async () => {
