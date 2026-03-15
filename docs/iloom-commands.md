@@ -610,15 +610,14 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 
 1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
-3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
-4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
-5. **Copies agents to child worktrees** - Copies `.claude/agents/` from the epic worktree to each child worktree so workers can resolve agent files locally
-6. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+3. **Renders swarm agents** - Writes swarm-mode agent templates to a temporary plugin directory (`iloom-swarm` plugin)
+4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type (`iloom-swarm:worker`) to the plugin directory
+5. **Launches orchestrator** - Starts Claude with agent teams enabled, `bypassPermissions` mode, and `--plugin-dir` pointing to the temporary plugin directory
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
 - Spawns parallel agents for all unblocked child issues simultaneously
-- Each agent uses the `iloom-swarm-worker` custom agent type, receiving the full iloom workflow as its system prompt
+- Each agent uses the `iloom-swarm:worker` custom agent type, receiving the full iloom workflow as its system prompt
 - Completed work is rebased and fast-forward merged into the epic branch for clean linear history
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
@@ -1865,7 +1864,7 @@ Only sibling dependencies (between child issues of the same epic) are included. 
 
 Each child agent runs in complete isolation:
 
-1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm-worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
+1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm:worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
 2. The agent's system prompt contains the full iloom issue workflow adapted for swarm mode (high-authority instructions)
 3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
 4. On completion, the agent reports back to the orchestrator with status and summary
@@ -2061,29 +2060,33 @@ Swarm mode is designed to maximize throughput despite individual failures:
 
 ### File Structure
 
-During swarm mode, the following files are created:
+During swarm mode, swarm agents are rendered to a temporary plugin directory (outside the worktree) and loaded via `--plugin-dir`. This avoids conflicts with tools like [rulesync](https://github.com/dyoshikawa/rulesync) that manage the `.claude/` directory.
 
 ```
+$TMPDIR/iloom-swarm-plugin-<random>/   # Temporary plugin directory
+├── .claude-plugin/
+│   └── plugin.json                    # {"name": "iloom-swarm", "version": "<cli-version>"}
+├── agents/
+│   ├── worker.md                      # iloom-swarm:worker — full iloom workflow
+│   ├── issue-implementer.md           # iloom-swarm:issue-implementer
+│   ├── wave-verifier.md               # iloom-swarm:wave-verifier
+│   └── ...                            # Other phase agents
+└── skills/
+    ├── issue-analyzer/SKILL.md        # /iloom-swarm:issue-analyzer
+    ├── issue-planner/SKILL.md         # /iloom-swarm:issue-planner
+    └── ...                            # Other skill wrappers
+
 ~/project-looms/
 ├── epic-issue-100/                    # Epic worktree
-│   └── .claude/
-│       └── agents/
-│           ├── iloom-swarm-worker.md              # Worker agent with full iloom workflow
-│           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
-│           └── ...
+│   └── iloom-metadata.json
 ├── issue-101/                         # Child worktree (branched off epic)
-│   ├── .claude/
-│   │   └── agents/                    # Copied from epic worktree during setup (not committed)
-│   │       ├── iloom-swarm-worker.md
-│   │       ├── iloom-swarm-issue-implementer.md
-│   │       └── ...
 │   └── iloom-metadata.json            # state: pending -> in_progress -> done
 ├── issue-102/                         # Another child worktree
 │   └── iloom-metadata.json
 └── ...
 ```
 
-Swarm agent files are not committed to the repository.
+Plugin agents are namespaced as `iloom-swarm:<agent-name>` (e.g., `iloom-swarm:worker`, `iloom-swarm:issue-implementer`). The temporary directory is cleaned up by the OS naturally since agents are loaded into memory at session start.
 
 ---
 

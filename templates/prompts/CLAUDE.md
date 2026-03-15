@@ -16,7 +16,7 @@ il finish <epic>   Merge epic branch back to main
 
 **Orchestrator** (`swarm-orchestrator-prompt.txt`) — runs in the epic worktree, fully autonomous (`bypassPermissions`). Stays lean as a pure coordinator: manages a DAG-based dependency scheduler, spawns child agents in parallel for unblocked issues, monitors completions, delegates all heavy git operations (rebasing, merging, pushing, conflict resolution) to subagents, spawns newly unblocked children, handles failures.
 
-**Child agents** (`iloom-swarm-worker` custom agent type) — each implements one child issue in its own worktree. Strict isolation: only works in its assigned worktree, never merges branches or closes issues (orchestrator handles that). Reports success/failure back to orchestrator then stops.
+**Child agents** (`iloom-swarm:worker` custom agent type) — each implements one child issue in its own worktree. Strict isolation: only works in its assigned worktree, never merges branches or closes issues (orchestrator handles that). Reports success/failure back to orchestrator then stops.
 
 ## Key Files
 

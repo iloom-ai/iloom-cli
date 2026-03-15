@@ -7,14 +7,14 @@ Each phase agent is available as a skill in your .claude/skills/ directory.
 **Your MANDATORY FIRST ACTION** is reading the issue details via MCP tools.
 
 **Skill invocation pattern:**
-- Enhancement: /iloom-swarm-issue-enhancer "Enhance issue #ISSUE_NUMBER..."
-- Complexity: /iloom-swarm-issue-complexity-evaluator "Evaluate complexity..."
-- Analysis: /iloom-swarm-issue-analyzer "Analyze issue #ISSUE_NUMBER..."
-- Planning: /iloom-swarm-issue-planner "Create implementation plan..."
-- Analyze+Plan: /iloom-swarm-issue-analyze-and-plan "Analyze and plan..."
-- Implementation: /iloom-swarm-issue-implementer "Implement the plan..."
-- Code Review: /iloom-swarm-code-reviewer "Run code review."
-- Artifact Review: /iloom-swarm-artifact-reviewer "Review this artifact..."
+- Enhancement: /iloom-swarm:issue-enhancer "Enhance issue #ISSUE_NUMBER..."
+- Complexity: /iloom-swarm:issue-complexity-evaluator "Evaluate complexity..."
+- Analysis: /iloom-swarm:issue-analyzer "Analyze issue #ISSUE_NUMBER..."
+- Planning: /iloom-swarm:issue-planner "Create implementation plan..."
+- Analyze+Plan: /iloom-swarm:issue-analyze-and-plan "Analyze and plan..."
+- Implementation: /iloom-swarm:issue-implementer "Implement the plan..."
+- Code Review: /iloom-swarm:code-reviewer "Run code review."
+- Artifact Review: /iloom-swarm:artifact-reviewer "Review this artifact..."
 
 Skills run inline in your context. Their output is directly available to you.
 
@@ -344,19 +344,19 @@ without temp files or output parsing.
 
 **Skill invocation:**
 ```
-/iloom-swarm-<phase> "<prompt for the phase>"
+/iloom-swarm:<phase> "<prompt for the phase>"
 ```
 
 **Available skills:**
-The following skills are pre-rendered in your .claude/skills/ directory:
-- /iloom-swarm-issue-enhancer
-- /iloom-swarm-issue-complexity-evaluator
-- /iloom-swarm-issue-analyzer
-- /iloom-swarm-issue-analyze-and-plan
-- /iloom-swarm-issue-planner
-- /iloom-swarm-issue-implementer
-- /iloom-swarm-code-reviewer
-- /iloom-swarm-artifact-reviewer
+The following skills are available via the iloom-swarm plugin:
+- /iloom-swarm:issue-enhancer
+- /iloom-swarm:issue-complexity-evaluator
+- /iloom-swarm:issue-analyzer
+- /iloom-swarm:issue-analyze-and-plan
+- /iloom-swarm:issue-planner
+- /iloom-swarm:issue-implementer
+- /iloom-swarm:code-reviewer
+- /iloom-swarm:artifact-reviewer
 
 **Output handling:**
 Skill output is returned directly in your conversation. Extract the relevant
@@ -369,42 +369,42 @@ project root, NOT your current working directory. You MUST include the worktree
 path in every skill invocation prompt so the forked agent works in the correct
 location. Example:
 ```
-/iloom-swarm-issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the plan..."
+/iloom-swarm:issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the plan..."
 ```
 Always prepend: `"Your working directory is <worktree-path>. cd there before doing any work."`
 
 **Todo List:**
 1. Initialize: cd to worktree, set state to `in_progress` (pass `worktreePath: "<your-worktree-path>"` to target your own metadata, not the epic's), read issue
 2. Run upfront scan to determine workflow plan (enhancement, complexity eval, analysis, planning, implementation decisions)
-3. Run issue enhancement (if needed) via /iloom-swarm-issue-enhancer skill. After completion, call `mcp__recap__add_artifact` with the enhancement comment URL and `worktreePath: "<your-worktree-path>"`.
+3. Run issue enhancement (if needed) via /iloom-swarm:issue-enhancer skill. After completion, call `mcp__recap__add_artifact` with the enhancement comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
-3a. Run artifact review on enhancement output via /iloom-swarm-artifact-reviewer skill
+3a. Run artifact review on enhancement output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if COMPLEXITY_OVERRIDE}}
 4. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}}. Skip complexity evaluation and proceed directly to routing.
 5. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
 {{else}}
-4. Run complexity evaluation via /iloom-swarm-issue-complexity-evaluator skill. After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
+4. Run complexity evaluation via /iloom-swarm:issue-complexity-evaluator skill. After completion, call `mcp__recap__add_artifact` with the complexity evaluation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
-4a. Run artifact review on complexity evaluation output via /iloom-swarm-artifact-reviewer skill
+4a. Run artifact review on complexity evaluation output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
 5. Route based on complexity (TRIVIAL skips to implementation, SIMPLE uses combined analyze-and-plan, COMPLEX uses separate analysis then planning)
 {{/if}}
-6. Run analysis/planning based on route via appropriate /iloom-swarm-* skill. After completion, call `mcp__recap__add_artifact` with each comment URL created by the skill and `worktreePath: "<your-worktree-path>"`.
+6. Run analysis/planning based on route via appropriate /iloom-swarm:* skill. After completion, call `mcp__recap__add_artifact` with each comment URL created by the skill and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
-6a. If COMPLEX: Run artifact review on analysis output via /iloom-swarm-artifact-reviewer skill
+6a. If COMPLEX: Run artifact review on analysis output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
-6b. If COMPLEX: Run artifact review on plan output via /iloom-swarm-artifact-reviewer skill
+6b. If COMPLEX: Run artifact review on plan output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
-6c. If SIMPLE: Run artifact review on combined analysis and plan output via /iloom-swarm-artifact-reviewer skill
+6c. If SIMPLE: Run artifact review on combined analysis and plan output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
-7. Run implementation via /iloom-swarm-issue-implementer skill. After completion, call `mcp__recap__add_artifact` with the implementation comment URL and `worktreePath: "<your-worktree-path>"`.
+7. Run implementation via /iloom-swarm:issue-implementer skill. After completion, call `mcp__recap__add_artifact` with the implementation comment URL and `worktreePath: "<your-worktree-path>"`.
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
-7a. Run artifact review on implementation output via /iloom-swarm-artifact-reviewer skill
+7a. Run artifact review on implementation output via /iloom-swarm:artifact-reviewer skill
 {{/if}}{{/if}}
-8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via /iloom-swarm-code-reviewer skill
+8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via /iloom-swarm:code-reviewer skill
 9. If critical/high issues found, auto-fix and optionally re-review
 10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
@@ -558,7 +558,7 @@ For the Enhancement Decision specifically: you check whether an existing comment
 
 Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
-1. Execute enhancement phase via /iloom-swarm-issue-enhancer skill with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute enhancement phase via /iloom-swarm:issue-enhancer skill with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -587,7 +587,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 2.6. Artifact Review (Enhancement):
    - The enhancer output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{/if}}
@@ -597,7 +597,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke enhancer via /iloom-swarm-issue-enhancer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke enhancer via /iloom-swarm:issue-enhancer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-enhancer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -605,7 +605,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run enhancer via /iloom-swarm-issue-enhancer skill from scratch with the reviewer's feedback, return to step 2
+        - Re-run enhancer via /iloom-swarm:issue-enhancer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-enhancer from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -662,7 +662,7 @@ The complexity has been overridden to **{{COMPLEXITY_OVERRIDE}}** via CLI flag. 
 {{else}}
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
-1. Execute complexity evaluation via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute complexity evaluation via /iloom-swarm:issue-complexity-evaluator skill with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -691,7 +691,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 2.6. Artifact Review (Complexity Evaluation):
    - The complexity evaluator output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{/if}}
@@ -701,7 +701,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke complexity evaluator via /iloom-swarm:issue-complexity-evaluator skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-complexity-evaluator with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -709,7 +709,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill from scratch with the reviewer's feedback, return to step 2
+        - Re-run complexity evaluator via /iloom-swarm:issue-complexity-evaluator skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-complexity-evaluator from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -775,7 +775,7 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
 
 Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLEX:
 {{#if SWARM_MODE}}
-1. Execute analysis phase via /iloom-swarm-issue-analyzer skill with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute analysis phase via /iloom-swarm:issue-analyzer skill with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -804,7 +804,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 2.6. Artifact Review (Analysis):
    - The analyzer output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{/if}}
@@ -814,7 +814,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke analyzer via /iloom-swarm-issue-analyzer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke analyzer via /iloom-swarm:issue-analyzer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -822,7 +822,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run analyzer via /iloom-swarm-issue-analyzer skill from scratch with the reviewer's feedback, return to step 2
+        - Re-run analyzer via /iloom-swarm:issue-analyzer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-analyzer from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -880,7 +880,7 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]' })`
 {{/if}}
 {{#if SWARM_MODE}}
-2. Log: "Using SIMPLE workflow: Combined analysis and planning via /iloom-swarm-issue-analyze-and-plan skill, then implementation"
+2. Log: "Using SIMPLE workflow: Combined analysis and planning via /iloom-swarm:issue-analyze-and-plan skill, then implementation"
 {{else}}
 2. Display to user: "Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
 {{/if}}
@@ -912,7 +912,7 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 Execute combined analyze-and-plan agent:
 1. Display: "Executing combined analyze-and-plan agent for SIMPLE task..."
 {{#if SWARM_MODE}}
-2. Execute combined analyze-and-plan phase via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+2. Execute combined analyze-and-plan phase via /iloom-swarm:issue-analyze-and-plan skill with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -943,7 +943,7 @@ Execute combined analyze-and-plan agent:
 3.6. Artifact Review (Analysis and Plan):
    - The analyze-and-plan output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{/if}}
@@ -953,7 +953,7 @@ Execute combined analyze-and-plan agent:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke analyze-and-plan via /iloom-swarm:issue-analyze-and-plan skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -961,7 +961,7 @@ Execute combined analyze-and-plan agent:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill from scratch with the reviewer's feedback, return to step 2
+        - Re-run analyze-and-plan via /iloom-swarm:issue-analyze-and-plan skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-analyze-and-plan from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -997,7 +997,7 @@ Execute combined analyze-and-plan agent:
 
 Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLEX:
 {{#if SWARM_MODE}}
-1. Execute planning phase via /iloom-swarm-issue-planner skill with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
+1. Execute planning phase via /iloom-swarm:issue-planner skill with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
 1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
@@ -1028,7 +1028,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 2.6. Artifact Review (Plan):
    - The planner output should be reviewed before posting
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{/if}}
@@ -1038,7 +1038,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke planner via /iloom-swarm-issue-planner skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke planner via /iloom-swarm:issue-planner skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-planner with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -1046,7 +1046,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run planner via /iloom-swarm-issue-planner skill from scratch with the reviewer's feedback, return to step 2
+        - Re-run planner via /iloom-swarm:issue-planner skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
         - Re-run @agent-iloom-issue-planner from scratch with the reviewer's feedback, return to step 2
 {{/if}}
@@ -1118,12 +1118,12 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
 {{#if SWARM_MODE}}
       **If line says "Run Step N" (sequential):**
-      - Execute implementer via /iloom-swarm-issue-implementer skill with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+      - Execute implementer via /iloom-swarm:issue-implementer skill with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
       - Wait for completion
       - Update progress comment: `- [x] Step N: [name] - [brief result]`
 
       **If line says "Run Steps X, Y, Z in parallel":**
-      - Execute each step sequentially via /iloom-swarm-issue-implementer skill (skills run inline, so execute one at a time)
+      - Execute each step sequentially via /iloom-swarm:issue-implementer skill (skills run inline, so execute one at a time)
       - Each with prompt: "You are implementing Step N of the plan in comment [COMMENT_ID] on issue #ISSUE_NUMBER. DO NOT create your own issue comment."
       - Update progress comment for all completed steps
 {{else}}
@@ -1142,7 +1142,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    **FOR SIMPLE/TRIVIAL workflows (single implementation run):**
 
 {{#if SWARM_MODE}}
-   - Execute implementer via /iloom-swarm-issue-implementer skill with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
+   - Execute implementer via /iloom-swarm:issue-implementer skill with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
    - Wait for completion
 {{else}}
    - Launch ONE @agent-iloom-issue-implementer with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
@@ -1195,7 +1195,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 5.5. Artifact Review (Implementation):
    - The implementer output should be reviewed for plan alignment before code review
 {{#if SWARM_MODE}}
-   - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+   - Execute artifact review via /iloom-swarm:artifact-reviewer skill with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{else}}
    - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{/if}}
@@ -1205,7 +1205,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
      a. If verdict is SUGGEST_IMPROVEMENTS:
         - Log: "Artifact review suggests improvements: [summary]"
 {{#if SWARM_MODE}}
-        - Re-invoke implementer via /iloom-swarm-issue-implementer skill with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+        - Re-invoke implementer via /iloom-swarm:issue-implementer skill with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{else}}
         - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{/if}}
@@ -1213,7 +1213,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
      b. If verdict is RECOMMEND_REGENERATION:
         - Log: "Artifact review recommends regeneration: [summary]"
 {{#if SWARM_MODE}}
-        - Re-run implementer via /iloom-swarm-issue-implementer skill from scratch with the reviewer's feedback
+        - Re-run implementer via /iloom-swarm:issue-implementer skill from scratch with the reviewer's feedback
 {{else}}
         - Re-run @agent-iloom-issue-implementer from scratch with the reviewer's feedback
 {{/if}}
@@ -1247,7 +1247,7 @@ This section is about reviewing code changes for quality, security, and complian
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
 {{#if SWARM_MODE}}
-1. Execute code review via /iloom-swarm-code-reviewer skill with prompt: "Run code review."
+1. Execute code review via /iloom-swarm:code-reviewer skill with prompt: "Run code review."
 {{else}}
 1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 {{/if}}

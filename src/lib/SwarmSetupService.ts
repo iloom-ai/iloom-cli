@@ -1,10 +1,12 @@
 import path from 'path'
+import os from 'os'
 import fs from 'fs-extra'
 import { AgentManager } from './AgentManager.js'
 import { SettingsManager, type ClaudeModel } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
+import { getPackageInfo } from '../utils/package-info.js'
 
 /**
  * Result of the swarm setup process
@@ -16,6 +18,7 @@ export interface SwarmSetupResult {
 	renderedAgents: string[]
 	workerAgentRendered: boolean
 	verifierAgentRendered: boolean
+	pluginDir: string
 }
 
 /**
@@ -35,20 +38,22 @@ export class SwarmSetupService {
 	 * Render swarm-mode agent templates as custom agent files AND thin skill wrappers.
 	 *
 	 * For each phase agent, two files are written:
-	 * 1. Agent file at `.claude/agents/iloom-swarm-<phase>.md` - contains frontmatter
+	 * 1. Agent file at `<pluginDir>/agents/<phase>.md` - contains frontmatter
 	 *    (name, description, model) and the full agent prompt as body.
-	 * 2. Thin skill wrapper at `.claude/skills/iloom-swarm-<phase>/SKILL.md` - contains
-	 *    frontmatter with `agent: iloom-swarm-<phase>` and a minimal body.
+	 * 2. Thin skill wrapper at `<pluginDir>/skills/<phase>/SKILL.md` - contains
+	 *    frontmatter with `agent: <phase>` and a minimal body.
 	 *
 	 * Skills are auto-discovered by Claude Code and invoked via /skill-name syntax.
 	 * The agent file carries the real prompt; the skill just delegates to it.
+	 * Agent names use short form (e.g., `issue-implementer`) since the plugin
+	 * namespace (`iloom-swarm:`) provides the prefix.
 	 */
-	async renderSwarmAgents(epicWorktreePath: string): Promise<{
+	async renderSwarmAgents(pluginDir: string, epicWorktreePath: string): Promise<{
 		renderedSkills: string[]
 		renderedAgents: string[]
 	}> {
-		const claudeSkillsDir = path.join(epicWorktreePath, '.claude', 'skills')
-		const claudeAgentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+		const claudeSkillsDir = path.join(pluginDir, 'skills')
+		const claudeAgentsDir = path.join(pluginDir, 'agents')
 		await fs.ensureDir(claudeSkillsDir)
 		await fs.ensureDir(claudeAgentsDir)
 
@@ -89,7 +94,7 @@ export class SwarmSetupService {
 		const renderedAgents: string[] = []
 
 		// Agents that are rendered as standalone custom agent types (with frontmatter
-		// in .claude/agents/) rather than as skills. These are skipped here
+		// in <pluginDir>/agents/) rather than as skills. These are skipped here
 		// and rendered separately with their own dedicated methods.
 		const standaloneAgents = new Set(['iloom-wave-verifier'])
 
@@ -98,12 +103,13 @@ export class SwarmSetupService {
 				continue
 			}
 
-			// Compute agent/skill name: iloom-swarm-<phase>
+			// Compute agent/skill name: <phase> (e.g., issue-implementer)
+			// The plugin namespace (iloom-swarm:) provides the full qualified name.
 			const swarmName = agentName.startsWith('iloom-')
-				? `iloom-swarm-${agentName.slice('iloom-'.length)}`
-				: `iloom-swarm-${agentName}`
+				? agentName.slice('iloom-'.length)
+				: agentName
 
-			// 1. Write agent file to .claude/agents/<swarmName>.md
+			// 1. Write agent file to <pluginDir>/agents/<swarmName>.md
 			const agentFrontmatter = [
 				'---',
 				`name: ${swarmName}`,
@@ -117,7 +123,7 @@ export class SwarmSetupService {
 			renderedAgents.push(swarmName)
 			getLogger().debug(`Rendered swarm agent: ${swarmName}`)
 
-			// 2. Write thin skill wrapper to .claude/skills/<swarmName>/SKILL.md
+			// 2. Write thin skill wrapper to <pluginDir>/skills/<swarmName>/SKILL.md
 			const skillDir = path.join(claudeSkillsDir, swarmName)
 			await fs.ensureDir(skillDir)
 
@@ -142,11 +148,11 @@ export class SwarmSetupService {
 	}
 
 	/**
-	 * Render the swarm worker agent file to the epic worktree's .claude/agents/ directory.
+	 * Render the swarm worker agent file to the plugin directory.
 	 *
-	 * This creates an agent file at `.claude/agents/iloom-swarm-worker.md` containing
+	 * This creates an agent file at `<pluginDir>/agents/worker.md` containing
 	 * the full iloom workflow instructions (rendered from issue-prompt.txt with SWARM_MODE=true).
-	 * The orchestrator spawns children with `subagent_type: "iloom-swarm-worker"` so these
+	 * The orchestrator spawns children with `subagent_type: "iloom-swarm:worker"` so these
 	 * instructions become the agent's system prompt (high authority), rather than arriving
 	 * as a skill invocation (low authority user message).
 	 *
@@ -154,10 +160,11 @@ export class SwarmSetupService {
 	 * worktree path, body) is provided per-child via the Task prompt from the orchestrator.
 	 */
 	async renderSwarmWorkerAgent(
+		pluginDir: string,
 		epicWorktreePath: string,
 	): Promise<boolean> {
-		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
-		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-worker.md')
+		const agentsDir = path.join(pluginDir, 'agents')
+		const agentOutputPath = path.join(agentsDir, 'worker.md')
 
 		await fs.ensureDir(agentsDir)
 
@@ -180,12 +187,13 @@ export class SwarmSetupService {
 			// Render issue prompt template with swarm variables
 			const agentBody = await this.templateManager.getPrompt('issue', variables)
 
-			// Build the agent file with frontmatter
+			// Settings key stays as 'iloom-swarm-worker' for backward compatibility,
+			// even though the plugin agent name is now just 'worker' (namespaced as iloom-swarm:worker).
 			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
 
 			const frontmatter = [
 				'---',
-				'name: iloom-swarm-worker',
+				'name: worker',
 				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
 				`model: ${workerModel}`,
 				'---',
@@ -207,16 +215,16 @@ export class SwarmSetupService {
 	}
 
 	/**
-	 * Render the wave verifier agent file to the epic worktree's .claude/agents/ directory.
+	 * Render the wave verifier agent file to the plugin directory.
 	 *
-	 * This creates an agent file at `.claude/agents/iloom-swarm-wave-verifier.md` WITH frontmatter,
-	 * making it available as a custom agent type via `subagent_type: "iloom-swarm-wave-verifier"`.
+	 * This creates an agent file at `<pluginDir>/agents/wave-verifier.md` WITH frontmatter,
+	 * making it available as a custom agent type via `subagent_type: "iloom-swarm:wave-verifier"`.
 	 * Unlike phase agents (which are appended as system prompts), the wave verifier is a standalone
 	 * agent that the orchestrator spawns directly for verification child issues.
 	 */
-	async renderSwarmWaveVerifierAgent(epicWorktreePath: string): Promise<boolean> {
-		const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
-		const agentOutputPath = path.join(agentsDir, 'iloom-swarm-wave-verifier.md')
+	async renderSwarmWaveVerifierAgent(pluginDir: string, epicWorktreePath: string): Promise<boolean> {
+		const agentsDir = path.join(pluginDir, 'agents')
+		const agentOutputPath = path.join(agentsDir, 'wave-verifier.md')
 
 		await fs.ensureDir(agentsDir)
 
@@ -244,7 +252,7 @@ export class SwarmSetupService {
 			// Build the agent file WITH frontmatter (standalone custom agent type)
 			const frontmatter = [
 				'---',
-				'name: iloom-swarm-wave-verifier',
+				'name: wave-verifier',
 				`description: ${verifierConfig.description ?? 'Wave verification agent that checks must-have criteria after each swarm wave.'}`,
 				`model: ${verifierModel}`,
 				...(verifierConfig.tools ? [`tools: ${verifierConfig.tools.join(', ')}`] : []),
@@ -265,8 +273,33 @@ export class SwarmSetupService {
 	}
 
 	/**
+	 * Create the plugin manifest file at `<pluginDir>/.claude-plugin/plugin.json`.
+	 *
+	 * The manifest declares the plugin name (`iloom-swarm`) and version, enabling
+	 * Claude Code to namespace all agents/skills under `iloom-swarm:`.
+	 */
+	async createPluginManifest(pluginDir: string): Promise<void> {
+		const manifestDir = path.join(pluginDir, '.claude-plugin')
+		await fs.ensureDir(manifestDir)
+
+		const manifest = {
+			name: 'iloom-swarm',
+			version: getPackageInfo().version,
+		}
+
+		await fs.writeFile(
+			path.join(manifestDir, 'plugin.json'),
+			JSON.stringify(manifest, null, 2),
+			'utf-8',
+		)
+		getLogger().debug(`Created plugin manifest at ${manifestDir}/plugin.json`)
+	}
+
+	/**
 	 * Run the full swarm setup: render agents, worker agent, and wave verifier.
 	 *
+	 * Creates a temporary plugin directory for all swarm agent/skill files,
+	 * keeping them isolated from the worktree's `.claude/` directory.
 	 * The epic worktree already exists (created by `il start`).
 	 * Child worktrees are created on-the-fly by the orchestrator as issues become unblocked.
 	 */
@@ -274,15 +307,19 @@ export class SwarmSetupService {
 		epicBranch: string,
 		epicWorktreePath: string,
 	): Promise<SwarmSetupResult> {
-		// 1. Render swarm agents and skill wrappers to epic worktree
+		// 0. Create temp plugin directory for swarm agents/skills
+		const pluginDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iloom-swarm-plugin-'))
+		await this.createPluginManifest(pluginDir)
+
+		// 1. Render swarm agents and skill wrappers to plugin dir
 		const { renderedSkills: skillsRendered, renderedAgents } =
-			await this.renderSwarmAgents(epicWorktreePath)
+			await this.renderSwarmAgents(pluginDir, epicWorktreePath)
 
 		// 2. Render the swarm worker agent file
-		const workerAgentRendered = await this.renderSwarmWorkerAgent(epicWorktreePath)
+		const workerAgentRendered = await this.renderSwarmWorkerAgent(pluginDir, epicWorktreePath)
 
 		// 3. Render the wave verifier agent file (standalone custom agent type with frontmatter)
-		const verifierAgentRendered = await this.renderSwarmWaveVerifierAgent(epicWorktreePath)
+		const verifierAgentRendered = await this.renderSwarmWaveVerifierAgent(pluginDir, epicWorktreePath)
 
 		getLogger().success('Swarm setup complete: agents and skills rendered')
 
@@ -293,6 +330,7 @@ export class SwarmSetupService {
 			renderedAgents,
 			workerAgentRendered,
 			verifierAgentRendered,
+			pluginDir,
 		}
 	}
 }

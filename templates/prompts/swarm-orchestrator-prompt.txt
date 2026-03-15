@@ -219,7 +219,7 @@ Before spawning, check if a child issue is a **verification task** by examining 
 #### Spawning Regular (Implementation) Issues
 
 For regular child issues (non-verification), use these parameters:
-- `subagent_type`: `"iloom-swarm-worker"`
+- `subagent_type`: `"iloom-swarm:worker"`
 - `mode`: `"delegate"`
 - `team_name`: `"{{SWARM_TEAM_NAME}}"`
 - `name`: `"issue-<child-number>"`
@@ -241,7 +241,7 @@ Nothing else. No title. No body. No instructions. No context. The child's system
 
 For verification child issues (title starts with "Verify"), use the wave verifier agent instead of the regular swarm worker:
 
-- `subagent_type`: `"iloom-swarm-wave-verifier"`
+- `subagent_type`: `"iloom-swarm:wave-verifier"`
 - `mode`: `"delegate"`
 - `team_name`: `"{{SWARM_TEAM_NAME}}"`
 - `name`: `"verifier-<child-number>"`
@@ -483,7 +483,7 @@ git log --oneline -5
 
 **Delegate this to a subagent.** Spawn a Task subagent using the code reviewer agent directly:
 
-- `subagent_type`: `"iloom-swarm-code-reviewer"`
+- `subagent_type`: `"iloom-swarm:code-reviewer"`
 - Prompt:
 
 ```

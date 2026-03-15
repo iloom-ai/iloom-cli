@@ -71,6 +71,7 @@ vi.mock('../lib/SwarmSetupService.js', () => ({
 			renderedAgents: [],
 			workerAgentRendered: false,
 			verifierAgentRendered: false,
+			pluginDir: '/tmp/iloom-swarm-plugin-mock',
 		}),
 	})),
 }))
@@ -3335,6 +3336,7 @@ describe('IgniteCommand', () => {
 					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
+					pluginDir: '/tmp/iloom-swarm-plugin-mock',
 				}),
 			}) as unknown as SwarmSetupService)
 
@@ -3436,6 +3438,7 @@ describe('IgniteCommand', () => {
 				renderedAgents: [],
 				workerAgentRendered: true,
 				verifierAgentRendered: false,
+				pluginDir: '/tmp/iloom-swarm-plugin-mock',
 			})
 
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
@@ -3748,6 +3751,7 @@ describe('IgniteCommand', () => {
 					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
+					pluginDir: '/tmp/iloom-swarm-plugin-mock',
 				}),
 			}) as unknown as SwarmSetupService)
 		})
@@ -4094,6 +4098,7 @@ describe('IgniteCommand', () => {
 					renderedAgents: [],
 					workerAgentRendered: true,
 					verifierAgentRendered: false,
+					pluginDir: '/tmp/iloom-swarm-plugin-mock',
 				}),
 			}) as unknown as SwarmSetupService)
 

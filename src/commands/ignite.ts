@@ -993,8 +993,8 @@ export class IgniteCommand {
 			}
 		}
 
-		// Run swarm setup (renders agents, worker agent, and wave verifier to epic worktree)
-		await swarmSetup.setupSwarm(
+		// Run swarm setup (renders agents, worker agent, and wave verifier to plugin dir)
+		const swarmSetupResult = await swarmSetup.setupSwarm(
 			epicBranch,
 			epicWorktreePath,
 		)
@@ -1179,6 +1179,7 @@ export class IgniteCommand {
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
+			pluginDir: swarmSetupResult.pluginDir,
 		})
 
 		// Track swarm child completions and overall completion

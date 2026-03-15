@@ -330,12 +330,12 @@ async function main() {
 | Request Type | Action |
 |--------------|--------|
 | Trivial (quick answer, single-line fix) | Handle directly |
-| Bug investigation / analysis - ESPECIALLY INVOLVING 3rd PARTY APIs/LIBRARIES | \`@agent-iloom-swarm-issue-analyzer\` → present findings → offer to fix |
-| Code changes | \`@agent-iloom-swarm-issue-implementer\` - TELL THE AGENT NOT TO MAKE/UPDATE ISSUE COMMENTS TO AVOID POLLUTION |
-| On 3rd repeated attempt at fixing the same problem | \`@agent-iloom-swarm-issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm-issue-implementer\` - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
-| New features / complex changes | \`@agent-iloom-swarm-issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm-issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
-| Deep questions (how/why something works) | \`@agent-iloom-swarm-issue-analyzer\` |
-| Code review request | \`@agent-iloom-swarm-code-reviewer\` |`;
+| Bug investigation / analysis - ESPECIALLY INVOLVING 3rd PARTY APIs/LIBRARIES | \`@agent-iloom-swarm:issue-analyzer\` → present findings → offer to fix |
+| Code changes | \`@agent-iloom-swarm:issue-implementer\` - TELL THE AGENT NOT TO MAKE/UPDATE ISSUE COMMENTS TO AVOID POLLUTION |
+| On 3rd repeated attempt at fixing the same problem | \`@agent-iloom-swarm:issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm:issue-implementer\` - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
+| New features / complex changes | \`@agent-iloom-swarm:issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm:issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
+| Deep questions (how/why something works) | \`@agent-iloom-swarm:issue-analyzer\` |
+| Code review request | \`@agent-iloom-swarm:code-reviewer\` |`;
           const output = {
             hookSpecificOutput: {
               hookEventName: 'UserPromptSubmit',
@@ -348,7 +348,7 @@ async function main() {
         }
 
         // Swarm still in progress — agents handle their own workflow, only remind about code reviewer
-        const swarmReminder = `**REMINDER**: When the user requests a code review, use \`@agent-iloom-code-reviewer\`.`;
+        const swarmReminder = `**REMINDER**: When the user requests a code review, use \`@agent-iloom-swarm:code-reviewer\`.`;
         const output = {
           hookSpecificOutput: {
             hookEventName: 'UserPromptSubmit',

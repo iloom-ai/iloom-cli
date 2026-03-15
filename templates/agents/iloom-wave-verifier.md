@@ -142,7 +142,7 @@ If any must-haves FAILED, invoke the fix skill to address them:
 CRITICAL: Skills run with `context: fork` and start at the project root. You MUST include the child worktree path so the forked agent works in the correct location.
 
 ```
-/iloom-swarm-issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the following missing must-haves for issue #NNN '[issue title]'. DO NOT create your own issue comment.
+/iloom-swarm:issue-implementer "Your working directory is /path/to/child/worktree. cd there before doing any work. Implement the following missing must-haves for issue #NNN '[issue title]'. DO NOT create your own issue comment.
 
 The following must-have criteria FAILED verification:
 1. [exists] src/components/Foo.tsx — File does not exist
@@ -204,7 +204,7 @@ After ALL fix skill invocations have completed:
 {{#if HAS_REVIEW_GEMINI}}
 Invoke the code reviewer skill with the pre-gathered diff:
 
-/iloom-swarm-code-reviewer "
+/iloom-swarm:code-reviewer "
 ## Pre-gathered Diff
 
 The following diff contains all changes made in this wave (from pre-wave commit to current epic branch HEAD). Use this diff directly — do NOT run git commands to gather your own diff.
@@ -224,7 +224,7 @@ Collect the skill output as the code review findings.
 {{#if HAS_REVIEW_CODEX}}
 Invoke the code reviewer skill with the pre-gathered diff:
 
-/iloom-swarm-code-reviewer "
+/iloom-swarm:code-reviewer "
 ## Pre-gathered Diff
 
 The following diff contains all changes made in this wave (from pre-wave commit to current epic branch HEAD). Use this diff directly — do NOT run git commands to gather your own diff.
@@ -260,7 +260,7 @@ CRITICAL: Skills run with `context: fork` and start at the project root. You MUS
 For each file that has critical findings, invoke:
 
 ```
-/iloom-swarm-issue-implementer "Your working directory is {{EPIC_WORKTREE_PATH}}. cd there before doing any work.
+/iloom-swarm:issue-implementer "Your working directory is {{EPIC_WORKTREE_PATH}}. cd there before doing any work.
 
 Fix the following critical code review findings in FILE_PATH. DO NOT create your own issue comment. Do NOT commit changes — just make the edits.
 
@@ -270,7 +270,7 @@ Fix the following critical code review findings in FILE_PATH. DO NOT create your
 Fix ONLY these specific issues. Do not refactor or make additional changes beyond what is listed."
 ```
 
-**Parallel invocation:** If critical findings span 3 files, you invoke 3 separate `/iloom-swarm-issue-implementer` skills in a single response message. This runs them concurrently. Each invocation handles findings for ONE file only, preventing edit conflicts.
+**Parallel invocation:** If critical findings span 3 files, you invoke 3 separate `/iloom-swarm:issue-implementer` skills in a single response message. This runs them concurrently. Each invocation handles findings for ONE file only, preventing edit conflicts.
 
 **Fix prompt construction:** Copy each critical finding EXACTLY from the code reviewer's output (file path, line number, score, issue description, and recommendation). Do NOT paraphrase or summarize — the fix agent needs the precise details to locate and fix each issue.
 
