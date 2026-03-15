@@ -386,6 +386,7 @@ Before presenting the plan to the user, audit it against these questions:
 4. **Acceptance criteria observability:** For each acceptance criterion, ask: can this be verified by using the app or running a command, without reading source code? If not, rewrite it.
 {{#if WAVE_VERIFICATION}}
 5. **Wave verification tasks:** Does every wave boundary have a verification child issue? Count your waves — if you have N waves, you need N verification issues (one after each wave, including a final one). If any wave boundary is missing a verification issue, add one now. This is mandatory, not optional.
+6. **Integration must-haves for producer/consumer pairs:** For each wave with parallel issues, check: does any issue produce a class/service that a sibling issue's factory or provider is expected to consume? If yes, the wave's verification issue must have a `substantive:` must-have verifying the consumer injects/passes a real instance (not null). Missing these means nobody checks the wiring after merge.
 {{/if}}
 
 {{#if WAVE_VERIFICATION}}
@@ -424,6 +425,36 @@ Verify integration (depends on A, B, C)
 ```
 
 Skip verification tasks only when the DAG is trivially small (2 or fewer child issues).
+
+**Integration-Point Must-Haves for Producer/Consumer Pairs:**
+
+When parallel issues in the same wave have producer/consumer relationships, the verification issue for that wave MUST include integration must-haves that verify the consumer actually uses the producer's output — not just that both pieces exist independently.
+
+**How to detect producer/consumer pairs:** Scan parallel issues within each wave for these signals:
+- One issue's "Shared Contracts (Produces)" matches another issue's "Shared Contracts (Consumes)"
+- A factory or provider class in issue B constructs or injects instances of a class created in issue A
+- Constructor parameters or method signatures in one issue are typed as classes/interfaces from a sibling issue
+- DI container registrations in one issue provide services consumed in another
+
+**What to generate:** For each detected pair, add a `substantive:` must-have to the wave's verification issue. The must-have should verify that the consumer passes or injects a real instance of the producer's class — not a null placeholder. The check must be statically verifiable (grep for null in constructor calls, verify the factory imports and instantiates the real class, check that DI binds to the concrete implementation).
+
+**Format:**
+```
+## Must-Haves
+- substantive: <consumer-file-path> — <ConsumerClass> passes a real <ProducerClass> instance (not null) to <target> in <methods-or-call-sites>
+```
+
+**Example:** If wave 2 has:
+- Issue A: Creates `LayoutCanvasView` class
+- Issue B: Creates `LayoutPlayerItemFactory` that constructs `LayoutPlayerItem`
+
+Then the wave 2 verification issue gets:
+```
+## Must-Haves
+- substantive: src/factories/LayoutPlayerItemFactory.ts — LayoutPlayerItemFactory injects CanvasViewFactoryService and passes a real LayoutCanvasView (not null) to LayoutPlayerItem in both createFromEditorItem and createFromDraftItem
+```
+
+Place integration must-haves on the wave's verification issue, NOT on the individual child issues — the integration only exists after both are merged.
 {{/if}}
 
 **Before Creating Issues:**
