@@ -483,13 +483,18 @@ export class MergeManager {
 		const prompt =
 			`Help me with this rebase please.`
 
-		// Git commands to auto-approve during rebase conflict resolution
-		// These are the essential commands Claude needs to analyze and resolve conflicts
+		// Tools to auto-approve during rebase conflict resolution
+		// Includes core file tools for reading/editing conflicted files,
+		// plus the essential git commands Claude needs to analyze and resolve conflicts
 		// Note: git reset and git checkout are intentionally excluded as they can be destructive
 		const rebaseAllowedTools = [
+			'Read',
+			'Grep',
+			'Glob',
 			'Bash(git status:*)',
 			'Bash(git diff:*)',
 			'Bash(git log:*)',
+			'Bash(git show:*)',
 			'Bash(git add:*)',
 			'Bash(git rebase:*)',
 			'Bash(GIT_EDITOR=true git rebase:*)',
@@ -503,8 +508,8 @@ export class MergeManager {
 				appendSystemPrompt: systemPrompt,
 				addDir: worktreePath,
 				headless: options.jsonStream ? true : false,
+				...(options.jsonStream && { permissionMode: 'bypassPermissions' as const }),
 				...(options.jsonStream && {
-					permissionMode: 'bypassPermissions' as const,
 					passthroughStdout: true,
 				}),
 				allowedTools: rebaseAllowedTools,

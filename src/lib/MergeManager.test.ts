@@ -1585,13 +1585,17 @@ describe('MergeManager', () => {
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Verify allowedTools contains essential git commands for rebase
+			// Verify allowedTools contains core file tools and essential git commands for rebase
 			// Note: git reset and git checkout are intentionally excluded as they can be destructive
 			const options = vi.mocked(claude.launchClaude).mock.calls[0][1]
 			expect(options?.allowedTools).toEqual(expect.arrayContaining([
+				'Read',
+				'Grep',
+				'Glob',
 				'Bash(git status:*)',
 				'Bash(git diff:*)',
 				'Bash(git log:*)',
+				'Bash(git show:*)',
 				'Bash(git add:*)',
 				'Bash(git rebase:*)',
 			]))
