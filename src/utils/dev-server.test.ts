@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildDevServerCommand, buildDevServerUrl, getDevServerLaunchCommand } from './dev-server.js'
 import * as packageManager from './package-manager.js'
+import * as packageJson from './package-json.js'
 
 // Mock package-manager module
 vi.mock('./package-manager.js', () => ({
 	detectPackageManager: vi.fn(),
 }))
 
+// Mock package-json module
+vi.mock('./package-json.js', () => ({
+	getPackageScripts: vi.fn(),
+}))
+
 describe('buildDevServerCommand', () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
+		// Default: no iloom-config scripts, fall through to package manager
+		vi.mocked(packageJson.getPackageScripts).mockResolvedValue({})
 	})
 
 	it('should build pnpm dev command for pnpm projects', async () => {
@@ -55,11 +62,34 @@ describe('buildDevServerCommand', () => {
 
 		expect(command).toBe('npm run dev')
 	})
+
+	it('should use iloom-config dev script when available', async () => {
+		vi.mocked(packageJson.getPackageScripts).mockResolvedValue({
+			dev: { command: 'cargo watch -x run', source: 'iloom-config' },
+		})
+
+		const command = await buildDevServerCommand('/Users/test/workspace')
+
+		expect(command).toBe('cargo watch -x run')
+		expect(packageManager.detectPackageManager).not.toHaveBeenCalled()
+	})
+
+	it('should fall through to package manager when dev script is from package-manager source', async () => {
+		vi.mocked(packageJson.getPackageScripts).mockResolvedValue({
+			dev: { command: 'next dev', source: 'package-manager' },
+		})
+		vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+
+		const command = await buildDevServerCommand('/Users/test/workspace')
+
+		expect(command).toBe('pnpm dev')
+	})
 })
 
 describe('getDevServerLaunchCommand', () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
+		// Default: no iloom-config scripts
+		vi.mocked(packageJson.getPackageScripts).mockResolvedValue({})
 	})
 
 	it('should build complete terminal command with PORT export for web projects', async () => {

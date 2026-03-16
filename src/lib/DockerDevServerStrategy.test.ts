@@ -268,22 +268,27 @@ describe('DockerDevServerStrategy', () => {
 			vi.mocked(utils.buildContainerName).mockReturnValue('iloom-dev-test')
 			vi.mocked(execa)
 				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found = removed)
 				.mockResolvedValueOnce({ exitCode: 0, stdout: 'abc123' } as never) // docker run
 		})
 
-		it('should force-remove existing container before running', async () => {
+		it('should force-remove existing container and verify removal before running', async () => {
 			await strategy.runContainerDetached(WORKTREE, 3742, 4200, config)
 
 			expect(execa).toHaveBeenNthCalledWith(
 				1,
 				'docker', ['rm', '-f', 'iloom-dev-test'], { reject: false }
 			)
+			expect(execa).toHaveBeenNthCalledWith(
+				2,
+				'docker', ['container', 'inspect', 'iloom-dev-test'], { reject: false }
+			)
 		})
 
 		it('should run detached with correct port mapping and volume mounts', async () => {
 			await strategy.runContainerDetached(WORKTREE, 3742, 4200, config)
 
-			expect(execa).toHaveBeenNthCalledWith(2, 'docker', [
+			expect(execa).toHaveBeenCalledWith('docker', [
 				'run', '-d',
 				'--name', 'iloom-dev-test',
 				'-p', '3742:4200',
@@ -300,7 +305,7 @@ describe('DockerDevServerStrategy', () => {
 				DEBUG: 'true',
 			})
 
-			expect(execa).toHaveBeenNthCalledWith(2, 'docker', expect.arrayContaining([
+			expect(execa).toHaveBeenCalledWith('docker', expect.arrayContaining([
 				'-e', 'DATABASE_URL=postgres://localhost/test',
 				'-e', 'DEBUG=true',
 			]))
@@ -312,7 +317,7 @@ describe('DockerDevServerStrategy', () => {
 				runArgs: ['--memory', '512m', '--cpus', '0.5'],
 			})
 
-			expect(execa).toHaveBeenNthCalledWith(2, 'docker', expect.arrayContaining([
+			expect(execa).toHaveBeenCalledWith('docker', expect.arrayContaining([
 				'--memory', '512m', '--cpus', '0.5',
 			]))
 		})
@@ -327,6 +332,7 @@ describe('DockerDevServerStrategy', () => {
 			vi.mocked(execa)
 				.mockReset()
 				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(new Error('port already allocated'))
 
 			await expect(
@@ -339,8 +345,14 @@ describe('DockerDevServerStrategy', () => {
 	// runContainerForeground
 	// ---------------------------------------------------------------------------
 	describe('runContainerForeground', () => {
+		/** Default execa mock: returns exitCode 0 for all calls except container inspect (exitCode 1 = not found) */
 		const setupExeca = () => {
-			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(execa).mockImplementation((_cmd: string, args?: readonly string[]) => {
+				if (args?.[0] === 'container' && args?.[1] === 'inspect') {
+					return Promise.resolve({ exitCode: 1 }) as never
+				}
+				return Promise.resolve({ exitCode: 0 }) as never
+			})
 		}
 
 		/** Helper to create an ExecaError-like object with exitCode and/or signal */
@@ -442,6 +454,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should remove signal handlers even when docker run throws', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(new Error('container crashed'))
 			const removeSpy = vi.spyOn(process, 'removeListener')
 
@@ -456,6 +469,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should silently swallow exit code 143 (SIGTERM via docker stop)', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(makeExecaError({ exitCode: 143 }))
 
 			await expect(
@@ -466,6 +480,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should silently swallow exit code 130 (SIGINT)', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(makeExecaError({ exitCode: 130 }))
 
 			await expect(
@@ -476,6 +491,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should silently swallow signal SIGTERM', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGTERM' }))
 
 			await expect(
@@ -486,6 +502,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should silently swallow signal SIGINT', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGINT' }))
 
 			await expect(
@@ -496,6 +513,7 @@ describe('DockerDevServerStrategy', () => {
 		it('should re-throw unexpected errors (non-signal exit codes)', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({} as never) // rm -f (stale cleanup)
+				.mockResolvedValueOnce({ exitCode: 1 } as never) // container inspect (not found)
 				.mockRejectedValueOnce(makeExecaError({ exitCode: 1, message: 'container failed' }))
 
 			await expect(

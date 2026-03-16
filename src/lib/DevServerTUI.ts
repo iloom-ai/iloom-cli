@@ -19,6 +19,8 @@ const CURSOR_HIDE = `${CSI}?25l`
 const CURSOR_SHOW = `${CSI}?25h`
 /** Clear from cursor to end of line */
 const CLEAR_LINE = `${CSI}K`
+/** Clear entire screen and reset cursor to top-left */
+const CLEAR_SCREEN = `${CSI}2J${CSI}H`
 /** Reset scroll region to full terminal */
 const SCROLL_REGION_RESET = `${CSI}r`
 
@@ -103,6 +105,10 @@ export class DevServerTUI {
 
 		// Hide cursor during TUI operation
 		this.stdout.write(CURSOR_HIDE)
+
+		// Clear the screen so previous output (build logs, startup messages) doesn't
+		// bleed through the scroll region and create a confusing mix of old and new text
+		this.stdout.write(CLEAR_SCREEN)
 
 		// Set scroll region: top of terminal to (total rows - status bar height)
 		const scrollBottom = Math.max(1, rows - STATUS_BAR_HEIGHT)

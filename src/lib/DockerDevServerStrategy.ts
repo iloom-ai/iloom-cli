@@ -99,6 +99,31 @@ export class DockerDevServerStrategy {
 	}
 
 	/**
+	 * Force-remove a container and verify it's gone before returning.
+	 * Handles the known Docker race where `docker rm -f` returns success but the
+	 * name isn't immediately released, causing subsequent `docker run --name` to
+	 * fail with "name already in use".
+	 */
+	private async ensureContainerRemoved(containerName: string, maxRetries = 3): Promise<void> {
+		for (let attempt = 0; attempt < maxRetries; attempt++) {
+			await execa('docker', ['rm', '-f', containerName], { reject: false })
+
+			// Verify container is gone (inspect exits non-zero when container doesn't exist)
+			const check = await execa('docker', ['container', 'inspect', containerName], { reject: false })
+			if (check.exitCode !== 0) {
+				return
+			}
+
+			if (attempt < maxRetries - 1) {
+				logger.debug(`Container "${containerName}" still exists after rm -f, retrying (attempt ${attempt + 1}/${maxRetries})...`)
+				await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 500))
+			}
+		}
+
+		logger.warn(`Container "${containerName}" still exists after ${maxRetries} removal attempts`)
+	}
+
+	/**
 	 * Resolve the container port using 3-tier fallback:
 	 *   1. config.containerPort (explicit)
 	 *   2. inspectImagePorts(imageName) (from built image)
@@ -210,8 +235,8 @@ export class DockerDevServerStrategy {
 		const imageName = this.utils.buildImageName(nameId)
 		const containerName = this.utils.buildContainerName(nameId)
 
-		// Force-remove any existing container with same name
-		await execa('docker', ['rm', '-f', containerName], { reject: false })
+		// Force-remove any existing container with same name and verify it's gone
+		await this.ensureContainerRemoved(containerName)
 
 		const args = [
 			'run', '-d',
@@ -279,7 +304,7 @@ export class DockerDevServerStrategy {
 		const { redirectToStderr, onProcessStarted, envOverrides, onOutput } = opts
 
 		// Force-remove any existing container with same name (stale from previous ungraceful exit)
-		await execa('docker', ['rm', '-f', containerName], { reject: false })
+		await this.ensureContainerRemoved(containerName)
 
 		const args = [
 			'run', '--rm',

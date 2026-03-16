@@ -1,4 +1,5 @@
 import { detectPackageManager } from './package-manager.js'
+import { getPackageScripts } from './package-json.js'
 import { logger } from './logger.js'
 import type { Capability } from '../types/loom.js'
 
@@ -16,6 +17,15 @@ export function buildDevServerUrl(port: number, protocol: 'http' | 'https' = 'ht
 export async function buildDevServerCommand(
 	workspacePath: string
 ): Promise<string> {
+	// Check for iloom config dev script first (package.iloom.json / package.iloom.local.json)
+	const scripts = await getPackageScripts(workspacePath)
+	const devScript = scripts['dev']
+
+	if (devScript?.source === 'iloom-config') {
+		logger.debug(`Dev server command (from iloom config): ${devScript.command}`)
+		return devScript.command
+	}
+
 	const packageManager = await detectPackageManager(workspacePath)
 
 	let devCommand: string
