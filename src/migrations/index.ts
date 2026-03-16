@@ -117,4 +117,14 @@ export const migrations: Migration[] = [
       await ensureGlobalGitignorePatterns(allIloomPatterns)
     }
   },
+  {
+    version: '0.13.1',
+    description: 'Add global gitignore for .env.local and .env.*.local files',
+    migrate: async (): Promise<void> => {
+      await ensureGlobalGitignorePatterns([
+        '**/.env.local',
+        '**/.env.*.local',
+      ])
+    }
+  },
 ]

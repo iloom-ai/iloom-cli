@@ -222,6 +222,26 @@ describe('migrations', () => {
     })
   })
 
+  describe('v0.13.1 global gitignore for .env.local files', () => {
+    const migration = migrations.find(m => m.version === '0.13.1')
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toContain('.env.local')
+    })
+
+    it('calls ensureGlobalGitignorePatterns with env local patterns', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith([
+        '**/.env.local',
+        '**/.env.*.local',
+      ])
+    })
+  })
+
   describe('v0.10.3 global gitignore path remediation migration', () => {
     const migration = migrations.find(m => m.version === '0.10.3')
 
