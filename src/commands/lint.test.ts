@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LintCommand } from './lint.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import * as packageJson from '../utils/package-json.js'
 import * as packageManager from '../utils/package-manager.js'
@@ -12,6 +13,7 @@ vi.mock('../utils/IdentifierParser.js', () => ({
 		parseForPatternDetection: vi.fn(),
 	})),
 }))
+vi.mock('../lib/MetadataManager.js')
 
 // Mock package utilities
 vi.mock('../utils/package-json.js', () => ({
@@ -47,6 +49,10 @@ describe('LintCommand', () => {
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
 		command = new LintCommand(mockGitWorktreeManager)
+		// Set up MetadataManager mock to return no packagesToValidate by default
+		vi.mocked(MetadataManager).mockImplementation(() => ({
+			readMetadata: vi.fn().mockResolvedValue(null),
+		} as unknown as MetadataManager))
 	})
 
 	describe('identifier parsing', () => {
@@ -115,7 +121,7 @@ describe('LintCommand', () => {
 
 			await command.execute({})
 
-			expect(packageManager.runScript).toHaveBeenCalledWith('lint', mockWorktree.path, [])
+			expect(packageManager.runScript).toHaveBeenCalledWith('lint', mockWorktree.path, [], { packages: [] })
 		})
 
 		it('should pass worktree path to runScript()', async () => {
@@ -129,7 +135,8 @@ describe('LintCommand', () => {
 			expect(packageManager.runScript).toHaveBeenCalledWith(
 				'lint',
 				mockWorktree.path,
-				[]
+				[],
+				{ packages: [] }
 			)
 		})
 	})
