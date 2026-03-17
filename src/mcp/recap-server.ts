@@ -487,6 +487,116 @@ server.registerTool(
 	}
 )
 
+// Register set_package_to_run tool
+server.registerTool(
+	'set_package_to_run',
+	{
+		title: 'Set Package to Run',
+		description: 'Set which monorepo package to run a dev server for. Stores as single-element array in loom metadata.',
+		inputSchema: {
+			package: z.string().describe('Relative directory path from repo root (e.g., "services/admin-api")'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope to a specific loom'),
+		},
+		outputSchema: {
+			success: z.literal(true),
+			packagesToRun: z.array(z.string()),
+		},
+	},
+	async ({ package: pkg, worktreePath }) => {
+		const metadataFilePath = resolveMetadataFilePath(worktreePath)
+
+		// Read existing metadata
+		let metadata: MetadataFile
+		try {
+			const content = await fs.readFile(metadataFilePath, 'utf8')
+			metadata = JSON.parse(content) as MetadataFile
+		} catch (error: unknown) {
+			if (error instanceof SyntaxError) {
+				throw new Error(`Metadata file contains invalid JSON at ${metadataFilePath}`)
+			}
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				throw new Error(`Metadata file not found at ${metadataFilePath}`)
+			}
+			throw error
+		}
+
+		// Warn if package path doesn't exist on disk (relative to project path or worktree path)
+		const basePath = metadata.projectPath ?? (worktreePath ?? process.cwd())
+		const pkgAbsPath = path.join(basePath, pkg)
+		if (!(await fs.pathExists(pkgAbsPath))) {
+			console.error(`Warning: Package path does not exist on disk: ${pkgAbsPath}`)
+		}
+
+		// Update packagesToRun as single-element array
+		metadata.packagesToRun = [pkg]
+
+		// Write back
+		await fs.writeFile(metadataFilePath, JSON.stringify(metadata, null, 2), { mode: 0o644 })
+
+		const result = { success: true as const, packagesToRun: [pkg] }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
+		}
+	}
+)
+
+// Register set_packages_to_validate tool
+server.registerTool(
+	'set_packages_to_validate',
+	{
+		title: 'Set Packages to Validate',
+		description: 'Set which monorepo packages to scope validation to. Stores array in loom metadata.',
+		inputSchema: {
+			packages: z.array(z.string()).describe('Array of relative directory paths from repo root (e.g., ["services/admin-api", "packages/shared"])'),
+			worktreePath: z.string().optional().describe('Optional worktree path to scope to a specific loom'),
+		},
+		outputSchema: {
+			success: z.literal(true),
+			packagesToValidate: z.array(z.string()),
+		},
+	},
+	async ({ packages, worktreePath }) => {
+		const metadataFilePath = resolveMetadataFilePath(worktreePath)
+
+		// Read existing metadata
+		let metadata: MetadataFile
+		try {
+			const content = await fs.readFile(metadataFilePath, 'utf8')
+			metadata = JSON.parse(content) as MetadataFile
+		} catch (error: unknown) {
+			if (error instanceof SyntaxError) {
+				throw new Error(`Metadata file contains invalid JSON at ${metadataFilePath}`)
+			}
+			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+				throw new Error(`Metadata file not found at ${metadataFilePath}`)
+			}
+			throw error
+		}
+
+		// Warn for each package path that doesn't exist on disk
+		const basePath = metadata.projectPath ?? (worktreePath ?? process.cwd())
+		for (const pkg of packages) {
+			const pkgAbsPath = path.join(basePath, pkg)
+			if (!(await fs.pathExists(pkgAbsPath))) {
+				console.error(`Warning: Package path does not exist on disk: ${pkgAbsPath}`)
+			}
+		}
+
+		// Update packagesToValidate
+		metadata.packagesToValidate = packages
+
+		// Write back
+		await fs.writeFile(metadataFilePath, JSON.stringify(metadata, null, 2), { mode: 0o644 })
+
+		const result = { success: true as const, packagesToValidate: packages }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
+		}
+	}
+)
+
 // Main server startup
 async function main(): Promise<void> {
 	console.error('=== Loom Recap MCP Server Starting ===')
