@@ -98,11 +98,13 @@ Do NOT include: "should have planned better", "the swarm was efficient", "agents
 
 ### 7. Per-Child Details
 
-For each child:
+For each child, use an H3 heading with the issue number as a link, then collapse the details:
 
 ```
+### [#NUMBER](issue-url): TITLE — succeeded/failed
+
 <details>
-<summary>#[NUMBER]: [TITLE] — [succeeded/failed]</summary>
+<summary>Details</summary>
 
 **What changed:** [1-2 sentences about the actual code change, not the process]
 
@@ -116,6 +118,8 @@ For each child:
 
 </details>
 ```
+
+This way the issue number and title are always visible as scannable headings, with details collapsed underneath.
 
 ## Formatting Rules
 
