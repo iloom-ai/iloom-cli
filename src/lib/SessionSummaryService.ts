@@ -19,7 +19,7 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import type { IssueProvider } from '../mcp/types.js'
 import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
-import { SwarmReportCollector, readRecapForWorktree } from './SwarmReportCollector.js'
+import { SwarmReportCollector, readRecapForWorktree, type ChildImplementationData } from './SwarmReportCollector.js'
 import { TelemetryService } from './TelemetryService.js'
 
 const GITHUB_COMMENT_MAX_LENGTH = 65_536
@@ -169,6 +169,33 @@ export class SessionSummaryService {
 	}
 
 	/**
+	 * Format child implementation data as readable markdown for the epic report template.
+	 * This replaces raw JSON.stringify so the AI gets structured, readable input.
+	 */
+	private formatChildDataAsMarkdown(childData: ChildImplementationData[]): string {
+		return childData.map(child => {
+			const sections: string[] = [
+				`### Child #${child.issueNumber}: ${child.title}`,
+				`**Status:** ${child.status}`,
+			]
+
+			if (child.implementationComment) {
+				sections.push('', '**Implementation Summary:**', child.implementationComment)
+			}
+
+			if (child.recapMarkdown) {
+				sections.push('', '**Recap (decisions, risks, insights):**', child.recapMarkdown)
+			}
+
+			if (!child.implementationComment && !child.recapMarkdown) {
+				sections.push('', '*No implementation data available for this child.*')
+			}
+
+			return sections.join('\n')
+		}).join('\n\n---\n\n')
+	}
+
+	/**
 	 * Truncate a report to GitHub's comment size limit, appending a notice if truncated
 	 */
 	private truncateReport(report: string): string {
@@ -207,7 +234,7 @@ export class SessionSummaryService {
 			const prompt = await this.templateManager.getPrompt('epic-report', {
 				EPIC_NUMBER: String(input.epicIssueNumber),
 				EPIC_TITLE: input.epicTitle,
-				CHILD_DATA: JSON.stringify(childData),
+				CHILD_DATA: this.formatChildDataAsMarkdown(childData),
 				TOTAL_CHILDREN: String(childData.length),
 				TOTAL_SUCCEEDED: String(totalSucceeded),
 				TOTAL_FAILED: String(totalFailed),

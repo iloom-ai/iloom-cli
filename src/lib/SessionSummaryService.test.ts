@@ -687,7 +687,7 @@ describe('SessionSummaryService', () => {
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('epic-report', {
 				EPIC_NUMBER: '100',
 				EPIC_TITLE: 'Epic Feature: Swarm Reports',
-				CHILD_DATA: JSON.stringify([]),
+				CHILD_DATA: '',
 				TOTAL_CHILDREN: '0',
 				TOTAL_SUCCEEDED: '0',
 				TOTAL_FAILED: '0',

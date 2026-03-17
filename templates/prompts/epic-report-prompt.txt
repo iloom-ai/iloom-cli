@@ -1,48 +1,138 @@
-You are generating a structured implementation report for a PR reviewer. You are NOT having a conversation. Output ONLY the report markdown content — no preamble, no meta-commentary, no sign-off.
+You are generating an implementation report for an epic PR. You are NOT having a conversation. Output ONLY the report markdown — no preamble, no meta-commentary, no sign-off.
 
 ## Epic Context
 
 Epic: #{{EPIC_NUMBER}} - {{EPIC_TITLE}}
 Children: {{TOTAL_CHILDREN}} total, {{TOTAL_SUCCEEDED}} succeeded, {{TOTAL_FAILED}} failed
 
-## Report Requirements
+## Content Quality Guidelines
 
-Produce a report with the following sections in order:
+**CRITICAL: This report is NOT a play-by-play of the swarm. It's a knowledge artifact for PR reviewers and future developers.**
 
-### 1. Executive Summary
-2-3 sentences covering: what was done across all children, the success rate, and any key concerns a reviewer should be aware of.
+The reader doesn't care about:
+- Which agent did what, or in which order
+- Git operations (rebases, merges, pushes, conflict resolution steps)
+- Workflow phases, status transitions, or orchestration mechanics
+- "The agent analyzed the issue and then planned the implementation"
 
-### 2. Cross-Cutting Risks & Assumptions
-Synthesize risks and assumptions from ALL children. Group them by architectural concern — NOT by child issue. Use groupings like "Database Changes", "API Surface", "UI Components", "Authentication", "Data Migration", or whatever categories apply to the actual changes. Highlight risks that appear in multiple children. Identify any contradictions or conflicts between children.
+The reader DOES care about:
+- What changed in the codebase and why
+- What could break and what to watch out for
+- Decisions that constrain future work
+- Gaps in testing or verification
+- Integration risks from parallel development
 
-### 3. Architecture Decisions
-Notable decisions made across children that affect the overall system design. Include decisions about shared interfaces, patterns, naming conventions, or integration points. Explain the rationale when it is clear from the implementation data.
+**Self-check:** If a sentence describes swarm PROCESS rather than codebase KNOWLEDGE, delete it.
 
-### 4. Per-Child Implementation Details
-For each child, use a collapsible block:
+| BAD (process narration) | GOOD (technical insight) |
+|-------------------------|--------------------------|
+| "Issue #42 was implemented first, then #43 was merged" | "The auth middleware now validates tokens before route matching" |
+| "The agent resolved a merge conflict in config.ts" | "Two children modified the same type union — reconciled to include both additions" |
+| "Wave 1 completed successfully with 4 children" | "All 4 services share a common `ChildImplementationData` interface for consistency" |
+| "The verification agent confirmed all must-haves" | "The collector gracefully degrades when recap files are missing (returns partial data)" |
+
+## Report Structure
+
+Produce these sections in order:
+
+### 1. Executive Summary (always visible, no collapse)
+
+3-4 sentences covering:
+- What capability was added or changed (in user/developer terms, not swarm terms)
+- Key architectural pattern or approach chosen
+- Anything a reviewer should be concerned about
+- Quick stats: files changed, tests added
+
+### 2. What to Review Carefully (always visible, no collapse)
+
+3-5 bullets pointing reviewers to the areas where human judgment matters most:
+- Integration seams between independently-developed components
+- Behavioral changes to existing code paths
+- Edge cases with no test coverage
+- Architectural choices that could be controversial
+
+### 3. Cross-Cutting Risks & Assumptions
+
+<details>
+<summary>Risks & Assumptions (expand for details)</summary>
+
+Synthesize from ALL children. Group by architectural concern (e.g., "API Surface", "Error Handling", "Type Safety") — NOT by child issue. Highlight risks that appeared in multiple children. Flag any contradictions between children's approaches.
+
+</details>
+
+### 4. Architecture Decisions
+
+<details>
+<summary>Key Decisions (expand for details)</summary>
+
+Decisions that affect the overall system — shared interfaces, patterns, naming conventions, integration contracts. Include rationale. Format as bullets.
+
+</details>
+
+### 5. Testing & Verification
+
+<details>
+<summary>Test Coverage (expand for details)</summary>
+
+- New tests: what areas they cover and rough count
+- Modified tests: what changed and why
+- Coverage gaps: areas with NO test coverage that need manual verification
+- Integration verification results: what was checked, what passed, what was fixed
+
+</details>
+
+### 6. Lessons Learned
+
+<details>
+<summary>What we'd do differently (expand for details)</summary>
+
+Technical insights, NOT process reflection:
+- Integration issues discovered when merging parallel work (e.g., "Two children defined the same type differently")
+- Contract mismatches caught by review or verification (and how they were fixed)
+- Patterns that worked well for parallel decomposition
+- Patterns that caused friction (e.g., "Shared type file was modified by 3 children independently")
+
+Do NOT include: "should have planned better", "the swarm was efficient", "agents worked well together"
+
+</details>
+
+### 7. Per-Child Details
+
+For each child:
 
 ```
 <details>
-<summary>Issue #[NUMBER]: [TITLE] — [succeeded/failed]</summary>
+<summary>#[NUMBER]: [TITLE] — [succeeded/failed]</summary>
 
-**What was implemented:** [1-2 sentences]
+**What changed:** [1-2 sentences about the actual code change, not the process]
 
-**Files changed:** [key files only, not exhaustive]
+**Key files:** [most important files, not exhaustive list]
 
-**Key decisions:** [decisions specific to this child]
+**Decisions:** [child-specific decisions with brief rationale]
 
-**Risks:** [risks specific to this child, if any]
+**Risks:** [child-specific risks, if any]
+
+**Test coverage:** [what's tested, what isn't]
 
 </details>
 ```
 
-## Synthesis Instructions
+## Formatting Rules
 
-- Group cross-cutting findings by architectural concern, NOT sequentially by child
-- Identify contradictions or conflicts between children (e.g., conflicting data models, incompatible APIs)
-- Highlight shared risks that appear in multiple children — consolidate them in Section 2
+- Sections 1 and 2 are ALWAYS visible (no `<details>` wrapper) — they're the skim layer
+- Sections 3-7 use `<details><summary>` — they're the depth layer
+- Replace "(expand for details)" with actual item counts when you can (e.g., "Risks & Assumptions (4 items)")
 - Keep total output under 10,000 characters (GitHub comment limit)
-- If a child failed, note it clearly in the per-child section and mention any downstream impact in the executive summary
+- Write for two audiences: humans who skim headings and expand selectively, and AI agents that ingest everything
+
+## VALIDATION CHECKLIST
+
+Before outputting, verify:
+- [ ] Executive summary describes what CHANGED, not what the swarm DID
+- [ ] No sentences describe agent behavior, orchestration steps, or workflow phases
+- [ ] Risks are grouped by concern, not by child issue
+- [ ] "What to Review Carefully" contains actionable guidance, not vague praise
+- [ ] Lessons learned contains technical insights, not process reflection
 
 ## Child Implementation Data
 
