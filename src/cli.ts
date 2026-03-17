@@ -79,6 +79,23 @@ function parseIssueIdentifier(value: string): string | number {
   return !isNaN(parsed) && String(parsed) === value ? parsed : value
 }
 
+/**
+ * Commander custom parse function for collecting repeatable KEY=VALUE options into a Record.
+ * Used for --env flags that can be specified multiple times.
+ */
+function collectKeyValue(value: string, previous: Record<string, string>): Record<string, string> {
+  const equalsIndex = value.indexOf('=')
+  if (equalsIndex === -1) {
+    throw new Error(`Invalid format: "${value}". Expected KEY=VALUE`)
+  }
+  const key = value.substring(0, equalsIndex)
+  const val = value.substring(equalsIndex + 1)
+  if (!key) {
+    throw new Error(`Invalid format: "${value}". Key cannot be empty`)
+  }
+  return { ...previous, [key]: val }
+}
+
 program
   .name('iloom')
   .description(packageJson.description)
@@ -862,15 +879,17 @@ program
   .command('open')
   .description('Open workspace in browser or run CLI tool')
   .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('-e, --env <KEY=VALUE>', 'Environment variable for the dev server (repeatable)', collectKeyValue, {})
   .allowUnknownOption()
-  .action(async (identifier?: string, _options?: Record<string, unknown>, command?: Command) => {
+  .action(async (identifier?: string, options?: { env?: Record<string, string> }, command?: Command) => {
     try {
       // Extract additional arguments - everything after identifier
       const args = command?.args ? command.args.slice(identifier ? 1 : 0) : []
+      const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined
 
       const { OpenCommand } = await import('./commands/open.js')
       const cmd = new OpenCommand()
-      const input = identifier ? { identifier, args } : { args }
+      const input = identifier ? { identifier, args, env } : { args, env }
       await cmd.execute(input)
     } catch (error) {
       logger.error(`Failed to open: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -882,15 +901,17 @@ program
   .command('run')
   .description('Run CLI tool or open workspace in browser')
   .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('-e, --env <KEY=VALUE>', 'Environment variable for the dev server (repeatable)', collectKeyValue, {})
   .allowUnknownOption()
-  .action(async (identifier?: string, _options?: Record<string, unknown>, command?: Command) => {
+  .action(async (identifier?: string, options?: { env?: Record<string, string> }, command?: Command) => {
     try {
       // Extract additional arguments - everything after identifier
       const args = command?.args ? command.args.slice(identifier ? 1 : 0) : []
+      const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined
 
       const { RunCommand } = await import('./commands/run.js')
       const cmd = new RunCommand()
-      const input = identifier ? { identifier, args } : { args }
+      const input = identifier ? { identifier, args, env } : { args, env }
       await cmd.execute(input)
     } catch (error) {
       logger.error(`Failed to run: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -919,11 +940,13 @@ program
   .description('Start dev server for workspace (foreground)')
   .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
   .option('--json', 'Output as JSON')
-  .action(async (identifier?: string, options?: { json?: boolean }) => {
+  .option('-e, --env <KEY=VALUE>', 'Environment variable for the dev server (repeatable)', collectKeyValue, {})
+  .action(async (identifier?: string, options?: { json?: boolean; env?: Record<string, string> }) => {
     try {
       const { DevServerCommand } = await import('./commands/dev-server.js')
       const cmd = new DevServerCommand()
-      await cmd.execute({ identifier, json: options?.json })
+      const env = options?.env && Object.keys(options.env).length > 0 ? options.env : undefined
+      await cmd.execute({ identifier, json: options?.json, env })
     } catch (error) {
       logger.error(`Failed to start dev server: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

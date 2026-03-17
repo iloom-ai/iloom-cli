@@ -242,6 +242,10 @@ export const CapabilitiesSettingsSchema = z
 					.array(z.string())
 					.optional()
 					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
+				dockerRunEnv: z
+					.record(z.string())
+					.optional()
+					.describe('Environment variables to pass to docker run (e.g., {"NODE_ENV": "development", "DEBUG": "true"})'),
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
@@ -302,6 +306,10 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.array(z.string())
 					.optional()
 					.describe('Additional arguments for docker run (e.g., ["-v", "./src:/app/src"] for volume mounts)'),
+				dockerRunEnv: z
+					.record(z.string())
+					.optional()
+					.describe('Environment variables to pass to docker run (e.g., {"NODE_ENV": "development", "DEBUG": "true"})'),
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
@@ -360,6 +368,10 @@ export const DevServerSettingsSchema = z.object({
 				.array(z.string())
 				.optional()
 				.describe('Additional arguments for docker run'),
+			runEnv: z
+				.record(z.string(), z.string())
+				.optional()
+				.describe('Environment variables to pass to docker run'),
 		})
 		.optional(),
 })
@@ -406,6 +418,10 @@ export const DevServerSettingsSchemaNoDefaults = z.object({
 				.array(z.string())
 				.optional()
 				.describe('Additional arguments for docker run'),
+			runEnv: z
+				.record(z.string(), z.string())
+				.optional()
+				.describe('Environment variables to pass to docker run'),
 		})
 		.optional(),
 })

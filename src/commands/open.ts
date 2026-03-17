@@ -18,6 +18,7 @@ import type { GitWorktree } from '../types/worktree.js'
 export interface OpenCommandInput {
 	identifier?: string
 	args?: string[]
+	env?: Record<string, string> | undefined
 }
 
 interface ParsedOpenInput {
@@ -62,7 +63,7 @@ export class OpenCommand {
 
 		// 4. Execute based on capabilities (web first, CLI fallback)
 		if (capabilities.includes('web')) {
-			await this.openWebBrowser(worktree)
+			await this.openWebBrowser(worktree, input.env)
 		} else if (capabilities.includes('cli')) {
 			await this.runCLITool(worktree.path, binEntries, input.args ?? [])
 		} else {
@@ -217,7 +218,7 @@ export class OpenCommand {
 	 * Open web browser with workspace URL
 	 * Auto-starts dev server if not already running
 	 */
-	private async openWebBrowser(worktree: GitWorktree): Promise<void> {
+	private async openWebBrowser(worktree: GitWorktree, env?: Record<string, string>): Promise<void> {
 		const cliOverrides = extractSettingsOverrides()
 		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
 		const isMainWorktree = await this.gitWorktreeManager.isMainWorktree(worktree, this.settingsManager)
@@ -247,7 +248,8 @@ export class OpenCommand {
 		const serverReady = await this.devServerManager.ensureServerRunning(
 			worktree.path,
 			port,
-			dockerConfig
+			dockerConfig,
+			env
 		)
 
 		if (!serverReady) {

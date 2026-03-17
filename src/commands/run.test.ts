@@ -595,6 +595,7 @@ describe('RunCommand', () => {
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
+				undefined,
 				undefined
 			)
 		})

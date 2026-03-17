@@ -952,6 +952,7 @@ describe('DockerManager', () => {
 				dockerBuildArgs: undefined,
 				dockerBuildSecrets: undefined,
 				dockerRunArgs: undefined,
+				dockerRunEnv: undefined,
 				identifier: '548',
 			})
 		})
@@ -982,8 +983,21 @@ describe('DockerManager', () => {
 				dockerBuildArgs: { NODE_ENV: 'development' },
 				dockerBuildSecrets: undefined,
 				dockerRunArgs: ['-v', './src:/app/src'],
+				dockerRunEnv: undefined,
 				identifier: 'my-branch',
 			})
+		})
+
+		it('should pass through dockerRunEnv when provided', () => {
+			const result = DockerManager.buildDockerConfigFromSettings(
+				{
+					devServer: 'docker',
+					dockerRunEnv: { NODE_ENV: 'development', DEBUG: 'true' },
+				},
+				'548'
+			)
+
+			expect(result?.dockerRunEnv).toEqual({ NODE_ENV: 'development', DEBUG: 'true' })
 		})
 
 		it('should pass through dockerBuildSecrets when provided', () => {

@@ -19,6 +19,8 @@ export interface DockerConfig {
 	buildSecrets?: Record<string, string> | undefined
 	/** Additional docker run flags */
 	runArgs?: string[] | undefined
+	/** Environment variables passed as --env to docker run */
+	runEnv?: Record<string, string> | undefined
 	/** Identifier for naming containers/images (issue number, branch name). Falls back to worktreePath if not set. */
 	identifier?: string | undefined
 	/** Protocol for displayed URLs (http or https, default http) */
@@ -251,7 +253,14 @@ export class DockerDevServerStrategy {
 			'-e', `PORT=${containerPort}`,
 		]
 
-		// Forward additional environment variables
+		// Forward settings-level environment variables (overridable by envOverrides)
+		if (config.runEnv) {
+			for (const [key, value] of Object.entries(config.runEnv)) {
+				args.push('-e', `${key}=${value}`)
+			}
+		}
+
+		// Forward additional environment variables (overrides settings-level env for same keys)
 		if (envOverrides) {
 			for (const [key, value] of Object.entries(envOverrides)) {
 				args.push('-e', `${key}=${value}`)
@@ -319,7 +328,14 @@ export class DockerDevServerStrategy {
 			'-e', `PORT=${containerPort}`,
 		]
 
-		// Forward additional environment variables
+		// Forward settings-level environment variables (overridable by envOverrides)
+		if (config.runEnv) {
+			for (const [key, value] of Object.entries(config.runEnv)) {
+				args.push('-e', `${key}=${value}`)
+			}
+		}
+
+		// Forward additional environment variables (overrides settings-level env for same keys)
 		if (envOverrides) {
 			for (const [key, value] of Object.entries(envOverrides)) {
 				args.push('-e', `${key}=${value}`)

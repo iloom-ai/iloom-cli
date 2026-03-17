@@ -660,6 +660,7 @@ describe('OpenCommand', () => {
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
+				undefined,
 				undefined
 			)
 		})
@@ -691,6 +692,7 @@ describe('OpenCommand', () => {
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				3087,
+				undefined,
 				undefined
 			)
 		})
@@ -708,6 +710,7 @@ describe('OpenCommand', () => {
 			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
 				mockWorktree.path,
 				4500,
+				undefined,
 				undefined
 			)
 		})

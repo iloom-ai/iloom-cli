@@ -18,6 +18,7 @@ import type { GitWorktree } from '../types/worktree.js'
 export interface RunCommandInput {
 	identifier?: string
 	args?: string[]
+	env?: Record<string, string> | undefined
 }
 
 interface ParsedRunInput {
@@ -62,9 +63,9 @@ export class RunCommand {
 
 		// 4. Execute based on capabilities (CLI first, web fallback)
 		if (capabilities.includes('cli')) {
-			await this.runCLITool(worktree.path, binEntries, input.args ?? [])
+			await this.runCLITool(worktree.path, binEntries, input.args ?? [], input.env)
 		} else if (capabilities.includes('web')) {
-			await this.openWebBrowser(worktree)
+			await this.openWebBrowser(worktree, input.env)
 		} else {
 			throw new Error(
 				`No CLI or web capabilities detected for workspace at ${worktree.path}`
@@ -219,7 +220,8 @@ export class RunCommand {
 	private async runCLITool(
 		worktreePath: string,
 		binEntries: Record<string, string>,
-		args: string[]
+		args: string[],
+		env?: Record<string, string>
 	): Promise<void> {
 		// Validate binEntries exist
 		if (Object.keys(binEntries).length === 0) {
@@ -251,7 +253,7 @@ export class RunCommand {
 		await execa('node', [binFilePath, ...args], {
 			stdio: 'inherit', // Allow interactive CLIs (prompts, colors, etc.)
 			cwd: worktreePath, // Execute in worktree context
-			env: process.env, // Inherit environment
+			env: env ? { ...process.env, ...env } : process.env,
 		})
 	}
 
@@ -259,7 +261,7 @@ export class RunCommand {
 	 * Open web browser with workspace URL
 	 * Auto-starts dev server if not already running
 	 */
-	private async openWebBrowser(worktree: GitWorktree): Promise<void> {
+	private async openWebBrowser(worktree: GitWorktree, env?: Record<string, string>): Promise<void> {
 		const cliOverrides = extractSettingsOverrides()
 		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
 		const isMainWorktree = await this.gitWorktreeManager.isMainWorktree(worktree, this.settingsManager)
@@ -289,7 +291,8 @@ export class RunCommand {
 		const serverReady = await this.devServerManager.ensureServerRunning(
 			worktree.path,
 			port,
-			dockerConfig
+			dockerConfig,
+			env
 		)
 
 		if (!serverReady) {

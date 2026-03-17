@@ -673,7 +673,8 @@ describe('DevServerManager', () => {
 					expect.objectContaining({
 						dockerFile: './Dockerfile',
 						containerPort: 4200,
-					})
+					}),
+					undefined
 				)
 			})
 
@@ -738,7 +739,8 @@ describe('DevServerManager', () => {
 					4200,
 					expect.objectContaining({
 						runArgs: ['-v', './src:/app/src'],
-					})
+					}),
+					undefined
 				)
 			})
 
@@ -751,6 +753,53 @@ describe('DevServerManager', () => {
 
 				// Process-based detection should NOT be called in Docker mode
 				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+			})
+
+			it('should pass envOverrides through to runContainerDetached', async () => {
+				const port = 3548
+				const envOverrides = { API_KEY: 'test-key', DEBUG: 'true' }
+
+				mockStrategyInstance.isContainerRunning.mockResolvedValue(false)
+				mockStrategyInstance.buildImage.mockResolvedValue(undefined)
+				mockStrategyInstance.resolveContainerPort.mockResolvedValue(4200)
+				mockStrategyInstance.runContainerDetached.mockResolvedValue('iloom-dev-548')
+				mockStrategyInstance.waitForReady.mockResolvedValue(true)
+
+				await manager.ensureServerRunning(mockWorktreePath, port, dockerConfig, envOverrides)
+
+				expect(mockStrategyInstance.runContainerDetached).toHaveBeenCalledWith(
+					mockWorktreePath,
+					port,
+					4200,
+					expect.any(Object),
+					envOverrides
+				)
+			})
+
+			it('should pass dockerRunEnv through toStrategyConfig as runEnv', async () => {
+				const port = 3548
+				const configWithEnv: typeof dockerConfig = {
+					...dockerConfig,
+					dockerRunEnv: { NODE_ENV: 'development' },
+				}
+
+				mockStrategyInstance.isContainerRunning.mockResolvedValue(false)
+				mockStrategyInstance.buildImage.mockResolvedValue(undefined)
+				mockStrategyInstance.resolveContainerPort.mockResolvedValue(4200)
+				mockStrategyInstance.runContainerDetached.mockResolvedValue('iloom-dev-548')
+				mockStrategyInstance.waitForReady.mockResolvedValue(true)
+
+				await manager.ensureServerRunning(mockWorktreePath, port, configWithEnv)
+
+				expect(mockStrategyInstance.runContainerDetached).toHaveBeenCalledWith(
+					mockWorktreePath,
+					port,
+					4200,
+					expect.objectContaining({
+						runEnv: { NODE_ENV: 'development' },
+					}),
+					undefined
+				)
 			})
 		})
 

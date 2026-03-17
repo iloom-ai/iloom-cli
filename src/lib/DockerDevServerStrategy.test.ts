@@ -311,6 +311,39 @@ describe('DockerDevServerStrategy', () => {
 			]))
 		})
 
+		it('should forward config.runEnv as -e flags', async () => {
+			await strategy.runContainerDetached(WORKTREE, 3742, 4200, {
+				...config,
+				runEnv: { NODE_ENV: 'development', DEBUG: 'true' },
+			})
+
+			expect(execa).toHaveBeenCalledWith('docker', expect.arrayContaining([
+				'-e', 'NODE_ENV=development',
+				'-e', 'DEBUG=true',
+			]))
+		})
+
+		it('should place config.runEnv before envOverrides so envOverrides win for same key', async () => {
+			await strategy.runContainerDetached(WORKTREE, 3742, 4200, {
+				...config,
+				runEnv: { DEBUG: 'false' },
+			}, { DEBUG: 'true' })
+
+			const args = vi.mocked(execa).mock.calls.find(
+				(call) => Array.isArray(call[1]) && (call[1] as string[]).includes('run')
+			)?.[1] as string[]
+
+			// Both should be present; Docker uses last -e for same key, so envOverrides wins
+			const debugIndices = args.reduce<number[]>((acc, arg, i) => {
+				if (arg === 'DEBUG=false' || arg === 'DEBUG=true') acc.push(i)
+				return acc
+			}, [])
+			expect(debugIndices).toHaveLength(2)
+			// envOverrides (DEBUG=true) should come after config.runEnv (DEBUG=false)
+			expect(args[debugIndices[0]!]).toBe('DEBUG=false')
+			expect(args[debugIndices[1]!]).toBe('DEBUG=true')
+		})
+
 		it('should append runArgs to docker run command', async () => {
 			await strategy.runContainerDetached(WORKTREE, 3742, 4200, {
 				...config,
@@ -525,6 +558,38 @@ describe('DockerDevServerStrategy', () => {
 			const result = await strategy.runContainerForeground(WORKTREE, 3742, 4200, config)
 
 			expect(result).toEqual({})
+		})
+
+		it('should forward config.runEnv as -e flags', async () => {
+			await strategy.runContainerForeground(WORKTREE, 3742, 4200, {
+				...config,
+				runEnv: { NODE_ENV: 'development', DEBUG: 'true' },
+			})
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				expect.arrayContaining(['-e', 'NODE_ENV=development', '-e', 'DEBUG=true']),
+				expect.any(Object)
+			)
+		})
+
+		it('should place config.runEnv before envOverrides so envOverrides win for same key', async () => {
+			await strategy.runContainerForeground(WORKTREE, 3742, 4200, {
+				...config,
+				runEnv: { DEBUG: 'false' },
+			}, { envOverrides: { DEBUG: 'true' } })
+
+			const args = vi.mocked(execa).mock.calls.find(
+				(call) => Array.isArray(call[1]) && (call[1] as string[]).includes('run')
+			)?.[1] as string[]
+
+			const debugIndices = args.reduce<number[]>((acc, arg, i) => {
+				if (arg === 'DEBUG=false' || arg === 'DEBUG=true') acc.push(i)
+				return acc
+			}, [])
+			expect(debugIndices).toHaveLength(2)
+			expect(args[debugIndices[0]!]).toBe('DEBUG=false')
+			expect(args[debugIndices[1]!]).toBe('DEBUG=true')
 		})
 
 		it('should append config.runArgs to the docker run command', async () => {

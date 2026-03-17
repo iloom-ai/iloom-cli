@@ -63,6 +63,7 @@ function toStrategyConfig(config: DockerConfig): StrategyDockerConfig {
 		buildArgs: config.dockerBuildArgs,
 		buildSecrets: config.dockerBuildSecrets,
 		runArgs: config.dockerRunArgs,
+		runEnv: config.dockerRunEnv,
 		identifier: config.identifier,
 		protocol: config.protocol,
 	}
@@ -115,7 +116,7 @@ export class DevServerManager {
 	 * @param dockerConfig - Optional Docker configuration for container-based server
 	 * @returns true if server is ready, false if startup failed/timed out
 	 */
-	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig): Promise<boolean> {
+	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig, envOverrides?: Record<string, string>): Promise<boolean> {
 		logger.debug(`Checking if dev server is running on port ${port}...`)
 
 		// Docker mode: check if container is already running
@@ -130,7 +131,7 @@ export class DevServerManager {
 
 			logger.info(`Docker dev server not running on port ${port}, starting...`)
 			try {
-				await this.startDockerServer(worktreePath, port, dockerConfig, strategy)
+				await this.startDockerServer(worktreePath, port, dockerConfig, strategy, envOverrides)
 				return true
 			} catch (error) {
 				logger.error(
@@ -172,7 +173,8 @@ export class DevServerManager {
 		worktreePath: string,
 		port: number,
 		dockerConfig: DockerConfig,
-		strategy: DockerDevServerStrategy
+		strategy: DockerDevServerStrategy,
+		envOverrides?: Record<string, string>
 	): Promise<void> {
 		const strategyConfig = toStrategyConfig(dockerConfig)
 		const imageName = dockerUtils.buildImageName(dockerConfig.identifier)
@@ -193,7 +195,8 @@ export class DevServerManager {
 			worktreePath,
 			port,
 			containerPort,
-			strategyConfig
+			strategyConfig,
+			envOverrides
 		)
 
 		// Track for cleanup

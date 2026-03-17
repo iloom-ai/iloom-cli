@@ -18,6 +18,7 @@ import type { GitWorktree } from '../types/worktree.js'
 export interface DevServerCommandInput {
 	identifier?: string | undefined
 	json?: boolean | undefined
+	env?: Record<string, string> | undefined
 }
 
 export interface DevServerResult {
@@ -107,6 +108,11 @@ export class DevServerCommand {
 		const metadata = await this.metadataManager.readMetadata(worktree.path)
 		if (metadata?.colorHex) {
 			envOverrides.ILOOM_COLOR_HEX = metadata.colorHex
+		}
+
+		// 3d. Merge CLI --env overrides (highest priority for environment variables)
+		if (input.env) {
+			Object.assign(envOverrides, input.env)
 		}
 
 		// 4. Detect project capabilities

@@ -723,7 +723,16 @@ il open 25
 # For CLI projects, run with arguments
 il open 25 --help
 il open 25 --version
+
+# Pass environment variables to the dev server
+il open 25 --env DEBUG=true --env API_URL=http://localhost:8080
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-e, --env <KEY=VALUE>` | Environment variable to pass to the dev server (repeatable). Same behavior as `il dev-server --env`. |
 
 ---
 
@@ -807,6 +816,13 @@ il dev-server 25
 il dev-server feat/my-branch
 ```
 
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output result as JSON |
+| `-e, --env <KEY=VALUE>` | Environment variable to pass to the dev server (repeatable). In Docker mode, these become `--env` flags on `docker run`; in native mode, they are injected into the process environment. CLI `--env` values override settings-level `dockerRunEnv` for the same key. |
+
 **Notes:**
 - Runs in foreground to see server output and errors
 - Use Ctrl+C to stop the server
@@ -838,7 +854,10 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
       "dockerBuildSecrets": {
         "npmrc": "~/.npmrc"
       },
-      "dockerRunArgs": ["-v", "./src:/app/src"]
+      "dockerRunArgs": ["-v", "./src:/app/src"],
+      "dockerRunEnv": {
+        "DEBUG": "true"
+      }
     }
   }
 }
@@ -854,7 +873,8 @@ Set `capabilities.web.devServer` to `"docker"` in your `.iloom/settings.json`:
 | `containerPort` | `number` | Auto-detected | Port the application listens on inside the Docker container. If not set, iloom attempts to detect it from `EXPOSE` directives in the built Docker image (via `docker image inspect`), falling back to Dockerfile parsing. |
 | `dockerBuildArgs` | `Record<string, string>` | - | Build arguments passed to `docker build` (e.g., `{"NODE_ENV": "development"}`). |
 | `dockerBuildSecrets` | `Record<string, string>` | - | Secret files to mount during `docker build` via BuildKit `--secret` flag. Keys are secret IDs, values are source file paths (supports `~` expansion). Example: `{"npmrc": "~/.npmrc"}` translates to `--secret id=npmrc,src=$HOME/.npmrc`. |
-| `dockerRunArgs` | `string[]` | - | Additional flags passed to `docker run`. Use this for volume mounts, environment variables, user mapping, and other Docker options. |
+| `dockerRunArgs` | `string[]` | - | Additional flags passed to `docker run`. Use this for volume mounts, user mapping, and other Docker options. |
+| `dockerRunEnv` | `Record<string, string>` | - | Environment variables passed as `--env` to `docker run` (e.g., `{"NODE_ENV": "development"}`). These can be overridden at invocation time with `il dev-server --env KEY=VALUE`. |
 
 **How Port Mapping Works:**
 
@@ -875,10 +895,10 @@ Containers are named `iloom-dev-<identifier>` where the identifier is derived fr
 **Known Limitations:**
 
 - **Single-container only:** Docker mode runs a single container from your Dockerfile. Docker Compose (`docker-compose.yml`) multi-service stacks are not yet supported. If your app depends on external services (Redis, Postgres, etc.), run them separately or use a self-contained Dockerfile.
-- **macOS file watching:** Docker Desktop on macOS uses VirtioFS for bind mounts. Hot reload frameworks may not detect file changes reliably through VirtioFS. If your dev server's hot reload stops working, enable polling mode via `dockerRunArgs`:
+- **macOS file watching:** Docker Desktop on macOS uses VirtioFS for bind mounts. Hot reload frameworks may not detect file changes reliably through VirtioFS. If your dev server's hot reload stops working, enable polling mode via `dockerRunEnv`:
   ```json
   {
-    "dockerRunArgs": ["-e", "CHOKIDAR_USEPOLLING=true"]
+    "dockerRunEnv": { "CHOKIDAR_USEPOLLING": "true" }
   }
   ```
   This is a Docker Desktop limitation, not an iloom limitation.

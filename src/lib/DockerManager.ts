@@ -29,6 +29,8 @@ export interface DockerConfig {
 	dockerBuildSecrets?: Record<string, string> | undefined
 	/** Additional docker run flags (e.g., volume mounts) */
 	dockerRunArgs?: string[] | undefined
+	/** Environment variables passed as --env to docker run */
+	dockerRunEnv?: Record<string, string> | undefined
 	/** Identifier for container naming (issue number, branch name) */
 	identifier: string
 	/** Protocol for dev server URLs (http or https) */
@@ -47,6 +49,7 @@ interface WebSettings {
 	dockerBuildArgs?: Record<string, string> | undefined
 	dockerBuildSecrets?: Record<string, string> | undefined
 	dockerRunArgs?: string[] | undefined
+	dockerRunEnv?: Record<string, string> | undefined
 	protocol?: 'http' | 'https' | undefined
 }
 
@@ -430,6 +433,7 @@ export class DockerManager {
 			dockerBuildArgs: webSettings.dockerBuildArgs,
 			dockerBuildSecrets: webSettings.dockerBuildSecrets,
 			dockerRunArgs: webSettings.dockerRunArgs,
+			dockerRunEnv: webSettings.dockerRunEnv,
 			identifier,
 			protocol: webSettings.protocol,
 		}

@@ -655,6 +655,32 @@ describe('DevServerCommand', () => {
 			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
 			expect(envArg).not.toHaveProperty('ILOOM_COLOR_HEX')
 		})
+
+		it('should merge CLI --env into envOverrides', async () => {
+			await command.execute({ identifier: '87', env: { API_KEY: 'secret', DEBUG: 'true' } })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).toHaveProperty('API_KEY', 'secret')
+			expect(envArg).toHaveProperty('DEBUG', 'true')
+			// Internal vars should still be present
+			expect(envArg).toHaveProperty('ILOOM_LOOM', '87')
+		})
+
+		it('should let CLI --env override .env file values for same key', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				sourceEnvOnStart: true,
+			})
+			vi.mocked(loadWorkspaceEnv).mockReturnValue({
+				parsed: { DEBUG: 'false', API_KEY: 'from-env-file' },
+			})
+
+			await command.execute({ identifier: '87', env: { DEBUG: 'true' } })
+
+			const envArg = vi.mocked(mockDevServerManager.runServerForeground).mock.calls[0]?.[4]
+			expect(envArg).toHaveProperty('DEBUG', 'true')
+			// Env file value for API_KEY should still be present
+			expect(envArg).toHaveProperty('API_KEY', 'from-env-file')
+		})
 	})
 
 	describe('Docker mode', () => {
