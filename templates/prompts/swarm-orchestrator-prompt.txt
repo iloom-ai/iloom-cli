@@ -92,10 +92,12 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 12. Create final commit with Fixes trailer for epic issue
 13. Push epic branch to remote (final commit)
 14. Print final summary
+15. Post completion status comment on epic issue
 {{else}}
 11. Create final commit with Fixes trailer for epic issue
 12. Push epic branch to remote (final commit)
 13. Print final summary
+14. Post completion status comment on epic issue
 {{/if}}
 {{else}}
 6. Clean up completed child worktrees (if not --skip-cleanup)
@@ -106,9 +108,11 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 10. Run post-swarm code review and auto-fix any findings
 11. Create final commit with Fixes trailer for epic issue
 12. Print final summary
+13. Post completion status comment on epic issue
 {{else}}
 10. Create final commit with Fixes trailer for epic issue
 11. Print final summary
+12. Post completion status comment on epic issue
 {{/if}}
 {{/if}}
 {{else}}
@@ -120,9 +124,11 @@ This is a JSON object representing the dependency DAG. Keys are issue numbers (a
 10. Run post-swarm code review and auto-fix any findings
 11. Create final commit with Fixes trailer for epic issue
 12. Print final summary
+13. Post completion status comment on epic issue
 {{else}}
 10. Create final commit with Fixes trailer for epic issue
 11. Print final summary
+12. Post completion status comment on epic issue
 {{/if}}
 {{/if}}
 
@@ -627,25 +633,60 @@ The epic branch at `{{EPIC_WORKTREE_PATH}}` contains merged work from all succes
 The epic worktree is ready for review at: `{{EPIC_WORKTREE_PATH}}`
 ```
 
+### Step 5.4.5: Post Completion Status Comment on Epic Issue
+
+Using the same data you just printed in Step 5.4, post a lightweight status comment on the parent epic issue.
+
+1. Build the comment body using the following format:
+
+```markdown
+## Swarm Completion Status
+
+**Epic:** #<EPIC_ISSUE_NUMBER>
+
+| Issue | Status |
+|-------|--------|
+| [#<number>](<url>) | Done |
+| [#<number>](<url>) | Failed |
+
+**Results:** N succeeded, N failed out of N total children.
+
+_Full implementation report will be generated at `il finish` time._
+```
+
+2. Post the comment by calling `mcp__issue_management__create_comment` with:
+   - `number`: `"{{EPIC_ISSUE_NUMBER}}"`
+   - `type`: `"issue"`
+   - `body`: the constructed markdown above
+   - `markupLanguage`: `"GFM"`
+
+3. Log the comment as a recap artifact by calling `mcp__recap__add_artifact` with:
+   - `type`: `"comment"`
+   - `primaryUrl`: the URL returned from the create_comment call
+   - `description`: `"Swarm completion status comment"`
+   - (omit `worktreePath` -- this belongs to the epic recap)
+
+4. If the comment creation fails for any reason, log the error and continue. This step is non-blocking -- do not let a failed comment post stop the swarm from completing.
+
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 {{#if POST_SWARM_REVIEW}}
+Mark todo #10, #11, #12, #13, #14, and #15 as completed.
+{{else}}
 Mark todo #10, #11, #12, #13, and #14 as completed.
-{{else}}
-Mark todo #10, #11, #12, and #13 as completed.
 {{/if}}
 {{else}}
 {{#if POST_SWARM_REVIEW}}
-Mark todo #9, #10, #11, and #12 as completed.
+Mark todo #9, #10, #11, #12, and #13 as completed.
 {{else}}
-Mark todo #9, #10, and #11 as completed.
+Mark todo #9, #10, #11, and #12 as completed.
 {{/if}}
 {{/if}}
 {{else}}
 {{#if POST_SWARM_REVIEW}}
-Mark todo #9, #10, #11, and #12 as completed.
+Mark todo #9, #10, #11, #12, and #13 as completed.
 {{else}}
-Mark todo #9, #10, and #11 as completed.
+Mark todo #9, #10, #11, and #12 as completed.
 {{/if}}
 {{/if}}
 
