@@ -35,6 +35,7 @@ export class LinearService implements IssueTracker {
   // IssueTracker interface implementation
   readonly providerName = 'linear'
   readonly supportsPullRequests = false // Linear doesn't have pull requests
+  readonly branchFormat?: string | undefined
 
   private config: LinearServiceConfig
   private prompter: (message: string) => Promise<boolean>
@@ -44,6 +45,7 @@ export class LinearService implements IssueTracker {
     options?: { prompter?: (message: string) => Promise<boolean> },
   ) {
     this.config = config ?? {}
+    this.branchFormat = this.config.branchFormat
     this.prompter = options?.prompter ?? promptConfirmation
 
     // Set API token from config if provided (follows mcp.ts pattern)

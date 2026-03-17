@@ -15,4 +15,5 @@ export interface BranchGenerationOptions {
 	issueNumber: string | number
 	title: string
 	strategy?: BranchNameStrategy // Optional override
+	branchFormat?: string | undefined // Template string (e.g., "{ticketId}-{slug}")
 }

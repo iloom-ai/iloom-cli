@@ -669,7 +669,7 @@ Generate a git branch name for the following issue:
  * Check format: {prefix}/issue-{number}__{description}
  * Uses case-insensitive matching for issue number (Linear uses uppercase like MARK-1)
  */
-function isValidBranchName(name: string, issueNumber: string | number): boolean {
+export function isValidBranchName(name: string, issueNumber: string | number): boolean {
 	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}__[a-z0-9-]+$`, 'i')
 	return pattern.test(name) && name.length <= 50
 }

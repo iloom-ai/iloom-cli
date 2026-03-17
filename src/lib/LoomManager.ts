@@ -652,10 +652,12 @@ export class LoomManager {
     }
 
     if ((input.type === 'issue' || input.type === 'epic') && issueData) {
-      // Use BranchNamingService for AI-powered branch name generation
+      // Use BranchNamingService for branch name generation
+      // Pass branchFormat from issue tracker if configured (e.g., Jira branchFormat)
       const branchName = await this.branchNaming.generateBranchName({
         issueNumber: input.identifier as number,
         title: issueData.title,
+        branchFormat: this.issueTracker.branchFormat,
       })
       return branchName
     }

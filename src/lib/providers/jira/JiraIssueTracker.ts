@@ -17,6 +17,7 @@ export interface JiraTrackerConfig extends JiraConfig {
 	transitionMappings?: Record<string, string> // Map iloom states to Jira transition names
 	defaultIssueType?: string // Default issue type for creating issues (e.g., "Task", "Story")
 	defaultSubtaskType?: string // Default issue type for creating subtasks (e.g., "Subtask", "Sub-task")
+	branchFormat?: string // Branch naming template (e.g., "{ticketId}-{slug}")
 }
 
 /**
@@ -31,6 +32,7 @@ export interface JiraTrackerConfig extends JiraConfig {
 export class JiraIssueTracker implements IssueTracker {
 	readonly providerName = 'jira'
 	readonly supportsPullRequests = false
+	readonly branchFormat?: string | undefined
 
 	private readonly client: JiraApiClient
 	private readonly config: JiraTrackerConfig
@@ -67,6 +69,10 @@ export class JiraIssueTracker implements IssueTracker {
 			config.transitionMappings = jiraSettings.transitionMappings
 		}
 
+		if (jiraSettings.branchFormat) {
+			config.branchFormat = jiraSettings.branchFormat
+		}
+
 		return new JiraIssueTracker(config)
 	}
 
@@ -74,6 +80,7 @@ export class JiraIssueTracker implements IssueTracker {
 		prompter?: (message: string) => Promise<boolean>
 	}) {
 		this.config = config
+		this.branchFormat = config.branchFormat
 		this.client = new JiraApiClient({
 			host: config.host,
 			username: config.username,

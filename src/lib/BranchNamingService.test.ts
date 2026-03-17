@@ -3,6 +3,8 @@ import {
 	DefaultBranchNamingService,
 	SimpleBranchNameStrategy,
 	ClaudeBranchNameStrategy,
+	TemplateBranchNameStrategy,
+	slugify,
 	type BranchNameStrategy,
 } from './BranchNamingService.js'
 
@@ -189,6 +191,99 @@ describe('BranchNamingService', () => {
 
 			const { generateBranchName } = await import('../utils/claude.js')
 			expect(generateBranchName).toHaveBeenCalledWith('Default Model Test', 789, 'haiku')
+		})
+	})
+
+	describe('TemplateBranchNameStrategy', () => {
+		it('should substitute {ticketId} and {slug}', async () => {
+			const strategy = new TemplateBranchNameStrategy('{ticketId}-{slug}')
+			const branchName = await strategy.generate('PRINT-1234', 'Fix dependency bug')
+			expect(branchName).toBe('print-1234-fix-dependency-bug')
+		})
+
+		it('should handle Jira-style issue keys', async () => {
+			const strategy = new TemplateBranchNameStrategy('{ticketId}-{slug}')
+			const branchName = await strategy.generate('HB-42', 'Add dark mode toggle')
+			expect(branchName).toBe('hb-42-add-dark-mode-toggle')
+		})
+
+		it('should handle template with only ticketId', async () => {
+			const strategy = new TemplateBranchNameStrategy('{ticketId}')
+			const branchName = await strategy.generate('PROJ-99', 'Some title')
+			expect(branchName).toBe('proj-99')
+		})
+
+		it('should handle template with slashes', async () => {
+			const strategy = new TemplateBranchNameStrategy('feature/{ticketId}-{slug}')
+			const branchName = await strategy.generate('ENG-500', 'Update auth flow')
+			expect(branchName).toBe('feature/eng-500-update-auth-flow')
+		})
+
+		it('should truncate slug to 40 characters', async () => {
+			const strategy = new TemplateBranchNameStrategy('{ticketId}-{slug}')
+			const branchName = await strategy.generate(
+				'PRINT-1',
+				'This is a very long title that should definitely be truncated at some point'
+			)
+			const slug = branchName.replace('print-1-', '')
+			expect(slug.length).toBeLessThanOrEqual(40)
+		})
+
+		it('should remove trailing hyphens', async () => {
+			const strategy = new TemplateBranchNameStrategy('{ticketId}-{slug}')
+			const branchName = await strategy.generate('X-1', '!!!')
+			expect(branchName).toBe('x-1')
+		})
+	})
+
+	describe('slugify', () => {
+		it('should convert to lowercase and replace special chars', () => {
+			expect(slugify('Fix Bug #123')).toBe('fix-bug-123')
+		})
+
+		it('should respect maxLength', () => {
+			expect(slugify('a very long string here', 10).length).toBeLessThanOrEqual(10)
+		})
+
+		it('should trim leading and trailing hyphens', () => {
+			expect(slugify('---hello---')).toBe('hello')
+		})
+	})
+
+	describe('DefaultBranchNamingService with branchFormat', () => {
+		it('should use TemplateBranchNameStrategy when branchFormat is provided', async () => {
+			const service = new DefaultBranchNamingService({ useClaude: false })
+			const branchName = await service.generateBranchName({
+				issueNumber: 'PRINT-1234',
+				title: 'Fix deps bug',
+				branchFormat: '{ticketId}-{slug}',
+			})
+			expect(branchName).toBe('print-1234-fix-deps-bug')
+		})
+
+		it('should prefer explicit strategy over branchFormat', async () => {
+			class CustomStrategy implements BranchNameStrategy {
+				async generate(): Promise<string> {
+					return 'custom/branch'
+				}
+			}
+			const service = new DefaultBranchNamingService({ useClaude: false })
+			const branchName = await service.generateBranchName({
+				issueNumber: 'PRINT-1234',
+				title: 'Fix deps bug',
+				strategy: new CustomStrategy(),
+				branchFormat: '{ticketId}-{slug}',
+			})
+			expect(branchName).toBe('custom/branch')
+		})
+
+		it('should fall back to default strategy when no branchFormat', async () => {
+			const service = new DefaultBranchNamingService({ useClaude: false })
+			const branchName = await service.generateBranchName({
+				issueNumber: 123,
+				title: 'Test Issue',
+			})
+			expect(branchName).toBe('feat/issue-123__test-issue')
 		})
 	})
 })

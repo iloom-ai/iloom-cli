@@ -49,4 +49,7 @@ export interface IssueTracker {
 
 	// Context extraction - formats issue/PR for AI prompts
 	extractContext(entity: Issue | PullRequest): string
+
+	// Branch naming - optional custom format template
+	branchFormat?: string | undefined
 }

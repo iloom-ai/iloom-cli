@@ -616,6 +616,10 @@ export const IloomSettingsSchema = z.object({
 						.optional()
 						.default(['Done'])
 						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
+					branchFormat: z
+						.string()
+						.optional()
+						.describe('Branch naming template for Jira issues. Variables: {ticketId} (e.g., "PROJ-123"), {slug} (slugified title). Example: "{ticketId}-{slug}" → "proj-123-fix-bug"'),
 				})
 				.optional(),
 		})
@@ -905,6 +909,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.optional()
 						.default(['Done'])
 						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
+					branchFormat: z
+						.string()
+						.optional()
+						.describe('Branch naming template for Jira issues. Variables: {ticketId} (e.g., "PROJ-123"), {slug} (slugified title). Example: "{ticketId}-{slug}" → "proj-123-fix-bug"'),
 				})
 				.optional(),
 		})
