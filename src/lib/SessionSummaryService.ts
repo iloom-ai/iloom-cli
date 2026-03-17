@@ -23,8 +23,11 @@ import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { formatRecapMarkdown } from '../utils/recap-formatter.js'
+import { SwarmReportCollector } from './SwarmReportCollector.js'
 
 const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+
+const GITHUB_COMMENT_MAX_LENGTH = 65_536
 
 /**
  * Slugify path to recap filename (matches MetadataManager/RecapCommand algorithm)
@@ -101,21 +104,36 @@ export interface SessionSummaryResult {
 }
 
 /**
+ * Input for generating and posting an epic implementation report
+ */
+export interface EpicReportInput {
+	worktreePath: string
+	epicIssueNumber: string | number
+	childIssueNumbers: string[]
+	epicTitle: string
+	/** Optional PR number - when provided, report is posted to the PR instead of the issue */
+	prNumber?: number
+}
+
+/**
  * Service that generates and posts Claude session summaries to issues
  */
 export class SessionSummaryService {
 	private templateManager: PromptTemplateManager
 	private metadataManager: MetadataManager
 	private settingsManager: SettingsManager
+	private swarmReportCollector: SwarmReportCollector
 
 	constructor(
 		templateManager?: PromptTemplateManager,
 		metadataManager?: MetadataManager,
-		settingsManager?: SettingsManager
+		settingsManager?: SettingsManager,
+		swarmReportCollector?: SwarmReportCollector
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.metadataManager = metadataManager ?? new MetadataManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.swarmReportCollector = swarmReportCollector ?? new SwarmReportCollector()
 	}
 
 	/**
@@ -206,6 +224,75 @@ export class SessionSummaryService {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 			logger.warn(`Failed to generate session summary: ${errorMessage}`)
 			logger.debug('Session summary generation error details:', { error })
+		}
+	}
+
+	/**
+	 * Truncate a report to GitHub's comment size limit, appending a notice if truncated
+	 */
+	private truncateReport(report: string): string {
+		if (report.length <= GITHUB_COMMENT_MAX_LENGTH) return report
+		const truncationNotice = '\n\n---\n*Report truncated due to GitHub comment size limit.*'
+		const maxContentLength = GITHUB_COMMENT_MAX_LENGTH - truncationNotice.length
+		return report.slice(0, maxContentLength) + truncationNotice
+	}
+
+	/**
+	 * Generate and post an epic implementation report to the issue or PR
+	 *
+	 * Non-blocking: Catches all errors and logs warnings instead of throwing
+	 * This ensures the finish workflow continues even if report generation fails
+	 */
+	async generateAndPostEpicReport(input: EpicReportInput): Promise<void> {
+		try {
+			// 1. Load settings, check generateSummary
+			const settings = await this.settingsManager.loadSettings(input.worktreePath)
+			if (!this.shouldGenerateSummary('epic', settings)) {
+				logger.debug('Skipping epic report: generateSummary is disabled')
+				return
+			}
+
+			logger.info('Generating epic implementation report...')
+
+			// 2. Collect child data via SwarmReportCollector
+			const childData = await this.swarmReportCollector.collectChildData(
+				input.childIssueNumbers, input.worktreePath, settings
+			)
+
+			// 3. Load epic-report template with variables
+			const prompt = await this.templateManager.getPrompt('epic-report', {
+				EPIC_ISSUE_NUMBER: String(input.epicIssueNumber),
+				EPIC_TITLE: input.epicTitle,
+				CHILD_DATA: JSON.stringify(childData),
+			})
+
+			logger.debug('Epic report prompt:\n' + prompt)
+
+			// 4. Invoke Claude headless to generate report
+			const summaryModel = this.settingsManager.getSummaryModel(settings)
+			const reportResult = await launchClaude(prompt, {
+				headless: true,
+				model: summaryModel,
+			})
+
+			if (!reportResult || typeof reportResult !== 'string' || reportResult.trim() === '') {
+				logger.warn('Epic report generation returned empty result')
+				return
+			}
+
+			// 5. Truncate if needed, then post
+			const report = this.truncateReport(reportResult.trim())
+			await this.postSummaryToIssue(
+				input.epicIssueNumber, report, settings, input.worktreePath, input.prNumber
+			)
+
+			const target = input.prNumber ? `PR #${input.prNumber}` : 'issue'
+			logger.success(`Epic implementation report posted to ${target}`)
+		} catch (error) {
+			// Non-blocking: log warning but don't throw
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			logger.warn(`Failed to generate epic report: ${errorMessage}`)
+			logger.debug('Epic report generation error details:', { error })
 		}
 	}
 
@@ -326,9 +413,12 @@ export class SessionSummaryService {
 			return false
 		}
 
+		// Epic uses issue workflow config (epics are issue-based)
+		const effectiveType = loomType === 'epic' ? 'issue' : loomType
+
 		// Get workflow-specific config
 		const workflowConfig =
-			loomType === 'issue'
+			effectiveType === 'issue'
 				? settings.workflows?.issue
 				: settings.workflows?.pr
 

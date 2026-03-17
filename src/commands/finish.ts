@@ -17,7 +17,7 @@ import { PRManager } from '../lib/PRManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
-import { SessionSummaryService } from '../lib/SessionSummaryService.js'
+import { SessionSummaryService, type EpicReportInput } from '../lib/SessionSummaryService.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber, getMergeTargetBranch, isPlaceholderCommit, findPlaceholderCommitSha, removePlaceholderCommitFromHead, removePlaceholderCommitFromHistory, executeGitCommand } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -1518,6 +1518,36 @@ export class FinishCommand {
 			undefined, // Use default MetadataManager
 			this.settingsManager
 		)
+
+		// Check if this is an epic loom by reading metadata
+		const metadataManager = new MetadataManager()
+		const metadata = await metadataManager.readMetadata(worktree.path)
+		const isEpicLoom = metadata?.childIssueNumbers != null && metadata.childIssueNumbers.length > 0
+
+		if (isEpicLoom && metadata != null) {
+			// Epic loom: generate epic report instead of session summary
+			if (parsed.number == null) {
+				getLogger().warn('Epic loom has no issue number, skipping epic report generation')
+				return
+			}
+
+			const epicTitle = metadata.description ?? `Epic #${String(parsed.number)}`
+
+			if (options.dryRun) {
+				getLogger().info(`[DRY RUN] Would post epic implementation report for issue #${parsed.number}`)
+				return
+			}
+
+			const epicInput: EpicReportInput = {
+				worktreePath: worktree.path,
+				epicIssueNumber: parsed.number,
+				childIssueNumbers: metadata.childIssueNumbers,
+				epicTitle,
+				...(prNumber !== undefined && { prNumber }),
+			}
+			await this.sessionSummaryService.generateAndPostEpicReport(epicInput)
+			return
+		}
 
 		if (options.dryRun) {
 			// In dry-run mode: generate but don't post, show preview

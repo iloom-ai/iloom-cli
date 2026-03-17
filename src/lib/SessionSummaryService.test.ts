@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SessionSummaryService, type SessionSummaryInput } from './SessionSummaryService.js'
+import { SessionSummaryService, type SessionSummaryInput, type EpicReportInput } from './SessionSummaryService.js'
 import type { PromptTemplateManager } from './PromptTemplateManager.js'
 import type { MetadataManager, LoomMetadata } from './MetadataManager.js'
 import type { SettingsManager, IloomSettings } from './SettingsManager.js'
@@ -34,6 +34,7 @@ vi.mock('./VCSProviderFactory.js', () => ({
 	},
 }))
 
+
 // Mock fs-extra for recap file reading
 vi.mock('fs-extra', () => ({
 	default: {
@@ -50,6 +51,7 @@ import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 import type { VersionControlProvider } from './VersionControlProvider.js'
 import fs from 'fs-extra'
+import type { SwarmReportCollector } from './SwarmReportCollector.js'
 
 describe('SessionSummaryService', () => {
 	// Mock dependencies
@@ -57,6 +59,7 @@ describe('SessionSummaryService', () => {
 	let mockMetadataManager: MetadataManager
 	let mockSettingsManager: SettingsManager
 	let mockIssueProvider: IssueManagementProvider
+	let mockSwarmReportCollector: SwarmReportCollector
 	let service: SessionSummaryService
 
 	const defaultInput: SessionSummaryInput = {
@@ -145,11 +148,17 @@ describe('SessionSummaryService', () => {
 		vi.mocked(fs.pathExists).mockResolvedValue(false as never)
 		vi.mocked(fs.readFile).mockResolvedValue('{}' as never)
 
+		// Create mock swarm report collector
+		mockSwarmReportCollector = {
+			collectChildData: vi.fn().mockResolvedValue([]),
+		} as unknown as SwarmReportCollector
+
 		// Create service with mocks
 		service = new SessionSummaryService(
 			mockTemplateManager,
 			mockMetadataManager,
-			mockSettingsManager
+			mockSettingsManager,
+			mockSwarmReportCollector
 		)
 	})
 
@@ -714,6 +723,186 @@ describe('SessionSummaryService', () => {
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
 				RECAP_DATA: '',
 			}))
+		})
+	})
+
+	describe('generateAndPostEpicReport', () => {
+		const defaultEpicInput: EpicReportInput = {
+			worktreePath: '/path/to/epic-worktree',
+			epicIssueNumber: 100,
+			childIssueNumbers: ['101', '102', '103'],
+			epicTitle: 'Epic Feature: Swarm Reports',
+		}
+
+		it('should generate epic report via headless Claude and post to issue', async () => {
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			// Verify collectChildData was called with childIssueNumbers
+			expect(mockSwarmReportCollector.collectChildData).toHaveBeenCalledWith(
+				defaultEpicInput.childIssueNumbers,
+				defaultEpicInput.worktreePath,
+				defaultSettings
+			)
+
+			// Verify template 'epic-report' was used
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('epic-report', {
+				EPIC_ISSUE_NUMBER: '100',
+				EPIC_TITLE: 'Epic Feature: Swarm Reports',
+				CHILD_DATA: JSON.stringify([]),
+			})
+
+			// Verify Claude was called (headless, no session)
+			expect(launchClaude).toHaveBeenCalledWith('Generated prompt content', {
+				headless: true,
+				model: 'sonnet',
+			})
+
+			// Verify comment was posted to issue
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '100',
+				body: expect.any(String),
+				type: 'issue',
+			})
+		})
+
+		it('should post to PR when prNumber is provided', async () => {
+			const inputWithPr: EpicReportInput = {
+				...defaultEpicInput,
+				prNumber: 456,
+			}
+
+			await service.generateAndPostEpicReport(inputWithPr)
+
+			// Verify comment was posted to PR
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '456',
+				body: expect.any(String),
+				type: 'pr',
+			})
+		})
+
+		it('should truncate report exceeding 65536 characters', async () => {
+			// Generate a report that exceeds the limit
+			const longReport = 'x'.repeat(70_000)
+			vi.mocked(launchClaude).mockResolvedValue(longReport)
+
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			// Verify posted body is <= 65536 chars and includes truncation notice
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '100',
+				body: expect.stringMatching(/^.{1,65536}$/s),
+				type: 'issue',
+			})
+			const callArgs = vi.mocked(mockIssueProvider.createComment).mock.calls[0][0]
+			expect(callArgs.body.length).toBeLessThanOrEqual(65_536)
+			expect(callArgs.body).toContain('Report truncated due to GitHub comment size limit.')
+		})
+
+		it('should not truncate report within 65536 characters', async () => {
+			const normalReport = 'x'.repeat(1000)
+			vi.mocked(launchClaude).mockResolvedValue(normalReport)
+
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			const callArgs = vi.mocked(mockIssueProvider.createComment).mock.calls[0][0]
+			expect(callArgs.body).not.toContain('Report truncated')
+		})
+
+		it('should continue workflow on failure (non-blocking)', async () => {
+			vi.mocked(launchClaude).mockRejectedValue(new Error('Claude API error'))
+
+			// Should not throw
+			await expect(service.generateAndPostEpicReport(defaultEpicInput)).resolves.not.toThrow()
+
+			// Should have attempted to call Claude but not posted
+			expect(launchClaude).toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
+		it('should skip when generateSummary is disabled', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				workflows: {
+					issue: {
+						generateSummary: false,
+					},
+				},
+			})
+
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			// Should return early without invoking Claude
+			expect(launchClaude).not.toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
+		it('should handle empty child data gracefully (still invokes Claude)', async () => {
+			// Default mock already returns [] - just verify Claude is still called
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			// Should still call Claude with empty child data
+			expect(launchClaude).toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).toHaveBeenCalled()
+		})
+
+		it('should skip when Claude returns empty result', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('')
+
+			await service.generateAndPostEpicReport(defaultEpicInput)
+
+			// Should not post empty report
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
+		it('should handle collectChildData failure non-blocking', async () => {
+			// Override the mock to reject
+			vi.mocked(mockSwarmReportCollector.collectChildData).mockRejectedValueOnce(new Error('Collector error'))
+
+			// Should not throw
+			await expect(service.generateAndPostEpicReport(defaultEpicInput)).resolves.not.toThrow()
+
+			// Claude and posting should not be called
+			expect(launchClaude).not.toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('shouldGenerateSummary - epic type', () => {
+		it('should use issue workflow config for epic loom type', () => {
+			const settings: IloomSettings = {
+				workflows: {
+					issue: {
+						generateSummary: false,
+					},
+					pr: {
+						generateSummary: true,
+					},
+				},
+			}
+
+			// Epic should use issue config (false), not pr config (true)
+			expect(service.shouldGenerateSummary('epic', settings)).toBe(false)
+		})
+
+		it('should return true for epic when issue workflow generateSummary is true', () => {
+			const settings: IloomSettings = {
+				workflows: {
+					issue: {
+						generateSummary: true,
+					},
+				},
+			}
+
+			expect(service.shouldGenerateSummary('epic', settings)).toBe(true)
+		})
+
+		it('should return true for epic when no workflow config (default)', () => {
+			const settings: IloomSettings = {
+				workflows: {},
+			}
+
+			expect(service.shouldGenerateSummary('epic', settings)).toBe(true)
 		})
 	})
 })
