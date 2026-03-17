@@ -6,6 +6,8 @@ import Handlebars from 'handlebars'
 import { logger } from '../utils/logger.js'
 import type { AgentSettings } from './SettingsManager.js'
 
+export type TemplateName = 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator' | 'epic-report'
+
 // Register raw helper to handle content with curly braces (e.g., JSON)
 // Usage: {{{{raw}}}}{{VARIABLE}}{{{{/raw}}}}
 // This outputs the variable content as-is without Handlebars parsing its curly braces
@@ -124,6 +126,13 @@ export interface TemplateVariables {
 	IS_GITHUB_TRACKER?: boolean  // True when issue tracker is GitHub
 	VCS_PROVIDER?: string  // Configured VCS provider: 'github', 'bitbucket'
 	IS_GITHUB_VCS?: boolean  // True when VCS provider is GitHub
+	// Epic report template variables
+	EPIC_NUMBER?: string  // Epic issue number for report generation
+	EPIC_TITLE?: string  // Epic issue title for report generation
+	CHILD_DATA?: string  // Pre-formatted markdown of all child implementation data
+	TOTAL_CHILDREN?: string  // Total number of child issues in the epic
+	TOTAL_SUCCEEDED?: string  // Number of child issues that succeeded
+	TOTAL_FAILED?: string  // Number of child issues that failed
 }
 
 /**
@@ -241,7 +250,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator'): Promise<string> {
+	async loadTemplate(templateName: TemplateName): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -270,7 +279,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator',
+		type: TemplateName,
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)

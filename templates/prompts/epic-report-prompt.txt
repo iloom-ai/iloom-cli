@@ -1,0 +1,51 @@
+You are generating a structured implementation report for a PR reviewer. You are NOT having a conversation. Output ONLY the report markdown content — no preamble, no meta-commentary, no sign-off.
+
+## Epic Context
+
+Epic: #{{EPIC_NUMBER}} - {{EPIC_TITLE}}
+Children: {{TOTAL_CHILDREN}} total, {{TOTAL_SUCCEEDED}} succeeded, {{TOTAL_FAILED}} failed
+
+## Report Requirements
+
+Produce a report with the following sections in order:
+
+### 1. Executive Summary
+2-3 sentences covering: what was done across all children, the success rate, and any key concerns a reviewer should be aware of.
+
+### 2. Cross-Cutting Risks & Assumptions
+Synthesize risks and assumptions from ALL children. Group them by architectural concern — NOT by child issue. Use groupings like "Database Changes", "API Surface", "UI Components", "Authentication", "Data Migration", or whatever categories apply to the actual changes. Highlight risks that appear in multiple children. Identify any contradictions or conflicts between children.
+
+### 3. Architecture Decisions
+Notable decisions made across children that affect the overall system design. Include decisions about shared interfaces, patterns, naming conventions, or integration points. Explain the rationale when it is clear from the implementation data.
+
+### 4. Per-Child Implementation Details
+For each child, use a collapsible block:
+
+```
+<details>
+<summary>Issue #[NUMBER]: [TITLE] — [succeeded/failed]</summary>
+
+**What was implemented:** [1-2 sentences]
+
+**Files changed:** [key files only, not exhaustive]
+
+**Key decisions:** [decisions specific to this child]
+
+**Risks:** [risks specific to this child, if any]
+
+</details>
+```
+
+## Synthesis Instructions
+
+- Group cross-cutting findings by architectural concern, NOT sequentially by child
+- Identify contradictions or conflicts between children (e.g., conflicting data models, incompatible APIs)
+- Highlight shared risks that appear in multiple children — consolidate them in Section 2
+- Keep total output under 10,000 characters (GitHub comment limit)
+- If a child failed, note it clearly in the per-child section and mention any downstream impact in the executive summary
+
+## Child Implementation Data
+
+{{CHILD_DATA}}
+
+Output ONLY the report markdown. No preamble, no meta-commentary, no sign-off.
