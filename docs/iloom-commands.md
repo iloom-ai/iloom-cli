@@ -800,8 +800,19 @@ il dev-server [identifier] [options]
 
 1. Resolves the target loom
 2. Loads environment variables from `.env` files
-3. Executes dev script from `package.json` or `.iloom/package.iloom.json`
-4. Runs in foreground (useful for debugging and manual testing)
+3. Detects project capabilities (web, monorepo, CLI)
+4. In monorepo mode: waits for `packagesToRun` to be set in loom metadata, then launches from the package subdirectory
+5. Executes dev script from `package.json` or `.iloom/package.iloom.json`
+6. Runs in foreground (useful for debugging and manual testing)
+
+**Monorepo Support:**
+
+When both `web` and `monorepo` capabilities are detected, `il dev-server` waits for the package detection agent to set `packagesToRun` in the loom metadata before launching. This ensures the dev server starts from the correct package subdirectory.
+
+- If `packagesToRun` is already set (detection agent ran before `il dev-server`), the server starts immediately.
+- If `packagesToRun` is empty, `il dev-server` watches the metadata file (with 15-second polling fallback) and launches once the agent populates it.
+- Only the first package in `packagesToRun` is used (multi-package dev servers are not supported in v1).
+- Times out after 60 seconds with an actionable error message if the agent never runs.
 
 **Examples:**
 
