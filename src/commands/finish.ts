@@ -1520,8 +1520,7 @@ export class FinishCommand {
 		)
 
 		// Check if this is an epic loom by reading metadata
-		const metadataManager = new MetadataManager()
-		const metadata = await metadataManager.readMetadata(worktree.path)
+		const metadata = await this.sessionSummaryService.metadataManager.readMetadata(worktree.path)
 		const isEpicLoom = metadata?.childIssueNumbers != null && metadata.childIssueNumbers.length > 0
 
 		if (isEpicLoom && metadata != null) {

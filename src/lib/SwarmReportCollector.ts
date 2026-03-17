@@ -28,6 +28,41 @@ export interface ChildImplementationData {
 // Concurrency limit for API calls
 const CONCURRENCY_LIMIT = 5
 
+/**
+ * Read and format the recap file for a worktree path.
+ * Returns formatted recap markdown or null if not found/empty/error.
+ * Shared between SwarmReportCollector and SessionSummaryService.
+ */
+export async function readRecapForWorktree(worktreePath: string): Promise<string | null> {
+	try {
+		const filePath = resolveRecapFilePath(worktreePath)
+		if (!(await fs.pathExists(filePath))) return null
+
+		const content = await fs.readFile(filePath, 'utf8')
+		const recap = JSON.parse(content) as RecapFile
+
+		const hasGoal = recap.goal !== null && recap.goal !== undefined
+		const hasComplexity = recap.complexity !== null && recap.complexity !== undefined
+		const hasEntries = Array.isArray(recap.entries) && recap.entries.length > 0
+		const hasArtifacts = Array.isArray(recap.artifacts) && recap.artifacts.length > 0
+		const hasContent = hasGoal || hasComplexity || hasEntries || hasArtifacts
+
+		if (!hasContent) return null
+
+		const recapOutput: RecapOutput = {
+			filePath,
+			goal: recap.goal ?? null,
+			complexity: recap.complexity ?? null,
+			entries: recap.entries ?? [],
+			artifacts: recap.artifacts ?? [],
+		}
+		return formatRecapMarkdown(recapOutput)
+	} catch {
+		// Graceful degradation - return null on any error
+		return null
+	}
+}
+
 export class SwarmReportCollector {
 	private metadataManager: MetadataManager
 
@@ -137,7 +172,17 @@ export class SwarmReportCollector {
 			const worktreePath = worktreeMap.get(issueNumber) ?? null
 			const recapMarkdown = worktreePath ? await this.readChildRecap(worktreePath) : null
 
-			const status = comments.length === 0 ? 'missing' : 'success'
+			// Determine status based on issue state and comments:
+			// - No comments at all: 'missing' (child may not have started)
+			// - Issue closed (state includes 'closed' or 'done'): 'success' (completed normally)
+			// - Issue still open with comments: 'failure' (child started but didn't finish)
+			let status: 'success' | 'failure' | 'missing'
+			if (comments.length === 0) {
+				status = 'missing'
+			} else {
+				const issueState = issue.state.toLowerCase()
+				status = (issueState === 'closed' || issueState === 'done') ? 'success' : 'failure'
+			}
 
 			return {
 				issueNumber,
@@ -197,34 +242,6 @@ export class SwarmReportCollector {
 	 * Returns null if the recap file is missing or cannot be read.
 	 */
 	private async readChildRecap(worktreePath: string): Promise<string | null> {
-		try {
-			const filePath = resolveRecapFilePath(worktreePath)
-			if (!(await fs.pathExists(filePath))) return null
-
-			const content = await fs.readFile(filePath, 'utf8')
-			const recap = JSON.parse(content) as RecapFile
-
-			const hasGoal = recap.goal !== null && recap.goal !== undefined
-			const hasComplexity = recap.complexity !== null && recap.complexity !== undefined
-			const hasEntries = Array.isArray(recap.entries) && recap.entries.length > 0
-			const hasArtifacts = Array.isArray(recap.artifacts) && recap.artifacts.length > 0
-			const hasContent = hasGoal || hasComplexity || hasEntries || hasArtifacts
-
-			if (!hasContent) return null
-
-			const recapOutput: RecapOutput = {
-				filePath,
-				goal: recap.goal ?? null,
-				complexity: recap.complexity ?? null,
-				entries: recap.entries ?? [],
-				artifacts: recap.artifacts ?? [],
-			}
-			return formatRecapMarkdown(recapOutput)
-		} catch (error) {
-			getLogger().debug(
-				`SwarmReportCollector: failed to read/parse recap at ${worktreePath}: ${error instanceof Error ? error.message : String(error)}`
-			)
-			return null
-		}
+		return readRecapForWorktree(worktreePath)
 	}
 }

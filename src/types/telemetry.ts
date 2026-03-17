@@ -109,6 +109,12 @@ export interface AutoSwarmCompletedProperties {
   fallback_to_normal: boolean
 }
 
+export interface EpicReportGeneratedProperties {
+  total_children: number
+  succeeded: number
+  failed: number
+}
+
 export interface DevServerStartedEvent {
   /** Execution mode for the dev server */
   mode: 'docker' | 'process'
@@ -156,6 +162,7 @@ export interface TelemetryEventMap {
   'init.completed': InitCompletedProperties
   'auto_swarm.started': AutoSwarmStartedProperties
   'auto_swarm.completed': AutoSwarmCompletedProperties
+  'epic.report_generated': EpicReportGeneratedProperties
   'devServer.started': DevServerStartedEvent
   'devServer.stopped': DevServerStoppedEvent
 }

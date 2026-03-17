@@ -157,6 +157,7 @@ describe('SwarmReportCollector', () => {
 			vi.mocked(mockProvider.getIssue).mockResolvedValue(
 				makeIssueResult({
 					title: 'Feature A',
+					state: 'closed',
 					comments: [{ id: '1', body: '# Implementation Complete\nDone!', author: null, createdAt: '2024-01-01' }],
 				})
 			)
@@ -181,6 +182,7 @@ describe('SwarmReportCollector', () => {
 		it('returns status "success" when both comment and recap data are available', async () => {
 			vi.mocked(mockProvider.getIssue).mockResolvedValue(
 				makeIssueResult({
+					state: 'closed',
 					comments: [{ id: '1', body: 'Implementation summary', author: null, createdAt: '2024-01-01' }],
 				})
 			)
@@ -200,6 +202,7 @@ describe('SwarmReportCollector', () => {
 		it('returns status "success" with null recapMarkdown when recap file is missing', async () => {
 			vi.mocked(mockProvider.getIssue).mockResolvedValue(
 				makeIssueResult({
+					state: 'closed',
 					comments: [{ id: '1', body: 'Implementation summary', author: null, createdAt: '2024-01-01' }],
 				})
 			)
@@ -235,6 +238,7 @@ describe('SwarmReportCollector', () => {
 					makeIssueResult({
 						id: '100',
 						title: 'Issue 100',
+						state: 'closed',
 						comments: [{ id: '1', body: 'Implementation complete', author: null, createdAt: '2024-01-01' }],
 					})
 				)
