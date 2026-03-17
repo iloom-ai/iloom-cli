@@ -301,6 +301,11 @@ export class IgniteCommand {
 			// Step 2.2: Get prompt template with variable substitution
 			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl, effectiveComplexity)
 
+			// Set IS_MONOREPO from metadata capabilities
+			if (metadata?.capabilities?.includes('monorepo')) {
+				variables.IS_MONOREPO = true
+			}
+
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
 				variables.FIRST_TIME_USER = true
@@ -467,10 +472,11 @@ export class IgniteCommand {
 				}
 
 				// Exclude init-only agents (e.g., framework-detector which is only for il init)
+				// and detection agents that are invoked explicitly rather than auto-loaded
 				agents = await this.agentManager.loadAndPrepare(
 					this.settings,
 					variables,
-					['*.md', '!iloom-framework-detector.md'],
+					['*.md', '!iloom-framework-detector.md', '!iloom-monorepo-package-detector.md'],
 					path.join(context.workspacePath, '.claude', 'agents')
 				)
 			} catch (error) {
@@ -1078,6 +1084,7 @@ export class IgniteCommand {
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
 			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
+			...(metadata.capabilities?.includes('monorepo') && { IS_MONOREPO: true }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
@@ -1133,7 +1140,7 @@ export class IgniteCommand {
 			agents = await this.agentManager.loadAndPrepare(
 				settings,
 				variables,
-				['*.md', '!iloom-framework-detector.md'],
+				['*.md', '!iloom-framework-detector.md', '!iloom-monorepo-package-detector.md'],
 				path.join(epicWorktreePath, '.claude', 'agents')
 			)
 		} catch (error) {

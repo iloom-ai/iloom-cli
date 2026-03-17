@@ -58,6 +58,8 @@ export interface TemplateVariables {
 	DIRECT_PROMPT_MODE?: boolean
 	// VS Code environment detection
 	IS_VSCODE_MODE?: boolean  // True when ILOOM_VSCODE=1 environment variable is set
+	// Monorepo capability
+	IS_MONOREPO?: boolean  // True when project has 'monorepo' capability
 	// Multi-language support variables - mutually exclusive
 	HAS_PACKAGE_JSON?: boolean  // True when project has package.json
 	NO_PACKAGE_JSON?: boolean   // True when project does not have package.json (non-Node.js projects)

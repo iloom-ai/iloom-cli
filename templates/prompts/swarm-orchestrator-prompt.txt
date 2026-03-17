@@ -545,6 +545,28 @@ IMPORTANT: Only fix the specific issues identified in the review findings. Do NO
 **Single pass only.** Do NOT re-review after fixing. This prevents infinite review-fix loops.
 
 {{/if}}
+{{#if IS_MONOREPO}}
+### Step 5.2.8: Run Monorepo Package Detection
+
+Before creating the final commit, run the monorepo package detector to set `packagesToRun` and `packagesToValidate` for the integrated epic branch.
+
+**Delegate this to a subagent:**
+
+- `subagent_type`: `"iloom-swarm-monorepo-package-detector"`
+- `mode`: `"delegate"`
+- Prompt:
+
+```
+Detect monorepo packages for epic #{{EPIC_ISSUE_NUMBER}}.
+
+Working directory: {{EPIC_WORKTREE_PATH}}
+
+Explore the workspace structure and determine which packages were changed by this epic. Call the MCP tools to set packagesToRun and packagesToValidate.
+```
+
+**Error handling**: If the detection agent fails, log the warning and continue. Package detection is non-blocking.
+
+{{/if}}
 ### Step 5.3: Final Commit on Epic Branch
 
 If at least one child succeeded, create the final "Fixes" commit — but only if it doesn't already exist (idempotency).

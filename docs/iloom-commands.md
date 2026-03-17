@@ -2187,6 +2187,24 @@ The `monorepo` capability is auto-detected during `il init` when either of these
 - `pnpm-workspace.yaml` — used by pnpm workspaces
 - `workspaces` field in `package.json` — used by yarn and npm workspaces
 
+**Monorepo Package Detection:**
+
+When the `"monorepo"` capability is set, iloom integrates a dedicated `iloom-monorepo-package-detector` agent into the workflow to determine which packages to run and validate.
+
+*How it works:*
+- The detection agent explores the workspace structure, reads the issue context, and calls MCP tools to set `packagesToRun` and `packagesToValidate` on the loom metadata
+- In **non-swarm mode**: the detection agent runs before the implementation agent begins
+- In **swarm mode**: the detection agent runs after the swarm completes (called by the orchestrator), not by individual child agents
+
+*Package metadata reminder:*
+When the `"monorepo"` capability is set, a UserPromptSubmit hook injects a reminder into each agent session: if the agent touches packages not already listed in `packagesToValidate`, it should call `mcp__recap__setPackagesToValidate` to update the list.
+
+*MCP tools used:*
+- `setPackageToRun` — declare which package to run (dev server, etc.)
+- `setPackagesToValidate` — declare which packages need test/lint/build validation
+
+When the project does not have the `"monorepo"` capability, no detection agent runs and no monorepo instructions appear in prompts.
+
 **Jira Advanced Settings:**
 
 The following Jira settings can be configured in `.iloom/settings.json` under `issueManagement.jira`:

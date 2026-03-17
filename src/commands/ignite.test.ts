@@ -1555,7 +1555,7 @@ describe('IgniteCommand', () => {
 				expect(mockAgentManager.loadAndPrepare).toHaveBeenCalledWith(
 					expect.anything(), // settings
 					expect.anything(), // template variables
-					['*.md', '!iloom-framework-detector.md'],
+					['*.md', '!iloom-framework-detector.md', '!iloom-monorepo-package-detector.md'],
 					'/path/to/feat/issue-123__test/.claude/agents',
 				)
 
@@ -1724,7 +1724,7 @@ describe('IgniteCommand', () => {
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
 					}),
-					['*.md', '!iloom-framework-detector.md'],
+					['*.md', '!iloom-framework-detector.md', '!iloom-monorepo-package-detector.md'],
 					'/path/to/feat/issue-123__test/.claude/agents'
 				)
 			} finally {
@@ -1779,7 +1779,7 @@ describe('IgniteCommand', () => {
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
 					}),
-					['*.md', '!iloom-framework-detector.md'],
+					['*.md', '!iloom-framework-detector.md', '!iloom-monorepo-package-detector.md'],
 					'/path/to/feat/issue-123__test/.claude/agents'
 				)
 				expect(launchClaudeSpy).toHaveBeenCalled()
