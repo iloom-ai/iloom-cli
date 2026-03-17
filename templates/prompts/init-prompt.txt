@@ -335,6 +335,7 @@ The agent will:
 **Capabilities:**
 - `"cli"` - Command-line interface/tool (enables CLI isolation features)
 - `"web"` - Web application with dev server (enables port assignment)
+- `"monorepo"` - Monorepo with workspace packages (enables package-aware commands)
 
 **Note:** Scripts in `package.iloom.json` are raw shell commands, not npm script names. iloom will execute them directly.
 
@@ -345,6 +346,7 @@ If the framework detector did not set capabilities, or if you need to ask the us
 - Options:
   - "cli" - Command-line interface/tool
   - "web" - Web application with dev server
+  - "monorepo" - Monorepo with multiple packages/workspaces
   - "both" - Both CLI and web capabilities
   - "neither" - Library or other project type
 

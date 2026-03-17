@@ -2162,9 +2162,30 @@ il init "configure neon database with project ID abc-123"
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local, pr, draft-pr)
 - Permission modes
-- Project type (web app, CLI tool, etc.)
+- Project type (web app, CLI tool, monorepo, etc.)
 - Base port for development servers
 - Environment variable names
+
+**Project Capabilities:**
+
+iloom detects and persists project capabilities in `.iloom/package.iloom.json` under the `capabilities` field. Valid values are:
+
+| Capability | Description | Auto-detected from |
+|------------|-------------|-------------------|
+| `"web"` | Web application with a dev server | React, Next.js, Vite, and other web framework dependencies |
+| `"cli"` | Command-line tool with a `bin` entry | `bin` field in `package.json` |
+| `"monorepo"` | Monorepo with multiple workspace packages | `pnpm-workspace.yaml` file OR `workspaces` field in `package.json` |
+
+Capabilities can also be set manually in `.iloom/package.iloom.json`:
+```json
+{
+  "capabilities": ["monorepo"]
+}
+```
+
+The `monorepo` capability is auto-detected during `il init` when either of these workspace configuration files are present:
+- `pnpm-workspace.yaml` — used by pnpm workspaces
+- `workspaces` field in `package.json` — used by yarn and npm workspaces
 
 **Jira Advanced Settings:**
 

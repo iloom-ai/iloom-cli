@@ -66,6 +66,10 @@ export class OpenCommand {
 			await this.openWebBrowser(worktree, input.env)
 		} else if (capabilities.includes('cli')) {
 			await this.runCLITool(worktree.path, binEntries, input.args ?? [])
+		} else if (capabilities.includes('monorepo')) {
+			throw new Error(
+				`This is a monorepo root package. Use 'il open' from a specific package worktree, or run the desired package's dev server or CLI directly.`
+			)
 		} else {
 			throw new Error(
 				`No web or CLI capabilities detected for workspace at ${worktree.path}`
