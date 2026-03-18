@@ -348,7 +348,7 @@ async function main() {
             swarmCurrentPackages = swarmMeta.packagesToValidate || [];
           }
           if (swarmIsMonorepo) {
-            reminder += `\n\n**MONOREPO**: Current packages to validate: [${swarmCurrentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__setPackagesToValidate\` to update the list.`;
+            reminder += `\n\n**MONOREPO**: Current packages to validate: [${swarmCurrentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__set_packages_to_validate\` to update the list.`;
           }
 
           const output = {
@@ -401,7 +401,7 @@ Regarding creating/updating comments - if it's a trivial fix or quick answer, DO
         currentPackages = metadata.packagesToValidate || [];
       }
       if (isMonorepo) {
-        reminder += `\n\n**MONOREPO**: Current packages to validate: [${currentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__setPackagesToValidate\` to update the list.`;
+        reminder += `\n\n**MONOREPO**: Current packages to validate: [${currentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__set_packages_to_validate\` to update the list.`;
       }
 
       const output = {

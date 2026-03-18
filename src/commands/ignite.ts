@@ -1123,6 +1123,8 @@ export class IgniteCommand {
 			'mcp__recap__set_complexity',
 			'mcp__recap__set_loom_state',
 			'mcp__recap__get_loom_state',
+			'mcp__recap__set_package_to_run',
+			'mcp__recap__set_packages_to_validate',
 		]
 
 		// Launch Claude with agent teams enabled

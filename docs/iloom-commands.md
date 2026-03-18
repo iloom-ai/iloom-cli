@@ -983,6 +983,10 @@ il build
 | Ruby | `bundle install` | `.iloom/package.iloom.json` |
 | Go | `go build ./...` | `.iloom/package.iloom.json` |
 
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il build` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `build` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il build` runs at the project root as normal.
+
 **Notes:**
 - Works with any language/framework via `.iloom/package.iloom.json`
 - Environment variables are automatically loaded before execution
@@ -1042,6 +1046,10 @@ il lint feat/my-feature
 | Ruby | `rubocop` | `.iloom/package.iloom.json` |
 | Go | `golangci-lint run` | `.iloom/package.iloom.json` |
 
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il lint` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `lint` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il lint` runs at the project root as normal.
+
 **Notes:**
 - Works with any linter via `.iloom/package.iloom.json`
 - Environment variables are automatically loaded before execution
@@ -1100,6 +1108,10 @@ il test feat/my-feature
 | Rust | `cargo test` | `.iloom/package.iloom.json` |
 | Ruby | `bundle exec rspec` | `.iloom/package.iloom.json` |
 | Go | `go test ./...` | `.iloom/package.iloom.json` |
+
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il test` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `test` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il test` runs at the project root as normal.
 
 **Notes:**
 - Works with any test framework via `.iloom/package.iloom.json`
@@ -1166,6 +1178,10 @@ il typecheck feat/my-feature
 | Python | `mypy src/` | `.iloom/package.iloom.json` |
 | Rust | `cargo check` | `.iloom/package.iloom.json` |
 | Go | `go build ./...` (no-op compile) | `.iloom/package.iloom.json` |
+
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il compile` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `compile` or `typecheck` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il compile` runs at the project root as normal.
 
 **Notes:**
 - Works with any compiler/type checker via `.iloom/package.iloom.json`
@@ -2208,11 +2224,11 @@ When the `"monorepo"` capability is set, iloom integrates a dedicated `iloom-mon
 - In **swarm mode**: the detection agent runs after the swarm completes (called by the orchestrator), not by individual child agents
 
 *Package metadata reminder:*
-When the `"monorepo"` capability is set, a UserPromptSubmit hook injects a reminder into each agent session: if the agent touches packages not already listed in `packagesToValidate`, it should call `mcp__recap__setPackagesToValidate` to update the list.
+When the `"monorepo"` capability is set, a UserPromptSubmit hook injects a reminder into each agent session: if the agent touches packages not already listed in `packagesToValidate`, it should call `mcp__recap__set_packages_to_validate` to update the list.
 
 *MCP tools used:*
-- `setPackageToRun` — declare which package to run (dev server, etc.)
-- `setPackagesToValidate` — declare which packages need test/lint/build validation
+- `set_package_to_run` — declare which package to run (dev server, etc.)
+- `set_packages_to_validate` — declare which packages need test/lint/build validation
 
 When the project does not have the `"monorepo"` capability, no detection agent runs and no monorepo instructions appear in prompts.
 

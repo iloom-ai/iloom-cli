@@ -150,7 +150,7 @@ export class DevServerCommand {
 			logger.info(`Launching dev server from monorepo package: ${serverPath}`)
 		}
 
-		// 4. If no web capability, return gracefully with info message
+		// 5. If no web capability, return gracefully with info message
 		if (!capabilities.includes('web')) {
 			const message = 'No web capability detected in this workspace. Dev server not started.'
 			if (input.json) {

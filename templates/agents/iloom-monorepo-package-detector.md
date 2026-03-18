@@ -40,13 +40,13 @@ Based on your exploration:
 **Package to run (dev server):**
 - If the issue involves a web application package, that's the package to run
 - If no web package is involved, skip this step
-- Call `mcp__recap__setPackageToRun` with the relative path (e.g., "apps/web")
+- Call `mcp__recap__set_package_to_run` with the relative path (e.g., "apps/web")
 
 **Packages to validate:**
 - Include all packages directly modified by the issue
 - Include packages that depend on modified packages (transitive consumers)
 - Do NOT include the entire monorepo — only affected packages
-- Call `mcp__recap__setPackagesToValidate` with the array of relative paths
+- Call `mcp__recap__set_packages_to_validate` with the array of relative paths
 
 ### Step 4: Report
 
