@@ -260,12 +260,16 @@ export class FinishCommand {
 
 		// Read metadata BEFORE workflow execution (cleanup may delete the worktree)
 		let preFinishCreatedAt: string | undefined
+		let preFinishPackagesToValidate: string[] = []
 		try {
 			const metadataManager = new MetadataManager()
 			const metadata = await metadataManager.readMetadata(worktree.path)
 			preFinishCreatedAt = metadata?.created_at ?? undefined
+			preFinishPackagesToValidate = metadata?.packagesToValidate ?? []
 		} catch (error: unknown) {
-			getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+			// Non-fatal: metadata is used for telemetry and validation scoping.
+			// If unreadable, validation will run un-scoped (full project).
+			getLogger().debug(`Failed to read metadata: ${error instanceof Error ? error.message : String(error)}`)
 		}
 
 		// Step 4: Branch based on input type
@@ -279,10 +283,10 @@ export class FinishCommand {
 				throw new Error('Issue tracker does not support pull requests')
 			}
 			const pr = await this.issueTracker.fetchPR(parsed.number, repo)
-			await this.executePRWorkflow(parsed, input.options, worktree, pr, result)
+			await this.executePRWorkflow(parsed, input.options, worktree, pr, result, preFinishPackagesToValidate)
 		} else {
 			// Execute traditional issue/branch workflow
-			await this.executeIssueWorkflow(parsed, input.options, worktree, result)
+			await this.executeIssueWorkflow(parsed, input.options, worktree, result, preFinishPackagesToValidate)
 		}
 
 		// Mark overall success if we got here without throwing
@@ -657,7 +661,8 @@ export class FinishCommand {
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
-		result: FinishResult
+		result: FinishResult,
+		packagesToValidate: string[] = []
 	): Promise<void> {
 		// Define merge options early so they're available for all code paths
 		const mergeOptions: MergeOptions = {
@@ -705,6 +710,7 @@ export class FinishCommand {
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
 					jsonStream: options.jsonStream ?? false,
+					packagesToValidate,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({
@@ -985,7 +991,8 @@ export class FinishCommand {
 		options: FinishOptions,
 		worktree: GitWorktree,
 		pr: PullRequest,
-		result: FinishResult
+		result: FinishResult,
+		_packagesToValidate: string[] = []
 	): Promise<void> {
 		// Branch based on PR state
 		if (pr.state === 'closed' || pr.state === 'merged') {

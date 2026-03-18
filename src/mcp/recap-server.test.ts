@@ -547,3 +547,146 @@ describe('recap-server worktreePath resolution', () => {
 		})
 	})
 })
+
+/**
+ * Simulates the set_package_to_run logic from recap-server.ts
+ * Reads metadata file, updates packagesToRun as single-element array, writes back
+ */
+async function setPackageToRun(
+	readMetadata: () => Promise<MetadataFile>,
+	writeMetadata: (metadata: MetadataFile) => Promise<void>,
+	pkg: string
+): Promise<{ success: true; packagesToRun: string[] }> {
+	const metadata = await readMetadata()
+	metadata.packagesToRun = [pkg]
+	await writeMetadata(metadata)
+	return { success: true, packagesToRun: [pkg] }
+}
+
+/**
+ * Simulates the set_packages_to_validate logic from recap-server.ts
+ * Reads metadata file, updates packagesToValidate, writes back
+ */
+async function setPackagesToValidate(
+	readMetadata: () => Promise<MetadataFile>,
+	writeMetadata: (metadata: MetadataFile) => Promise<void>,
+	packages: string[]
+): Promise<{ success: true; packagesToValidate: string[] }> {
+	const metadata = await readMetadata()
+	metadata.packagesToValidate = packages
+	await writeMetadata(metadata)
+	return { success: true, packagesToValidate: packages }
+}
+
+describe('recap-server monorepo package tools', () => {
+	let mockMetadataFile: MetadataFile
+	let readMetadataMock: () => Promise<MetadataFile>
+	let writeMetadataMock: (metadata: MetadataFile) => Promise<void>
+
+	beforeEach(() => {
+		mockMetadataFile = {
+			description: 'Test loom',
+			version: 1,
+			branchName: 'issue-42__test',
+			worktreePath: '/Users/test/dev/repo',
+			projectPath: '/Users/test/dev/repo',
+		}
+
+		readMetadataMock = vi.fn().mockImplementation(async () => ({ ...mockMetadataFile }))
+		writeMetadataMock = vi.fn().mockImplementation(async (metadata: MetadataFile) => {
+			mockMetadataFile = { ...metadata }
+		})
+	})
+
+	describe('set_package_to_run', () => {
+		it('should store single package as array', async () => {
+			const result = await setPackageToRun(readMetadataMock, writeMetadataMock, 'services/admin-api')
+
+			expect(result.success).toBe(true)
+			expect(result.packagesToRun).toEqual(['services/admin-api'])
+			expect(mockMetadataFile.packagesToRun).toEqual(['services/admin-api'])
+		})
+
+		it('should overwrite existing packagesToRun', async () => {
+			mockMetadataFile.packagesToRun = ['services/old-api']
+
+			const result = await setPackageToRun(readMetadataMock, writeMetadataMock, 'services/new-api')
+
+			expect(result.packagesToRun).toEqual(['services/new-api'])
+			expect(mockMetadataFile.packagesToRun).toEqual(['services/new-api'])
+		})
+
+		it('should always store as single-element array', async () => {
+			await setPackageToRun(readMetadataMock, writeMetadataMock, 'packages/ui')
+
+			expect(mockMetadataFile.packagesToRun).toHaveLength(1)
+		})
+
+		it('should preserve other metadata fields when setting packagesToRun', async () => {
+			mockMetadataFile.description = 'Important loom'
+			mockMetadataFile.branchName = 'issue-99__feature'
+
+			await setPackageToRun(readMetadataMock, writeMetadataMock, 'apps/frontend')
+
+			expect(mockMetadataFile.description).toBe('Important loom')
+			expect(mockMetadataFile.branchName).toBe('issue-99__feature')
+			expect(mockMetadataFile.packagesToRun).toEqual(['apps/frontend'])
+		})
+
+		it('should call writeMetadata with updated metadata', async () => {
+			await setPackageToRun(readMetadataMock, writeMetadataMock, 'services/api')
+
+			expect(writeMetadataMock).toHaveBeenCalledWith(
+				expect.objectContaining({ packagesToRun: ['services/api'] })
+			)
+		})
+	})
+
+	describe('set_packages_to_validate', () => {
+		it('should store array of packages', async () => {
+			const packages = ['services/admin-api', 'packages/shared']
+			const result = await setPackagesToValidate(readMetadataMock, writeMetadataMock, packages)
+
+			expect(result.success).toBe(true)
+			expect(result.packagesToValidate).toEqual(packages)
+			expect(mockMetadataFile.packagesToValidate).toEqual(packages)
+		})
+
+		it('should accept empty array', async () => {
+			const result = await setPackagesToValidate(readMetadataMock, writeMetadataMock, [])
+
+			expect(result.packagesToValidate).toEqual([])
+			expect(mockMetadataFile.packagesToValidate).toEqual([])
+		})
+
+		it('should overwrite existing packagesToValidate', async () => {
+			mockMetadataFile.packagesToValidate = ['services/old-api']
+			const newPackages = ['services/new-api', 'packages/ui']
+
+			const result = await setPackagesToValidate(readMetadataMock, writeMetadataMock, newPackages)
+
+			expect(result.packagesToValidate).toEqual(newPackages)
+			expect(mockMetadataFile.packagesToValidate).toEqual(newPackages)
+		})
+
+		it('should preserve other metadata fields when setting packagesToValidate', async () => {
+			mockMetadataFile.description = 'Important loom'
+			mockMetadataFile.branchName = 'issue-99__feature'
+
+			await setPackagesToValidate(readMetadataMock, writeMetadataMock, ['services/api'])
+
+			expect(mockMetadataFile.description).toBe('Important loom')
+			expect(mockMetadataFile.branchName).toBe('issue-99__feature')
+			expect(mockMetadataFile.packagesToValidate).toEqual(['services/api'])
+		})
+
+		it('should call writeMetadata with updated metadata', async () => {
+			const packages = ['services/api', 'apps/web']
+			await setPackagesToValidate(readMetadataMock, writeMetadataMock, packages)
+
+			expect(writeMetadataMock).toHaveBeenCalledWith(
+				expect.objectContaining({ packagesToValidate: packages })
+			)
+		})
+	})
+})

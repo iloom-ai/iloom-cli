@@ -339,6 +339,12 @@ export interface ValidationOptions {
 	skipLint?: boolean
 	skipTests?: boolean
 	jsonStream?: boolean
+	/**
+	 * Monorepo packages to scope validation to (relative paths from repo root).
+	 * When non-empty, validation commands run only for these packages.
+	 * When empty or undefined, runs against the entire project (default behavior).
+	 */
+	packagesToValidate?: string[]
 }
 
 export interface ValidationStepResult {

@@ -1,3 +1,5 @@
+import fs from 'fs-extra'
+import path from 'path'
 import { getPackageConfig, parseBinField, hasWebDependencies, getExplicitCapabilities } from '../utils/package-json.js'
 import type { ProjectCapability } from '../types/loom.js'
 
@@ -40,6 +42,14 @@ export class ProjectCapabilityDetector {
       // Web detection: has web framework dependencies
       if (hasWebDependencies(pkgJson)) {
         capabilities.push('web')
+      }
+
+      // Monorepo detection: has pnpm-workspace.yaml or package.json workspaces field
+      const pnpmWorkspacePath = path.join(worktreePath, 'pnpm-workspace.yaml')
+      if (await fs.pathExists(pnpmWorkspacePath)) {
+        capabilities.push('monorepo')
+      } else if (pkgJson.workspaces) {
+        capabilities.push('monorepo')
       }
 
       // Parse bin entries for CLI projects

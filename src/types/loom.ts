@@ -1,4 +1,4 @@
-export type ProjectCapability = 'cli' | 'web'
+export type ProjectCapability = 'cli' | 'web' | 'monorepo'
 export type Capability = ProjectCapability
 
 export interface Loom {

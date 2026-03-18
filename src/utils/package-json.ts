@@ -16,8 +16,8 @@ export const ILOOM_PACKAGE_LOCAL_PATH = '.iloom/package.iloom.local.json'
  * Defines project capabilities and custom shell commands for non-Node.js projects
  */
 export const PackageIloomSchema = z.object({
-  capabilities: z.array(z.enum(['cli', 'web'])).optional()
-    .describe('Project capabilities - "cli" for command-line tools (enables CLI isolation), "web" for web applications (enables port assignment and dev server)'),
+  capabilities: z.array(z.enum(['cli', 'web', 'monorepo'])).optional()
+    .describe('Project capabilities - "cli" for command-line tools (enables CLI isolation), "web" for web applications (enables port assignment and dev server), "monorepo" for monorepo projects with workspace packages (enables package-aware commands)'),
   scripts: z.object({
     install: z.string().optional().describe('Install command (e.g., "bundle install", "poetry install")'),
     build: z.string().optional().describe('Build/compile command'),
@@ -37,6 +37,7 @@ export interface PackageJson {
   devDependencies?: Record<string, string>
   scripts?: Record<string, string>
   capabilities?: ProjectCapability[]
+  workspaces?: string[] | { packages: string[] }
   [key: string]: unknown
 }
 
@@ -263,7 +264,7 @@ export async function getPackageScripts(dir: string): Promise<Record<string, Pac
 /**
  * Valid capability values that can be explicitly declared
  */
-const VALID_CAPABILITIES: readonly ProjectCapability[] = ['cli', 'web'] as const
+const VALID_CAPABILITIES: readonly ProjectCapability[] = ['cli', 'web', 'monorepo'] as const
 
 /**
  * Extract explicit capabilities from package configuration

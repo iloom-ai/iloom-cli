@@ -11,6 +11,7 @@ import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ProjectCapabilities } from '../types/loom.js'
 import fs from 'fs-extra'
+import nodeFsModule from 'node:fs'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
@@ -21,6 +22,7 @@ vi.mock('../lib/DockerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
 vi.mock('../lib/SettingsManager.js')
+vi.mock('node:fs')
 vi.mock('../utils/env.js', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../utils/env.js')>()
 	return {
@@ -680,6 +682,153 @@ describe('DevServerCommand', () => {
 			expect(envArg).toHaveProperty('DEBUG', 'true')
 			// Env file value for API_KEY should still be present
 			expect(envArg).toHaveProperty('API_KEY', 'from-env-file')
+		})
+	})
+
+	describe('monorepo mode', () => {
+		beforeEach(() => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 87,
+				originalInput: '87',
+			})
+
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+		})
+
+		it('should launch dev server from package subdirectory when packagesToRun is already set', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web', 'monorepo'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				colorHex: null,
+				packagesToRun: ['apps/web'],
+				packagesToValidate: [],
+			})
+			vi.mocked(mockMetadataManager.getMetadataFilePath).mockReturnValue(
+				'/home/.config/iloom-ai/looms/test-worktree.json'
+			)
+
+			const result = await command.execute({ identifier: '87' })
+
+			expect(result.status).toBe('started')
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				`${mockWorktree.path}/apps/web`,
+				3087,
+				false,
+				expect.any(Function),
+				expect.any(Object),
+				undefined,
+				undefined
+			)
+		})
+
+		it('should wait for packagesToRun when monorepo+web but packagesToRun is empty, then launch from package dir', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web', 'monorepo'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(mockMetadataManager.getMetadataFilePath).mockReturnValue(
+				'/home/.config/iloom-ai/looms/test-worktree.json'
+			)
+
+			// First readMetadata call (in execute for color): return empty packagesToRun
+			// Second readMetadata call (in waitForPackagesToRun): return populated
+			vi.mocked(mockMetadataManager.readMetadata)
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: [], packagesToValidate: [] })
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: [], packagesToValidate: [] })
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: ['packages/frontend'], packagesToValidate: [] })
+
+			// Mock fs.watch to call the callback immediately with a file change event
+			const mockWatcher = {
+				close: vi.fn(),
+			}
+			vi.mocked(nodeFsModule.watch).mockImplementation((_dir, _opts, callback) => {
+				// Simulate a file change event asynchronously
+				if (typeof callback === 'function') {
+					globalThis.setTimeout(() => {
+						callback('change', 'test-worktree.json')
+					}, 10)
+				}
+				return mockWatcher as unknown as nodeFsModule.FSWatcher
+			})
+
+			const result = await command.execute({ identifier: '87' })
+
+			expect(result.status).toBe('started')
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				`${mockWorktree.path}/packages/frontend`,
+				3087,
+				false,
+				expect.any(Function),
+				expect.any(Object),
+				undefined,
+				undefined
+			)
+		})
+
+		it('should behave normally when only web capability (no monorepo)', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				colorHex: null,
+				packagesToRun: [],
+				packagesToValidate: [],
+			})
+
+			const result = await command.execute({ identifier: '87' })
+
+			expect(result.status).toBe('started')
+			// Should use original worktree.path, not a subdirectory
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				expect.any(Object),
+				undefined,
+				undefined
+			)
+		})
+
+		it('should clean up file watcher when packagesToRun is resolved', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web', 'monorepo'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(mockMetadataManager.getMetadataFilePath).mockReturnValue(
+				'/home/.config/iloom-ai/looms/test-worktree.json'
+			)
+
+			vi.mocked(mockMetadataManager.readMetadata)
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: [], packagesToValidate: [] })
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: [], packagesToValidate: [] })
+				.mockResolvedValueOnce({ colorHex: null, packagesToRun: ['apps/web'], packagesToValidate: [] })
+
+			const mockWatcher = { close: vi.fn() }
+			vi.mocked(nodeFsModule.watch).mockImplementation((_dir, _opts, callback) => {
+				if (typeof callback === 'function') {
+					globalThis.setTimeout(() => {
+						callback('change', 'test-worktree.json')
+					}, 10)
+				}
+				return mockWatcher as unknown as nodeFsModule.FSWatcher
+			})
+
+			await command.execute({ identifier: '87' })
+
+			// Watcher should have been closed after resolving
+			expect(mockWatcher.close).toHaveBeenCalled()
 		})
 	})
 

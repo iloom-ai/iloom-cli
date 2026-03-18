@@ -800,8 +800,19 @@ il dev-server [identifier] [options]
 
 1. Resolves the target loom
 2. Loads environment variables from `.env` files
-3. Executes dev script from `package.json` or `.iloom/package.iloom.json`
-4. Runs in foreground (useful for debugging and manual testing)
+3. Detects project capabilities (web, monorepo, CLI)
+4. In monorepo mode: waits for `packagesToRun` to be set in loom metadata, then launches from the package subdirectory
+5. Executes dev script from `package.json` or `.iloom/package.iloom.json`
+6. Runs in foreground (useful for debugging and manual testing)
+
+**Monorepo Support:**
+
+When both `web` and `monorepo` capabilities are detected, `il dev-server` waits for the package detection agent to set `packagesToRun` in the loom metadata before launching. This ensures the dev server starts from the correct package subdirectory.
+
+- If `packagesToRun` is already set (detection agent ran before `il dev-server`), the server starts immediately.
+- If `packagesToRun` is empty, `il dev-server` watches the metadata file (with 15-second polling fallback) and launches once the agent populates it.
+- Only the first package in `packagesToRun` is used (multi-package dev servers are not supported in v1).
+- Times out after 60 seconds with an actionable error message if the agent never runs.
 
 **Examples:**
 
@@ -972,6 +983,10 @@ il build
 | Ruby | `bundle install` | `.iloom/package.iloom.json` |
 | Go | `go build ./...` | `.iloom/package.iloom.json` |
 
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il build` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `build` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il build` runs at the project root as normal.
+
 **Notes:**
 - Works with any language/framework via `.iloom/package.iloom.json`
 - Environment variables are automatically loaded before execution
@@ -1031,6 +1046,10 @@ il lint feat/my-feature
 | Ruby | `rubocop` | `.iloom/package.iloom.json` |
 | Go | `golangci-lint run` | `.iloom/package.iloom.json` |
 
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il lint` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `lint` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il lint` runs at the project root as normal.
+
 **Notes:**
 - Works with any linter via `.iloom/package.iloom.json`
 - Environment variables are automatically loaded before execution
@@ -1089,6 +1108,10 @@ il test feat/my-feature
 | Rust | `cargo test` | `.iloom/package.iloom.json` |
 | Ruby | `bundle exec rspec` | `.iloom/package.iloom.json` |
 | Go | `go test ./...` | `.iloom/package.iloom.json` |
+
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il test` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `test` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il test` runs at the project root as normal.
 
 **Notes:**
 - Works with any test framework via `.iloom/package.iloom.json`
@@ -1155,6 +1178,10 @@ il typecheck feat/my-feature
 | Python | `mypy src/` | `.iloom/package.iloom.json` |
 | Rust | `cargo check` | `.iloom/package.iloom.json` |
 | Go | `go build ./...` (no-op compile) | `.iloom/package.iloom.json` |
+
+**Monorepo Support:**
+
+When `packagesToValidate` is set in the loom metadata, `il compile` scopes execution to those specific packages using the package manager's workspace filter flag (`--filter` for pnpm, `--workspace` for npm, `--include` for yarn). Packages that do not define a `compile` or `typecheck` script are gracefully skipped. When `packagesToValidate` is empty or not set, `il compile` runs at the project root as normal.
 
 **Notes:**
 - Works with any compiler/type checker via `.iloom/package.iloom.json`
@@ -2162,9 +2189,48 @@ il init "configure neon database with project ID abc-123"
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local, pr, draft-pr)
 - Permission modes
-- Project type (web app, CLI tool, etc.)
+- Project type (web app, CLI tool, monorepo, etc.)
 - Base port for development servers
 - Environment variable names
+
+**Project Capabilities:**
+
+iloom detects and persists project capabilities in `.iloom/package.iloom.json` under the `capabilities` field. Valid values are:
+
+| Capability | Description | Auto-detected from |
+|------------|-------------|-------------------|
+| `"web"` | Web application with a dev server | React, Next.js, Vite, and other web framework dependencies |
+| `"cli"` | Command-line tool with a `bin` entry | `bin` field in `package.json` |
+| `"monorepo"` | Monorepo with multiple workspace packages | `pnpm-workspace.yaml` file OR `workspaces` field in `package.json` |
+
+Capabilities can also be set manually in `.iloom/package.iloom.json`:
+```json
+{
+  "capabilities": ["monorepo"]
+}
+```
+
+The `monorepo` capability is auto-detected during `il init` when either of these workspace configuration files are present:
+- `pnpm-workspace.yaml` — used by pnpm workspaces
+- `workspaces` field in `package.json` — used by yarn and npm workspaces
+
+**Monorepo Package Detection:**
+
+When the `"monorepo"` capability is set, iloom integrates a dedicated `iloom-monorepo-package-detector` agent into the workflow to determine which packages to run and validate.
+
+*How it works:*
+- The detection agent explores the workspace structure, reads the issue context, and calls MCP tools to set `packagesToRun` and `packagesToValidate` on the loom metadata
+- In **non-swarm mode**: the detection agent runs before the implementation agent begins
+- In **swarm mode**: the detection agent runs after the swarm completes (called by the orchestrator), not by individual child agents
+
+*Package metadata reminder:*
+When the `"monorepo"` capability is set, a UserPromptSubmit hook injects a reminder into each agent session: if the agent touches packages not already listed in `packagesToValidate`, it should call `mcp__recap__set_packages_to_validate` to update the list.
+
+*MCP tools used:*
+- `set_package_to_run` — declare which package to run (dev server, etc.)
+- `set_packages_to_validate` — declare which packages need test/lint/build validation
+
+When the project does not have the `"monorepo"` capability, no detection agent runs and no monorepo instructions appear in prompts.
 
 **Jira Advanced Settings:**
 

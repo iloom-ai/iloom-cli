@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { CompileCommand } from './compile.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import * as packageJson from '../utils/package-json.js'
 import * as packageManager from '../utils/package-manager.js'
@@ -12,6 +13,7 @@ vi.mock('../utils/IdentifierParser.js', () => ({
 		parseForPatternDetection: vi.fn(),
 	})),
 }))
+vi.mock('../lib/MetadataManager.js')
 
 // Mock package utilities
 vi.mock('../utils/package-json.js', () => ({
@@ -47,6 +49,10 @@ describe('CompileCommand', () => {
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
 		command = new CompileCommand(mockGitWorktreeManager)
+		// Set up MetadataManager mock to return no packagesToValidate by default
+		vi.mocked(MetadataManager).mockImplementation(() => ({
+			readMetadata: vi.fn().mockResolvedValue(null),
+		} as unknown as MetadataManager))
 	})
 
 	describe('identifier parsing', () => {
@@ -116,7 +122,7 @@ describe('CompileCommand', () => {
 
 			await command.execute({})
 
-			expect(packageManager.runScript).toHaveBeenCalledWith('compile', mockWorktree.path, [])
+			expect(packageManager.runScript).toHaveBeenCalledWith('compile', mockWorktree.path, [], { packages: [] })
 		})
 
 		it('should fallback to typecheck if compile does not exist', async () => {
@@ -127,7 +133,7 @@ describe('CompileCommand', () => {
 
 			await command.execute({})
 
-			expect(packageManager.runScript).toHaveBeenCalledWith('typecheck', mockWorktree.path, [])
+			expect(packageManager.runScript).toHaveBeenCalledWith('typecheck', mockWorktree.path, [], { packages: [] })
 		})
 
 		it('should skip silently if neither compile nor typecheck exist', async () => {
@@ -152,7 +158,7 @@ describe('CompileCommand', () => {
 
 			await command.execute({})
 
-			expect(packageManager.runScript).toHaveBeenCalledWith('compile', mockWorktree.path, [])
+			expect(packageManager.runScript).toHaveBeenCalledWith('compile', mockWorktree.path, [], { packages: [] })
 			expect(packageManager.runScript).toHaveBeenCalledTimes(1)
 		})
 	})

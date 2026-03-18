@@ -28,14 +28,15 @@ export class ValidationRunner {
 		const startTime = Date.now()
 		const steps: ValidationStepResult[] = []
 
-		const { jsonStream } = options
+		const { jsonStream, packagesToValidate } = options
+		const stepOptions = { jsonStream, packagesToValidate }
 
 		// Run typecheck
 		if (!options.skipTypecheck) {
 			const typecheckResult = await this.runTypecheck(
 				worktreePath,
 				options.dryRun ?? false,
-				{ jsonStream }
+				stepOptions
 			)
 			steps.push(typecheckResult)
 
@@ -50,7 +51,7 @@ export class ValidationRunner {
 
 		// Run lint
 		if (!options.skipLint) {
-			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false, { jsonStream })
+			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false, stepOptions)
 			steps.push(lintResult)
 
 			if (!lintResult.passed && !lintResult.skipped) {
@@ -63,7 +64,7 @@ export class ValidationRunner {
 			const testResult = await this.runTests(
 				worktreePath,
 				options.dryRun ?? false,
-				{ jsonStream }
+				stepOptions
 			)
 			steps.push(testResult)
 
@@ -82,7 +83,7 @@ export class ValidationRunner {
 	private async runTypecheck(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; packagesToValidate?: string[] | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -125,13 +126,15 @@ export class ValidationRunner {
 		}
 
 		const packageManager = await detectPackageManager(worktreePath)
+		const packages = options.packagesToValidate ?? []
 
 		if (dryRun) {
 			const command =
 				packageManager === 'npm'
 					? `npm run ${scriptToRun}`
 					: `${packageManager} ${scriptToRun}`
-			getLogger().info(`[DRY RUN] Would run: ${command}`)
+			const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+			getLogger().info(`[DRY RUN] Would run: ${command}${scopeNote}`)
 			return {
 				step: scriptToRun,
 				passed: true,
@@ -140,10 +143,11 @@ export class ValidationRunner {
 			}
 		}
 
-		getLogger().info(`Running ${scriptToRun}...`)
+		const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+		getLogger().info(`Running ${scriptToRun}...${scopeNote}`)
 
 		try {
-			await runScript(scriptToRun, worktreePath, [], { quiet: true })
+			await runScript(scriptToRun, worktreePath, [], { quiet: true, packages })
 			getLogger().success(`${scriptToRun.charAt(0).toUpperCase() + scriptToRun.slice(1)} passed`)
 
 			return {
@@ -158,7 +162,7 @@ export class ValidationRunner {
 				scriptToRun,
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, packagesToValidate: packages }
 			)
 
 			if (fixed) {
@@ -191,7 +195,7 @@ export class ValidationRunner {
 	private async runLint(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; packagesToValidate?: string[] | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -225,11 +229,13 @@ export class ValidationRunner {
 		}
 
 		const packageManager = await detectPackageManager(worktreePath)
+		const packages = options.packagesToValidate ?? []
 
 		if (dryRun) {
 			const command =
 				packageManager === 'npm' ? 'npm run lint' : `${packageManager} lint`
-			getLogger().info(`[DRY RUN] Would run: ${command}`)
+			const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+			getLogger().info(`[DRY RUN] Would run: ${command}${scopeNote}`)
 			return {
 				step: 'lint',
 				passed: true,
@@ -238,10 +244,11 @@ export class ValidationRunner {
 			}
 		}
 
-		getLogger().info('Running lint...')
+		const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+		getLogger().info(`Running lint...${scopeNote}`)
 
 		try {
-			await runScript('lint', worktreePath, [], { quiet: true })
+			await runScript('lint', worktreePath, [], { quiet: true, packages })
 			getLogger().success('Linting passed')
 
 			return {
@@ -256,11 +263,10 @@ export class ValidationRunner {
 				'lint',
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, packagesToValidate: packages }
 			)
 
 			if (fixed) {
-				// logger.success('Linting passed after Claude auto-fix')
 				return {
 					step: 'lint',
 					passed: true,
@@ -287,7 +293,7 @@ export class ValidationRunner {
 	private async runTests(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; packagesToValidate?: string[] | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -321,11 +327,13 @@ export class ValidationRunner {
 		}
 
 		const packageManager = await detectPackageManager(worktreePath)
+		const packages = options.packagesToValidate ?? []
 
 		if (dryRun) {
 			const command =
 				packageManager === 'npm' ? 'npm run test' : `${packageManager} test`
-			getLogger().info(`[DRY RUN] Would run: ${command}`)
+			const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+			getLogger().info(`[DRY RUN] Would run: ${command}${scopeNote}`)
 			return {
 				step: 'test',
 				passed: true,
@@ -334,10 +342,11 @@ export class ValidationRunner {
 			}
 		}
 
-		getLogger().info('Running tests...')
+		const scopeNote = packages.length > 0 ? ` (scoped to: ${packages.join(', ')})` : ''
+		getLogger().info(`Running tests...${scopeNote}`)
 
 		try {
-			await runScript('test', worktreePath, [], { quiet: true })
+			await runScript('test', worktreePath, [], { quiet: true, packages })
 			getLogger().success('Tests passed')
 
 			return {
@@ -352,11 +361,10 @@ export class ValidationRunner {
 				'test',
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, packagesToValidate: packages }
 			)
 
 			if (fixed) {
-				// logger.success('Tests passed after Claude auto-fix')
 				return {
 					step: 'test',
 					passed: true,
@@ -390,7 +398,7 @@ export class ValidationRunner {
 		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		worktreePath: string,
 		packageManager: string,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; packagesToValidate?: string[] | undefined } = {}
 	): Promise<boolean> {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
@@ -405,6 +413,10 @@ export class ValidationRunner {
 		// Build prompt based on validation type (matching bash script prompts)
 		const prompt = this.getClaudePrompt(validationType, validationCommand)
 
+		// Build system prompt appendage to instruct auto-fix agents to use il commands for re-validation
+		const packages = options.packagesToValidate ?? []
+		const appendSystemPrompt = this.getAutoFixSystemPrompt(validationType, packages)
+
 		const validationTypeCapitalized = validationType.charAt(0).toUpperCase() + validationType.slice(1)
 		getLogger().info(`Launching Claude to help fix ${validationTypeCapitalized} errors...`)
 
@@ -417,6 +429,7 @@ export class ValidationRunner {
 				permissionMode: options.jsonStream ? 'bypassPermissions' : 'acceptEdits',
 				model: 'sonnet',
 				noSessionPersistence: true,
+				appendSystemPrompt,
 				...(options.jsonStream && { passthroughStdout: true }),
 			})
 
@@ -424,7 +437,7 @@ export class ValidationRunner {
 			getLogger().info(`Re-running ${validationTypeCapitalized} after Claude's fixes...`)
 
 			try {
-				await runScript(validationType, worktreePath, [], { quiet: true })
+				await runScript(validationType, worktreePath, [], { quiet: true, packages })
 				// Validation passed after Claude fix
 				getLogger().success(`${validationTypeCapitalized} passed after Claude auto-fix`)
 				return true
@@ -440,6 +453,27 @@ export class ValidationRunner {
 			})
 			return false
 		}
+	}
+
+	/**
+	 * Get the system prompt appendage for auto-fix agents.
+	 * Instructs agents to use il commands for re-validation (so they benefit from monorepo scoping).
+	 * Note: 'typecheck' maps to 'il compile' since 'il typecheck' is not a CLI command.
+	 */
+	private getAutoFixSystemPrompt(
+		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
+		packages: string[]
+	): string {
+		// 'il typecheck' does not exist — il compile handles both compile and typecheck fallback
+		const commandName = validationType === 'typecheck' ? 'compile' : validationType
+		const ilCommand = `il ${commandName}`
+		let prompt = `IMPORTANT: When re-running validation to verify your fixes, always use '${ilCommand}' instead of raw package manager commands. The il command automatically applies the correct monorepo scoping and configuration.`
+
+		if (packages.length > 0) {
+			prompt += ` This validation is scoped to the following packages: ${packages.join(', ')}.`
+		}
+
+		return prompt
 	}
 
 	/**

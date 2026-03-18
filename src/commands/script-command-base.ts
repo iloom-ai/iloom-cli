@@ -1,5 +1,6 @@
 import path from 'path'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { runScript } from '../utils/package-manager.js'
 import { getPackageScripts } from '../utils/package-json.js'
@@ -65,10 +66,36 @@ export abstract class ScriptCommandBase {
 			throw new Error(`No ${scriptName} script defined in package.json or package.iloom.json`)
 		}
 
-		// 4. Run the script
+		// 4. Read packagesToValidate from loom metadata for monorepo scoping
+		const packages = await this.readPackagesToValidate(worktree.path)
+
+		if (packages.length > 0) {
+			logger.info(`Scoping ${this.getScriptDisplayName()} to packages: ${packages.join(', ')}`)
+		}
+
+		// 5. Run the script
 		logger.info(`Running ${this.getScriptDisplayName()}...`)
-		await runScript(scriptName, worktree.path, [])
+		await runScript(scriptName, worktree.path, [], { packages })
 		logger.success(`${this.getScriptDisplayName()} completed successfully`)
+	}
+
+	/**
+	 * Read packagesToValidate from loom metadata.
+	 * Returns empty array if the metadata file does not exist (graceful degradation for non-loom worktrees).
+	 * Rethrows unexpected errors.
+	 */
+	protected async readPackagesToValidate(worktreePath: string): Promise<string[]> {
+		try {
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(worktreePath)
+			return metadata?.packagesToValidate ?? []
+		} catch (error: unknown) {
+			// Only suppress ENOENT (metadata file not found) — all other errors propagate
+			if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+				return []
+			}
+			throw error
+		}
 	}
 
 	/**

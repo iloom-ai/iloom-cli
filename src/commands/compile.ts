@@ -56,10 +56,17 @@ export class CompileCommand extends ScriptCommandBase {
 			return
 		}
 
-		// 5. Run the found script
+		// 5. Read packagesToValidate from loom metadata for monorepo scoping
+		const packages = await this.readPackagesToValidate(worktree.path)
+
+		if (packages.length > 0) {
+			logger.info(`Scoping Compile/Typecheck to packages: ${packages.join(', ')}`)
+		}
+
+		// 6. Run the found script
 		const displayName = scriptToRun === 'compile' ? 'Compile' : 'Typecheck'
 		logger.info(`Running ${displayName}...`)
-		await runScript(scriptToRun, worktree.path, [])
+		await runScript(scriptToRun, worktree.path, [], { packages })
 		logger.success(`${displayName} completed successfully`)
 	}
 }

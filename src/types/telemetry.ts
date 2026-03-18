@@ -133,6 +133,11 @@ export interface DevServerStartedEvent {
    * Tracks feature adoption without exposing secret IDs or paths.
    */
   docker_build_secrets_count?: number
+  /**
+   * Whether the dev server launched from a monorepo package subdirectory
+   * (both web and monorepo capabilities were detected).
+   */
+  is_monorepo?: boolean
 }
 
 export interface DevServerStoppedEvent {

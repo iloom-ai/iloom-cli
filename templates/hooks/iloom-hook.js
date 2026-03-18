@@ -325,7 +325,7 @@ async function main() {
 
         if (swarmCompleted) {
           // Swarm finished — show full routing table with swarm-prefixed agents
-          const reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
+          let reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
 |--------------|--------|
@@ -336,6 +336,21 @@ async function main() {
 | New features / complex changes | \`@agent-iloom-swarm-issue-analyze-and-plan\` → if approved, \`@agent-iloom-swarm-issue-implementer\` - IN THIS CASE IT'S OK TO CREATE/UPDATE ISSUE COMMENTS |
 | Deep questions (how/why something works) | \`@agent-iloom-swarm-issue-analyzer\` |
 | Code review request | \`@agent-iloom-swarm-code-reviewer\` |`;
+
+          // Append monorepo reminder if applicable
+          let swarmIsMonorepo = false;
+          let swarmCurrentPackages = [];
+          const swarmMetadataPath = getMetadataFilePath(cwd);
+          if (fs.existsSync(swarmMetadataPath)) {
+            const swarmContent = fs.readFileSync(swarmMetadataPath, 'utf8');
+            const swarmMeta = JSON.parse(swarmContent);
+            swarmIsMonorepo = swarmMeta.capabilities?.includes('monorepo') || false;
+            swarmCurrentPackages = swarmMeta.packagesToValidate || [];
+          }
+          if (swarmIsMonorepo) {
+            reminder += `\n\n**MONOREPO**: Current packages to validate: [${swarmCurrentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__set_packages_to_validate\` to update the list.`;
+          }
+
           const output = {
             hookSpecificOutput: {
               hookEventName: 'UserPromptSubmit',
@@ -360,7 +375,7 @@ async function main() {
         process.exit(0);
       }
 
-      const reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
+      let reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
 |--------------|--------|
@@ -374,6 +389,20 @@ async function main() {
 | Code review request | \`@agent-iloom-code-reviewer\` |
 
 Regarding creating/updating comments - if it's a trivial fix or quick answer, DO NOT create or update issue comments to avoid polluting the issue history. Only create/update comments for complex changes or new features as outlined above.`;
+
+      // Read metadata to check for monorepo capability and append reminder if applicable
+      let isMonorepo = false;
+      let currentPackages = [];
+      const metadataPath = getMetadataFilePath(cwd);
+      if (fs.existsSync(metadataPath)) {
+        const content = fs.readFileSync(metadataPath, 'utf8');
+        const metadata = JSON.parse(content);
+        isMonorepo = metadata.capabilities?.includes('monorepo') || false;
+        currentPackages = metadata.packagesToValidate || [];
+      }
+      if (isMonorepo) {
+        reminder += `\n\n**MONOREPO**: Current packages to validate: [${currentPackages.join(', ')}]. If you are touching packages not in this list, call \`mcp__recap__set_packages_to_validate\` to update the list.`;
+      }
 
       const output = {
         hookSpecificOutput: {

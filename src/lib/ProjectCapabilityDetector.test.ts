@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import * as packageJsonUtils from '../utils/package-json.js'
 import type { PackageJson } from '../utils/package-json.js'
+import fs from 'fs-extra'
 
 vi.mock('../utils/package-json.js', () => ({
   getPackageConfig: vi.fn(),
   parseBinField: vi.fn(),
   hasWebDependencies: vi.fn(),
   getExplicitCapabilities: vi.fn()
+}))
+
+vi.mock('fs-extra', () => ({
+  default: {
+    pathExists: vi.fn()
+  }
 }))
 
 describe('ProjectCapabilityDetector', () => {
@@ -18,6 +25,8 @@ describe('ProjectCapabilityDetector', () => {
     detector = new ProjectCapabilityDetector()
     // Default: no explicit capabilities (fallback to package.json detection)
     vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValue([])
+    // Default: no pnpm-workspace.yaml
+    vi.mocked(fs.pathExists as (path: string) => Promise<boolean>).mockResolvedValue(false)
   })
 
   describe('detectCapabilities', () => {
@@ -327,6 +336,107 @@ describe('ProjectCapabilityDetector', () => {
 
       expect(result.capabilities).toEqual(['web'])
       expect(result.binEntries).toEqual({})
+    })
+  })
+
+  describe('monorepo detection', () => {
+    it('should detect monorepo from pnpm-workspace.yaml', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'my-monorepo',
+        dependencies: {}
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+      vi.mocked(fs.pathExists as (path: string) => Promise<boolean>).mockResolvedValue(true)
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toContain('monorepo')
+      expect(result.capabilities).not.toContain('cli')
+      expect(result.capabilities).not.toContain('web')
+    })
+
+    it('should detect monorepo from package.json workspaces field (array)', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'my-monorepo',
+        workspaces: ['packages/*'],
+        dependencies: {}
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+      // pathExists returns false (no pnpm-workspace.yaml), falls through to workspaces check
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toContain('monorepo')
+    })
+
+    it('should detect monorepo from package.json workspaces field (object form)', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'my-monorepo',
+        workspaces: { packages: ['packages/*'] },
+        dependencies: {}
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toContain('monorepo')
+    })
+
+    it('should combine monorepo with cli capability', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'my-monorepo-cli',
+        bin: { 'my-cli': './dist/cli.js' },
+        dependencies: {}
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+      vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({ 'my-cli': './dist/cli.js' })
+      vi.mocked(fs.pathExists as (path: string) => Promise<boolean>).mockResolvedValue(true)
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toContain('cli')
+      expect(result.capabilities).toContain('monorepo')
+    })
+
+    it('should detect monorepo from explicit capabilities in package.iloom.json', async () => {
+      const mockIloomPackage: PackageJson = {
+        name: 'my-monorepo',
+        capabilities: ['monorepo', 'web']
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockIloomPackage)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce(['monorepo', 'web'])
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['monorepo', 'web'])
+      expect(result.binEntries).toEqual({})
+    })
+
+    it('should not set monorepo capability when no workspace markers exist', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'regular-cli',
+        bin: { 'regular-cli': './dist/cli.js' },
+        dependencies: {}
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+      vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({ 'regular-cli': './dist/cli.js' })
+      // pathExists returns false (default) and no workspaces field
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.capabilities).not.toContain('monorepo')
     })
   })
 })

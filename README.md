@@ -18,7 +18,7 @@ iloom
 
 #### Links to key sections
 
-[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Telemetry](#telemetry) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Monorepo](#monorepo-support) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Telemetry](#telemetry) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
 ## How can your team trust the code your AI wrote, when you don't?
 
@@ -688,6 +688,34 @@ Then use `il dev-server`, `il open`, or `il run` as normal.
 
 Docker Compose multi-service stacks are not yet supported — see [#332](https://github.com/iloom-ai/iloom-cli/issues/332) for the roadmap. For full configuration options and known limitations, see the [Complete Command Reference](docs/iloom-commands.md#docker-dev-server-mode).
 
+### Monorepo Support
+
+iloom detects monorepo workspace configurations during `il init` and scopes commands to only the packages relevant to your current task.
+
+**Auto-detection:** iloom recognizes `pnpm-workspace.yaml` and `package.json` `workspaces` field, adding `"monorepo"` to your project capabilities automatically.
+
+**How it works:**
+
+1. **Package detection agent** runs before implementation (or after swarm completion in swarm mode) to determine which packages are affected by the current issue
+2. **Scoped validation** — `il test`, `il lint`, `il compile`, and `il build` run only against the declared packages, using the correct filter syntax for your package manager (pnpm `--filter`, yarn `workspace`, npm `--workspace`)
+3. **Scoped dev server** — `il dev-server` watches for the detection agent's decision and launches from the correct package subdirectory
+
+**Quick setup:**
+
+```bash
+# Auto-detected during init
+il init
+
+# Or add manually to .iloom/package.iloom.json
+{
+  "capabilities": ["monorepo", "web"]
+}
+```
+
+Non-monorepo projects are completely unaffected — all commands behave identically to before.
+
+**-> [Complete Monorepo Guide](docs/monorepo-guide.md)** — Full details on detection, package scoping, dev server behavior, and troubleshooting.
+
 ### Epic Planning and Decomposition
 
 The `il plan` command launches an interactive Architect session that helps you break down complex features into manageable child issues.
@@ -820,7 +848,9 @@ This is an early-stage product.
 
 *   ✅ **Node.js CLI Tools:** Full support with isolated binary generation.
 
-*   ✅ **Multi-Language Projects:** Python, Rust, Ruby, Go, and other languages via `.iloom/package.iloom.json`.    
+*   ✅ **Multi-Language Projects:** Python, Rust, Ruby, Go, and other languages via `.iloom/package.iloom.json`.
+
+*   ✅ **Monorepo Projects:** Automatic detection and scoped commands for pnpm, yarn, and npm workspaces. See [Monorepo Support](#monorepo-support) below.
 
 See all [known limitations](https://github.com/iloom-ai/iloom-cli/issues?q=is:issue+is:open+label:known-limitation) on GitHub. If you're feeling left out - you're absolutely right! The best way to complain about something is to fix it. So...
 

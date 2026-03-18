@@ -383,6 +383,8 @@ describe('MetadataManager', () => {
         dependencyMap: {},
         mcpConfigPath: null,
         swarmTeamName: null,
+        packagesToRun: [],
+        packagesToValidate: [],
       })
     })
 
@@ -517,6 +519,8 @@ describe('MetadataManager', () => {
         dependencyMap: {},
         mcpConfigPath: null,
         swarmTeamName: null,
+        packagesToRun: [],
+        packagesToValidate: [],
       })
     })
 
@@ -889,6 +893,8 @@ describe('MetadataManager', () => {
         dependencyMap: {},
         mcpConfigPath: null,
         swarmTeamName: null,
+        packagesToRun: [],
+        packagesToValidate: [],
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -917,6 +923,8 @@ describe('MetadataManager', () => {
         dependencyMap: {},
         mcpConfigPath: null,
         swarmTeamName: null,
+        packagesToRun: [],
+        packagesToValidate: [],
       })
     })
 
@@ -1029,6 +1037,8 @@ describe('MetadataManager', () => {
         dependencyMap: {},
         mcpConfigPath: null,
         swarmTeamName: null,
+        packagesToRun: [],
+        packagesToValidate: [],
       })
     })
 

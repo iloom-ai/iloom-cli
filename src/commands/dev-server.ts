@@ -1,5 +1,7 @@
 import path from 'path'
+import fs from 'node:fs'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
@@ -121,7 +123,34 @@ export class DevServerCommand {
 
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
-		// 4. If no web capability, return gracefully with info message
+		// 4a. Monorepo mode: wait for packagesToRun to be populated before launching
+		const isMonorepo = capabilities.includes('web') && capabilities.includes('monorepo')
+		let serverPath = worktree.path
+		if (isMonorepo) {
+			// Re-read metadata to get the latest packagesToRun
+			const latestMetadata = await this.metadataManager.readMetadata(worktree.path)
+			let packagesToRun = latestMetadata?.packagesToRun ?? []
+
+			if (packagesToRun.length === 0) {
+				logger.info('Monorepo detected. Waiting for package detection agent to identify which package to run...')
+				const metadataFilePath = this.metadataManager.getMetadataFilePath(worktree.path)
+				packagesToRun = await this.waitForPackagesToRun(metadataFilePath, worktree.path)
+			}
+
+			const firstPackage = packagesToRun[0]
+			if (!firstPackage) {
+				throw new Error('packagesToRun is empty after waiting for detection')
+			}
+			if (firstPackage.includes('..') || path.isAbsolute(firstPackage)) {
+				throw new Error(
+					`Invalid package path in metadata: "${firstPackage}" must be a relative path within the workspace`
+				)
+			}
+			serverPath = path.join(worktree.path, firstPackage)
+			logger.info(`Launching dev server from monorepo package: ${serverPath}`)
+		}
+
+		// 5. If no web capability, return gracefully with info message
 		if (!capabilities.includes('web')) {
 			const message = 'No web capability detected in this workspace. Dev server not started.'
 			if (input.json) {
@@ -216,7 +245,7 @@ export class DevServerCommand {
 			// This will block until user stops the server (Ctrl+C)
 			// In JSON mode, redirect npm output to stderr so JSON can go to stdout
 			const processInfo = await this.devServerManager.runServerForeground(
-				worktree.path,
+				serverPath,
 				port,
 				!!input.json,
 				// Callback called immediately when process starts (for JSON output)
@@ -233,6 +262,18 @@ export class DevServerCommand {
 
 			if (processInfo.pid) {
 				finalResult.pid = processInfo.pid
+			}
+
+			// Fire-and-forget telemetry: track dev server started
+			try {
+				TelemetryService.getInstance().track('devServer.started', {
+					mode: dockerConfig ? 'docker' : 'process',
+					success: true,
+					startDurationMs: 0,
+					is_monorepo: isMonorepo,
+				})
+			} catch (err) {
+				logger.debug(`Telemetry error: ${String(err)}`)
 			}
 		} finally {
 			if (tui) {
@@ -386,5 +427,123 @@ export class DevServerCommand {
 	 */
 	private formatLoomIdentifier(parsed: ParsedDevServerInput): string {
 		return parsed.originalInput
+	}
+
+	/**
+	 * Watch the metadata file until packagesToRun is populated.
+	 * Uses fs.watch with a polling fallback (15s interval).
+	 * Resolves with the packagesToRun array, or rejects on SIGINT or timeout.
+	 *
+	 * Maximum wait time is 60 seconds before giving up with an actionable error.
+	 */
+	private waitForPackagesToRun(metadataFilePath: string, worktreePath: string): Promise<string[]> {
+		const MAX_WAIT_MS = 60_000
+		const POLL_INTERVAL_MS = 15_000
+
+		return new Promise((resolve, reject) => {
+			let isChecking = false
+			let watcher: fs.FSWatcher | undefined
+			let pollTimer: NodeJS.Timeout | undefined
+			let timeoutTimer: NodeJS.Timeout | undefined
+			let done = false
+			const expectedFilename = path.basename(metadataFilePath)
+
+			const cleanup = (): void => {
+				done = true
+				if (watcher) {
+					try { watcher.close() } catch { /* ignore */ }
+				}
+				if (pollTimer) {
+					globalThis.clearInterval(pollTimer)
+				}
+				if (timeoutTimer) {
+					globalThis.clearTimeout(timeoutTimer)
+				}
+			}
+
+			const checkMetadata = async (): Promise<boolean> => {
+				if (done || isChecking) return false
+				isChecking = true
+				try {
+					const metadata = await this.metadataManager.readMetadata(worktreePath)
+					if (metadata?.packagesToRun && metadata.packagesToRun.length > 0) {
+						resolve(metadata.packagesToRun)
+						return true
+					}
+				} catch (error: unknown) {
+					// Only suppress errors expected during normal operation:
+					// - ENOENT: metadata file doesn't exist yet
+					// - SyntaxError: file is being written (transient parse failure)
+					const isEnoent =
+						error instanceof Error &&
+						'code' in error &&
+						(error as NodeJS.ErrnoException).code === 'ENOENT'
+					const isSyntaxError = error instanceof SyntaxError
+					if (!isEnoent && !isSyntaxError) {
+						cleanup()
+						process.removeListener('SIGINT', onSignal)
+						reject(error)
+						return false
+					}
+				} finally {
+					isChecking = false
+				}
+				return false
+			}
+
+			const onSignal = (): void => {
+				cleanup()
+				reject(new Error('Dev server watch aborted due to SIGINT'))
+			}
+
+			process.once('SIGINT', onSignal)
+
+			const handleChange = async (): Promise<void> => {
+				if (done) return
+				const resolved = await checkMetadata()
+				if (resolved) {
+					cleanup()
+					process.removeListener('SIGINT', onSignal)
+				}
+			}
+
+			// Maximum wait timeout
+			timeoutTimer = globalThis.setTimeout(() => {
+				cleanup()
+				process.removeListener('SIGINT', onSignal)
+				reject(new Error(
+					`Timed out waiting for package detection agent to identify which package to run after ${MAX_WAIT_MS / 1000}s. ` +
+					`Ensure the detection agent ran and set packagesToRun in the loom metadata.`
+				))
+			}, MAX_WAIT_MS)
+
+			// Attempt to use fs.watch first
+			try {
+				// Watch the metadata file directory for changes
+				const dir = path.dirname(metadataFilePath)
+				watcher = fs.watch(dir, { persistent: false }, (_eventType, filename) => {
+					if (filename === expectedFilename) {
+						void handleChange()
+					}
+				})
+				logger.debug(`Watching metadata directory for changes: ${dir}`)
+			} catch (err) {
+				logger.debug(`fs.watch unavailable, falling back to polling: ${String(err)}`)
+				watcher = undefined
+			}
+
+			// Always set up polling as a fallback / safety net
+			pollTimer = globalThis.setInterval(() => {
+				void handleChange()
+			}, POLL_INTERVAL_MS)
+
+			// Check immediately in case packagesToRun is already set
+			void checkMetadata().then((resolved) => {
+				if (resolved) {
+					cleanup()
+					process.removeListener('SIGINT', onSignal)
+				}
+			})
+		})
 	}
 }

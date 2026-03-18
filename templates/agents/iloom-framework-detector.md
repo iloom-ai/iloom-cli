@@ -114,6 +114,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts and capabilities bas
 **Capabilities Detection:**
 - `"cli"` - Include if project has CLI components (e.g., `[[bin]]` in Cargo.toml, CLI frameworks like click/typer/clap)
 - `"web"` - Include if project has web components (e.g., Flask/Django/FastAPI/Rails/Actix/Rocket)
+- `"monorepo"` - Include if project has workspace configuration (e.g., `pnpm-workspace.yaml` exists, `workspaces` field in package.json, multiple project directories with individual build files)
 
 **Common Patterns by Language:**
 

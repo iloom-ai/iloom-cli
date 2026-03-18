@@ -52,6 +52,8 @@ export interface MetadataFile {
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
   mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
   swarmTeamName?: string // Unique team name for swarm orchestrator (persisted for re-runs)
+  packagesToRun?: string[] // Monorepo packages to run dev server for (relative paths from repo root)
+  packagesToValidate?: string[] // Monorepo packages to scope validation to (relative paths from repo root)
 }
 
 /**
@@ -97,6 +99,8 @@ export interface WriteMetadataInput {
   dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
   mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
   swarmTeamName?: string // Unique team name for swarm orchestrator (persisted for re-runs)
+  packagesToRun?: string[] // Monorepo packages to run dev server for (relative paths from repo root)
+  packagesToValidate?: string[] // Monorepo packages to scope validation to (relative paths from repo root)
 }
 
 /**
@@ -143,6 +147,8 @@ export interface LoomMetadata {
   dependencyMap: Record<string, string[]>
   mcpConfigPath: string | null // Path to per-loom MCP config file (null for non-swarm looms)
   swarmTeamName: string | null // Unique team name for swarm orchestrator (null for non-swarm looms)
+  packagesToRun: string[] // Monorepo packages to run dev server for (empty for non-monorepo looms)
+  packagesToValidate: string[] // Monorepo packages to scope validation to (empty for non-monorepo looms)
 }
 
 /**
@@ -196,6 +202,8 @@ export class MetadataManager {
       dependencyMap: data.dependencyMap ?? {},
       mcpConfigPath: data.mcpConfigPath ?? null,
       swarmTeamName: data.swarmTeamName ?? null,
+      packagesToRun: data.packagesToRun ?? [],
+      packagesToValidate: data.packagesToValidate ?? [],
     }
   }
 
@@ -282,6 +290,9 @@ export class MetadataManager {
         ...(input.childIssues && input.childIssues.length > 0 && { childIssues: input.childIssues }),
         ...(input.dependencyMap && Object.keys(input.dependencyMap).length > 0 && { dependencyMap: input.dependencyMap }),
         ...(input.mcpConfigPath && { mcpConfigPath: input.mcpConfigPath }),
+        ...(input.swarmTeamName && { swarmTeamName: input.swarmTeamName }),
+        ...(input.packagesToRun !== undefined && { packagesToRun: input.packagesToRun }),
+        ...(input.packagesToValidate !== undefined && { packagesToValidate: input.packagesToValidate }),
       }
 
       // 3. Write to slugified filename

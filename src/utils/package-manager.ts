@@ -166,6 +166,50 @@ export interface RunScriptOptions {
   noCi?: boolean
   /** Callback for server output when using pipe mode (for TUI). When provided, stdio is piped instead of inherited. */
   onOutput?: (data: Buffer) => void
+  /**
+   * Monorepo packages to scope the script to (relative paths from repo root).
+   * When non-empty, uses the package manager's filter syntax to run only for these packages.
+   * Packages missing the target script are gracefully skipped.
+   * When empty or undefined, runs against the entire project.
+   */
+  packages?: string[]
+}
+
+/**
+ * Build package-manager-specific filter args for monorepo scoping.
+ * Returns args to prepend/append to the command for filtering to specific packages.
+ */
+export function buildMonorepoFilterArgs(
+  packageManager: PackageManager,
+  scriptName: string,
+  packages: string[]
+): { prefix: string[]; suffix: string[] } {
+  if (packages.length === 0) {
+    return { prefix: [], suffix: [] }
+  }
+
+  switch (packageManager) {
+    case 'pnpm': {
+      // pnpm uses directory paths with ./ prefix for path-based filtering, or package names otherwise.
+      // Always normalize to path form to match the "relative paths from repo root" contract.
+      const filterArgs = packages.flatMap(pkg => ['--filter', pkg.startsWith('./') ? pkg : `./${pkg}`])
+      return { prefix: filterArgs, suffix: ['--if-present'] }
+    }
+    case 'npm': {
+      // npm run <script> --workspace=pkg1 --workspace=pkg2 --if-present
+      const workspaceArgs = packages.map(pkg => `--workspace=${pkg}`)
+      return { prefix: [], suffix: [...workspaceArgs, '--if-present'] }
+    }
+    case 'yarn': {
+      // yarn workspaces foreach --include pkg1 --include pkg2 run <script>
+      // This works with yarn berry (v2+). For yarn classic, there's no built-in multi-workspace support.
+      const includeArgs = packages.flatMap(pkg => ['--include', pkg])
+      return { prefix: ['workspaces', 'foreach', ...includeArgs], suffix: ['run', scriptName] }
+    }
+    default: {
+      throw new Error(`Unsupported package manager for monorepo filtering: ${packageManager}`)
+    }
+  }
 }
 
 /**
@@ -241,9 +285,31 @@ export async function runScript(
     } else {
       // Execute via package manager (for Node.js projects)
       const packageManager = await detectPackageManager(cwd)
-      const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
+      const packages = options.packages ?? []
 
-      execaProcess = execa(packageManager, [...command, ...args], {
+      let execaArgs: string[]
+
+      if (packages.length > 0) {
+        // Monorepo scoped execution using package manager filter syntax
+        const filterArgs = buildMonorepoFilterArgs(packageManager, scriptName, packages)
+
+        if (packageManager === 'yarn') {
+          // yarn workspaces foreach --include pkg1 run <script> [args...]
+          execaArgs = [...filterArgs.prefix, ...filterArgs.suffix, ...args]
+        } else if (packageManager === 'npm') {
+          // npm run <script> [args...] --workspace=pkg1 --if-present
+          execaArgs = ['run', scriptName, ...args, ...filterArgs.suffix]
+        } else {
+          // pnpm --filter pkg1 --filter pkg2 run <script> [args...] --if-present
+          execaArgs = [...filterArgs.prefix, 'run', scriptName, ...args, ...filterArgs.suffix]
+        }
+      } else {
+        // Standard full-project execution
+        const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
+        execaArgs = [...command, ...args]
+      }
+
+      execaProcess = execa(packageManager, execaArgs, {
         cwd,
         stdio,
         ...(!options.foreground && !options.onOutput && { timeout: 600000 }), // No timeout for foreground/TUI mode

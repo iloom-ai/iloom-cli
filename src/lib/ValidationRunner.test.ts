@@ -208,7 +208,7 @@ describe('ValidationRunner', () => {
 				'compile',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 			expect(packageManager.runScript).not.toHaveBeenCalledWith(
 				'typecheck',
@@ -238,7 +238,7 @@ describe('ValidationRunner', () => {
 				'typecheck',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 		})
 
@@ -262,7 +262,7 @@ describe('ValidationRunner', () => {
 				'compile',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 		})
 
@@ -396,7 +396,7 @@ describe('ValidationRunner', () => {
 				'typecheck',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 		})
 
@@ -489,7 +489,7 @@ describe('ValidationRunner', () => {
 				'lint',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 		})
 
@@ -561,7 +561,7 @@ describe('ValidationRunner', () => {
 				'test',
 				'/test/worktree',
 				[],
-				{ quiet: true }
+				{ quiet: true, packages: [] }
 			)
 		})
 
@@ -1358,6 +1358,112 @@ describe('ValidationRunner', () => {
 					})
 				).rejects.toThrow(/Typecheck failed/)
 			})
+		})
+	})
+
+	describe('Monorepo Package Scoping', () => {
+		it('should pass packages to runScript when packagesToValidate is set for lint', async () => {
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
+				name: 'test',
+				scripts: { lint: 'eslint .' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'lint'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			const result = await runner.runValidations('/test/worktree', {
+				skipTypecheck: true,
+				skipTests: true,
+				packagesToValidate: ['packages/core', 'packages/api'],
+			})
+
+			expect(result.success).toBe(true)
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'lint',
+				'/test/worktree',
+				[],
+				{ quiet: true, packages: ['packages/core', 'packages/api'] }
+			)
+		})
+
+		it('should pass packages to runScript when packagesToValidate is set for tests', async () => {
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
+				name: 'test',
+				scripts: { test: 'vitest run' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'test'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			const result = await runner.runValidations('/test/worktree', {
+				skipTypecheck: true,
+				skipLint: true,
+				packagesToValidate: ['services/auth'],
+			})
+
+			expect(result.success).toBe(true)
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'test',
+				'/test/worktree',
+				[],
+				{ quiet: true, packages: ['services/auth'] }
+			)
+		})
+
+		it('should pass packages to runScript when packagesToValidate is set for typecheck', async () => {
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			const result = await runner.runValidations('/test/worktree', {
+				skipLint: true,
+				skipTests: true,
+				packagesToValidate: ['packages/core'],
+			})
+
+			expect(result.success).toBe(true)
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'compile',
+				'/test/worktree',
+				[],
+				{ quiet: true, packages: ['packages/core'] }
+			)
+		})
+
+		it('should run against full project when packagesToValidate is empty', async () => {
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
+				name: 'test',
+				scripts: { lint: 'eslint .' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'lint'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			const result = await runner.runValidations('/test/worktree', {
+				skipTypecheck: true,
+				skipTests: true,
+				packagesToValidate: [],
+			})
+
+			expect(result.success).toBe(true)
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'lint',
+				'/test/worktree',
+				[],
+				{ quiet: true, packages: [] }
+			)
 		})
 	})
 })
