@@ -205,6 +205,8 @@ After ALL fix skill invocations have completed:
 Invoke the code reviewer skill with the pre-gathered diff:
 
 /iloom-swarm-code-reviewer "
+Your worktree path is <your-worktree-path>.
+
 ## Pre-gathered Diff
 
 The following diff contains all changes made in this wave (from pre-wave commit to current epic branch HEAD). Use this diff directly — do NOT run git commands to gather your own diff.
@@ -225,6 +227,8 @@ Collect the skill output as the code review findings.
 Invoke the code reviewer skill with the pre-gathered diff:
 
 /iloom-swarm-code-reviewer "
+Your worktree path is <your-worktree-path>.
+
 ## Pre-gathered Diff
 
 The following diff contains all changes made in this wave (from pre-wave commit to current epic branch HEAD). Use this diff directly — do NOT run git commands to gather your own diff.

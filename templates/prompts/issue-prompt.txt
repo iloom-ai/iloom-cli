@@ -1247,7 +1247,7 @@ This section is about reviewing code changes for quality, security, and complian
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
 {{#if SWARM_MODE}}
-1. Execute code review via /iloom-swarm-code-reviewer skill with prompt: "Run code review."
+1. Execute code review via /iloom-swarm-code-reviewer skill with prompt: "Your worktree path is <your-worktree-path>. Run code review."
 {{else}}
 1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 {{/if}}
