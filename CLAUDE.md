@@ -62,6 +62,8 @@ The telemetry system is in `src/lib/TelemetryService.ts` and event types are def
 
 The `docs/iloom-commands.md` file is the comprehensive command reference. Use it for detailed documentation to avoid flooding README.md. The README.md should remain a concise overview and quick start guide.
 
+- **Subdirectory CLAUDE.md files**: When adding, removing, or changing the responsibility of commands, services, templates, agents, MCP servers, types, or migrations, update the CLAUDE.md in the corresponding directory. See [Component Documentation](#component-documentation) below for the full list.
+
 **Core Commands**:
 
 - `il start <issue-number>` - Create isolated workspace for an issue/PR
@@ -91,49 +93,41 @@ npm run test:single -- <test-file>  # Run specific test file
 
 ## Architecture Overview
 
-**Test-Driven Development (TDD)**: All code must be written test-first with >70% coverage. Use comprehensive mock factories for external dependencies (Git, GitHub CLI, Neon CLI, Claude CLI).
+### Execution Contexts
 
-### Core Module Structure
+iloom operates in three distinct execution contexts. Understanding which context you're working in is critical for targeting the right component:
 
-```
-src/
-├── cli.ts                    # Main CLI entry point
-├── commands/                 # CLI command implementations
-│   ├── start.ts             # Port of new-branch-workflow.sh
-│   ├── finish.ts            # Port of merge-and-clean.sh
-│   ├── cleanup.ts           # Port of cleanup-worktree.sh
-│   ├── list.ts              # Enhanced workspace listing
-├── lib/                     # Core business logic
-│   ├── WorkspaceManager.ts  # Main orchestrator
-│   ├── GitWorktreeManager.ts # Git operations
-│   ├── GitHubService.ts     # GitHub CLI integration
-│   ├── EnvironmentManager.ts # .env file manipulation
-│   ├── DatabaseManager.ts   # Database provider abstraction
-│   └── ClaudeContextManager.ts # Claude context generation
-└── utils/                   # Utility functions
-    ├── git.ts, github.ts, env.ts, database.ts, shell.ts
-```
+1. **Regular mode** (`il start` + `il spin`): A single agent works on one issue in one worktree. Phase agents (analyzer → planner → implementer → reviewer) run sequentially. Prompt: `templates/prompts/issue-prompt.txt`.
+
+2. **Swarm mode** (`il start --epic` + `il spin`): An orchestrator agent manages an epic by spawning parallel child workers — each in its own worktree with its own phase agents. The orchestrator is lean: it parses the dependency DAG, spawns/monitors workers, and merges results. It delegates ALL implementation work (coding, rebasing, conflict resolution) to child agents via the Task tool. Prompt: `templates/prompts/swarm-orchestrator-prompt.txt`. Child workers use `templates/prompts/issue-prompt.txt` with `SWARM_MODE=true`.
+
+3. **Plan mode** (`il plan`): An architect agent decomposes work into issues. No implementation — planning and decomposition only. Can trigger auto-swarm to begin implementation after planning completes. Prompt: `templates/prompts/plan-prompt.txt`.
+
+### Orchestrator vs Child Boundary
+
+The orchestrator and child workers have strictly separated responsibilities. Getting this wrong is a common source of bugs:
+
+- **Orchestrator NEVER**: writes code, runs builds/tests, rebases branches, resolves merge conflicts, creates PRs, manages database branches, runs phase agents
+- **Child worker NEVER**: spawns other agents, merges branches to the epic branch, closes issues, manages the dependency DAG, reads other children's worktrees
 
 ### Key Architectural Patterns
 
-**Dependency Injection**: Core classes accept dependencies through constructor injection for complete test isolation.
+- **Dependency Injection**: Core classes accept dependencies through constructor injection for test isolation
+- **Provider Pattern**: Database (Neon), issue tracker (GitHub, Linear, Jira), VCS (GitHub, BitBucket), dev server (Native, Docker) — all implement pluggable interfaces via factories
+- **Strategy Pattern**: Branch naming (Simple vs Claude), dev server (Native vs Docker)
+- **Configuration Layering**: Defaults → global (`~/.config/iloom-ai/settings.json`) → project (`.iloom/settings.json`) → local (`.iloom/settings.local.json`) → CLI flags
 
-**Provider Pattern**: Database integrations (Neon, Supabase, PlanetScale) implement `DatabaseProvider` interface.
+### Component Documentation
 
-**Command Pattern**: CLI commands are separate classes with full workflow testing.
+Each major directory has its own CLAUDE.md with detailed component documentation. These load automatically when you access files in that directory:
 
-**Mock-First Testing**: All external dependencies (shell commands, APIs) are mocked using factory patterns.
-
-## Bash Script Migration Map
-
-The TypeScript implementation maintains exact functional parity with these bash scripts:
-
-- `bash/new-branch-workflow.sh` → `StartCommand` + `WorkspaceManager.createWorkspace()`
-- `bash/merge-and-clean.sh` → `FinishCommand` + `WorkspaceManager.finishWorkspace()`
-- `bash/cleanup-worktree.sh` → `CleanupCommand` + `WorkspaceManager.cleanupWorkspace()`
-- `bash/utils/env-utils.sh` → `EnvironmentManager`
-- `bash/utils/neon-utils.sh` → `NeonProvider`
-- `bash/utils/worktree-utils.sh` → `GitWorktreeManager`
+- `templates/CLAUDE.md` — Template system, prompt ownership, Handlebars conventions
+- `templates/agents/CLAUDE.md` — Phase agent lifecycle, YAML frontmatter, model overrides
+- `src/commands/CLAUDE.md` — Command layer, CLI flags, delegation to lib/
+- `src/lib/CLAUDE.md` — Service layer, class responsibilities, provider patterns
+- `src/mcp/CLAUDE.md` — MCP servers, exposed tools, routing rules
+- `src/types/CLAUDE.md` — Key interfaces, type organization by domain
+- `src/migrations/CLAUDE.md` — Migration versioning convention and lifecycle
 
 ## Testing Requirements
 
@@ -228,38 +222,8 @@ Uses Neon database branching to create isolated database copies per workspace. E
 
 ## Migration Versioning
 
-Migrations live in `src/migrations/index.ts` and run automatically on CLI startup via `VersionMigrationManager`. Each migration has a `version` field that determines when it runs: it must be greater than `lastMigratedVersion` (stored in `~/.config/iloom-ai/migration-state.json`) and less than or equal to the current package version.
-
-**Versioning convention:** A new migration's version should be one patch version higher than the current `package.json` version. For example, if `package.json` is at `0.10.2`, the next migration should be `0.10.3`. If an unreleased migration already exists at that version (check `git tag` to confirm it hasn't been released), fold new migration logic into it rather than creating a separate entry.
+See `src/migrations/CLAUDE.md` for the full versioning convention. Key rule: new migration version = current `package.json` version + one patch. Fold into existing unreleased migrations rather than creating duplicates.
 
 ## Agent Workflow Todo Lists
 
-The todo list in `templates/prompts/issue-prompt.txt` is critical for ensuring agents follow the implementation plan correctly.
-
-**Why the Todo List Matters:**
-- Agents use the todo list as both a progress tracker and an execution checklist
-- Each numbered item represents a workflow step that must be completed
-- Agents check off items as they complete each step, providing visibility into progress
-- The todo list serves as the source of truth for what steps need to be executed
-
-**When Adding New Workflow Steps:**
-- New workflow steps MUST be added to the todo list to ensure they are executed
-- Position the item appropriately based on when it should run in the workflow
-- Use Handlebars conditionals (e.g., `{{#if FLAG_NAME}}`) when steps are conditional
-- Ensure numbering remains sequential within each conditional branch
-
-**Example - Adding a Conditional Step:**
-```handlebars
-{{#if SOME_MODE}}
-{{#if SOME_FLAG}}
-17. Execute conditional step (STEP X.X)
-18. Next step...
-{{else}}
-17. Next step...
-{{/if}}
-{{else}}
-17. Next step...
-{{/if}}
-```
-
-Without the todo list entry, agents may skip steps even if they are fully documented elsewhere in the prompt.
+See `templates/CLAUDE.md` for the full todo list convention. Key rule: when adding new workflow steps, you MUST add a corresponding todo list entry in `templates/prompts/issue-prompt.txt` or agents will skip the step.
