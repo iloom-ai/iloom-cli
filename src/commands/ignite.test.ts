@@ -3648,6 +3648,179 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('swarm PORT passthrough for web-capable epics', () => {
+		let launchClaudeSpy: ReturnType<typeof vi.spyOn>
+		let findMainWorktreePathSpy: ReturnType<typeof vi.spyOn>
+		let originalCwd: typeof process.cwd
+		let mockSetupSwarm: ReturnType<typeof vi.fn>
+
+		beforeEach(async () => {
+			launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			findMainWorktreePathSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			mockSetupSwarm = vi.fn().mockResolvedValue({
+				epicWorktreePath: '/path/to/epic',
+				epicBranch: 'feat/issue-100__epic',
+				skillsRendered: [],
+				renderedAgents: [],
+				workerAgentRendered: true,
+				verifierAgentRendered: false,
+			})
+
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: mockSetupSwarm,
+			}) as unknown as SwarmSetupService)
+		})
+
+		afterEach(() => {
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+			findMainWorktreePathSpy.mockRestore()
+		})
+
+		it('should pass PORT to orchestrator template when epic has web capability', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+			]
+
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read (with web capability)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				capabilities: ['web'],
+				sessionId: 'epic-session-id',
+			})
+			// Second call: fresh metadata re-read for swarm mode
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				capabilities: ['web'],
+				dependencyMap: {},
+				sessionId: 'epic-session-id',
+			})
+			// Child filtering call: no existing metadata
+			readMetadataMock.mockResolvedValueOnce(null)
+			// Telemetry call
+			readMetadataMock.mockResolvedValueOnce(null)
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
+			}) as unknown as MetadataManager)
+
+			const cmd = new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-100__epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAndPrepare: vi.fn().mockResolvedValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+
+			await cmd.execute()
+
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			// PORT should be 3000 + 100 = 3100
+			expect(templateCall![1].PORT).toBe(3100)
+		})
+
+		it('should not pass PORT to orchestrator template when epic has no web capability', async () => {
+			const childIssues = [
+				{ number: '#201', title: 'Child 1', body: 'Body 1' },
+			]
+
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read (no capabilities)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				sessionId: 'epic-session-id',
+			})
+			// Second call: fresh metadata re-read for swarm mode
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues,
+				dependencyMap: {},
+				sessionId: 'epic-session-id',
+			})
+			// Child filtering call
+			readMetadataMock.mockResolvedValueOnce(null)
+			// Telemetry call
+			readMetadataMock.mockResolvedValueOnce(null)
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+				listFinishedMetadata: vi.fn().mockResolvedValue([]),
+			}) as unknown as MetadataManager)
+
+			const cmd = new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-100__epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAndPrepare: vi.fn().mockResolvedValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+
+			await cmd.execute()
+
+			const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(
+				(call) => call[0] === 'swarm-orchestrator',
+			)
+			expect(templateCall).toBeDefined()
+			expect(templateCall![1].PORT).toBeUndefined()
+		})
+	})
+
 	describe('swarm telemetry', () => {
 		// Helper to create an IgniteCommand that enters swarm mode
 		function createSwarmCommand(

@@ -293,6 +293,7 @@ export class IgniteCommand {
 						context.branchName ?? '',
 						metadataManager,
 						skipCleanup,
+						context.port,
 					)
 					return
 				}
@@ -878,6 +879,7 @@ export class IgniteCommand {
 		epicBranch: string,
 		metadataManager: MetadataManager,
 		skipCleanup?: boolean,
+		epicPort?: number,
 	): Promise<void> {
 		if (!this.settings) {
 			throw new Error('Settings not loaded. Cannot enter swarm mode.')
@@ -1078,6 +1080,7 @@ export class IgniteCommand {
 			ISSUE_PREFIX: issuePrefix,
 			...(skipCleanup && { NO_CLEANUP: true }),
 			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
+			...(epicPort !== undefined && { PORT: epicPort }),
 		}
 
 		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
