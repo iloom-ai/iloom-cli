@@ -51,6 +51,11 @@ ALL iloom configuration files should default to their `.local` variants:
 - ❌ **NEVER** read README.md, package.json, or any other files "for context"
 - **WHY**: All necessary information is provided in template variables
 
+**GITIGNORE CHECKS:**
+- If you need to check whether a file is gitignored, ALWAYS use `git check-ignore -q <path>` (exit code 0 = ignored, non-zero = not ignored)
+- ❌ **NEVER** read or parse `.gitignore` files directly to determine gitignore status
+- **WHY**: `git check-ignore` respects all gitignore sources (global, repo, nested) — reading a single `.gitignore` file does not
+
 **VIOLATION EXAMPLES TO AVOID:**
 - ❌ "Let me read .iloom/settings.json to see your current configuration"
 - ❌ "Let me look at your settings file to understand what's configured"
@@ -213,8 +218,8 @@ Current Configuration:
 Main Branch: [currentMainBranch or "main (default)"]
 Permission Mode (Issues): [currentPermissionMode or "acceptEdits (default)"]
 Base Port: [currentBasePort or "3000 (default)"]
-IDE: [currentIdeType or "vscode (default)"]
-Issue Tracker: [currentIssueProvider or "github (default)"]
+{{#unless IS_VSCODE_MODE}}IDE: [currentIdeType or "vscode (default)"]
+{{/unless}}Issue Tracker: [currentIssueProvider or "github (default)"]
 Linear Team ID: [currentLinearTeamId] (only if currentIssueProvider == linear)
 {{#if MULTIPLE_REMOTES}}GitHub Remote: [currentGitHubRemote] (only if currentIssueProvider == github){{/if}}
 Jira Host: [currentJiraHost] (only if currentIssueProvider == jira)
@@ -504,6 +509,9 @@ This repository has multiple git remotes detected. iloom needs to know which rem
 
 **Step 3: IDE Selection**
 
+{{#if IS_VSCODE_MODE}}
+4. **IDE Selection** — SKIP this question. The user is running from VS Code, so automatically set `ide.type` to `"vscode"`. Do not ask.
+{{else}}
 4. **IDE Selection**
    - Question format: "Which IDE should iloom launch when starting a loom?{{#if currentIdeType}} (Currently: [currentIdeType]){{/if}}"
    - Options:
@@ -518,6 +526,7 @@ This repository has multiple git remotes detected. iloom needs to know which rem
    - Validation: Must be one of the listed options
    - Store answer as: `ide.type`
    - Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf, antigravity). Other IDEs will launch without color theming.
+{{/if}}
 
 **Step 4: Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
 
@@ -541,7 +550,7 @@ This repository has multiple git remotes detected. iloom needs to know which rem
 **Implementation Details:**
 - Ask Step 1 first to determine provider
 - Then ask Step 2 based on the provider selected (includes Linear API Token if Linear was selected, or Jira credentials if Jira was selected)
-- Ask Step 3 (IDE) for all users
+{{#unless IS_VSCODE_MODE}}- Ask Step 3 (IDE) for all users{{/unless}}
 - Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
@@ -591,8 +600,8 @@ Tooling Configuration (Phase 2):
   Jira Project Key: [value] (only if issue tracker is Jira)
   Jira Board ID: [value or "not configured"] (only if issue tracker is Jira)
   Jira API Token: [configured/not configured] (only if issue tracker is Jira - never show actual token)
-  IDE: [value or "vscode (default)"]
-  Merge Mode: [value] (only if configured)
+{{#unless IS_VSCODE_MODE}}  IDE: [value or "vscode (default)"]
+{{/unless}}  Merge Mode: [value] (only if configured)
   Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.5)
 ```
 
@@ -902,7 +911,7 @@ Would you like to commit these changes?
 - **ONLY commit iloom-related files**: .iloom/settings.json, .iloom/package.iloom.json, .gitignore
 - **NEVER stage or commit unrelated files** - even if they appear in `git status`
 - **If the commit fails, you must then subsequently request to use --no-verify flag** to bypass pre-commit hooks that might fail due to unrelated codebase state
-- **Do NOT commit local-only files** - settings.local.json and package.iloom.local.json should be gitignored, not committed
+- **Do NOT commit local-only files** - settings.local.json and package.iloom.local.json are automatically added to the global gitignore by iloom CLI
 - **YOU MAY NEED TO EDIT/UPDATE MORE THAN ONE FILE if the user is changing something like API Keys (local only), permissionsMode (local only), IDE (recommened global) as well as shared settings.
 
 **Step 3: If user says yes, commit the changes**
@@ -914,7 +923,7 @@ Stage ONLY the iloom-related files that should be committed:
 git add .iloom/settings.json .iloom/package.iloom.json .gitignore 2>/dev/null || true
 ```
 
-Note: Do NOT add local-only files (.iloom/settings.local.json, .iloom/package.iloom.local.json) - they should be gitignored, not committed.
+Note: Do NOT add local-only files (.iloom/settings.local.json, .iloom/package.iloom.local.json) - these are automatically added to the global gitignore by iloom CLI.
 
 Then commit:
 
@@ -1206,13 +1215,13 @@ When configuring agents, use these model identifiers:
    **Local Overrides for Fork Contributors:**
 
    If you're contributing to a forked repository, save your customizations to `.iloom/package.iloom.local.json` instead of `package.iloom.json`. This file:
-   - Is automatically added to global gitignore (won't appear in PRs)
+   - Is automatically gitignored by iloom CLI (won't appear in PRs)
    - Merges with package.iloom.json (local scripts override base scripts)
    - Is automatically copied to new looms
 
    **When to use each file:**
    - `package.iloom.json` - Shared team configuration, committed to git
-   - `package.iloom.local.json` - Personal overrides, never committed (gitignored globally)
+   - `package.iloom.local.json` - Personal overrides, never committed (automatically gitignored by iloom CLI)
 
    Example `.iloom/package.iloom.local.json`:
    ```json

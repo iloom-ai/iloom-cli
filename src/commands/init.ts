@@ -368,6 +368,9 @@ export class InitCommand {
       const hasPackageJson = existsSync(packageJsonPath)
       logger.debug('Package.json detection', { packageJsonPath, hasPackageJson })
 
+      // Detect VS Code mode
+      const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -385,6 +388,7 @@ export class InitCommand {
         NO_REMOTES: noRemotes.toString(),
         README_CONTENT: readmeContent,
         VSCODE_SETTINGS_GITIGNORED: vscodeSettingsGitignored.toString(),
+        IS_VSCODE_MODE: isVscodeMode,
         // Multi-language support - mutually exclusive booleans
         HAS_PACKAGE_JSON: hasPackageJson,
         NO_PACKAGE_JSON: !hasPackageJson,
