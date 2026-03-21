@@ -9,6 +9,7 @@ import { VCSProviderFactory } from './lib/VCSProviderFactory.js'
 import { IssueEnhancementService } from './lib/IssueEnhancementService.js'
 import { AgentManager } from './lib/AgentManager.js'
 import { GitHubService } from './lib/GitHubService.js'
+import { ProjectCapabilityDetector } from './lib/ProjectCapabilityDetector.js'
 import { MetadataManager, type LoomMetadata } from './lib/MetadataManager.js'
 import { StartCommand } from './commands/start.js'
 import { AddIssueCommand } from './commands/add-issue.js'
@@ -1293,6 +1294,19 @@ program
               status: 'active' as const,
               finishedAt: null,
             }))
+
+            // Detect capabilities at runtime for worktrees without metadata (e.g., main worktree)
+            const capabilityDetector = new ProjectCapabilityDetector()
+            for (const loom of activeJson) {
+              if ((!loom.capabilities || loom.capabilities.length === 0) && loom.worktreePath) {
+                try {
+                  const { capabilities } = await capabilityDetector.detectCapabilities(loom.worktreePath)
+                  loom.capabilities = capabilities
+                } catch {
+                  // Non-fatal: leave capabilities empty if detection fails
+                }
+              }
+            }
           }
         }
 
