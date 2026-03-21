@@ -1,10 +1,12 @@
 import path from 'path'
+import { execa } from 'execa'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
 import { DevServerTUI } from '../lib/DevServerTUI.js'
 import { DockerManager } from '../lib/DockerManager.js'
+import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
@@ -194,6 +196,7 @@ export class DevServerCommand {
 		const useTui = !input.json && process.stdout.isTTY === true && process.stdin.isTTY === true
 
 		let tui: DevServerTUI | undefined
+		let restartRequested = false
 
 		if (useTui) {
 			tui = new DevServerTUI({
@@ -204,6 +207,26 @@ export class DevServerCommand {
 					// Send SIGINT to self to trigger normal cleanup flow
 					process.kill(process.pid, 'SIGINT')
 				},
+				onRestart: (): void => {
+					restartRequested = true
+					tui?.updateStatus('Restarting')
+
+					if (dockerConfig) {
+						// Docker: stop the container to trigger exit from runServerForeground
+						const containerName = DockerManager.buildContainerName(
+							dockerConfig.identifier ?? ''
+						)
+						void execa('docker', ['stop', containerName], { reject: false })
+					} else {
+						// Native: find and terminate the process on the port
+						const processManager = new ProcessManager()
+						void processManager.detectDevServer(port).then((processInfo) => {
+							if (processInfo?.pid) {
+								process.kill(processInfo.pid, 'SIGTERM')
+							}
+						})
+					}
+				},
 			})
 			tui.start()
 		}
@@ -213,27 +236,36 @@ export class DevServerCommand {
 			: undefined
 
 		try {
-			// This will block until user stops the server (Ctrl+C)
-			// In JSON mode, redirect npm output to stderr so JSON can go to stdout
-			const processInfo = await this.devServerManager.runServerForeground(
-				worktree.path,
-				port,
-				!!input.json,
-				// Callback called immediately when process starts (for JSON output)
-				(pid) => {
-					if (input.json && pid) {
-						finalResult.pid = pid
-						this.outputJson(finalResult)
-					}
-				},
-				envOverrides,
-				dockerConfig,
-				onOutput
-			)
+			do {
+				restartRequested = false
 
-			if (processInfo.pid) {
-				finalResult.pid = processInfo.pid
-			}
+				// This will block until user stops the server (Ctrl+C)
+				// In JSON mode, redirect npm output to stderr so JSON can go to stdout
+				const processInfo = await this.devServerManager.runServerForeground(
+					worktree.path,
+					port,
+					!!input.json,
+					// Callback called immediately when process starts (for JSON output)
+					(pid) => {
+						if (input.json && pid) {
+							finalResult.pid = pid
+							this.outputJson(finalResult)
+						}
+					},
+					envOverrides,
+					dockerConfig,
+					onOutput
+				)
+
+				if (processInfo.pid) {
+					finalResult.pid = processInfo.pid
+				}
+
+				if (restartRequested) {
+					logger.info('Restarting dev server...')
+					tui?.updateStatus('Running')
+				}
+			} while (restartRequested)
 		} finally {
 			if (tui) {
 				tui.cleanup()
