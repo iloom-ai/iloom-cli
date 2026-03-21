@@ -290,8 +290,37 @@ export class LoomManager {
           const prTitle = issueData?.title ?? `Work on ${branchName}`
           let prBody: string
           if (input.type === 'issue' || input.type === 'epic') {
-            const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
-            prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
+            const issueRef = `Fixes ${prManager.issuePrefix}${input.identifier}`
+            const issueBodyContent = issueData?.body?.trim()
+
+            const issueTitle = issueData?.title ?? `Issue ${input.identifier}`
+
+            if (issueBodyContent) {
+              prBody = [
+                issueRef,
+                '',
+                `## ${issueTitle}`,
+                '',
+                '<details>',
+                '<summary>Issue details</summary>',
+                '',
+                issueBodyContent,
+                '',
+                '</details>',
+                '',
+                '---',
+                '*This PR was created automatically by iloom.*',
+              ].join('\n')
+            } else {
+              prBody = [
+                issueRef,
+                '',
+                `## ${issueTitle}`,
+                '',
+                '---',
+                '*This PR was created automatically by iloom.*',
+              ].join('\n')
+            }
           } else {
             prBody = `Branch: ${branchName}\n\n---\n*This PR was created automatically by iloom.*`
           }

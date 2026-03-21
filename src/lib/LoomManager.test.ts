@@ -699,6 +699,11 @@ describe('LoomManager', testOptions, () => {
         expectedPath // worktree path
       )
 
+      // Verify issue title and body are included in the PR body
+      const prBodyArg = mockCreateDraftPR.mock.calls[0][2] as string
+      expect(prBodyArg).toContain('Test Linear Issue')
+      expect(prBodyArg).toContain('Test description')
+
       // Verify draft PR number was stored in metadata
       expect(mockWriteMetadata).toHaveBeenCalledWith(
         expectedPath,
@@ -913,6 +918,79 @@ describe('LoomManager', testOptions, () => {
         'feature/parent-branch', // base branch should be parent's branch
         expectedPath // worktree path
       )
+
+      // Verify issue title and body are included in the PR body
+      const prBodyArg = mockCreateDraftPR.mock.calls[0][2] as string
+      expect(prBodyArg).toContain('Child Issue')
+      expect(prBodyArg).toContain('Child description')
+    })
+
+    it('should handle empty issue body gracefully in draft-pr mode', async () => {
+      mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
+      mockCheckForExistingPR.mockResolvedValue(null)
+
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: { mode: 'draft-pr' },
+      })
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Issue With No Body',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      const prBodyArg = mockCreateDraftPR.mock.calls[0][2] as string
+      expect(prBodyArg).toContain('Fixes #123')
+      expect(prBodyArg).toContain('Issue With No Body')
+      expect(prBodyArg).not.toContain('<details>')
+    })
+
+    it('should include issue body in collapsible details in draft-pr mode', async () => {
+      mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
+      mockCheckForExistingPR.mockResolvedValue(null)
+
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: { mode: 'draft-pr' },
+      })
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Issue With Body',
+        body: '## Problem\n\nSomething is broken.',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      await manager.createIloom(baseInput)
+
+      const prBodyArg = mockCreateDraftPR.mock.calls[0][2] as string
+      expect(prBodyArg).toContain('Fixes #123')
+      expect(prBodyArg).toContain('<details>')
+      expect(prBodyArg).toContain('Issue With Body')
+      expect(prBodyArg).toContain('Something is broken.')
+      expect(prBodyArg).toContain('iloom')
     })
 
     it('should reuse existing PR instead of creating new one in draft-pr mode', async () => {
