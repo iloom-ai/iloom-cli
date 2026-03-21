@@ -73,10 +73,16 @@ export class AgentManager {
 		templateVariables?: TemplateVariables,
 		patterns: string[] = ['*.md']
 	): Promise<AgentConfigs> {
+		// Always exclude non-agent markdown files (e.g. CLAUDE.md documentation)
+		const excludes = ['!CLAUDE.md', '!agents.md']
+		const effectivePatterns = [...patterns, ...excludes.filter(p => !patterns.includes(p))]
+
 		// Use fast-glob to filter agent files based on patterns
-		const agentFiles = await fg(patterns, {
+		// caseSensitiveMatch: false so exclusions like !CLAUDE.md also catch claude.md, Claude.md, etc.
+		const agentFiles = await fg(effectivePatterns, {
 			cwd: this.agentDir,
 			onlyFiles: true,
+			caseSensitiveMatch: false,
 		})
 
 		const agents: AgentConfigs = {}
@@ -98,10 +104,7 @@ export class AgentManager {
 				agents[agentName] = agentConfig
 				logger.debug(`Loaded agent: ${agentName}`)
 			} catch (error) {
-				logger.error(`Failed to load agent from ${filename}`, { error })
-				throw new Error(
-					`Failed to load agent from ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-				)
+				logger.warn(`Skipping ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			}
 		}
 

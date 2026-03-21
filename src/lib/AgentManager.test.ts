@@ -105,9 +105,8 @@ You are an implementer`
 			])
 			vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT: no such file'))
 
-			await expect(manager.loadAgents()).rejects.toThrow(
-				'Failed to load agent from iloom-issue-analyzer.md',
-			)
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 
 		it('should handle malformed markdown in agent files', async () => {
@@ -117,9 +116,8 @@ You are an implementer`
 			// Markdown without proper frontmatter delimiters
 			vi.mocked(readFile).mockResolvedValueOnce('Just some text without frontmatter')
 
-			await expect(manager.loadAgents()).rejects.toThrow(
-				'Failed to load agent from bad-agent.md',
-			)
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 	})
 
@@ -388,7 +386,7 @@ const code = "block";
 			expect(result['format-agent'].prompt).toContain('<example>XML tag</example>')
 		})
 
-		it('should throw error for missing frontmatter delimiters', async () => {
+		it('should skip files with missing frontmatter delimiters', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['bad-agent.md'])
 
 			const markdownContent = `name: bad-agent
@@ -400,10 +398,11 @@ Just content without frontmatter`
 
 			vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
 
-			await expect(manager.loadAgents()).rejects.toThrow('Failed to load agent')
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 
-		it('should throw error for missing required field: name', async () => {
+		it('should skip files with missing required field: name', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
@@ -416,10 +415,11 @@ Prompt`
 
 			vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
 
-			await expect(manager.loadAgents()).rejects.toThrow('Missing required field: name')
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 
-		it('should throw error for missing required field: description', async () => {
+		it('should skip files with missing required field: description', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
@@ -432,7 +432,8 @@ Prompt`
 
 			vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
 
-			await expect(manager.loadAgents()).rejects.toThrow('Missing required field: description')
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 
 		it('should allow agents without tools field (tools inherits from parent)', async () => {
@@ -453,7 +454,7 @@ Prompt`
 			expect(agents['no-tools-agent'].tools).toBeUndefined()
 		})
 
-		it('should throw error for missing required field: model', async () => {
+		it('should skip files with missing required field: model', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
@@ -466,7 +467,8 @@ Prompt`
 
 			vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
 
-			await expect(manager.loadAgents()).rejects.toThrow('Missing required field: model')
+			const result = await manager.loadAgents()
+			expect(result).toEqual({})
 		})
 
 		it('should handle optional color field', async () => {
@@ -837,10 +839,11 @@ Detect framework`
 			expect(Object.keys(result)).toHaveLength(1)
 			expect(result['iloom-framework-detector']).toBeDefined()
 
-			// Verify fast-glob was called with correct pattern
-			expect(fg).toHaveBeenCalledWith(['iloom-framework-detector.md'], {
+			// Verify fast-glob was called with correct pattern (plus auto-excluded non-agent files)
+			expect(fg).toHaveBeenCalledWith(['iloom-framework-detector.md', '!CLAUDE.md', '!agents.md'], {
 				cwd: 'templates/agents',
 				onlyFiles: true,
+				caseSensitiveMatch: false,
 			})
 		})
 
@@ -879,10 +882,11 @@ Planner`
 			expect(result['iloom-issue-planner']).toBeDefined()
 			expect(result['iloom-framework-detector']).toBeUndefined()
 
-			// Verify fast-glob was called with negation pattern
-			expect(fg).toHaveBeenCalledWith(['*.md', '!iloom-framework-detector.md'], {
+			// Verify fast-glob was called with negation pattern (plus auto-excluded non-agent files)
+			expect(fg).toHaveBeenCalledWith(['*.md', '!iloom-framework-detector.md', '!CLAUDE.md', '!agents.md'], {
 				cwd: 'templates/agents',
 				onlyFiles: true,
+				caseSensitiveMatch: false,
 			})
 		})
 
@@ -902,10 +906,11 @@ Prompt`
 
 			await manager.loadAgents()
 
-			// Verify default pattern was used
-			expect(fg).toHaveBeenCalledWith(['*.md'], {
+			// Verify default pattern was used (plus auto-excluded non-agent files)
+			expect(fg).toHaveBeenCalledWith(['*.md', '!CLAUDE.md', '!agents.md'], {
 				cwd: 'templates/agents',
 				onlyFiles: true,
+				caseSensitiveMatch: false,
 			})
 		})
 
