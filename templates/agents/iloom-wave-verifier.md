@@ -197,11 +197,6 @@ After ALL fix skill invocations have completed:
 
 ### Step 6: Run Code Review on Wave Changes
 
-{{#if HAS_REVIEW_GEMINI}}{{else}}{{#if HAS_REVIEW_CODEX}}{{else}}
-*No review providers configured — skipping code review. Configure providers in `.iloom/settings.json` under `agents.iloom-code-reviewer.providers` to enable.*
-{{/if}}{{/if}}
-
-{{#if HAS_REVIEW_GEMINI}}
 Invoke the code reviewer skill with the pre-gathered diff:
 
 /iloom-swarm-code-reviewer "
@@ -222,30 +217,6 @@ The following diff contains all changes made in this wave (from pre-wave commit 
 Run a full code review of these wave changes. You are in swarm mode — do NOT ask the user about findings, return all results directly."
 
 Collect the skill output as the code review findings.
-{{else}}
-{{#if HAS_REVIEW_CODEX}}
-Invoke the code reviewer skill with the pre-gathered diff:
-
-/iloom-swarm-code-reviewer "
-Your worktree path is <your-worktree-path>.
-
-## Pre-gathered Diff
-
-The following diff contains all changes made in this wave (from pre-wave commit to current epic branch HEAD). Use this diff directly — do NOT run git commands to gather your own diff.
-
-\`\`\`diff
-<insert full diff from Step 5 here>
-\`\`\`
-
-## CLAUDE.md Guidelines
-
-<insert CLAUDE.md content from Step 5 here>
-
-Run a full code review of these wave changes. You are in swarm mode — do NOT ask the user about findings, return all results directly."
-
-Collect the skill output as the code review findings.
-{{/if}}
-{{/if}}
 
 ### Step 7: Fix Critical Code Review Issues
 
@@ -330,19 +301,9 @@ Return the verification report in this exact format:
 
 ### Code Review
 
-{{#if HAS_REVIEW_GEMINI}}
 - **Findings**: X critical, Y warnings
 - **Auto-fixed**: N critical issues
 - **Remaining**: Z issues require manual attention
-{{else}}
-{{#if HAS_REVIEW_CODEX}}
-- **Findings**: X critical, Y warnings
-- **Auto-fixed**: N critical issues
-- **Remaining**: Z issues require manual attention
-{{else}}
-- **Status**: Skipped (no review providers configured)
-{{/if}}
-{{/if}}
 
 ### Overall Status: [ALL_PASSED | ALL_FIXED | PARTIALLY_FIXED | FAILURES_REMAIN]
 
