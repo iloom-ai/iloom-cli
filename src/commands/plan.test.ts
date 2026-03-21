@@ -52,6 +52,7 @@ vi.mock('../lib/SettingsManager.js', () => ({
 		getPlanPlanner: vi.fn().mockReturnValue('claude'),
 		getPlanReviewer: vi.fn().mockReturnValue('none'),
 		getPlanWaveVerification: vi.fn().mockReturnValue(true),
+		getPlanEffort: vi.fn().mockReturnValue(undefined),
 	})),
 }))
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
@@ -237,6 +238,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue(undefined),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
@@ -262,6 +264,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue(undefined),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('jira')
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
@@ -287,6 +290,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue(undefined),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
 
@@ -418,6 +422,70 @@ describe('PlanCommand', () => {
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
 			expect(options.agents).toBeUndefined()
+		})
+	})
+
+	describe('effort support', () => {
+		it('sets CLAUDE_CODE_EFFORT_LEVEL when effort is provided', async () => {
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute(undefined, undefined, undefined, undefined, undefined, undefined, 'high')
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high')
+			} finally {
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
+		})
+
+		it('reads effort from settings.plan.effort when CLI not provided', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({ plan: { effort: 'low' } }),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue('low'),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute()
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('low')
+			} finally {
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
+		})
+
+		it('does not set env var when no effort configured', async () => {
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute()
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined()
+			} finally {
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
 		})
 	})
 

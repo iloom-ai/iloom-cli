@@ -30,6 +30,7 @@ export interface LaunchLoomOptions {
 	colorTerminal?: boolean // defaults to true if undefined
 	colorHex?: string // Pre-calculated hex color from metadata, avoids recalculation
 	complexity?: import('../types/index.js').ComplexityOverride
+	effort?: import('../types/index.js').EffortLevel
 }
 
 /**
@@ -223,6 +224,9 @@ export class LoomLauncher {
 		}
 		if (options.complexity) {
 			claudeCommand += ` --complexity=${options.complexity}`
+		}
+		if (options.effort) {
+			claudeCommand += ` --effort=${options.effort}`
 		}
 
 		// Only generate color if terminal coloring is enabled (default: true)

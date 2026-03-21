@@ -51,6 +51,8 @@ export interface CreateLoomInput {
     dangerouslySkipPermissions?: boolean
     // Complexity override (skips complexity evaluation)
     complexity?: import('./index.js').ComplexityOverride
+    // Effort level override
+    effort?: import('./index.js').EffortLevel
     // Raw --set arguments to forward to spin
     setArguments?: string[]
     // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')

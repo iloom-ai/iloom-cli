@@ -1207,4 +1207,140 @@ Prompt`
 			expect(fs.writeFile).not.toHaveBeenCalled()
 		})
 	})
+
+	describe('effort support', () => {
+		describe('parseMarkdownAgent', () => {
+			it('parses effort from frontmatter', async () => {
+				vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+
+				const markdownContent = `---
+name: effort-agent
+description: Agent with effort
+tools: Read
+model: sonnet
+effort: high
+---
+
+Prompt content`
+
+				vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
+
+				const result = await manager.loadAgents()
+
+				expect(result['effort-agent'].effort).toBe('high')
+			})
+
+			it('omits effort when not in frontmatter', async () => {
+				vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+
+				const markdownContent = `---
+name: no-effort-agent
+description: Agent without effort
+tools: Read
+model: sonnet
+---
+
+Prompt content`
+
+				vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
+
+				const result = await manager.loadAgents()
+
+				expect(result['no-effort-agent'].effort).toBeUndefined()
+			})
+		})
+
+		describe('loadAgents with effort overrides', () => {
+			it('applies effort from settings.agents override', async () => {
+				vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+
+				const markdownContent = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+				vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
+
+				const settings = {
+					agents: {
+						'test-agent': {
+							effort: 'max',
+						},
+					},
+				}
+
+				const result = await manager.loadAgents(settings)
+
+				expect(result['test-agent'].effort).toBe('max')
+			})
+
+			it('preserves effort from frontmatter when no settings override', async () => {
+				vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+
+				const markdownContent = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+effort: low
+---
+
+Prompt`
+
+				vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
+
+				const settings = {
+					agents: {},
+				}
+
+				const result = await manager.loadAgents(settings)
+
+				expect(result['test-agent'].effort).toBe('low')
+			})
+		})
+
+		describe('renderAgentsToDisk', () => {
+			beforeEach(() => {
+				vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+				vi.mocked(fs.remove).mockResolvedValue(undefined)
+				vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+				vi.mocked(fg).mockResolvedValue([])
+			})
+
+			it('includes effort in frontmatter when set', async () => {
+				const agents: AgentConfigs = {
+					'effort-agent': {
+						description: 'Agent with effort',
+						prompt: 'Do things',
+						model: 'sonnet',
+						effort: 'high',
+					},
+				}
+
+				await manager.renderAgentsToDisk(agents, '/tmp/agents')
+
+				const writtenContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string
+				expect(writtenContent).toContain('effort: high')
+			})
+
+			it('omits effort from frontmatter when undefined', async () => {
+				const agents: AgentConfigs = {
+					'no-effort-agent': {
+						description: 'Agent without effort',
+						prompt: 'Do things',
+						model: 'sonnet',
+					},
+				}
+
+				await manager.renderAgentsToDisk(agents, '/tmp/agents')
+
+				const writtenContent = vi.mocked(fs.writeFile).mock.calls[0][1] as string
+				expect(writtenContent).not.toContain('effort:')
+			})
+		})
+	})
 })

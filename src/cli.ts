@@ -458,6 +458,10 @@ program
     new Option('--complexity <level>', 'Override complexity evaluation (persists in loom metadata)')
       .choices(['trivial', 'simple', 'complex'])
   )
+  .addOption(
+    new Option('--effort <level>', 'Set effort level for Claude (persists in loom metadata)')
+      .choices(['low', 'medium', 'high', 'max'])
+  )
   .option('--create-only', 'Create workspace only (skip Claude, IDE, terminal, dev server)')
   .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean; dangerouslySkipPermissions?: boolean }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
@@ -825,6 +829,10 @@ program
     new Option('--complexity <level>', 'Override complexity evaluation (session-only)')
       .choices(['trivial', 'simple', 'complex'])
   )
+  .addOption(
+    new Option('--effort <level>', 'Set effort level for Claude (session-only)')
+      .choices(['low', 'medium', 'high', 'max'])
+  )
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -835,6 +843,7 @@ program
     jsonStream?: boolean
     skipCleanup?: boolean
     complexity?: 'trivial' | 'simple' | 'complex'
+    effort?: 'low' | 'medium' | 'high' | 'max'
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -869,7 +878,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions, options.skipCleanup, undefined, options.complexity)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup, undefined, options.complexity, options.effort)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1632,6 +1641,10 @@ program
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .option('--auto-swarm', 'Enable auto-swarm: plan, start epic, and spin automatically')
+  .addOption(
+    new Option('--effort <level>', 'Set effort level for Claude')
+      .choices(['low', 'medium', 'high', 'max'])
+  )
   .action(async (prompt?: string, options?: {
     model?: string
     oneShot?: 'default' | 'noReview' | 'bypassPermissions'
@@ -1646,6 +1659,7 @@ program
     json?: boolean
     jsonStream?: boolean
     autoSwarm?: boolean
+    effort?: 'low' | 'medium' | 'high' | 'max'
   }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
@@ -1705,7 +1719,7 @@ program
         ...(resolvedOneShot !== undefined && { oneShot: resolvedOneShot }),
         ...(resolvedDangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
         autoSwarm: resolvedAutoSwarm,
-      }, options?.planner, options?.reviewer, printOptions)
+      }, options?.planner, options?.reviewer, printOptions, options?.effort)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

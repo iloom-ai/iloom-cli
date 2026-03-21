@@ -324,6 +324,109 @@ describe('SwarmSetupService', () => {
 		})
 	})
 
+	describe('phase agent swarmEffort overrides', () => {
+			// Helper to extract agent file content by swarm name
+			const getAgentContent = (swarmName: string): string | undefined => {
+				const call = vi.mocked(fs.writeFile).mock.calls.find(
+					(c) => (c[0] as string).endsWith(`${swarmName}.md`),
+				)
+				return call ? (call[1] as string) : undefined
+			}
+
+			it('applies default swarmEffort for agents in default effort map', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'sonnet',
+					},
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'sonnet',
+					},
+					'iloom-issue-complexity-evaluator': {
+						description: 'Evaluator agent',
+						prompt: 'Evaluate things',
+						model: 'sonnet',
+					},
+				})
+
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Analyzer default effort is 'high'
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('effort: high')
+				// Implementer default effort is 'medium'
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('effort: medium')
+				// Complexity evaluator default effort is 'low'
+				expect(getAgentContent('iloom-swarm-issue-complexity-evaluator')).toContain('effort: low')
+			})
+
+			it('uses per-agent swarmEffort when configured', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-implementer': { swarmEffort: 'max' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'sonnet',
+					},
+				})
+
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('effort: max')
+			})
+
+			it('explicit swarmEffort overrides default effort map', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+					agents: {
+						'iloom-issue-analyzer': { swarmEffort: 'low' },
+					},
+				} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
+						model: 'sonnet',
+					},
+				})
+
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Default for analyzer is 'high' but explicit swarmEffort 'low' should win
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('effort: low')
+			})
+
+			it('includes effort in skill wrapper frontmatter', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
+
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-implementer': {
+						description: 'Implementer agent',
+						prompt: 'Implement things',
+						model: 'sonnet',
+					},
+				})
+
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				const skillFileCall = vi.mocked(fs.writeFile).mock.calls.find(
+					(call) => (call[0] as string).endsWith('SKILL.md'),
+				)
+				const skillContent = skillFileCall![1] as string
+				// Implementer default effort is 'medium'
+				expect(skillContent).toContain('effort: medium')
+			})
+		})
+
 	describe('renderSwarmWorkerAgent', () => {
 		it('calls PromptTemplateManager.getPrompt with SWARM_MODE=true and ONE_SHOT_MODE=true', async () => {
 			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
@@ -420,6 +523,43 @@ describe('SwarmSetupService', () => {
 					REVIEW_CLAUDE_MODEL: 'opus',
 				}),
 			)
+		})
+
+		it('includes effort in worker frontmatter when configured in settings', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-swarm-worker': {
+						effort: 'high',
+					},
+				},
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('effort: high')
+		})
+
+		it('includes effort from swarmEffort when effort not set for worker', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-swarm-worker': {
+						swarmEffort: 'low',
+					},
+				},
+			} as unknown as IloomSettings)
+
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).toContain('effort: low')
+		})
+
+		it('omits effort from worker frontmatter when not configured', async () => {
+			await service.renderSwarmWorkerAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]![1] as string
+			expect(writtenContent).not.toContain('effort:')
 		})
 
 		it('returns true on success', async () => {
@@ -561,6 +701,51 @@ describe('SwarmSetupService', () => {
 			)?.[1] as string
 
 			expect(writtenContent).toContain('tools: Bash, Read, Grep')
+		})
+
+		it('includes effort in verifier frontmatter from settings', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
+				agents: {
+					'iloom-wave-verifier': { effort: 'high' },
+				},
+			} as unknown as IloomSettings)
+
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-wave-verifier.md'),
+			)?.[1] as string
+
+			expect(writtenContent).toContain('effort: high')
+		})
+
+		it('includes effort from agent template when no settings override', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
+
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+				'iloom-wave-verifier': {
+					description: 'Wave verifier',
+					prompt: 'Verify things',
+					model: 'sonnet',
+					effort: 'medium',
+				},
+			})
+
+			await service.renderSwarmWaveVerifierAgent('/Users/dev/project-epic-610')
+
+			const writtenContent = vi.mocked(fs.writeFile).mock.calls.find(
+				(call) => (call[0] as string).endsWith('iloom-swarm-wave-verifier.md'),
+			)?.[1] as string
+
+			expect(writtenContent).toContain('effort: medium')
 		})
 
 		it('returns false when wave verifier template is not found', async () => {

@@ -631,6 +631,96 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('Effort level support', () => {
+		it('should set CLAUDE_CODE_EFFORT_LEVEL env var when effort is provided', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__effort-test')
+
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute(undefined, undefined, undefined, undefined, undefined, 'high')
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
+		})
+
+		it('should not set CLAUDE_CODE_EFFORT_LEVEL when no effort configured anywhere', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__no-effort-test')
+
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute()
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
+		})
+
+		it('should read effort from metadata when CLI flag not provided', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with effort
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-50__effort-metadata',
+					worktreePath: '/path/to/workspace',
+					issueType: 'issue',
+					issue_numbers: ['50'],
+					effort: 'max',
+					sessionId: '12345678-1234-4567-8901-123456789012',
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}))
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__effort-metadata')
+
+			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
+			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+
+			try {
+				await command.execute()
+
+				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('max')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEffort === undefined) {
+					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+				} else {
+					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
+				}
+			}
+		})
+	})
+
 	describe('Error Handling', () => {
 		it('should handle git command failures gracefully', async () => {
 			// Spy on launchClaude
@@ -1688,6 +1778,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -1744,6 +1835,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}), // Empty settings
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -1855,6 +1947,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const agentsResult = {
@@ -1920,6 +2013,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -2796,6 +2890,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -2858,6 +2953,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -2920,6 +3016,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -2979,6 +3076,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -3038,6 +3136,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -3094,6 +3193,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -3150,6 +3250,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -3190,6 +3291,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -3226,6 +3328,7 @@ describe('IgniteCommand', () => {
 					},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -3260,6 +3363,7 @@ describe('IgniteCommand', () => {
 					databaseProviders: {},
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -3295,6 +3399,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const originalCwd = process.cwd
@@ -3404,6 +3509,7 @@ describe('IgniteCommand', () => {
 						issueTracker: { provider: 'github' },
 					}),
 					getSpinModel: vi.fn().mockReturnValue('opus'),
+					getSpinEffort: vi.fn().mockReturnValue(undefined),
 				} as never,
 			)
 
@@ -3510,6 +3616,7 @@ describe('IgniteCommand', () => {
 						issueTracker: { provider: 'github' },
 					}),
 					getSpinModel: vi.fn().mockReturnValue('opus'),
+					getSpinEffort: vi.fn().mockReturnValue(undefined),
 				} as never,
 			)
 		}
@@ -3739,6 +3846,7 @@ describe('IgniteCommand', () => {
 						issueTracker: { provider: 'github' },
 					}),
 					getSpinModel: vi.fn().mockReturnValue('opus'),
+					getSpinEffort: vi.fn().mockReturnValue(undefined),
 				} as never,
 			)
 
@@ -3808,6 +3916,7 @@ describe('IgniteCommand', () => {
 						issueTracker: { provider: 'github' },
 					}),
 					getSpinModel: vi.fn().mockReturnValue('opus'),
+					getSpinEffort: vi.fn().mockReturnValue(undefined),
 				} as never,
 			)
 
@@ -3887,6 +3996,7 @@ describe('IgniteCommand', () => {
 					issueTracker: { provider: 'github' },
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {
@@ -4021,6 +4131,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockGitWorktreeManagerWithMain = {
@@ -4068,6 +4179,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockGitWorktreeManagerWithFeature = {
@@ -4337,6 +4449,7 @@ describe('IgniteCommand', () => {
 						issueTracker: { provider: 'github' },
 					}),
 					getSpinModel: vi.fn().mockReturnValue('opus'),
+					getSpinEffort: vi.fn().mockReturnValue(undefined),
 				} as never,
 			)
 
@@ -4546,6 +4659,7 @@ describe('IgniteCommand', () => {
 					issueManagement: { provider: 'github' },
 				}),
 				getSpinModel: vi.fn().mockReturnValue('opus'),
+				getSpinEffort: vi.fn().mockReturnValue(undefined),
 			}
 
 			const mockAgentManager = {

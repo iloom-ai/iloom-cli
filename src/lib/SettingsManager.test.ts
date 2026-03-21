@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, redactSensitiveFields, BaseAgentSettingsSchema, SpinAgentSettingsSchema, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
+import { SettingsManager, redactSensitiveFields, BaseAgentSettingsSchema, SpinAgentSettingsSchema, PlanCommandSettingsSchema, VALID_EFFORT_LEVELS, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -3103,6 +3103,169 @@ const error: { code?: string; message: string } = {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const, swarmModel: 'opus' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
 			expect(result).toBe('haiku')
+		})
+	})
+
+	describe('effort settings', () => {
+		describe('BaseAgentSettingsSchema', () => {
+			it('accepts valid effort levels: low, medium, high, max', () => {
+				for (const level of VALID_EFFORT_LEVELS) {
+					const result = BaseAgentSettingsSchema.safeParse({ effort: level })
+					expect(result.success).toBe(true)
+					if (result.success) {
+						expect(result.data.effort).toBe(level)
+					}
+				}
+			})
+
+			it('rejects invalid effort values', () => {
+				const result = BaseAgentSettingsSchema.safeParse({ effort: 'turbo' })
+				expect(result.success).toBe(false)
+			})
+
+			it('accepts valid swarmEffort levels', () => {
+				for (const level of VALID_EFFORT_LEVELS) {
+					const result = BaseAgentSettingsSchema.safeParse({ swarmEffort: level })
+					expect(result.success).toBe(true)
+					if (result.success) {
+						expect(result.data.swarmEffort).toBe(level)
+					}
+				}
+			})
+
+			it('treats effort as optional (undefined when omitted)', () => {
+				const result = BaseAgentSettingsSchema.safeParse({})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.effort).toBeUndefined()
+					expect(result.data.swarmEffort).toBeUndefined()
+				}
+			})
+		})
+
+		describe('SpinAgentSettingsSchema', () => {
+			it('includes optional effort and swarmEffort fields', () => {
+				const result = SpinAgentSettingsSchema.safeParse({ effort: 'high', swarmEffort: 'medium' })
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.effort).toBe('high')
+					expect(result.data.swarmEffort).toBe('medium')
+				}
+			})
+
+			it('treats effort and swarmEffort as optional', () => {
+				const result = SpinAgentSettingsSchema.safeParse({})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.effort).toBeUndefined()
+					expect(result.data.swarmEffort).toBeUndefined()
+				}
+			})
+		})
+
+		describe('PlanCommandSettingsSchema', () => {
+			it('includes optional effort field', () => {
+				const result = PlanCommandSettingsSchema.safeParse({ effort: 'max' })
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.effort).toBe('max')
+				}
+			})
+
+			it('treats effort as optional', () => {
+				const result = PlanCommandSettingsSchema.safeParse({})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.effort).toBeUndefined()
+				}
+			})
+		})
+
+		describe('IloomSettingsSchemaNoDefaults', () => {
+			it('accepts effort and swarmEffort in spin section', () => {
+				const result = IloomSettingsSchemaNoDefaults.safeParse({
+					spin: { effort: 'high', swarmEffort: 'medium' },
+				})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.spin?.effort).toBe('high')
+					expect(result.data.spin?.swarmEffort).toBe('medium')
+				}
+			})
+
+			it('accepts effort in plan section', () => {
+				const result = IloomSettingsSchemaNoDefaults.safeParse({
+					plan: { effort: 'low' },
+				})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.plan?.effort).toBe('low')
+				}
+			})
+		})
+
+		describe('getSpinEffort()', () => {
+			it('returns undefined when no effort configured', () => {
+				const settings = { sourceEnvOnStart: false }
+				const result = settingsManager.getSpinEffort(settings)
+				expect(result).toBeUndefined()
+			})
+
+			it('returns settings.spin.effort when configured', () => {
+				const settings = { sourceEnvOnStart: false, spin: { effort: 'high' as const } }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings)
+				expect(result).toBe('high')
+			})
+
+			it('returns settings.spin.swarmEffort for swarm mode when configured', () => {
+				const settings = { sourceEnvOnStart: false, spin: { effort: 'high' as const, swarmEffort: 'low' as const } }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings, 'swarm')
+				expect(result).toBe('low')
+			})
+
+			it('returns "medium" as default for swarm mode when no swarmEffort configured', () => {
+				const settings = { sourceEnvOnStart: false, spin: { effort: 'high' as const } }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings, 'swarm')
+				expect(result).toBe('medium')
+			})
+
+			it('returns "medium" for swarm mode even when no spin config exists', () => {
+				const settings = { sourceEnvOnStart: false }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings, 'swarm')
+				expect(result).toBe('medium')
+			})
+
+			it('ignores swarmEffort when mode is not swarm', () => {
+				const settings = { sourceEnvOnStart: false, spin: { effort: 'high' as const, swarmEffort: 'low' as const } }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings)
+				expect(result).toBe('high')
+			})
+
+			it('returns undefined when spin object exists but effort not set (non-swarm)', () => {
+				const settings = { sourceEnvOnStart: false, spin: {} }
+				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings)
+				expect(result).toBeUndefined()
+			})
+		})
+
+		describe('getPlanEffort()', () => {
+			it('returns undefined when no effort configured', () => {
+				const settings = { sourceEnvOnStart: false }
+				const result = settingsManager.getPlanEffort(settings)
+				expect(result).toBeUndefined()
+			})
+
+			it('returns settings.plan.effort when configured', () => {
+				const settings = { sourceEnvOnStart: false, plan: { effort: 'max' as const } }
+				const result = settingsManager.getPlanEffort(settings as unknown as IloomSettings)
+				expect(result).toBe('max')
+			})
+
+			it('returns undefined when plan object exists but effort not set', () => {
+				const settings = { sourceEnvOnStart: false, plan: { model: 'opus' as const } }
+				const result = settingsManager.getPlanEffort(settings as unknown as IloomSettings)
+				expect(result).toBeUndefined()
+			})
 		})
 	})
 

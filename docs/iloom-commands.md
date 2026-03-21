@@ -69,6 +69,7 @@ il start "<issue-description>"
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping workflow gates (composable with `--one-shot`) |
 | `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (persists in loom metadata) |
+| `--effort` | `low`, `medium`, `high`, `max` | Set effort level for Claude (persists in loom metadata) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
 | `--epic` | - | Force create as epic loom with child issues (skip prompt; ignored if no children) |
@@ -95,6 +96,20 @@ The `--complexity` flag skips the complexity evaluation agent entirely and route
 The override follows a two-level model:
 - **`il start --complexity`** - Persists the complexity value in loom metadata. All subsequent `il spin` sessions for this loom will use the stored complexity unless explicitly overridden.
 - **`il spin --complexity`** - Overrides the stored complexity for the current session only. The loom metadata is not modified, so the next `il spin` without `--complexity` reverts to the stored value (or runs the evaluator if none was stored).
+
+**Effort Override:**
+
+The `--effort` flag controls Claude's reasoning depth via the `CLAUDE_CODE_EFFORT_LEVEL` environment variable:
+- `low` - Quick, straightforward implementation with minimal overhead
+- `medium` - Balanced approach with standard implementation and testing
+- `high` - Comprehensive implementation with extensive testing and documentation
+- `max` - Maximum capability with deepest reasoning (Opus 4.6 only; silently downgrades to `high` on other models)
+
+The override follows the same two-level model as complexity:
+- **`il start --effort`** - Persists the effort value in loom metadata. All subsequent `il spin` sessions for this loom will use the stored effort unless explicitly overridden.
+- **`il spin --effort`** - Overrides the stored effort for the current session only. The loom metadata is not modified.
+
+When no effort is configured anywhere (CLI flag, metadata, or settings), the environment variable is not set, deferring to Claude Code's own default behavior (which respects any `/effort` session setting the user has configured).
 
 **Workflow Phases:**
 
@@ -584,6 +599,7 @@ il spin [options]
 | `--one-shot` | `noReview`, `bypassPermissions` | Automation level (same as `il start`) |
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (session-only, does not persist) |
+| `--effort` | `low`, `medium`, `high`, `max` | Set effort level for Claude (session-only, does not persist) |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
@@ -1402,6 +1418,7 @@ il plan <issue-number> [options]
 | `--auto-swarm` | - | Auto-start swarm after planning: plan → start --epic → spin |
 | `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
+| `--effort` | `low`, `medium`, `high`, `max` | Set effort level for Claude (default: from settings `plan.effort`) |
 | `-p, --print` | - | Enable print/headless mode for CI/CD (implies autonomous + `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | - | Enable verbose output (requires `--print`) |
@@ -2063,6 +2080,102 @@ Example settings for each mode:
 These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
 
 To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
+
+### Effort Configuration
+
+Effort levels control Claude's reasoning depth. iloom propagates effort to Claude Code via the `CLAUDE_CODE_EFFORT_LEVEL` environment variable for top-level sessions and via per-agent `effort:` frontmatter for agent-level overrides.
+
+**Valid effort levels:** `low`, `medium`, `high`, `max`
+
+When no effort is configured, iloom does not set the environment variable, deferring to Claude Code's own default (which respects any `/effort` session setting the user has configured).
+
+**Global Effort Settings:**
+
+Configure default effort levels for spin and plan commands in `.iloom/settings.json`:
+
+```json
+{
+  "spin": {
+    "effort": "high"
+  },
+  "plan": {
+    "effort": "high"
+  }
+}
+```
+
+**Swarm Orchestrator Effort:**
+
+Set the effort level for the swarm orchestrator using `spin.swarmEffort`. This defaults to `medium` when not configured (matching the current hardcoded behavior):
+
+```json
+{
+  "spin": {
+    "effort": "high",
+    "swarmEffort": "medium"
+  }
+}
+```
+
+In this example, `spin.effort` (`high`) is used when spin runs in single-issue mode, while `spin.swarmEffort` (`medium`) is used for the swarm orchestrator.
+
+**Per-Agent Effort Overrides:**
+
+Each agent supports `effort` and `swarmEffort` fields, following the same pattern as model overrides:
+
+```json
+{
+  "agents": {
+    "iloom-issue-analyzer": { "effort": "high", "swarmEffort": "high" },
+    "iloom-issue-implementer": { "effort": "high", "swarmEffort": "medium" },
+    "iloom-issue-complexity-evaluator": { "effort": "low", "swarmEffort": "low" }
+  }
+}
+```
+
+- `effort` overrides the agent's effort level in non-swarm mode
+- `swarmEffort` overrides the agent's effort level in swarm mode
+
+**Default Swarm Effort Levels:**
+
+When no user configuration is provided, swarm agents use these defaults:
+
+| Agent | Default Swarm Effort |
+|-------|---------------------|
+| `iloom-issue-analyzer` | `high` |
+| `iloom-issue-analyze-and-plan` | `high` |
+| `iloom-issue-planner` | `high` |
+| `iloom-issue-implementer` | `medium` |
+| `iloom-issue-enhancer` | `medium` |
+| `iloom-code-reviewer` | `medium` |
+| `iloom-issue-complexity-evaluator` | `low` |
+
+**Effort Resolution Order:**
+
+Effort is resolved with the following priority (highest first):
+
+1. CLI flag (`--effort`)
+2. Loom metadata (set via `il start --effort`)
+3. Settings (`spin.effort` / `plan.effort`)
+4. No effort set (defers to Claude Code default)
+
+For per-agent effort, Claude Code resolves: agent frontmatter `effort:` > `CLAUDE_CODE_EFFORT_LEVEL` env var > session default.
+
+**Example using the `--set` flag:**
+
+```bash
+# Set spin effort
+il spin --set spin.effort=high
+
+# Set swarm orchestrator effort
+il spin --set spin.swarmEffort=medium
+
+# Set per-agent effort
+il spin --set agents.iloom-issue-implementer.effort=high
+
+# Set per-agent swarm effort
+il spin --set agents.iloom-issue-implementer.swarmEffort=medium
+```
 
 ### Merge Strategy
 

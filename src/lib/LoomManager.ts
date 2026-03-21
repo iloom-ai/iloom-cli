@@ -394,6 +394,7 @@ export class LoomManager {
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
     const complexity = input.options?.complexity
+    const effort = input.options?.effort
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
@@ -420,6 +421,7 @@ export class LoomManager {
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
         ...(complexity && { complexity }),
+        ...(effort && { effort }),
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
@@ -491,6 +493,7 @@ export class LoomManager {
       ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
       ...(input.options?.dangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
       ...(input.options?.complexity && { complexity: input.options.complexity }),
+      ...(input.options?.effort && { effort: input.options.effort }),
       ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
       ...(input.options?.childIssues && input.options.childIssues.length > 0 && { childIssues: input.options.childIssues }),
       ...(input.options?.dependencyMap && Object.keys(input.options.dependencyMap).length > 0 && { dependencyMap: input.options.dependencyMap }),
@@ -1388,6 +1391,7 @@ export class LoomManager {
     const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
     const complexity = input.options?.complexity
+    const effort = input.options?.effort
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
@@ -1414,6 +1418,7 @@ export class LoomManager {
         ...(issueData?.title && { title: issueData.title }),
         oneShot,
         ...(complexity && { complexity }),
+        ...(effort && { effort }),
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
@@ -1475,14 +1480,16 @@ export class LoomManager {
         ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
         ...(input.options?.dangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
         ...(input.options?.complexity && { complexity: input.options.complexity }),
+        ...(input.options?.effort && { effort: input.options.effort }),
         ...(input.options?.childIssueNumbers && input.options.childIssueNumbers.length > 0 && { childIssueNumbers: input.options.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
-    } else if (input.options?.complexity) {
-      // Update existing metadata with complexity override
+    } else if (input.options?.complexity || input.options?.effort) {
+      // Update existing metadata with complexity/effort overrides
       await this.metadataManager.updateMetadata(worktreePath, {
-        complexity: input.options.complexity,
+        ...(input.options?.complexity && { complexity: input.options.complexity }),
+        ...(input.options?.effort && { effort: input.options.effort }),
       })
     }
 

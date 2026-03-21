@@ -494,6 +494,39 @@ describe('LoomLauncher', () => {
 			})
 		})
 
+	describe('effort forwarding', () => {
+		it('should append --effort flag to spin command when effort is set', async () => {
+			await launcher.launchLoom({
+				...baseOptions,
+				enableClaude: true,
+				enableCode: false,
+				enableDevServer: true,
+				enableTerminal: false,
+				effort: 'high',
+			} as LaunchLoomOptions)
+
+			const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
+			const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
+			expect(claudeTab).toBeDefined()
+			expect(claudeTab?.command).toContain('--effort=high')
+		})
+
+		it('should not append --effort flag when effort is undefined', async () => {
+			await launcher.launchLoom({
+				...baseOptions,
+				enableClaude: true,
+				enableCode: false,
+				enableDevServer: true,
+				enableTerminal: false,
+			})
+
+			const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
+			const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
+			expect(claudeTab).toBeDefined()
+			expect(claudeTab?.command).not.toContain('--effort')
+		})
+	})
+
 	describe('sourceEnvOnStart option', () => {
 		beforeEach(async () => {
 			// Reset existsSync mock to default (true)

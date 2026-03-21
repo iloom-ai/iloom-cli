@@ -82,10 +82,10 @@ Available on all commands:
 
 ### Key Flags by Command
 
-**`start`**: `--epic` (epic loom), `--one-shot <mode>` (automation level), `--complexity <level>` (override triage), `--create-only` (skip Claude/IDE/terminal), `--child-loom` (force child)
+**`start`**: `--epic` (epic loom), `--one-shot <mode>` (automation level), `--complexity <level>` (override triage), `--effort <level>` (set effort level, persists in metadata), `--create-only` (skip Claude/IDE/terminal), `--child-loom` (force child)
 
 **`finish`**: `--merge-strategy <local|pr|draft-pr>`, `--rebase` (rebase before merge), `--build`/`--test` (pre-merge validation)
 
-**`spin`**: `--one-shot <mode>`, `--complexity <level>`, `--json-stream` (headless JSONL output), `--print` (print mode for headless)
+**`spin`**: `--one-shot <mode>`, `--complexity <level>`, `--effort <level>` (set effort level, session-only), `--json-stream` (headless JSONL output), `--print` (print mode for headless)
 
-**`plan`**: `--planner <claude|gemini|codex>`, `--reviewer <claude|gemini|codex|none>`
+**`plan`**: `--planner <claude|gemini|codex>`, `--reviewer <claude|gemini|codex|none>`, `--effort <level>` (set effort level)

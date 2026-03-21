@@ -367,6 +367,7 @@ export class StartCommand {
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
 					...(input.options.dangerouslySkipPermissions && { dangerouslySkipPermissions: true }),
 					...(input.options.complexity && { complexity: input.options.complexity }),
+					...(input.options.effort && { effort: input.options.effort }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
 					...(childIssueNumbers.length > 0 && { childIssueNumbers }),

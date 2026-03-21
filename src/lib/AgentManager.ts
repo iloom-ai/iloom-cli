@@ -15,6 +15,7 @@ export interface AgentConfig {
 	prompt: string
 	tools?: string[]  // Optional - when omitted, agent inherits all tools from parent
 	model: string
+	effort?: string  // Optional effort level (low/medium/high/max) for Claude Code
 	color?: string
 }
 
@@ -131,7 +132,15 @@ export class AgentManager {
 						...agents[agentName],
 						model: agentSettings.model,
 					}
-				} else if (!agents[agentName]) {
+				}
+				if (agents[agentName] && agentSettings.effort) {
+					logger.debug(`Overriding effort for ${agentName}: ${agents[agentName].effort} -> ${agentSettings.effort}`)
+					agents[agentName] = {
+						...agents[agentName],
+						effort: agentSettings.effort,
+					}
+				}
+				if (!agents[agentName]) {
 					// Skip warning for runtime-generated agents (e.g., swarm worker)
 					const RUNTIME_GENERATED_AGENTS = ['iloom-swarm-worker']
 					if (!RUNTIME_GENERATED_AGENTS.includes(agentName)) {
@@ -217,6 +226,7 @@ export class AgentManager {
 				prompt: markdownBody.trim(),
 				model: data.model,
 				...(tools && { tools }),
+				...(data.effort && { effort: data.effort }),
 				...(data.color && { color: data.color }),
 			}
 
@@ -301,6 +311,7 @@ export class AgentManager {
 			const frontmatterLines = ['---', `name: ${agentName}`, `description: ${config.description}`]
 			if (config.tools) frontmatterLines.push(`tools: ${config.tools.join(', ')}`)
 			frontmatterLines.push(`model: ${config.model}`)
+			if (config.effort) frontmatterLines.push(`effort: ${config.effort}`)
 			if (config.color) frontmatterLines.push(`color: ${config.color}`)
 			frontmatterLines.push('---')
 

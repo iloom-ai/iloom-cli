@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager, type ClaudeModel } from './SettingsManager.js'
+import { SettingsManager, type ClaudeModel, type EffortLevel } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
@@ -75,14 +75,39 @@ export class SwarmSetupService {
 			'iloom-issue-complexity-evaluator': 'haiku',
 		}
 
-		// Apply per-agent swarmModel overrides (user-configured takes precedence over defaults)
+		// Default swarmEffort map for swarm phase agents. Agents that do
+		// deep analysis/planning get higher effort, while implementation
+		// and review agents use medium, and simple evaluators use low.
+		const defaultSwarmEfforts: Record<string, EffortLevel> = {
+			'iloom-issue-analyzer': 'high',
+			'iloom-issue-analyze-and-plan': 'high',
+			'iloom-issue-planner': 'high',
+			'iloom-issue-implementer': 'medium',
+			'iloom-issue-enhancer': 'medium',
+			'iloom-code-reviewer': 'medium',
+			'iloom-issue-complexity-evaluator': 'low',
+		}
+
+		// Apply per-agent swarmModel and swarmEffort overrides (user-configured takes precedence over defaults)
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
+			let updated = agentConfig
 			const userSwarmModel = settings?.agents?.[agentName]?.swarmModel
 			if (userSwarmModel) {
-				agents[agentName] = { ...agentConfig, model: userSwarmModel }
+				updated = { ...updated, model: userSwarmModel }
 			} else if (defaultSwarmModels[agentName]) {
-				agents[agentName] = { ...agentConfig, model: defaultSwarmModels[agentName] }
+				updated = { ...updated, model: defaultSwarmModels[agentName] }
 			}
+
+			const userSwarmEffort = settings?.agents?.[agentName]?.swarmEffort
+			const userBaseEffort = settings?.agents?.[agentName]?.effort
+			if (userSwarmEffort) {
+				updated = { ...updated, effort: userSwarmEffort }
+			} else if (userBaseEffort) {
+				updated = { ...updated, effort: userBaseEffort }
+			} else if (defaultSwarmEfforts[agentName]) {
+				updated = { ...updated, effort: defaultSwarmEfforts[agentName] }
+			}
+			agents[agentName] = updated
 		}
 
 		const renderedSkills: string[] = []
@@ -109,6 +134,7 @@ export class SwarmSetupService {
 				`name: ${swarmName}`,
 				`description: ${agentConfig.description}`,
 				`model: ${agentConfig.model}`,
+				...(agentConfig.effort ? [`effort: ${agentConfig.effort}`] : []),
 				'---',
 			].join('\n')
 
@@ -126,6 +152,7 @@ export class SwarmSetupService {
 				`name: ${swarmName}`,
 				`description: ${agentConfig.description}`,
 				`model: ${agentConfig.model}`,
+				...(agentConfig.effort ? [`effort: ${agentConfig.effort}`] : []),
 				'context: fork',
 				`agent: ${swarmName}`,
 				'---',
@@ -182,12 +209,14 @@ export class SwarmSetupService {
 
 			// Build the agent file with frontmatter
 			const workerModel = settings?.agents?.['iloom-swarm-worker']?.model ?? 'sonnet'
+			const workerEffort = settings?.agents?.['iloom-swarm-worker']?.swarmEffort ?? settings?.agents?.['iloom-swarm-worker']?.effort
 
 			const frontmatter = [
 				'---',
 				'name: iloom-swarm-worker',
 				'description: Swarm worker agent that implements a child issue following the full iloom workflow.',
 				`model: ${workerModel}`,
+				...(workerEffort ? [`effort: ${workerEffort}`] : []),
 				'---',
 			].join('\n')
 
@@ -238,8 +267,11 @@ export class SwarmSetupService {
 				return false
 			}
 
-			// Get model from settings or use the template's declared model
+			// Get model and effort from settings or use the template's declared values
 			const verifierModel = settings?.agents?.['iloom-wave-verifier']?.model ?? verifierConfig.model ?? 'sonnet'
+			const verifierEffort = settings?.agents?.['iloom-wave-verifier']?.swarmEffort
+				?? settings?.agents?.['iloom-wave-verifier']?.effort
+				?? verifierConfig.effort
 
 			// Build the agent file WITH frontmatter (standalone custom agent type)
 			const frontmatter = [
@@ -247,6 +279,7 @@ export class SwarmSetupService {
 				'name: iloom-swarm-wave-verifier',
 				`description: ${verifierConfig.description ?? 'Wave verification agent that checks must-have criteria after each swarm wave.'}`,
 				`model: ${verifierModel}`,
+				...(verifierEffort ? [`effort: ${verifierEffort}`] : []),
 				...(verifierConfig.tools ? [`tools: ${verifierConfig.tools.join(', ')}`] : []),
 				'---',
 			].join('\n')

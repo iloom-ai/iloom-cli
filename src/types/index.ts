@@ -145,6 +145,9 @@ export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 // Complexity override type
 export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
 
+// Effort level type
+export type EffortLevel = 'low' | 'medium' | 'high' | 'max'
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
@@ -164,6 +167,8 @@ export interface StartOptions {
   dangerouslySkipPermissions?: boolean
   // Complexity override (skips complexity evaluation)
   complexity?: ComplexityOverride
+  // Effort level for Claude sessions
+  effort?: EffortLevel
   // Optional body text for issue creation
   body?: string
   // Output result as JSON
