@@ -60,9 +60,9 @@ If only `origin` exists (or no upstream), proceed normally with `package.iloom.j
 
 ## Core Workflow
 
-### Step 1: Scan for Language Markers
+### Step 1: Scan for Language Markers and Dockerfile
 
-Examine the project root for language-specific files:
+Examine the project root for language-specific files **and** a Dockerfile:
 
 | Marker File | Language | Package Manager |
 |-------------|----------|-----------------|
@@ -76,10 +76,11 @@ Examine the project root for language-specific files:
 | `*.csproj`, `*.sln` | C#/.NET | dotnet |
 | `Makefile` | C/C++/Generic | make |
 | `CMakeLists.txt` | C/C++ | cmake |
+| `Dockerfile` | Any (Docker) | docker |
 
 Use the `Glob` tool to check for these files:
 ```
-Glob pattern: "{Cargo.toml,requirements.txt,pyproject.toml,setup.py,Gemfile,go.mod,pom.xml,build.gradle*,Package.swift,mix.exs,*.csproj,*.sln,Makefile,CMakeLists.txt}"
+Glob pattern: "{Cargo.toml,requirements.txt,pyproject.toml,setup.py,Gemfile,go.mod,pom.xml,build.gradle*,Package.swift,mix.exs,*.csproj,*.sln,Makefile,CMakeLists.txt,Dockerfile}"
 ```
 
 ### Step 2: Detect Framework (if applicable)
@@ -107,13 +108,48 @@ For each detected language, look for framework-specific indicators:
 - `gorilla/mux` in go.mod = Gorilla Mux
 - `fiber` in go.mod = Fiber
 
-### Step 3: Generate package.iloom.json
+### Step 3: Docker Detection (Report Only)
+
+If a `Dockerfile` was found in Step 1:
+
+1. **Record the finding** — set `dockerfileFound: true` in `_metadata`
+2. **Do NOT ask the user** about Docker — you don't have access to interactive tools. The init prompt will handle that question.
+3. **Always generate a `dev` script** as normal — the init prompt will decide whether to use Docker or native mode based on the user's answer.
+
+If no `Dockerfile` was found, skip this and proceed to Step 4.
+
+**Note:** Docker Compose (`docker-compose.yml`) is not supported. Only single-container Dockerfiles are supported.
+
+---
+
+### Step 4: Generate package.iloom.json
 
 Create `.iloom/package.iloom.json` with appropriate scripts and capabilities based on detection:
 
 **Capabilities Detection:**
 - `"cli"` - Include if project has CLI components (e.g., `[[bin]]` in Cargo.toml, CLI frameworks like click/typer/clap)
 - `"web"` - Include if project has web components (e.g., Flask/Django/FastAPI/Rails/Actix/Rocket)
+
+**Dockerfile Detection (from Step 3):**
+If a Dockerfile was found, include `"dockerfileFound": true` in `_metadata`. Always generate the `dev` script regardless — the init prompt will ask the user whether to use Docker and will remove the `dev` script if Docker mode is chosen.
+
+Example — web project where Dockerfile was found:
+```json
+{
+  "capabilities": ["web"],
+  "scripts": {
+    "install": "pip install -r requirements.txt",
+    "test": "pytest",
+    "dev": "python manage.py runserver"
+  },
+  "_metadata": {
+    "detectedLanguage": "python",
+    "detectedFramework": "django",
+    "dockerfileFound": true,
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
 
 **Common Patterns by Language:**
 
@@ -341,7 +377,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts and capabilities bas
 }
 ```
 
-### Step 4: Write the File
+### Step 5: Write the File
 
 **⚠️ CHECKPOINT: Verify fork status from Step 0 before proceeding.**
 
@@ -364,9 +400,12 @@ If NOT a fork:
    - Preserve any other existing fields (like `_metadata`)
 4. **If the file does not exist:**
    - Create the full detected configuration
-5. Ensure `.iloom/` directory exists
-6. Write the merged/new JSON to the target file
-7. Report what was detected, which file was written, and what changes were made (if any)
+5. **If Dockerfile was found (from Step 3):**
+   - Add `"dockerfileFound": true` to `_metadata`
+   - Still include the `dev` script — the init prompt handles Docker mode
+6. Ensure `.iloom/` directory exists
+7. Write the merged/new JSON to the target file
+8. Report what was detected, which file was written, and what changes were made (if any)
 
 **File Selection Summary:**
 | Scenario | Target File | Reason |
@@ -387,6 +426,7 @@ Detected:
 - Framework: [framework or "None detected"]
 - Package Manager: [package manager]
 - Capabilities: [cli, web, or none]
+- Dockerfile: [Found | Not found]
 - Fork Status: [Yes (origin + upstream) | No]
 
 Created: .iloom/[package.iloom.json OR package.iloom.local.json]
@@ -397,6 +437,9 @@ Configuration:
 - build: [command] (if applicable)
 - test: [command]
 - dev: [command]
+
+[If Dockerfile found]: A Dockerfile was detected. The init wizard will ask whether
+                        to use Docker for the dev server.
 
 [If fork]: This configuration was saved to the LOCAL file (package.iloom.local.json)
            because you're working on a fork. This prevents your iloom settings
@@ -429,6 +472,9 @@ You can customize these settings by editing .iloom/[filename].
 DO NOT:
 - Execute any build/test/dev commands
 - Install dependencies
-- Modify any files other than `.iloom/package.iloom.json`
+- Modify any files other than `.iloom/package.iloom.json` (or `.local.json` for forks)
 - Make assumptions about project-specific configuration
 - Add scripts that require additional setup not evident from the project
+- Ask the user questions — you don't have access to interactive tools. Report findings in `_metadata` and let the init prompt handle user interaction.
+- Configure Docker settings in `.iloom/settings.json` — that's the init prompt's responsibility
+- Recommend Docker for `docker-compose.yml` projects — only single-container Dockerfiles are supported

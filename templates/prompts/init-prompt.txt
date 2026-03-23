@@ -300,11 +300,12 @@ iloom needs to detect the project's language and framework to configure build/te
 **Invoke the framework detector agent** using the `iloom-framework-detector` agent:
 
 The agent will:
-1. Scan for language markers (Cargo.toml, requirements.txt, Gemfile, go.mod, etc.)
+1. Scan for language markers (Cargo.toml, requirements.txt, Gemfile, go.mod, etc.) and check for a Dockerfile
 2. Detect common frameworks
 3. Generate appropriate scripts for build, test, and dev commands
 4. Create `.iloom/package.iloom.json` with the detected configuration
 5. Detect and set project capabilities (cli, web) based on the framework
+6. Flag `dockerfileFound: true` in `_metadata` if a Dockerfile was detected
 
 **package.iloom.json Schema:**
 ```json
@@ -369,7 +370,20 @@ Write the capabilities and scripts to the chosen file.
 - `[[bin]]` in Cargo.toml -> include "cli"
 - No clear indicators -> ask user explicitly
 
-After the framework detector agent completes (and capabilities are set), proceed to Phase 2.
+After the framework detector agent completes (and capabilities are set):
+
+**Docker Dev Server Check:** If the framework detector flagged `dockerfileFound: true` in the `_metadata` of the generated `package.iloom.json`, AND the project has `"web"` capability, ask the user using AskUserQuestion:
+
+- Question: "A Dockerfile was detected. Would you like to use Docker to run the dev server?"
+- Options:
+  - "yes" - iloom will build and run the Docker container for the dev server
+  - "no" - iloom will use the native dev script instead
+- If the user chooses **yes**:
+  - Remove the `dev` script from `package.iloom.json` (Docker handles the dev server, so the script is unnecessary)
+  - You MUST configure `capabilities.web.devServer` as `"docker"` in the settings file (Phase 5). This is critical — without it, Docker dev server won't be used.
+- If the user chooses **no**: keep the `dev` script as-is, no Docker settings needed.
+
+Proceed to Phase 2.
 {{/if}}
 
 ### Phase 2: Tooling Configuration
@@ -603,6 +617,7 @@ Tooling Configuration (Phase 2):
 {{#unless IS_VSCODE_MODE}}  IDE: [value or "vscode (default)"]
 {{/unless}}  Merge Mode: [value] (only if configured)
   Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.5)
+  Dev Server: Docker (only if Docker mode was enabled by framework detector)
 ```
 
 **Note**:
@@ -610,6 +625,7 @@ Tooling Configuration (Phase 2):
 - Include Linear Team ID ONLY if Linear was selected as the issue tracker provider
 - Include Jira Host, Project Key, Board ID, and API Token ONLY if Jira was selected as the issue tracker provider
 - Include Merge Mode ONLY if it was asked and configured (multiple remotes or advanced config)
+- Include Dev Server ONLY if the user chose Docker mode when prompted about the Dockerfile
 
 Then ask: "Does this configuration look correct?"
 - If yes, proceed to Phase 4
@@ -708,16 +724,18 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    }
    ```
 
-4. **Add capabilities.web ONLY if basePort is not 3000:**
+4. **Add capabilities.web ONLY if basePort is not 3000 OR Docker mode is enabled:**
    ```json
    {
      "capabilities": {
        "web": {
-         "basePort": <user's number>
+         "basePort": <user's number>,       // ONLY if not 3000
+         "devServer": "docker"              // ONLY if Docker mode was enabled by framework detector
        }
      }
    }
    ```
+   If the user chose Docker mode when prompted about the Dockerfile, you MUST include `"devServer": "docker"` in the capabilities.web settings. Without this, iloom will default to native process mode and Docker won't be used for the dev server.
 
 5. **Add issueManagement ONLY if provider is not "github" OR if github.remote is configured:**
 
