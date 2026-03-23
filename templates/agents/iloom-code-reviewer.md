@@ -2,7 +2,7 @@
 name: iloom-code-reviewer
 description: Use this agent to review code changes.
 model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
-effort: {{#if SWARM_MODE}}medium{{/if}}
+{{#if SWARM_MODE}}effort: medium{{/if}}
 color: cyan
 ---
 

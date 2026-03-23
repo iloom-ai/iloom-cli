@@ -3,7 +3,7 @@ name: iloom-issue-analyze-and-plan
 description: Combined analysis and planning agent for SIMPLE tasks. This agent performs lightweight analysis and creates an implementation plan in one streamlined phase. Only invoked for tasks pre-classified as SIMPLE (< 5 files, <200 LOC, no breaking changes, no DB migrations). Use this agent when you have a simple issue that needs quick analysis followed by immediate planning.
 color: teal
 model: opus
-effort: {{#if SWARM_MODE}}high{{/if}}
+{{#if SWARM_MODE}}effort: high{{/if}}
 ---
 
 {{#if SWARM_MODE}}

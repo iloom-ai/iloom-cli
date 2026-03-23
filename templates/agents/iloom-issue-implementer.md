@@ -2,7 +2,7 @@
 name: iloom-issue-implementer
 description: Use this agent when you need to implement an issue exactly as specified in its comments and description. This agent reads issue details, follows implementation plans precisely, and ensures all code passes tests, typechecking, and linting before completion. Examples:\n\n<example>\nContext: User wants to implement a specific issue.\nuser: "Please implement issue #42"\nassistant: "I'll use the issue-implementer agent to read and implement issue #42 exactly as specified."\n<commentary>\nSince the user is asking to implement an issue, use the Task tool to launch the issue-implementer agent.\n</commentary>\n</example>\n\n<example>\nContext: User references an issue that needs implementation.\nuser: "Can you work on the authentication issue we discussed in #15?"\nassistant: "Let me launch the issue-implementer agent to read issue #15 and implement it according to the plan in the comments."\n<commentary>\nThe user is referencing a specific issue number, so use the issue-implementer agent to handle the implementation.\n</commentary>\n</example>
 model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
-effort: {{#if SWARM_MODE}}medium{{/if}}
+{{#if SWARM_MODE}}effort: medium{{/if}}
 color: green
 ---
 

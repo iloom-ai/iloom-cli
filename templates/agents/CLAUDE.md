@@ -41,7 +41,7 @@ Frontmatter fields support Handlebars expressions because template substitution 
 name: iloom-issue-implementer
 description: One-line description of this agent's role
 model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
-effort: {{#if SWARM_MODE}}medium{{/if}}
+{{#if SWARM_MODE}}effort: medium{{/if}}
 color: green         # Optional: terminal color for status display
 tools:               # Optional: restrict available tools
   - Read
@@ -52,7 +52,7 @@ tools:               # Optional: restrict available tools
 Agent prompt content in Markdown...
 ```
 
-When `SWARM_MODE` is falsy, conditional-only values (like `effort: {{#if SWARM_MODE}}medium{{/if}}`) resolve to an empty string, which is treated as "not set" — the agent inherits the session default.
+When `SWARM_MODE` is falsy, conditional lines (like `{{#if SWARM_MODE}}effort: medium{{/if}}`) resolve to an empty line, which is ignored by the parser — the agent inherits the session default.
 
 ## Model and Effort Override Rules
 
