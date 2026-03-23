@@ -99,7 +99,7 @@ The override follows a two-level model:
 
 **Effort Override:**
 
-The `--effort` flag controls Claude's reasoning depth via the `CLAUDE_CODE_EFFORT_LEVEL` environment variable:
+The `--effort` flag controls Claude's reasoning depth:
 - `low` - Quick, straightforward implementation with minimal overhead
 - `medium` - Balanced approach with standard implementation and testing
 - `high` - Comprehensive implementation with extensive testing and documentation
@@ -626,15 +626,13 @@ When `il spin` detects an epic loom (created via `il start --epic` or by confirm
 
 1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
 2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
-3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
-4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
-5. **Copies agents to child worktrees** - Copies `.claude/agents/` from the epic worktree to each child worktree so workers can resolve agent files locally
-6. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+3. **Configures swarm agents** - Sets up the orchestrator and worker agents for the epic and all child worktrees
+4. **Launches orchestrator** - Starts the swarm orchestrator session
 
 The orchestrator then:
 - Analyzes the dependency DAG to identify initially unblocked issues
-- Spawns parallel agents for all unblocked child issues simultaneously
-- Each agent uses the `iloom-swarm-worker` custom agent type, receiving the full iloom workflow as its system prompt
+- Spawns parallel worker agents for all unblocked child issues simultaneously
+- Each worker receives full issue context and implements its assigned issue autonomously
 - Completed work is rebased and fast-forward merged into the epic branch for clean linear history
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
@@ -653,7 +651,7 @@ il spin --skip-cleanup
 
 After all child agents complete and their work is merged into the epic branch, the orchestrator automatically runs a full code review using the `iloom-code-reviewer` agent. This catches cross-cutting issues that individual child agents miss because they each only see their own changes, not the integrated result.
 
-If the review finds any issues (confidence score 80+), a fix agent is spawned to address them before the final commit. The review is non-blocking -- if the reviewer or fix agent fails, the swarm continues to finalization without interruption. Only a single review-fix pass is performed (no re-review loops).
+If the review finds issues, they are automatically fixed before the final commit. The review is non-blocking -- if the reviewer or fix agent fails, the swarm continues to finalization without interruption. Only a single review-fix pass is performed (no re-review loops).
 
 Post-swarm review is enabled by default. To disable it, set `spin.postSwarmReview` to `false` in your settings:
 
@@ -1908,12 +1906,9 @@ Only sibling dependencies (between child issues of the same epic) are included. 
 
 Each child agent runs in complete isolation:
 
-1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm-worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
-2. The agent's system prompt contains the full iloom issue workflow adapted for swarm mode (high-authority instructions)
-3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
-4. On completion, the agent reports back to the orchestrator with status and summary
-
-The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature, both set automatically.
+1. The orchestrator spawns a worker for each child issue, passing its issue number, title, worktree path, and issue body
+2. The worker implements the issue autonomously in its own worktree (branched off the epic branch)
+3. On completion, the worker reports back to the orchestrator with status and summary
 
 **Worker Model Configuration:**
 
@@ -2073,7 +2068,7 @@ Example settings for each mode:
 }
 ```
 
-These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
+These modes only affect swarm behavior — non-swarm sessions continue using each agent's base `model` setting.
 
 To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
 
@@ -2102,7 +2097,7 @@ Configure default effort levels for spin and plan commands in `.iloom/settings.j
 
 **Swarm Orchestrator Effort:**
 
-Set the effort level for the swarm orchestrator using `spin.swarmEffort`. This defaults to `medium` when not configured (matching the current hardcoded behavior):
+Set the effort level for the swarm orchestrator using `spin.swarmEffort`. This defaults to `medium` when not configured:
 
 ```json
 {
