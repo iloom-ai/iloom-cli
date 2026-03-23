@@ -3,11 +3,11 @@
  *
  * The Recap MCP captures session context that scrolls away during Claude sessions:
  * - Goal: The original problem statement
- * - Entries: Decisions, insights, risks, assumptions discovered during the session
+ * - Entries: Decisions, insights, risks, assumptions, fixes discovered during the session
  */
 
 /** Entry types for recap entries */
-export type RecapEntryType = 'decision' | 'insight' | 'risk' | 'assumption' | 'other'
+export type RecapEntryType = 'decision' | 'insight' | 'risk' | 'assumption' | 'fix' | 'other'
 
 /** Artifact types for tracking created items */
 export type RecapArtifactType = 'comment' | 'issue' | 'pr'

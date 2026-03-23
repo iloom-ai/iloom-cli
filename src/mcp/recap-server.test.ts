@@ -91,6 +91,22 @@ describe('recap-server add_entry deduplication', () => {
 				content: 'Found existing helper function',
 			})
 		})
+
+		it('should create a new fix entry and return skipped: false', async () => {
+			const result = await addEntryWithDeduplication(
+				readRecapMock,
+				writeRecapMock,
+				'fix',
+				'Fixed null check in auth handler per review feedback'
+			)
+			expect(result.skipped).toBe(false)
+			expect(result.id).toBe('test-uuid-123')
+			expect(mockRecapFile.entries).toHaveLength(1)
+			expect(mockRecapFile.entries?.[0]).toMatchObject({
+				type: 'fix',
+				content: 'Fixed null check in auth handler per review feedback',
+			})
+		})
 	})
 
 	describe('when adding an entry with duplicate type and content', () => {

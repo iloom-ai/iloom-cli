@@ -1,7 +1,7 @@
 /**
  * Loom Recap MCP Server
  *
- * Captures session context (goal, decisions, insights, risks, assumptions)
+ * Captures session context (goal, decisions, insights, risks, fixes, assumptions)
  * for the VS Code Loom Context Panel.
  *
  * Environment variables:
@@ -234,7 +234,7 @@ server.registerTool(
 			'Append an entry to the recap. If an entry with the same type and content already exists, it will be skipped.',
 		inputSchema: {
 			type: z
-				.enum(['decision', 'insight', 'risk', 'assumption', 'other'])
+				.enum(['decision', 'insight', 'risk', 'assumption', 'fix', 'other'])
 				.describe('Entry type'),
 			content: z.string().describe('Entry content'),
 			worktreePath: z.string().optional().describe('Optional worktree path to scope recap to a specific loom'),
@@ -360,7 +360,7 @@ server.registerTool(
 				z.object({
 					id: z.string(),
 					timestamp: z.string(),
-					type: z.enum(['decision', 'insight', 'risk', 'assumption', 'other']),
+					type: z.enum(['decision', 'insight', 'risk', 'assumption', 'fix', 'other']),
 					content: z.string(),
 				})
 			),

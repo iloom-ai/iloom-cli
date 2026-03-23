@@ -18,7 +18,7 @@ Exposes issue/PR operations to agents. Provider-agnostic — routes to GitHub, L
 
 ### recap-server.ts
 
-Manages the recap system — structured knowledge capture (decisions, insights, risks, artifacts) displayed in the VS Code sidebar.
+Manages the recap system — structured knowledge capture (decisions, insights, risks, fixes, artifacts) displayed in the VS Code sidebar.
 
 **Tools:** `set_goal`, `set_complexity`, `add_entry`, `add_artifact`, `get_recap`, `set_loom_state`, `get_loom_state`
 

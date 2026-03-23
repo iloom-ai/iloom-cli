@@ -199,7 +199,7 @@ export async function writeRecapFile(filePath: string, recap: Record<string, unk
 /**
  * Generate MCP configuration for recap server
  *
- * The recap server captures session context (goal, decisions, insights, risks, assumptions)
+ * The recap server captures session context (goal, decisions, insights, risks, fixes, assumptions)
  * for the VS Code Loom Context Panel.
  *
  * @param loomPath - Absolute path to the loom workspace

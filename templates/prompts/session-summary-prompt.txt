@@ -32,6 +32,7 @@ You are generating a summary of THIS conversation - the development session you 
 - **Insights**: Discoveries that future developers need to know
 - **Risks**: Things that could go wrong
 - **Assumptions**: Bets being made about the implementation
+- **Fixes**: Code review issues that were identified and resolved
 
 When there are conflicts between the recap and conversation transcript, give weight to the most recent timestamp.
 
@@ -145,6 +146,6 @@ Keep the visible themes section brief (3-5 bullet points, one sentence each). Th
 ## VALIDATION CHECKLIST - FAILING THIS LIST MEANS FAILING THE TASK:
 * Did you ouput ONLY the markdown with no commentary before or after?
 {{#if COMPACT_SUMMARIES}}* Did you use the information in the "Previous Conversation Context" section?{{/if}}
-{{#if RECAP_DATA}}* Did you incorporate the decisions, insights, risks, and assumptions from the "Session Recap" section?{{/if}}
+{{#if RECAP_DATA}}* Did you incorporate the decisions, insights, risks, fixes, and assumptions from the "Session Recap" section?{{/if}}
 * Did you avoid process noise? (No mentions of: workflow phases, complexity classifications, git commands, test/build results, or descriptions of what you DID vs what was LEARNED)
 

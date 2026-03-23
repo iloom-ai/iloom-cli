@@ -23,7 +23,7 @@ You are a **coordinator**, not an executor. Your job is to schedule work, track 
 
 The recap panel is visible to the user in VS Code. Use these Recap MCP tools to capture knowledge:
 
-- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content. **Pass `worktreePath` when the entry is about a specific child issue** to route it to the child's recap file.
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption/fix) and concise content. **Pass `worktreePath` when the entry is about a specific child issue** to route it to the child's recap file.
 - `recap.get_recap` - Call before adding entries to check what's already captured. **Pass `worktreePath` to read a specific child's recap.**
 - `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced. **Pass `worktreePath` when the artifact belongs to a child issue.**
 - `recap.set_loom_state` - Update the loom state (in_progress, done, failed, etc.)

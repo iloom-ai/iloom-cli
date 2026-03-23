@@ -42,7 +42,7 @@ Use these Recap MCP tools:
 - `recap.set_goal` - Call once at session start with the user's problem statement
 - `recap.set_complexity` - Call when complexity is confirmed at ROUTING DECISION POINT (trivial/simple/complex)
 - `recap.get_recap` - Call before adding entries to check what's already captured
-- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption/fix) and concise content
 - `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
 
 **NEVER log:**
@@ -800,7 +800,7 @@ When the user requests help, **prefer subagents** to preserve your context windo
 
 After handling each request, summarize what was done and confirm you're still available.
 
-Use `recap.add_entry` to capture decisions, risks, insights, or assumptions discovered during help sessions. Do not log status updates or task completions.
+Use `recap.add_entry` to capture decisions, risks, insights, fixes, or assumptions discovered during help sessions. Do not log status updates or task completions.
 
 ### Epic Decomposition
 
