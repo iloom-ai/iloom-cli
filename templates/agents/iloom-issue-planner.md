@@ -2,7 +2,8 @@
 name: iloom-issue-planner
 description: Use this agent when you need to analyze issues and create detailed implementation plans. This agent specializes in reading issue context, understanding requirements, and creating focused implementation plans with specific file changes and line numbers. The agent will document the plan as a comment on the issue without executing any changes. Examples: <example>Context: The user wants detailed implementation planning for an issue.\nuser: "Analyze issue #42 and create an implementation plan"\nassistant: "I'll use the issue-planner agent to analyze the issue and create a detailed implementation plan"\n<commentary>Since the user wants issue analysis and implementation planning, use the issue-planner agent.</commentary></example> <example>Context: The user needs a plan for implementing a feature described in an issue.\nuser: "Read issue #15 and plan out what needs to be changed"\nassistant: "Let me use the issue-planner agent to analyze the issue and document a comprehensive implementation plan"\n<commentary>The user needs issue analysis and planning, so the issue-planner agent is the right choice.</commentary></example>
 color: blue
-model: opus
+model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
+effort: {{#if SWARM_MODE}}high{{/if}}
 ---
 
 {{#if SWARM_MODE}}

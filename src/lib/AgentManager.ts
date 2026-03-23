@@ -87,13 +87,26 @@ export class AgentManager {
 			caseSensitiveMatch: false,
 		})
 
+		// Enrich template variables with review config before substitution
+		// (must happen before the loop so all agents get the same enriched variables)
+		// Use a local copy to avoid mutating the caller's object
+		const enrichedVariables = templateVariables
+			? { ...templateVariables, ...buildReviewTemplateVariables(!!templateVariables.SWARM_MODE, settings?.agents) }
+			: undefined
+
 		const agents: AgentConfigs = {}
 
 		for (const filename of agentFiles) {
 			const agentPath = path.join(this.agentDir, filename)
 
 			try {
-				const content = await readFile(agentPath, 'utf-8')
+				let content = await readFile(agentPath, 'utf-8')
+
+				// Apply template substitution to raw content BEFORE parsing frontmatter
+				// This allows frontmatter fields (model, effort) to use Handlebars expressions
+				if (enrichedVariables) {
+					content = this.templateManager.substituteVariables(content, enrichedVariables)
+				}
 
 				// Parse markdown with frontmatter
 				const parsed = this.parseMarkdownAgent(content, filename)
@@ -107,20 +120,6 @@ export class AgentManager {
 				logger.debug(`Loaded agent: ${agentName}`)
 			} catch (error) {
 				logger.warn(`Skipping ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`)
-			}
-		}
-
-		// Apply template variable substitution to agent prompts if variables provided
-		if (templateVariables) {
-			// Extract review config from settings and add to template variables
-			Object.assign(templateVariables, buildReviewTemplateVariables(!!templateVariables.SWARM_MODE, settings?.agents))
-
-			for (const [agentName, agentConfig] of Object.entries(agents)) {
-				agents[agentName] = {
-					...agentConfig,
-					prompt: this.templateManager.substituteVariables(agentConfig.prompt, templateVariables),
-				}
-				logger.debug(`Applied template substitution to agent: ${agentName}`)
 			}
 		}
 

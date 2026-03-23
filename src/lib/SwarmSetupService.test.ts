@@ -168,46 +168,48 @@ describe('SwarmSetupService', () => {
 				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: haiku')
 			})
 
-			it('applies default swarmModel (sonnet) for agents in default map when no swarmModel configured', async () => {
+			it('uses model from loadAgents (frontmatter swarm conditional) when no swarmModel configured', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { model: 'opus' },
 					},
 				} as unknown as IloomSettings)
 
+				// loadAgents now returns swarm-appropriate model from frontmatter conditional
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
 						prompt: 'Implement things',
 						tools: ['Bash', 'Read'],
+						model: 'sonnet', // frontmatter resolves to sonnet in SWARM_MODE
+					},
+				})
+
+				await service.renderSwarmAgents('/Users/dev/project-epic-610')
+
+				// Model comes from loadAgents (frontmatter swarm conditional), not a hardcoded map
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
+			})
+
+			it('uses model from loadAgents (frontmatter) for analyzer agent', async () => {
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
+
+				// Analyzer frontmatter declares model: opus (same in both modes)
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
+					'iloom-issue-analyzer': {
+						description: 'Analyzer agent',
+						prompt: 'Analyze things',
 						model: 'opus',
 					},
 				})
 
 				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// iloom-issue-implementer is in the default swarmModel map, so it should be sonnet
-				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
-			})
-
-			it('applies default swarmModel (opus) for analyzer agent', async () => {
-				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
-
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
-					'iloom-issue-analyzer': {
-						description: 'Analyzer agent',
-						prompt: 'Analyze things',
-						model: 'sonnet',
-					},
-				})
-
-				await service.renderSwarmAgents('/Users/dev/project-epic-610')
-
-				// iloom-issue-analyzer is in the default swarmModel map as opus
+				// Model comes from loadAgents (frontmatter), which is opus for analyzer
 				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: opus')
 			})
 
-			it('non-swarm model override does not affect swarm mode when default map covers the agent', async () => {
+			it('user model setting applies in swarm mode when no swarmModel is set', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-implementer': { model: 'haiku' },
@@ -216,6 +218,8 @@ describe('SwarmSetupService', () => {
 					},
 				} as unknown as IloomSettings)
 
+				// loadAgents now returns agents with user-overridden model (haiku)
+				// since settings.model overrides frontmatter in loadAgents
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
@@ -236,11 +240,11 @@ describe('SwarmSetupService', () => {
 
 				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// Even though non-swarm model is set to haiku, swarm defaults override
-				// Check agent files (which carry the full prompt and model)
-				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: sonnet')
-				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: opus')
-				expect(getAgentContent('iloom-swarm-issue-planner')).toContain('model: sonnet')
+				// Without swarmModel set, user's model setting now applies in swarm mode
+				// (previously hardcoded defaults would override)
+				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('model: haiku')
+				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('model: haiku')
+				expect(getAgentContent('iloom-swarm-issue-planner')).toContain('model: haiku')
 			})
 
 			it('explicit swarmModel overrides both non-swarm model and default map', async () => {
@@ -333,34 +337,36 @@ describe('SwarmSetupService', () => {
 				return call ? (call[1] as string) : undefined
 			}
 
-			it('applies default swarmEffort for agents in default effort map', async () => {
+			it('uses effort from loadAgents (frontmatter swarm conditionals) when no user override', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
 
+				// loadAgents now returns agents with effort from frontmatter conditionals
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-analyzer': {
 						description: 'Analyzer agent',
 						prompt: 'Analyze things',
-						model: 'sonnet',
+						model: 'opus',
+						effort: 'high', // from frontmatter: {{#if SWARM_MODE}}high{{/if}}
 					},
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
 						prompt: 'Implement things',
 						model: 'sonnet',
+						effort: 'medium', // from frontmatter: {{#if SWARM_MODE}}medium{{/if}}
 					},
 					'iloom-issue-complexity-evaluator': {
 						description: 'Evaluator agent',
 						prompt: 'Evaluate things',
-						model: 'sonnet',
+						model: 'haiku',
+						effort: 'low', // from frontmatter: {{#if SWARM_MODE}}low{{/if}}
 					},
 				})
 
 				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// Analyzer default effort is 'high'
+				// Effort values come from loadAgents (frontmatter conditionals)
 				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('effort: high')
-				// Implementer default effort is 'medium'
 				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('effort: medium')
-				// Complexity evaluator default effort is 'low'
 				expect(getAgentContent('iloom-swarm-issue-complexity-evaluator')).toContain('effort: low')
 			})
 
@@ -384,7 +390,7 @@ describe('SwarmSetupService', () => {
 				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('effort: max')
 			})
 
-			it('explicit swarmEffort overrides default effort map', async () => {
+			it('explicit swarmEffort overrides frontmatter effort', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({
 					agents: {
 						'iloom-issue-analyzer': { swarmEffort: 'low' },
@@ -395,24 +401,27 @@ describe('SwarmSetupService', () => {
 					'iloom-issue-analyzer': {
 						description: 'Analyzer agent',
 						prompt: 'Analyze things',
-						model: 'sonnet',
+						model: 'opus',
+						effort: 'high', // from frontmatter swarm conditional
 					},
 				})
 
 				await service.renderSwarmAgents('/Users/dev/project-epic-610')
 
-				// Default for analyzer is 'high' but explicit swarmEffort 'low' should win
+				// Frontmatter resolves to 'high' but explicit swarmEffort 'low' should win
 				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('effort: low')
 			})
 
 			it('includes effort in skill wrapper frontmatter', async () => {
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValueOnce({} as unknown as IloomSettings)
 
+				// loadAgents now returns agents with effort from frontmatter conditionals
 				vi.mocked(mockAgentManager.loadAgents).mockResolvedValueOnce({
 					'iloom-issue-implementer': {
 						description: 'Implementer agent',
 						prompt: 'Implement things',
 						model: 'sonnet',
+						effort: 'medium', // from frontmatter: {{#if SWARM_MODE}}medium{{/if}}
 					},
 				})
 
@@ -422,7 +431,7 @@ describe('SwarmSetupService', () => {
 					(call) => (call[0] as string).endsWith('SKILL.md'),
 				)
 				const skillContent = skillFileCall![1] as string
-				// Implementer default effort is 'medium'
+				// Effort comes from frontmatter swarm conditional
 				expect(skillContent).toContain('effort: medium')
 			})
 		})

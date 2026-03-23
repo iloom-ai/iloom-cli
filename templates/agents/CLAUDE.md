@@ -34,11 +34,14 @@ complexity-evaluator → analyzer (or analyze-and-plan for SIMPLE) → planner �
 
 ## YAML Frontmatter Format
 
+Frontmatter fields support Handlebars expressions because template substitution runs on the raw file content **before** YAML parsing. This allows conditional defaults based on execution mode (e.g., swarm vs regular).
+
 ```yaml
 ---
 name: iloom-issue-implementer
 description: One-line description of this agent's role
-model: opus          # Default model (can be overridden by settings)
+model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
+effort: {{#if SWARM_MODE}}medium{{/if}}
 color: green         # Optional: terminal color for status display
 tools:               # Optional: restrict available tools
   - Read
@@ -49,15 +52,17 @@ tools:               # Optional: restrict available tools
 Agent prompt content in Markdown...
 ```
 
-## Model Override Rules
+When `SWARM_MODE` is falsy, conditional-only values (like `effort: {{#if SWARM_MODE}}medium{{/if}}`) resolve to an empty string, which is treated as "not set" — the agent inherits the session default.
 
-Agent models resolve in this order (highest priority first):
+## Model and Effort Override Rules
+
+Agent models and effort resolve in this order (highest priority first):
 1. **CLI flag**: `--set agents.iloom-issue-implementer.model=sonnet`
-2. **Settings**: `settings.agents["iloom-issue-implementer"].model`
-3. **Swarm model defaults**: `SwarmSetupService` applies swarm-specific defaults (e.g., haiku for complexity evaluator)
-4. **Frontmatter**: The `model` field in the YAML above
+2. **Settings**: `settings.agents["iloom-issue-implementer"].model` / `.effort`
+3. **Swarm settings**: `settings.agents["iloom-issue-implementer"].swarmModel` / `.swarmEffort` (applied by `SwarmSetupService` in swarm mode)
+4. **Frontmatter**: The `model` / `effort` field in YAML above (which may use `{{#if SWARM_MODE}}` conditionals for mode-specific defaults)
 
-Do NOT hardcode model choices in agent templates to work around performance issues — use the settings system instead.
+Swarm-specific model and effort defaults are declared directly in agent template frontmatter using `{{#if SWARM_MODE}}` conditionals, not in hardcoded maps.
 
 ## Swarm Agent Rendering
 

@@ -1957,17 +1957,17 @@ Each agent supports a `swarmModel` field for a clean, per-agent swarm model over
 }
 ```
 
-If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see below) — not the agent's base `model`. This separation is intentional: swarms run many agents in parallel and costs scale quickly, so swarm model choices should always be explicit.
+If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the agent uses its frontmatter default — which may differ between swarm and non-swarm modes via `{{#if SWARM_MODE}}` conditionals in the template. If the user has also set a base `model` in settings, that takes precedence over the frontmatter default in both modes.
 
-**Important:** Changing an agent's `model` only affects non-swarm mode (single-issue looms via `il start`). To change an agent's model in swarm mode, use `swarmModel` or choose a different Swarm Quality Mode.
+**Important:** Agent templates declare mode-specific defaults using Handlebars conditionals (e.g., `model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}`). Setting `model` in agent settings overrides the frontmatter default in both swarm and non-swarm mode. To override the model only in swarm mode, use `swarmModel`.
 
 With the configuration above:
 
 | Agent | Non-swarm mode | Swarm mode |
 |-------|---------------|------------|
-| `iloom-issue-implementer` | `opus` | `sonnet` (swarmModel) |
-| `iloom-issue-complexity-evaluator` | `haiku` | `haiku` (swarmModel) |
-| `iloom-issue-analyzer` | `.md` default | `opus` (Balanced mode default) |
+| `iloom-issue-implementer` | `opus` (settings) | `sonnet` (swarmModel) |
+| `iloom-issue-complexity-evaluator` | `haiku` (settings) | `haiku` (swarmModel) |
+| `iloom-issue-analyzer` | `opus` (frontmatter default) | `opus` (frontmatter swarm default) |
 
 **Example using the `--set` flag:**
 
@@ -2138,7 +2138,7 @@ Each agent supports `effort` and `swarmEffort` fields, following the same patter
 
 **Default Swarm Effort Levels:**
 
-When no user configuration is provided, swarm agents use these defaults:
+When no user configuration is provided, swarm agents use effort defaults declared in their template frontmatter via `{{#if SWARM_MODE}}` conditionals:
 
 | Agent | Default Swarm Effort |
 |-------|---------------------|

@@ -3,6 +3,7 @@ name: iloom-issue-analyzer
 description: Use this agent when you need to analyze and research issues, bugs, or enhancement requests. The agent will investigate the codebase, recent commits, and third-party dependencies to identify root causes WITHOUT proposing solutions. Ideal for initial issue triage, regression analysis, and documenting technical findings for team discussion.\n\nExamples:\n<example>\nContext: User wants to analyze a newly reported bug in issue #42\nuser: "Please analyze issue #42 - users are reporting that the login button doesn't work on mobile"\nassistant: "I'll use the issue-analyzer agent to investigate this issue and document my findings."\n<commentary>\nSince this is a request to analyze an issue, use the Task tool to launch the issue-analyzer agent to research the problem.\n</commentary>\n</example>\n<example>\nContext: User needs to understand a regression that appeared after recent changes\nuser: "Can you look into issue #78? It seems like something broke after yesterday's deployment"\nassistant: "Let me launch the issue-analyzer agent to research this regression and identify what changed."\n<commentary>\nThe user is asking for issue analysis and potential regression investigation, so use the issue-analyzer agent.\n</commentary>\n</example>
 color: pink
 model: opus
+effort: {{#if SWARM_MODE}}high{{/if}}
 ---
 
 {{#if SWARM_MODE}}

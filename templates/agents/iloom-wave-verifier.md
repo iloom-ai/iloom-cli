@@ -2,6 +2,7 @@
 name: iloom-wave-verifier
 description: Wave verification agent that checks must-have criteria from child issues after each swarm wave, invokes fix skills for failures, and reports structured results.\n\nExamples:\n<example>\nContext: Orchestrator wants to verify that wave 1 work meets acceptance criteria\nuser: "Verify must-haves for issues #101, #102, #103 from wave 1"\nassistant: "I'll check all must-have criteria from those issues against the codebase and report results."\n<commentary>\nThe orchestrator needs wave verification after a completed wave, so use the iloom-wave-verifier agent.\n</commentary>\n</example>\n<example>\nContext: Swarm orchestrator needs to gate the next wave on verification passing\nuser: "Run wave verification for child issues #45, #46 before proceeding to wave 2"\nassistant: "I'll verify all must-haves for the specified issues, fix any failures, and return a structured report."\n<commentary>\nWave gating requires verification of completed work, so use the iloom-wave-verifier agent.\n</commentary>\n</example>
 model: opus
+effort: high
 color: red
 ---
 

@@ -1,8 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager, type ClaudeModel } from './SettingsManager.js'
-import type { EffortLevel } from '../types/index.js'
+import { SettingsManager } from './SettingsManager.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
@@ -62,41 +61,14 @@ export class SwarmSetupService {
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
 
-		// Default swarmModel map for "Balanced" mode. All swarm phase agents are
-		// listed explicitly so that swarm mode never accidentally inherits a
-		// non-swarm model override. User-configured swarmModel values always
-		// take precedence.
-		const defaultSwarmModels: Record<string, ClaudeModel> = {
-			'iloom-issue-analyzer': 'opus',
-			'iloom-issue-analyze-and-plan': 'opus',
-			'iloom-issue-planner': 'sonnet',
-			'iloom-issue-implementer': 'sonnet',
-			'iloom-issue-enhancer': 'sonnet',
-			'iloom-code-reviewer': 'sonnet',
-			'iloom-issue-complexity-evaluator': 'haiku',
-		}
-
-		// Default swarmEffort map for swarm phase agents. Agents that do
-		// deep analysis/planning get higher effort, while implementation
-		// and review agents use medium, and simple evaluators use low.
-		const defaultSwarmEfforts: Record<string, EffortLevel> = {
-			'iloom-issue-analyzer': 'high',
-			'iloom-issue-analyze-and-plan': 'high',
-			'iloom-issue-planner': 'high',
-			'iloom-issue-implementer': 'medium',
-			'iloom-issue-enhancer': 'medium',
-			'iloom-code-reviewer': 'medium',
-			'iloom-issue-complexity-evaluator': 'low',
-		}
-
-		// Apply per-agent swarmModel and swarmEffort overrides (user-configured takes precedence over defaults)
+		// Apply per-agent swarmModel and swarmEffort overrides from user settings.
+		// Default swarm model/effort values are now declared in agent template frontmatter
+		// using {{#if SWARM_MODE}} conditionals, so only user overrides are needed here.
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
 			let updated = agentConfig
 			const userSwarmModel = settings?.agents?.[agentName]?.swarmModel
 			if (userSwarmModel) {
 				updated = { ...updated, model: userSwarmModel }
-			} else if (defaultSwarmModels[agentName]) {
-				updated = { ...updated, model: defaultSwarmModels[agentName] }
 			}
 
 			const userSwarmEffort = settings?.agents?.[agentName]?.swarmEffort
@@ -105,8 +77,6 @@ export class SwarmSetupService {
 				updated = { ...updated, effort: userSwarmEffort }
 			} else if (userBaseEffort) {
 				updated = { ...updated, effort: userBaseEffort }
-			} else if (!updated.effort && defaultSwarmEfforts[agentName]) {
-				updated = { ...updated, effort: defaultSwarmEfforts[agentName] }
 			}
 			agents[agentName] = updated
 		}

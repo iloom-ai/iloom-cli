@@ -953,16 +953,24 @@ Prompt`
 			}
 
 			const templateVariables = {} as Record<string, unknown>
+
+			// Spy on substituteVariables to capture the enriched variables
+			const substituteSpy = vi.spyOn(manager['templateManager'], 'substituteVariables')
+
 			await manager.loadAgents(settings as never, templateVariables)
 
-			// Verify key review fields are populated (detailed logic tested in PromptTemplateManager.test.ts)
-			expect(templateVariables.REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.ARTIFACT_REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
-			expect(templateVariables.HAS_ARTIFACT_REVIEW_GEMINI).toBe(true)
-			expect(templateVariables.ENHANCER_REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(true)
-			expect(templateVariables.ANALYZER_REVIEW_ENABLED).toBe(false)
+			// Verify enriched variables were passed to substituteVariables (not the original object)
+			const enrichedVars = substituteSpy.mock.calls[0][1] as Record<string, unknown>
+			expect(enrichedVars.REVIEW_ENABLED).toBe(true)
+			expect(enrichedVars.ARTIFACT_REVIEW_ENABLED).toBe(true)
+			expect(enrichedVars.HAS_ARTIFACT_REVIEW_CLAUDE).toBe(true)
+			expect(enrichedVars.HAS_ARTIFACT_REVIEW_GEMINI).toBe(true)
+			expect(enrichedVars.ENHANCER_REVIEW_ENABLED).toBe(true)
+			expect(enrichedVars.PLANNER_REVIEW_ENABLED).toBe(true)
+			expect(enrichedVars.ANALYZER_REVIEW_ENABLED).toBe(false)
+
+			// Original templateVariables should NOT be mutated
+			expect(templateVariables.REVIEW_ENABLED).toBeUndefined()
 		})
 
 		it('should not populate review fields when templateVariables is not provided', async () => {
@@ -1011,10 +1019,13 @@ Prompt`
 			}
 
 			const templateVariables = { SWARM_MODE: true } as Record<string, unknown>
+			const substituteSpy = vi.spyOn(manager['templateManager'], 'substituteVariables')
+
 			await manager.loadAgents(settings as never, templateVariables)
 
 			// When SWARM_MODE is true, swarmReview: false should override review: true
-			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(false)
+			const enrichedVars = substituteSpy.mock.calls[0][1] as Record<string, unknown>
+			expect(enrichedVars.PLANNER_REVIEW_ENABLED).toBe(false)
 		})
 
 		it('should pass false for isSwarmMode when SWARM_MODE is not in templateVariables', async () => {
@@ -1038,10 +1049,145 @@ Prompt`
 			}
 
 			const templateVariables = {} as Record<string, unknown>
+			const substituteSpy = vi.spyOn(manager['templateManager'], 'substituteVariables')
+
 			await manager.loadAgents(settings as never, templateVariables)
 
 			// When SWARM_MODE is not set, review: true should be used (swarmReview ignored)
-			expect(templateVariables.PLANNER_REVIEW_ENABLED).toBe(true)
+			const enrichedVars = substituteSpy.mock.calls[0][1] as Record<string, unknown>
+			expect(enrichedVars.PLANNER_REVIEW_ENABLED).toBe(true)
+		})
+	})
+
+	describe('template substitution in frontmatter', () => {
+		it('should resolve Handlebars expressions in frontmatter model field before parsing', async () => {
+			const mockTemplateManager = {
+				substituteVariables: vi.fn((content: string, vars: Record<string, unknown>) => {
+					// Simulate Handlebars: resolve {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
+					return content.replace(
+						/\{\{#if SWARM_MODE\}\}sonnet\{\{else\}\}opus\{\{\/if\}\}/g,
+						vars.SWARM_MODE ? 'sonnet' : 'opus',
+					)
+				}),
+			}
+
+			const managerWithTemplate = new AgentManager('templates/agents', mockTemplateManager as never)
+
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+			vi.mocked(readFile).mockResolvedValueOnce(`---
+name: test-agent
+description: Test agent
+model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
+---
+
+Prompt content`)
+
+			const result = await managerWithTemplate.loadAgents(undefined, { SWARM_MODE: true })
+
+			expect(result['test-agent'].model).toBe('sonnet')
+			expect(mockTemplateManager.substituteVariables).toHaveBeenCalled()
+		})
+
+		it('should resolve to non-swarm defaults when SWARM_MODE is falsy', async () => {
+			const mockTemplateManager = {
+				substituteVariables: vi.fn((content: string, vars: Record<string, unknown>) => {
+					return content.replace(
+						/\{\{#if SWARM_MODE\}\}sonnet\{\{else\}\}opus\{\{\/if\}\}/g,
+						vars.SWARM_MODE ? 'sonnet' : 'opus',
+					)
+				}),
+			}
+
+			const managerWithTemplate = new AgentManager('templates/agents', mockTemplateManager as never)
+
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+			vi.mocked(readFile).mockResolvedValueOnce(`---
+name: test-agent
+description: Test agent
+model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}
+---
+
+Prompt content`)
+
+			const result = await managerWithTemplate.loadAgents(undefined, {})
+
+			expect(result['test-agent'].model).toBe('opus')
+		})
+
+		it('should resolve Handlebars expressions in frontmatter effort field', async () => {
+			const mockTemplateManager = {
+				substituteVariables: vi.fn((content: string, vars: Record<string, unknown>) => {
+					return content.replace(
+						/\{\{#if SWARM_MODE\}\}medium\{\{\/if\}\}/g,
+						vars.SWARM_MODE ? 'medium' : '',
+					)
+				}),
+			}
+
+			const managerWithTemplate = new AgentManager('templates/agents', mockTemplateManager as never)
+
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+			vi.mocked(readFile).mockResolvedValueOnce(`---
+name: test-agent
+description: Test agent
+model: sonnet
+effort: {{#if SWARM_MODE}}medium{{/if}}
+---
+
+Prompt content`)
+
+			const result = await managerWithTemplate.loadAgents(undefined, { SWARM_MODE: true })
+
+			expect(result['test-agent'].effort).toBe('medium')
+		})
+
+		it('should handle empty effort when SWARM_MODE is falsy', async () => {
+			const mockTemplateManager = {
+				substituteVariables: vi.fn((content: string, vars: Record<string, unknown>) => {
+					return content.replace(
+						/\{\{#if SWARM_MODE\}\}medium\{\{\/if\}\}/g,
+						vars.SWARM_MODE ? 'medium' : '',
+					)
+				}),
+			}
+
+			const managerWithTemplate = new AgentManager('templates/agents', mockTemplateManager as never)
+
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+			vi.mocked(readFile).mockResolvedValueOnce(`---
+name: test-agent
+description: Test agent
+model: sonnet
+effort: {{#if SWARM_MODE}}medium{{/if}}
+---
+
+Prompt content`)
+
+			const result = await managerWithTemplate.loadAgents(undefined, {})
+
+			// Empty effort string should not pass isEffortLevel check, so effort is undefined
+			expect(result['test-agent'].effort).toBeUndefined()
+		})
+
+		it('should not apply template substitution when templateVariables is not provided', async () => {
+			const mockTemplateManager = {
+				substituteVariables: vi.fn(),
+			}
+
+			const managerWithTemplate = new AgentManager('templates/agents', mockTemplateManager as never)
+
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
+			vi.mocked(readFile).mockResolvedValueOnce(`---
+name: test-agent
+description: Test agent
+model: sonnet
+---
+
+Prompt content`)
+
+			await managerWithTemplate.loadAgents()
+
+			expect(mockTemplateManager.substituteVariables).not.toHaveBeenCalled()
 		})
 	})
 
