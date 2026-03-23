@@ -43,7 +43,7 @@ After creating or updating any issue comment, use the Recap MCP tools:
 
 This enables the recap panel to show quick-reference links to artifacts created during the session.
 
-- When addressing issues identified during code review, use `recap.add_entry` with type `fix` to log what was resolved (e.g., "Fixed null check in auth handler per review feedback").
+**Do NOT log `fix` recap entries** — the orchestrator tracks which review findings were addressed. Only use `recap.add_artifact` for comments you create.
 
 {{#if SWARM_MODE}}
 **IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.

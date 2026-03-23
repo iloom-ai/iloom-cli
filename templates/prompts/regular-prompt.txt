@@ -37,6 +37,7 @@ The recap panel is visible to the user in VS Code. They don't care about your in
 2. **Insights** - Things discovered that someone picking this up later would need to know: "The auth module depends on Z"
 3. **Risks** - Things that could go wrong: "This assumes X, will break if Y"
 4. **Assumptions** - Bets you're making: "Assuming backwards compat not needed"
+5. **Fixes** - Code review findings you addressed: "Fixed null check in auth handler per review feedback"
 
 Use these Recap MCP tools:
 - `recap.set_goal` - Call once at session start with the user's problem statement
