@@ -2329,7 +2329,7 @@ describe('claude utils', () => {
 				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp', '--no-session-persistence'],
 				expect.objectContaining({
 					input: expect.stringContaining(issueTitle),
-					env: expect.objectContaining({ CLAUDE_CODE_SIMPLE: '1' }),
+					env: expect.objectContaining({ CLAUDECODE: '0' }),
 				})
 			)
 		})
