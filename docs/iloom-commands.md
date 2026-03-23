@@ -2139,7 +2139,7 @@ When no user configuration is provided, swarm agents use these defaults:
 | `iloom-issue-implementer` | `medium` |
 | `iloom-issue-enhancer` | `medium` |
 | `iloom-code-reviewer` | `medium` |
-| `iloom-issue-complexity-evaluator` | `low` |
+| `iloom-issue-complexity-evaluator` | `high` |
 
 **Effort Resolution Order:**
 

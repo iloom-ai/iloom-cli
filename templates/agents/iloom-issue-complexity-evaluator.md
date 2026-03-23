@@ -3,7 +3,7 @@ name: iloom-issue-complexity-evaluator
 description: Use this agent when you need to quickly assess the complexity of an issue before deciding on the appropriate workflow. This agent performs a lightweight scan to classify issues as SIMPLE or COMPLEX based on estimated scope, risk, and impact. Runs first before any detailed analysis or planning.
 color: orange
 model: haiku
-{{#if SWARM_MODE}}effort: low{{/if}}
+{{#if SWARM_MODE}}effort: high{{/if}}
 ---
 
 {{#if SWARM_MODE}}

@@ -358,7 +358,7 @@ describe('SwarmSetupService', () => {
 						description: 'Evaluator agent',
 						prompt: 'Evaluate things',
 						model: 'haiku',
-						effort: 'low', // from frontmatter: {{#if SWARM_MODE}}low{{/if}}
+						effort: 'high', // from frontmatter: {{#if SWARM_MODE}}high{{/if}}
 					},
 				})
 
@@ -367,7 +367,7 @@ describe('SwarmSetupService', () => {
 				// Effort values come from loadAgents (frontmatter conditionals)
 				expect(getAgentContent('iloom-swarm-issue-analyzer')).toContain('effort: high')
 				expect(getAgentContent('iloom-swarm-issue-implementer')).toContain('effort: medium')
-				expect(getAgentContent('iloom-swarm-issue-complexity-evaluator')).toContain('effort: low')
+				expect(getAgentContent('iloom-swarm-issue-complexity-evaluator')).toContain('effort: high')
 			})
 
 			it('uses per-agent swarmEffort when configured', async () => {
