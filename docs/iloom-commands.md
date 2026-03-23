@@ -1957,17 +1957,13 @@ Each agent supports a `swarmModel` field for a clean, per-agent swarm model over
 }
 ```
 
-If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the agent uses its frontmatter default — which may differ between swarm and non-swarm modes via `{{#if SWARM_MODE}}` conditionals in the template. If the user has also set a base `model` in settings, that takes precedence over the frontmatter default in both modes.
-
-**Important:** Agent templates declare mode-specific defaults using Handlebars conditionals (e.g., `model: {{#if SWARM_MODE}}sonnet{{else}}opus{{/if}}`). Setting `model` in agent settings overrides the frontmatter default in both swarm and non-swarm mode. To override the model only in swarm mode, use `swarmModel`.
-
 With the configuration above:
 
 | Agent | Non-swarm mode | Swarm mode |
 |-------|---------------|------------|
 | `iloom-issue-implementer` | `opus` (settings) | `sonnet` (swarmModel) |
 | `iloom-issue-complexity-evaluator` | `haiku` (settings) | `haiku` (swarmModel) |
-| `iloom-issue-analyzer` | `opus` (frontmatter default) | `opus` (frontmatter swarm default) |
+| `iloom-issue-analyzer` | `opus` (default) | `opus` (default) |
 
 **Example using the `--set` flag:**
 
@@ -2083,7 +2079,7 @@ To configure, run `il init` — you'll be asked during setup, or you can change 
 
 ### Effort Configuration
 
-Effort levels control Claude's reasoning depth. iloom propagates effort to Claude Code via the `CLAUDE_CODE_EFFORT_LEVEL` environment variable for top-level sessions and via per-agent `effort:` frontmatter for agent-level overrides.
+Effort levels control Claude's reasoning depth.
 
 **Valid effort levels:** `low`, `medium`, `high`, `max`
 
@@ -2138,7 +2134,7 @@ Each agent supports `effort` and `swarmEffort` fields, following the same patter
 
 **Default Swarm Effort Levels:**
 
-When no user configuration is provided, swarm agents use effort defaults declared in their template frontmatter via `{{#if SWARM_MODE}}` conditionals:
+When no user configuration is provided, swarm agents use these defaults:
 
 | Agent | Default Swarm Effort |
 |-------|---------------------|
@@ -2158,8 +2154,6 @@ Effort is resolved with the following priority (highest first):
 2. Loom metadata (set via `il start --effort`)
 3. Settings (`spin.effort` / `plan.effort`)
 4. No effort set (defers to Claude Code default)
-
-For per-agent effort, Claude Code resolves: agent frontmatter `effort:` > `CLAUDE_CODE_EFFORT_LEVEL` env var > session default.
 
 **Example using the `--set` flag:**
 
