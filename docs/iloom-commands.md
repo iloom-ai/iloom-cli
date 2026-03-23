@@ -1952,6 +1952,10 @@ Each agent supports a `swarmModel` field for a clean, per-agent swarm model over
 }
 ```
 
+If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see below) — not the agent's base `model`. This separation is intentional: swarms run many agents in parallel and costs scale quickly, so swarm model choices should always be explicit.
+
+**Important:** Changing an agent's `model` only affects non-swarm mode (single-issue looms via `il start`). To change an agent's model in swarm mode, use `swarmModel` or choose a different Swarm Quality Mode.
+
 With the configuration above:
 
 | Agent | Non-swarm mode | Swarm mode |
