@@ -542,7 +542,7 @@ IMPORTANT: Only fix the specific issues identified in the review findings. Do NO
 ````
 
 **Handle the subagent result:**
-- If the fix agent succeeds: log "Post-swarm review: N findings addressed, fix committed."
+- If the fix agent succeeds: log a `fix` recap entry for each finding addressed (e.g., `recap.add_entry({ type: "fix", content: "Fixed missing null check in auth handler" })`). Then log "Post-swarm review: N findings addressed, fix committed."
 - If the fix agent fails: log the failure and continue. Auto-fix failure is non-blocking.
 
 **Single pass only.** Do NOT re-review after fixing. This prevents infinite review-fix loops.

@@ -406,7 +406,7 @@ Always prepend: `"Your working directory is <worktree-path>. cd there before doi
 7a. Run artifact review on implementation output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
 8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via /iloom-swarm-code-reviewer skill
-9. If critical/high issues found, auto-fix and optionally re-review
+9. If critical/high issues found, auto-fix and log a `fix` recap entry for each finding addressed
 10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
 {{else}}
@@ -1256,9 +1256,11 @@ This section is about reviewing code changes for quality, security, and complian
 3. If critical, high, or medium priority issues found:
 {{#if ONE_SHOT_MODE}}
    - Automatically implement the recommended fixes for critical, high, and medium priority issues without asking
+   - After fixing each issue, log a `fix` recap entry describing what was resolved (e.g., `recap.add_entry({ type: "fix", content: "Fixed missing null check in auth handler" })`)
 {{else}}
    - Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
    - Wait for user response before continuing
+   - After fixing each issue, log a `fix` recap entry describing what was resolved (e.g., `recap.add_entry({ type: "fix", content: "Fixed missing null check in auth handler" })`)
 {{/if}}
 {{/if}}
 
