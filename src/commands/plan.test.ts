@@ -52,7 +52,7 @@ vi.mock('../lib/SettingsManager.js', () => ({
 		getPlanPlanner: vi.fn().mockReturnValue('claude'),
 		getPlanReviewer: vi.fn().mockReturnValue('none'),
 		getPlanWaveVerification: vi.fn().mockReturnValue(true),
-		getPlanEffort: vi.fn().mockReturnValue(undefined),
+		getPlanEffort: vi.fn().mockReturnValue('high'),
 	})),
 }))
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
@@ -238,7 +238,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
-				getPlanEffort: vi.fn().mockReturnValue(undefined),
+				getPlanEffort: vi.fn().mockReturnValue('high'),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
@@ -264,7 +264,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
-				getPlanEffort: vi.fn().mockReturnValue(undefined),
+				getPlanEffort: vi.fn().mockReturnValue('high'),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('jira')
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
@@ -290,7 +290,7 @@ describe('PlanCommand', () => {
 				getPlanPlanner: vi.fn().mockReturnValue('claude'),
 				getPlanReviewer: vi.fn().mockReturnValue('none'),
 				getPlanWaveVerification: vi.fn().mockReturnValue(true),
-				getPlanEffort: vi.fn().mockReturnValue(undefined),
+				getPlanEffort: vi.fn().mockReturnValue('high'),
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
 
@@ -426,21 +426,13 @@ describe('PlanCommand', () => {
 	})
 
 	describe('effort support', () => {
-		it('sets CLAUDE_CODE_EFFORT_LEVEL when effort is provided', async () => {
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+		it('passes effort in ClaudeCliOptions when effort is provided', async () => {
+			await command.execute(undefined, undefined, undefined, undefined, undefined, undefined, 'high')
 
-			try {
-				await command.execute(undefined, undefined, undefined, undefined, undefined, undefined, 'high')
-
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high')
-			} finally {
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
-			}
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ effort: 'high' })
+			)
 		})
 
 		it('reads effort from settings.plan.effort when CLI not provided', async () => {
@@ -455,37 +447,21 @@ describe('PlanCommand', () => {
 			}) as unknown as InstanceType<typeof SettingsManager>)
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
 
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+			await command.execute()
 
-			try {
-				await command.execute()
-
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('low')
-			} finally {
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
-			}
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ effort: 'low' })
+			)
 		})
 
-		it('does not set env var when no effort configured', async () => {
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
+		it('passes "high" default effort when no effort configured', async () => {
+			await command.execute()
 
-			try {
-				await command.execute()
-
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined()
-			} finally {
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
-			}
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ effort: 'high' })
+			)
 		})
 	})
 

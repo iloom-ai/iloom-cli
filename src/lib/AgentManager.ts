@@ -8,6 +8,7 @@ import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
 import { VALID_CLAUDE_MODELS, type IloomSettings } from './SettingsManager.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from './PromptTemplateManager.js'
+import { isEffortLevel, type EffortLevel } from '../types/index.js'
 
 // Agent schema interface
 export interface AgentConfig {
@@ -15,7 +16,7 @@ export interface AgentConfig {
 	prompt: string
 	tools?: string[]  // Optional - when omitted, agent inherits all tools from parent
 	model: string
-	effort?: string  // Optional effort level (low/medium/high/max) for Claude Code
+	effort?: EffortLevel  // Optional effort level (low/medium/high/max) for Claude Code
 	color?: string
 }
 
@@ -226,7 +227,7 @@ export class AgentManager {
 				prompt: markdownBody.trim(),
 				model: data.model,
 				...(tools && { tools }),
-				...(data.effort && { effort: data.effort }),
+				...(isEffortLevel(data.effort) && { effort: data.effort }),
 				...(data.color && { color: data.color }),
 			}
 

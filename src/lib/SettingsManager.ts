@@ -4,6 +4,10 @@ import os from 'os'
 import { z } from 'zod'
 import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
+// Re-export from canonical location for backward compatibility
+export { VALID_EFFORT_LEVELS, type EffortLevel } from '../types/index.js'
+import { VALID_EFFORT_LEVELS } from '../types/index.js'
+import type { EffortLevel } from '../types/index.js'
 
 // Merge mode: canonical values + legacy aliases accepted at parse time
 export const mergeModeValues = ['local', 'pr', 'draft-pr', 'github-pr', 'github-draft-pr', 'bitbucket-pr'] as const
@@ -16,10 +20,6 @@ const mergeModeTransform = (val: string): MergeMode => {
 // Valid Claude model shorthands: standard + 1M context window variants
 export const VALID_CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const
 export type ClaudeModel = (typeof VALID_CLAUDE_MODELS)[number]
-
-// Valid effort levels for Claude Code sessions
-export const VALID_EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const
-export type EffortLevel = (typeof VALID_EFFORT_LEVELS)[number]
 
 /**
  * Zod schema for base agent settings (without nested agents)
@@ -1463,28 +1463,28 @@ export class SettingsManager {
 
 	/**
 	 * Get the spin effort level
-	 * Returns undefined when not configured (defers to Claude Code default)
+	 * Defaults to 'high' when not configured
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @param mode - When 'swarm', returns swarmEffort (defaults to 'medium')
-	 * @returns Effort level or undefined
+	 * @param mode - When 'swarm', returns swarmEffort (defaults to 'high')
+	 * @returns Effort level
 	 */
-	getSpinEffort(settings?: IloomSettings, mode?: 'swarm'): EffortLevel | undefined {
+	getSpinEffort(settings?: IloomSettings, mode?: 'swarm'): EffortLevel {
 		if (mode === 'swarm') {
-			return settings?.spin?.swarmEffort ?? 'medium'
+			return settings?.spin?.swarmEffort ?? 'high'
 		}
-		return settings?.spin?.effort
+		return settings?.spin?.effort ?? 'high'
 	}
 
 	/**
 	 * Get the plan effort level
-	 * Returns undefined when not configured (defers to Claude Code default)
+	 * Defaults to 'high' when not configured
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @returns Effort level or undefined
+	 * @returns Effort level
 	 */
-	getPlanEffort(settings?: IloomSettings): EffortLevel | undefined {
-		return settings?.plan?.effort
+	getPlanEffort(settings?: IloomSettings): EffortLevel {
+		return settings?.plan?.effort ?? 'high'
 	}
 
 	/**

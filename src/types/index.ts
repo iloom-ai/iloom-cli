@@ -145,8 +145,17 @@ export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 // Complexity override type
 export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
 
-// Effort level type
-export type EffortLevel = 'low' | 'medium' | 'high' | 'max'
+// Valid effort levels for Claude Code sessions
+export const VALID_EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const
+export type EffortLevel = (typeof VALID_EFFORT_LEVELS)[number]
+
+/**
+ * Type guard for EffortLevel values
+ * Validates that a value is a valid effort level at runtime
+ */
+export function isEffortLevel(value: unknown): value is EffortLevel {
+	return typeof value === 'string' && VALID_EFFORT_LEVELS.includes(value as EffortLevel)
+}
 
 // Command option types
 export interface StartOptions {

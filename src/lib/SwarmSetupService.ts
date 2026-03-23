@@ -1,7 +1,8 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { AgentManager } from './AgentManager.js'
-import { SettingsManager, type ClaudeModel, type EffortLevel } from './SettingsManager.js'
+import { SettingsManager, type ClaudeModel } from './SettingsManager.js'
+import type { EffortLevel } from '../types/index.js'
 import { PromptTemplateManager, buildReviewTemplateVariables, type TemplateVariables } from './PromptTemplateManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { getLogger } from '../utils/logger-context.js'
@@ -104,7 +105,7 @@ export class SwarmSetupService {
 				updated = { ...updated, effort: userSwarmEffort }
 			} else if (userBaseEffort) {
 				updated = { ...updated, effort: userBaseEffort }
-			} else if (defaultSwarmEfforts[agentName]) {
+			} else if (!updated.effort && defaultSwarmEfforts[agentName]) {
 				updated = { ...updated, effort: defaultSwarmEfforts[agentName] }
 			}
 			agents[agentName] = updated

@@ -3,7 +3,7 @@ import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
-import type { ComplexityOverride, OneShotMode } from '../types/index.js'
+import type { ComplexityOverride, EffortLevel, OneShotMode } from '../types/index.js'
 
 export type SwarmState = 'pending' | 'in_progress' | 'code_review' | 'done' | 'failed'
 
@@ -32,7 +32,7 @@ export interface MetadataFile {
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   dangerouslySkipPermissions?: boolean // Skip permissions without affecting one-shot mode
   complexity?: ComplexityOverride // Complexity override stored during loom creation
-  effort?: string // Effort level stored during loom creation
+  effort?: EffortLevel // Effort level stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
   state?: SwarmState // Swarm mode lifecycle state
   childIssueNumbers?: string[] // Child issue numbers for epic looms
@@ -78,7 +78,7 @@ export interface WriteMetadataInput {
   oneShot?: OneShotMode // One-shot automation mode to persist
   dangerouslySkipPermissions?: boolean // Skip permissions without affecting one-shot mode
   complexity?: ComplexityOverride // Complexity override to persist
-  effort?: string // Effort level to persist
+  effort?: EffortLevel // Effort level to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   state?: SwarmState // Swarm mode lifecycle state
   childIssueNumbers?: string[] // Child issue numbers for epic looms
@@ -125,7 +125,7 @@ export interface LoomMetadata {
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   dangerouslySkipPermissions: boolean // Skip permissions without affecting one-shot mode
   complexity: ComplexityOverride | null // Complexity override (null when not overridden)
-  effort: string | null // Effort level (null when not configured)
+  effort: EffortLevel | null // Effort level (null when not configured)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   state: SwarmState | null // Swarm mode lifecycle state (null for non-swarm looms)
   childIssueNumbers: string[] // Child issue numbers for epic looms (empty for non-epic looms)

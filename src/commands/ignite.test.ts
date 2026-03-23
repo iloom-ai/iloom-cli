@@ -632,51 +632,41 @@ describe('IgniteCommand', () => {
 	})
 
 	describe('Effort level support', () => {
-		it('should set CLAUDE_CODE_EFFORT_LEVEL env var when effort is provided', async () => {
+		it('should pass effort in ClaudeCliOptions when effort is provided', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__effort-test')
 
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-
 			try {
 				await command.execute(undefined, undefined, undefined, undefined, undefined, 'high')
 
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high')
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({ effort: 'high' })
+				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
 			}
 		})
 
-		it('should not set CLAUDE_CODE_EFFORT_LEVEL when no effort configured anywhere', async () => {
+		it('should pass "high" default effort when no effort configured anywhere', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__no-effort-test')
 
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-
 			try {
 				await command.execute()
 
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined()
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({ effort: 'high' })
+				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
 			}
 		})
 
@@ -702,21 +692,16 @@ describe('IgniteCommand', () => {
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__effort-metadata')
 
-			const originalEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL
-			delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-
 			try {
 				await command.execute()
 
-				expect(process.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('max')
+				expect(launchClaudeSpy).toHaveBeenCalledWith(
+					expect.any(String),
+					expect.objectContaining({ effort: 'max' })
+				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
-				if (originalEffort === undefined) {
-					delete process.env.CLAUDE_CODE_EFFORT_LEVEL
-				} else {
-					process.env.CLAUDE_CODE_EFFORT_LEVEL = originalEffort
-				}
 			}
 		})
 	})

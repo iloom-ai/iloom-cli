@@ -17,7 +17,7 @@ import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePa
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode, ComplexityOverride, EffortLevel } from '../types/index.js'
+import { isEffortLevel, type OneShotMode, type ComplexityOverride, type EffortLevel } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
@@ -251,8 +251,9 @@ export class IgniteCommand {
 			}
 
 			// Determine effective effort level
-			// CLI flag > metadata > settings > undefined (defer to Claude Code default)
-			const effectiveEffort = effort ?? (metadata?.effort as EffortLevel | null) ?? this.settingsManager.getSpinEffort(this.settings)
+			// CLI flag > metadata > settings > 'high' (iloom default)
+			const metadataEffort = isEffortLevel(metadata?.effort) ? metadata.effort : undefined
+			const effectiveEffort = effort ?? metadataEffort ?? this.settingsManager.getSpinEffort(this.settings)
 
 			// Step 2.0.5.1: Track session.started telemetry
 			try {
@@ -336,11 +337,6 @@ export class IgniteCommand {
 				)
 			}
 
-			// Set CLAUDE_CODE_EFFORT_LEVEL env var if effort is configured
-			if (effectiveEffort) {
-				process.env.CLAUDE_CODE_EFFORT_LEVEL = effectiveEffort
-			}
-
 			// Step 4: Build Claude CLI options
 			// Session ID must come from loom metadata - no fallback generation
 			const sessionId = metadata?.sessionId
@@ -361,6 +357,11 @@ export class IgniteCommand {
 			// Add optional model if present
 			if (model !== undefined) {
 				claudeOptions.model = model
+			}
+
+			// Add effort level if configured
+			if (effectiveEffort) {
+				claudeOptions.effort = effectiveEffort
 			}
 
 			// Add permission mode if not default
@@ -1181,9 +1182,6 @@ export class IgniteCommand {
 		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
 		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
 		const swarmEffort = this.settingsManager.getSpinEffort(settings, 'swarm')
-		if (swarmEffort) {
-			process.env.CLAUDE_CODE_EFFORT_LEVEL = swarmEffort
-		}
 
 		await launchClaude(swarmUserPrompt, {
 			model,
@@ -1195,6 +1193,7 @@ export class IgniteCommand {
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
+			...(swarmEffort && { effort: swarmEffort }),
 		})
 
 		// Track swarm child completions and overall completion

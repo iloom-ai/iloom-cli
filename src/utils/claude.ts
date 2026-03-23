@@ -77,6 +77,7 @@ export interface ClaudeCliOptions {
 	verbose?: boolean // Enable verbose output (headless mode) - defaults to true when headless
 	jsonMode?: 'json' | 'stream' // JSON output mode: 'json' for final object, 'stream' for real-time JSONL
 	passthroughStdout?: boolean // In headless mode, pipe stdout to process.stdout instead of capturing
+	effort?: string // Effort level to pass via --effort flag (e.g., 'low', 'high', 'max')
 	env?: Record<string, string> // Additional environment variables to pass to the Claude process
 	signal?: AbortSignal // Optional AbortSignal for graceful termination of the Claude process
 }
@@ -151,7 +152,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv, signal } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -172,6 +173,10 @@ export async function launchClaude(
 
 	if (model) {
 		args.push('--model', model)
+	}
+
+	if (effort) {
+		args.push('--effort', effort)
 	}
 
 	if (permissionMode && permissionMode !== 'default') {

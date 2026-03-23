@@ -8,7 +8,8 @@ import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemp
 import { AgentManager } from '../lib/AgentManager.js'
 import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
 import { HarnessServer } from '../lib/HarnessServer.js'
-import { SettingsManager, PlanCommandSettingsSchema, type EffortLevel } from '../lib/SettingsManager.js'
+import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
+import type { EffortLevel } from '../types/index.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
@@ -522,11 +523,6 @@ export class PlanCommand {
 			...(autoSwarm ? ['mcp__harness__signal'] : []),
 		]
 
-		// Set CLAUDE_CODE_EFFORT_LEVEL env var if effort is configured
-		if (effectiveEffort) {
-			process.env.CLAUDE_CODE_EFFORT_LEVEL = effectiveEffort
-		}
-
 		// Build Claude options
 		const claudeOptions: Parameters<typeof launchClaude>[1] = {
 			model: effectiveModel,
@@ -536,6 +532,7 @@ export class PlanCommand {
 			addDir: process.cwd(),
 			allowedTools,
 			...(agents && { agents }),
+			...(effectiveEffort && { effort: effectiveEffort }),
 		}
 
 		// Add output format and verbose options if provided (print mode only)

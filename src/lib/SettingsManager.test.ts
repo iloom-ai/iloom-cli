@@ -3205,10 +3205,10 @@ const error: { code?: string; message: string } = {
 		})
 
 		describe('getSpinEffort()', () => {
-			it('returns undefined when no effort configured', () => {
+			it('returns "high" default when no effort configured', () => {
 				const settings = { sourceEnvOnStart: false }
 				const result = settingsManager.getSpinEffort(settings)
-				expect(result).toBeUndefined()
+				expect(result).toBe('high')
 			})
 
 			it('returns settings.spin.effort when configured', () => {
@@ -3223,16 +3223,16 @@ const error: { code?: string; message: string } = {
 				expect(result).toBe('low')
 			})
 
-			it('returns "medium" as default for swarm mode when no swarmEffort configured', () => {
-				const settings = { sourceEnvOnStart: false, spin: { effort: 'high' as const } }
+			it('returns "high" default for swarm mode when no swarmEffort configured (ignores spin.effort)', () => {
+				const settings = { sourceEnvOnStart: false, spin: { effort: 'low' as const } }
 				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings, 'swarm')
-				expect(result).toBe('medium')
+				expect(result).toBe('high')
 			})
 
-			it('returns "medium" for swarm mode even when no spin config exists', () => {
+			it('returns "high" for swarm mode when no spin config exists', () => {
 				const settings = { sourceEnvOnStart: false }
 				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings, 'swarm')
-				expect(result).toBe('medium')
+				expect(result).toBe('high')
 			})
 
 			it('ignores swarmEffort when mode is not swarm', () => {
@@ -3241,18 +3241,18 @@ const error: { code?: string; message: string } = {
 				expect(result).toBe('high')
 			})
 
-			it('returns undefined when spin object exists but effort not set (non-swarm)', () => {
+			it('returns "high" default when spin object exists but effort not set (non-swarm)', () => {
 				const settings = { sourceEnvOnStart: false, spin: {} }
 				const result = settingsManager.getSpinEffort(settings as unknown as IloomSettings)
-				expect(result).toBeUndefined()
+				expect(result).toBe('high')
 			})
 		})
 
 		describe('getPlanEffort()', () => {
-			it('returns undefined when no effort configured', () => {
+			it('returns "high" default when no effort configured', () => {
 				const settings = { sourceEnvOnStart: false }
 				const result = settingsManager.getPlanEffort(settings)
-				expect(result).toBeUndefined()
+				expect(result).toBe('high')
 			})
 
 			it('returns settings.plan.effort when configured', () => {
@@ -3261,10 +3261,10 @@ const error: { code?: string; message: string } = {
 				expect(result).toBe('max')
 			})
 
-			it('returns undefined when plan object exists but effort not set', () => {
+			it('returns "high" default when plan object exists but effort not set', () => {
 				const settings = { sourceEnvOnStart: false, plan: { model: 'opus' as const } }
 				const result = settingsManager.getPlanEffort(settings as unknown as IloomSettings)
-				expect(result).toBeUndefined()
+				expect(result).toBe('high')
 			})
 		})
 	})
