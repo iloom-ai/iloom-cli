@@ -78,12 +78,7 @@ export function assertMacOS(): void {
  * Throws a clear, actionable error if either check fails.
  */
 export async function assertIOSAvailable(): Promise<void> {
-	if (process.platform !== 'darwin') {
-		throw new Error(
-			'iOS development tools are only available on macOS. ' +
-				`Current platform: ${process.platform}`
-		)
-	}
+	assertMacOS()
 
 	try {
 		await execa('xcode-select', ['-p'])

@@ -125,14 +125,11 @@ describe('assertIOSAvailable', () => {
 		}
 	})
 
-	it('throws on non-macOS platforms with clear message', async () => {
+	it('throws on non-macOS platforms with MacOSRequiredError', async () => {
 		const originalPlatform = process.platform
 		Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
 		try {
-			await expect(assertIOSAvailable()).rejects.toThrow(
-				'iOS development tools are only available on macOS'
-			)
-			await expect(assertIOSAvailable()).rejects.toThrow('linux')
+			await expect(assertIOSAvailable()).rejects.toThrow(MacOSRequiredError)
 		} finally {
 			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 		}
@@ -801,7 +798,7 @@ describe('platform guard behavior', () => {
 			const originalPlatform = process.platform
 			Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
 			try {
-				await expect(fn()).rejects.toThrow('iOS development tools are only available on macOS')
+				await expect(fn()).rejects.toThrow(MacOSRequiredError)
 			} finally {
 				Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 			}

@@ -146,12 +146,14 @@ export async function getPackageConfig(dir: string): Promise<PackageJson> {
       const basePackage = await readPackageJson(dir)
       getLogger().debug('Merging scripts from .iloom/package.iloom.json over package.json')
       // Merge: base package.json with iloom scripts taking precedence
+      const mergedCapabilities = iloomPackage.capabilities ?? basePackage.capabilities
       return {
         ...basePackage,
         scripts: {
           ...basePackage.scripts,
           ...iloomPackage.scripts,
         },
+        ...(mergedCapabilities && { capabilities: mergedCapabilities }),
       }
     } catch {
       // No package.json - use iloom package as-is (non-Node project)
