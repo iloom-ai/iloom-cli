@@ -3,6 +3,7 @@ import { DevServerManager, type DockerConfig } from './DevServerManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
 import { DockerManager } from './DockerManager.js'
 import { DockerDevServerStrategy } from './DockerDevServerStrategy.js'
+import { MetroDevServerStrategy } from './MetroDevServerStrategy.js'
 import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import * as devServerUtils from '../utils/dev-server.js'
@@ -15,6 +16,7 @@ vi.mock('timers/promises')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./DockerManager.js')
 vi.mock('./DockerDevServerStrategy.js')
+vi.mock('./MetroDevServerStrategy.js')
 vi.mock('../utils/dev-server.js')
 vi.mock('../utils/package-manager.js')
 vi.mock('../utils/package-json.js')
@@ -1023,6 +1025,158 @@ describe('DevServerManager', () => {
 
 				// Should not throw
 				await expect(manager.cleanup()).resolves.not.toThrow()
+			})
+		})
+	})
+
+	describe('Metro mode', () => {
+		let mockMetroInstance: {
+			isRunning: ReturnType<typeof vi.fn>
+			startBackground: ReturnType<typeof vi.fn>
+			startForeground: ReturnType<typeof vi.fn>
+			stop: ReturnType<typeof vi.fn>
+			stopAll: ReturnType<typeof vi.fn>
+			waitForReady: ReturnType<typeof vi.fn>
+		}
+
+		beforeEach(() => {
+			mockMetroInstance = {
+				isRunning: vi.fn(),
+				startBackground: vi.fn(),
+				startForeground: vi.fn(),
+				stop: vi.fn(),
+				stopAll: vi.fn(),
+				waitForReady: vi.fn(),
+			}
+
+			vi.mocked(MetroDevServerStrategy).mockImplementation(() => mockMetroInstance as unknown as MetroDevServerStrategy)
+
+			// Recreate manager so it picks up the mocked MetroDevServerStrategy
+			manager = new DevServerManager(mockProcessManager, {
+				startupTimeout: 5000,
+				checkInterval: 100,
+			})
+		})
+
+		describe('ensureServerRunning', () => {
+			it('should delegate to MetroDevServerStrategy when metroMode is true', async () => {
+				const port = 3087
+
+				mockMetroInstance.isRunning.mockResolvedValue(false)
+				mockMetroInstance.startBackground.mockResolvedValue(undefined)
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, undefined, undefined, true)
+
+				expect(result).toBe(true)
+				expect(mockMetroInstance.isRunning).toHaveBeenCalledWith(port)
+				expect(mockMetroInstance.startBackground).toHaveBeenCalledWith(mockWorktreePath, port, undefined)
+				// Should NOT use native strategy
+				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+				expect(execa).not.toHaveBeenCalled()
+			})
+
+			it('should return true when Metro is already running', async () => {
+				const port = 3087
+
+				mockMetroInstance.isRunning.mockResolvedValue(true)
+
+				const result = await manager.ensureServerRunning(mockWorktreePath, port, undefined, undefined, true)
+
+				expect(result).toBe(true)
+				expect(mockMetroInstance.startBackground).not.toHaveBeenCalled()
+			})
+
+			it('should throw when Metro fails to start', async () => {
+				const port = 3087
+
+				mockMetroInstance.isRunning.mockResolvedValue(false)
+				mockMetroInstance.startBackground.mockRejectedValue(new Error('Metro bundler failed to start'))
+
+				await expect(
+					manager.ensureServerRunning(mockWorktreePath, port, undefined, undefined, true)
+				).rejects.toThrow('Metro bundler failed to start')
+			})
+
+			it('should pass envOverrides to Metro startBackground', async () => {
+				const port = 3087
+				const envOverrides = { API_URL: 'http://localhost:3000' }
+
+				mockMetroInstance.isRunning.mockResolvedValue(false)
+				mockMetroInstance.startBackground.mockResolvedValue(undefined)
+
+				await manager.ensureServerRunning(mockWorktreePath, port, undefined, envOverrides, true)
+
+				expect(mockMetroInstance.startBackground).toHaveBeenCalledWith(mockWorktreePath, port, envOverrides)
+			})
+		})
+
+		describe('isServerRunning', () => {
+			it('should delegate to MetroDevServerStrategy when metroMode is true', async () => {
+				const port = 3087
+
+				mockMetroInstance.isRunning.mockResolvedValue(true)
+
+				const result = await manager.isServerRunning(port, undefined, true)
+
+				expect(result).toBe(true)
+				expect(mockMetroInstance.isRunning).toHaveBeenCalledWith(port)
+				expect(mockProcessManager.detectDevServer).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('runServerForeground', () => {
+			it('should delegate to MetroDevServerStrategy when metroMode is true', async () => {
+				const port = 3087
+				const onStart = vi.fn()
+
+				mockMetroInstance.startForeground.mockResolvedValue({ pid: 12345 })
+
+				const result = await manager.runServerForeground(
+					mockWorktreePath, port, false, onStart, undefined, undefined, undefined, true
+				)
+
+				expect(result).toEqual({ pid: 12345 })
+				expect(mockMetroInstance.startForeground).toHaveBeenCalledWith(
+					mockWorktreePath,
+					port,
+					expect.objectContaining({
+						redirectToStderr: false,
+						onProcessStarted: onStart,
+					})
+				)
+				// Should NOT use native strategy
+				expect(packageManagerUtils.runScript).not.toHaveBeenCalled()
+				expect(execa).not.toHaveBeenCalled()
+			})
+
+			it('should pass redirectToStderr and envOverrides to Metro strategy', async () => {
+				const port = 3087
+				const envOverrides = { DEBUG: 'true' }
+
+				mockMetroInstance.startForeground.mockResolvedValue({ pid: 12345 })
+
+				await manager.runServerForeground(
+					mockWorktreePath, port, true, undefined, envOverrides, undefined, undefined, true
+				)
+
+				expect(mockMetroInstance.startForeground).toHaveBeenCalledWith(
+					mockWorktreePath,
+					port,
+					expect.objectContaining({
+						redirectToStderr: true,
+						envOverrides,
+					})
+				)
+			})
+		})
+
+		describe('cleanup', () => {
+			it('should stop all Metro processes during cleanup', async () => {
+				mockMetroInstance.stopAll.mockResolvedValue(undefined)
+
+				await manager.cleanup()
+
+				expect(mockMetroInstance.stopAll).toHaveBeenCalled()
 			})
 		})
 	})
