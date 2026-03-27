@@ -13,6 +13,8 @@ import { extractIssueNumber } from '../utils/git.js'
 import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { openIOSProject, isReactNativeProject } from '../utils/ios.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 export interface OpenCommandInput {
@@ -61,8 +63,24 @@ export class OpenCommand {
 
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
-		// 4. Execute based on capabilities (web first, CLI fallback)
-		if (capabilities.includes('web')) {
+		// 4. Execute based on capabilities (iOS first, then web, CLI fallback)
+		if (capabilities.includes('ios')) {
+			let iosSuccess = false
+			try {
+				await openIOSProject(worktree.path, capabilities)
+				iosSuccess = true
+			} finally {
+				try {
+					TelemetryService.getInstance().track('ios.command_invoked', {
+						command: 'open',
+						is_react_native: isReactNativeProject(capabilities),
+						success: iosSuccess,
+					})
+				} catch {
+					logger.debug('Telemetry tracking failed (non-fatal)')
+				}
+			}
+		} else if (capabilities.includes('web')) {
 			await this.openWebBrowser(worktree, input.env)
 		} else if (capabilities.includes('cli')) {
 			await this.runCLITool(worktree.path, binEntries, input.args ?? [])

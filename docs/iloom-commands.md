@@ -701,7 +701,7 @@ il spin --complexity=complex --yolo
 
 ### il open
 
-Open loom in browser (web projects) or run configured CLI tool (CLI projects).
+Open loom in browser (web projects), Xcode (iOS projects), or run configured CLI tool (CLI projects).
 
 **Alias:** `run`
 
@@ -716,6 +716,11 @@ il open [identifier]
 - If omitted outside a loom, prompts for selection
 
 **Behavior by Project Type:**
+
+**iOS Projects (requires macOS):**
+- React Native (`web` + `ios` capabilities): Opens the `ios/` subdirectory in Xcode
+- Native iOS (`ios` capability only): Opens the project root in Xcode (searches for `.xcworkspace` or `.xcodeproj`)
+- Non-macOS platforms produce a clear error message
 
 **Web Projects:**
 - Opens development server in default browser
@@ -810,7 +815,19 @@ il dev-server [identifier] [options]
 - If omitted and inside a loom, starts dev server for current loom
 - If omitted outside a loom, prompts for selection
 
-**Behavior:**
+**Behavior by Project Type:**
+
+**React Native iOS (`web` + `ios` capabilities):**
+- Starts the Metro bundler as a foreground dev server
+- Metro is cross-platform and works on macOS, Linux, and Windows
+- The iOS Simulator must be launched separately via `il run` or Xcode
+
+**Native iOS (`ios` capability only, requires macOS):**
+- Not applicable — native iOS does not use a dev server
+- Displays a guidance message directing you to `il run`
+- Non-macOS platforms produce a clear error message
+
+**Web Projects:**
 
 1. Resolves the target loom
 2. Loads environment variables from `.env` files

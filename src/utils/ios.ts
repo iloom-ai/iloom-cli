@@ -4,6 +4,9 @@ import path from 'node:path'
 import { execa } from 'execa'
 import fs from 'fs-extra'
 
+import { logger } from './logger.js'
+import type { ProjectCapability } from '../types/loom.js'
+
 // --- Types ---
 
 export interface SimulatorInfo {
@@ -40,7 +43,32 @@ export interface DeviceBuildOptions extends XcodeBuildOptions {
 const TRACKING_DIR = path.join(os.homedir(), '.config', 'iloom-ai')
 const TRACKING_FILE = path.join(TRACKING_DIR, 'ios-simulators.json')
 
+// --- Error Classes ---
+
+/**
+ * Error thrown when an iOS operation is attempted on a non-macOS platform.
+ */
+export class MacOSRequiredError extends Error {
+	constructor() {
+		super(
+			'iOS development requires macOS. ' +
+			'Please run this command on a Mac with Xcode installed.'
+		)
+		this.name = 'MacOSRequiredError'
+	}
+}
+
 // --- Platform Guard ---
+
+/**
+ * Assert that the current platform is macOS.
+ * Throws MacOSRequiredError if not running on darwin.
+ */
+export function assertMacOS(): void {
+	if (process.platform !== 'darwin') {
+		throw new MacOSRequiredError()
+	}
+}
 
 /**
  * Assert that iOS development tools are available.
@@ -63,6 +91,85 @@ export async function assertIOSAvailable(): Promise<void> {
 				'Please install them by running: xcode-select --install'
 		)
 	}
+}
+
+// --- Capability Helpers ---
+
+/**
+ * Check if a project is a React Native project (has both 'web' and 'ios' capabilities).
+ * React Native projects use Metro bundler and have web capabilities alongside iOS.
+ */
+export function isReactNativeProject(capabilities: ProjectCapability[]): boolean {
+	return capabilities.includes('web') && capabilities.includes('ios')
+}
+
+// --- iOS Project Operations ---
+
+/**
+ * Open an iOS project — opens Xcode for both React Native and native iOS projects.
+ * For React Native, opens the `ios/` subdirectory (which contains the .xcworkspace).
+ * For native iOS, searches for a .xcworkspace or .xcodeproj in the worktree root.
+ *
+ * @param worktreePath Path to the worktree directory
+ * @param capabilities Detected project capabilities
+ */
+export async function openIOSProject(
+	worktreePath: string,
+	capabilities: ProjectCapability[]
+): Promise<void> {
+	assertMacOS()
+
+	if (isReactNativeProject(capabilities)) {
+		logger.info('Opening Xcode for React Native iOS project...')
+		// React Native convention: the iOS project lives in the `ios/` subdirectory
+		const iosDirPath = path.join(worktreePath, 'ios')
+		await execa('open', ['-a', 'Xcode', iosDirPath], {
+			stdio: 'inherit',
+			cwd: worktreePath,
+		})
+		logger.success('Xcode opened for React Native iOS project')
+	} else {
+		logger.info('Opening Xcode project...')
+		// Native iOS: open the .xcworkspace or .xcodeproj in Xcode
+		await execa('open', ['-a', 'Xcode', worktreePath], {
+			stdio: 'inherit',
+			cwd: worktreePath,
+		})
+		logger.success('Xcode project opened')
+	}
+}
+
+/**
+ * Build and run an iOS app on the configured deploy target (simulator or device).
+ * React Native projects use `npx react-native run-ios`.
+ * Native iOS projects use `xcodebuild` directly.
+ *
+ * @param worktreePath Path to the worktree directory
+ * @param capabilities Detected project capabilities
+ * @param args Additional arguments to pass to the build/run command
+ */
+export async function buildAndRunIOS(
+	worktreePath: string,
+	capabilities: ProjectCapability[],
+	args: string[] = []
+): Promise<void> {
+	assertMacOS()
+
+	if (isReactNativeProject(capabilities)) {
+		logger.info('Building and running React Native iOS app...')
+		await execa('npx', ['react-native', 'run-ios', ...args], {
+			stdio: 'inherit',
+			cwd: worktreePath,
+		})
+	} else {
+		logger.info('Building and running native iOS app...')
+		// Native iOS: use xcodebuild to build and run on simulator or device
+		await execa('xcodebuild', ['-allowProvisioningUpdates', ...args], {
+			stdio: 'inherit',
+			cwd: worktreePath,
+		})
+	}
+	logger.success('iOS app launched')
 }
 
 // --- Simulator Management ---

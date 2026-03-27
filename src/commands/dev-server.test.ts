@@ -8,6 +8,7 @@ import { DockerManager } from '../lib/DockerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
+import { assertMacOS, isReactNativeProject, MacOSRequiredError } from '../utils/ios.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ProjectCapabilities } from '../types/loom.js'
 import fs from 'fs-extra'
@@ -27,6 +28,18 @@ vi.mock('../utils/env.js', async (importOriginal) => {
 		...actual,
 		loadWorkspaceEnv: vi.fn(() => ({ parsed: {} })),
 		isNoEnvFilesFoundError: vi.fn(() => false),
+	}
+})
+
+// Mock iOS utilities
+vi.mock('../utils/ios.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/ios.js')>()
+	return {
+		...actual,
+		assertMacOS: vi.fn(),
+		isReactNativeProject: vi.fn().mockReturnValue(false),
+		openIOSProject: vi.fn().mockResolvedValue(undefined),
+		buildAndRunIOS: vi.fn().mockResolvedValue(undefined),
 	}
 })
 
@@ -273,6 +286,59 @@ describe('DevServerCommand', () => {
 			expect(result.status).toBe('no_web_capability')
 			expect(result.message).toContain('No web capability detected')
 			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+		})
+
+		it('should start Metro bundler for ios+web project (React Native)', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web', 'ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(isReactNativeProject).mockReturnValue(true)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+
+			const result = await command.execute({ identifier: '87' })
+
+			// Metro is cross-platform — assertMacOS should NOT be called for React Native
+			expect(assertMacOS).not.toHaveBeenCalled()
+			expect(result.status).toBe('started')
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalled()
+		})
+
+		it('should throw for ios-only project (native iOS, macOS only)', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(isReactNativeProject).mockReturnValue(false)
+
+			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
+				'Native iOS projects do not use a dev server'
+			)
+
+			expect(assertMacOS).toHaveBeenCalled()
+			expect(mockDevServerManager.runServerForeground).not.toHaveBeenCalled()
+		})
+
+		it('should throw macOS-only error on non-darwin for native ios project', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+			vi.mocked(isReactNativeProject).mockReturnValue(false)
+
+			// Make assertMacOS throw
+			vi.mocked(assertMacOS).mockImplementationOnce(() => {
+				throw new MacOSRequiredError()
+			})
+
+			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
+				'iOS development requires macOS'
+			)
 		})
 	})
 

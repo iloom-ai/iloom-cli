@@ -6,6 +6,9 @@ import fs from 'fs-extra'
 
 import {
 	assertIOSAvailable,
+	assertMacOS,
+	MacOSRequiredError,
+	isReactNativeProject,
 	listSimulators,
 	bootSimulator,
 	shutdownSimulator,
@@ -21,8 +24,88 @@ import {
 
 vi.mock('execa')
 vi.mock('fs-extra')
+vi.mock('./logger.js', () => ({
+	logger: {
+		info: vi.fn(),
+		error: vi.fn(),
+		warn: vi.fn(),
+		debug: vi.fn(),
+		success: vi.fn(),
+	},
+}))
 
-// --- Platform Guard ---
+// --- Platform Guard: assertMacOS ---
+
+describe('assertMacOS', () => {
+	it('should not throw on darwin platform', () => {
+		const originalPlatform = process.platform
+		Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+		try {
+			expect(() => assertMacOS()).not.toThrow()
+		} finally {
+			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+		}
+	})
+
+	it('should throw MacOSRequiredError on linux platform', () => {
+		const originalPlatform = process.platform
+		Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+		try {
+			expect(() => assertMacOS()).toThrow(MacOSRequiredError)
+			expect(() => assertMacOS()).toThrow('iOS development requires macOS')
+		} finally {
+			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+		}
+	})
+
+	it('should throw MacOSRequiredError on win32 platform', () => {
+		const originalPlatform = process.platform
+		Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+		try {
+			expect(() => assertMacOS()).toThrow(MacOSRequiredError)
+		} finally {
+			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+		}
+	})
+})
+
+// --- MacOSRequiredError ---
+
+describe('MacOSRequiredError', () => {
+	it('should have correct name and message', () => {
+		const error = new MacOSRequiredError()
+		expect(error.name).toBe('MacOSRequiredError')
+		expect(error.message).toContain('iOS development requires macOS')
+		expect(error.message).toContain('Xcode')
+		expect(error).toBeInstanceOf(Error)
+	})
+})
+
+// --- Capability Helpers ---
+
+describe('isReactNativeProject', () => {
+	it('should return true when project has both web and ios capabilities', () => {
+		expect(isReactNativeProject(['web', 'ios'])).toBe(true)
+	})
+
+	it('should return false when project has only ios capability', () => {
+		expect(isReactNativeProject(['ios'])).toBe(false)
+	})
+
+	it('should return false when project has only web capability', () => {
+		expect(isReactNativeProject(['web'])).toBe(false)
+	})
+
+	it('should return false when project has no capabilities', () => {
+		expect(isReactNativeProject([])).toBe(false)
+	})
+
+	it('should return true when project has web, ios, and cli capabilities', () => {
+		expect(isReactNativeProject(['web', 'ios', 'cli'])).toBe(true)
+	})
+})
+
+// --- Platform Guard: assertIOSAvailable ---
 
 describe('assertIOSAvailable', () => {
 	it('succeeds on macOS with xcode-select present', async () => {

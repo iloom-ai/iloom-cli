@@ -10,6 +10,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import { execa } from 'execa'
 import { openBrowser } from '../utils/browser.js'
+import { openIOSProject, MacOSRequiredError } from '../utils/ios.js'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
@@ -32,6 +33,17 @@ vi.mock('../utils/browser.js', () => ({
 	openBrowser: vi.fn().mockResolvedValue(undefined),
 	detectPlatform: vi.fn().mockReturnValue('darwin'),
 }))
+
+// Mock iOS utilities
+vi.mock('../utils/ios.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/ios.js')>()
+	return {
+		...actual,
+		openIOSProject: vi.fn().mockResolvedValue(undefined),
+		assertMacOS: vi.fn(),
+		isReactNativeProject: vi.fn().mockReturnValue(false),
+	}
+})
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -326,6 +338,54 @@ describe('OpenCommand', () => {
 
 			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
 				'No web or CLI capabilities detected'
+			)
+		})
+
+		it('should launch iOS for ios-only project', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			await command.execute({ identifier: '87' })
+
+			expect(openIOSProject).toHaveBeenCalledWith(mockWorktree.path, ['ios'])
+			expect(openBrowser).not.toHaveBeenCalled()
+			expect(execa).not.toHaveBeenCalled()
+		})
+
+		it('should launch iOS for web+ios project (ios takes precedence)', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web', 'ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			await command.execute({ identifier: '87' })
+
+			expect(openIOSProject).toHaveBeenCalledWith(mockWorktree.path, ['web', 'ios'])
+			expect(openBrowser).not.toHaveBeenCalled()
+		})
+
+		it('should throw macOS-only error on non-darwin platform for ios project', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			// Make openIOSProject throw MacOSRequiredError
+			vi.mocked(openIOSProject).mockRejectedValueOnce(new MacOSRequiredError())
+
+			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
+				'iOS development requires macOS'
 			)
 		})
 	})

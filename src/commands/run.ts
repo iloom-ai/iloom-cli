@@ -13,6 +13,8 @@ import { extractIssueNumber } from '../utils/git.js'
 import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { buildAndRunIOS, isReactNativeProject } from '../utils/ios.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 export interface RunCommandInput {
@@ -61,8 +63,24 @@ export class RunCommand {
 
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
-		// 4. Execute based on capabilities (CLI first, web fallback)
-		if (capabilities.includes('cli')) {
+		// 4. Execute based on capabilities (iOS first, then CLI, web fallback)
+		if (capabilities.includes('ios')) {
+			let iosSuccess = false
+			try {
+				await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+				iosSuccess = true
+			} finally {
+				try {
+					TelemetryService.getInstance().track('ios.command_invoked', {
+						command: 'run',
+						is_react_native: isReactNativeProject(capabilities),
+						success: iosSuccess,
+					})
+				} catch {
+					logger.debug('Telemetry tracking failed (non-fatal)')
+				}
+			}
+		} else if (capabilities.includes('cli')) {
 			await this.runCLITool(worktree.path, binEntries, input.args ?? [], input.env)
 		} else if (capabilities.includes('web')) {
 			await this.openWebBrowser(worktree, input.env)
