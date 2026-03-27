@@ -3961,7 +3961,7 @@ const error: { code?: string; message: string } = {
 
 })
 
-import { DevServerSettingsSchema, DevServerSettingsSchemaNoDefaults } from './SettingsManager.js'
+import { DevServerSettingsSchema, DevServerSettingsSchemaNoDefaults, CapabilitiesSettingsSchema, CapabilitiesSettingsSchemaNoDefaults } from './SettingsManager.js'
 
 describe('DevServerSettingsSchema', () => {
 	describe('valid configs', () => {
@@ -4102,5 +4102,79 @@ describe('DevServerSettingsSchemaNoDefaults', () => {
 		expect(() =>
 			DevServerSettingsSchemaNoDefaults.parse({ docker: { dockerFile: '../escape' } }),
 		).toThrow('dockerFile must be a relative path')
+	})
+})
+
+describe('CapabilitiesSettingsSchema - iOS settings', () => {
+	it('should accept capabilities.ios settings with all fields', () => {
+		const input = {
+			ios: {
+				simulatorDevice: 'iPhone 16',
+				scheme: 'MyApp',
+				bundleId: 'com.example.MyApp',
+				configuration: 'Release' as const,
+				deployTarget: 'device' as const,
+				developmentTeam: 'ABC123DEF4',
+			},
+		}
+		const result = CapabilitiesSettingsSchema.parse(input)
+		expect(result.ios).toMatchObject(input.ios)
+	})
+
+	it('should accept capabilities.ios with only optional fields omitted', () => {
+		const input = { ios: {} }
+		const result = CapabilitiesSettingsSchema.parse(input)
+		expect(result.ios).toBeDefined()
+		expect(result.ios!.configuration).toBe('Debug')
+		expect(result.ios!.deployTarget).toBe('simulator')
+	})
+
+	it('should use Debug as default configuration', () => {
+		const result = CapabilitiesSettingsSchema.parse({ ios: {} })
+		expect(result.ios!.configuration).toBe('Debug')
+	})
+
+	it('should use simulator as default deployTarget', () => {
+		const result = CapabilitiesSettingsSchema.parse({ ios: {} })
+		expect(result.ios!.deployTarget).toBe('simulator')
+	})
+
+	it('should reject invalid configuration value', () => {
+		expect(() =>
+			CapabilitiesSettingsSchema.parse({ ios: { configuration: 'Profile' } }),
+		).toThrow(/Invalid enum value/)
+	})
+
+	it('should reject invalid deployTarget value', () => {
+		expect(() =>
+			CapabilitiesSettingsSchema.parse({ ios: { deployTarget: 'emulator' } }),
+		).toThrow(/Invalid enum value/)
+	})
+})
+
+describe('CapabilitiesSettingsSchemaNoDefaults - iOS settings', () => {
+	it('should not apply defaults for configuration', () => {
+		const result = CapabilitiesSettingsSchemaNoDefaults.parse({ ios: {} })
+		expect(result.ios!.configuration).toBeUndefined()
+	})
+
+	it('should not apply defaults for deployTarget', () => {
+		const result = CapabilitiesSettingsSchemaNoDefaults.parse({ ios: {} })
+		expect(result.ios!.deployTarget).toBeUndefined()
+	})
+
+	it('should accept valid iOS config without applying defaults', () => {
+		const input = {
+			ios: {
+				simulatorDevice: 'iPhone 16 Pro',
+				scheme: 'MyApp',
+				bundleId: 'com.example.MyApp',
+				configuration: 'Release' as const,
+				deployTarget: 'device' as const,
+				developmentTeam: 'XYZ789',
+			},
+		}
+		const result = CapabilitiesSettingsSchemaNoDefaults.parse(input)
+		expect(result.ios).toMatchObject(input.ios)
 	})
 })

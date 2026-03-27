@@ -273,6 +273,35 @@ export const CapabilitiesSettingsSchema = z
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
+		ios: z
+			.object({
+				simulatorDevice: z
+					.string()
+					.optional()
+					.describe('iOS Simulator device name (e.g., "iPhone 16")'),
+				scheme: z
+					.string()
+					.optional()
+					.describe('Xcode scheme name for building the project'),
+				bundleId: z
+					.string()
+					.optional()
+					.describe('Application bundle identifier (e.g., "com.example.MyApp")'),
+				configuration: z
+					.enum(['Debug', 'Release'])
+					.default('Debug')
+					.describe('Xcode build configuration'),
+				deployTarget: z
+					.enum(['simulator', 'device'])
+					.default('simulator')
+					.describe('Target for deployment: simulator or physical device'),
+				developmentTeam: z
+					.string()
+					.optional()
+					.describe('Apple Development Team ID for code signing on physical devices'),
+			})
+			.optional()
+			.describe('iOS project settings. To declare a project as an iOS project, add "ios" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -337,6 +366,35 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 			})
 			.optional()
 			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
+		ios: z
+			.object({
+				simulatorDevice: z
+					.string()
+					.optional()
+					.describe('iOS Simulator device name (e.g., "iPhone 16")'),
+				scheme: z
+					.string()
+					.optional()
+					.describe('Xcode scheme name for building the project'),
+				bundleId: z
+					.string()
+					.optional()
+					.describe('Application bundle identifier (e.g., "com.example.MyApp")'),
+				configuration: z
+					.enum(['Debug', 'Release'])
+					.optional()
+					.describe('Xcode build configuration'),
+				deployTarget: z
+					.enum(['simulator', 'device'])
+					.optional()
+					.describe('Target for deployment: simulator or physical device'),
+				developmentTeam: z
+					.string()
+					.optional()
+					.describe('Apple Development Team ID for code signing on physical devices'),
+			})
+			.optional()
+			.describe('iOS project settings.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z

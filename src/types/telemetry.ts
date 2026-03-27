@@ -29,6 +29,7 @@ export interface LoomCreatedProperties {
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
   complexity_override: boolean
   create_only: boolean
+  has_ios_capability: boolean
 }
 
 export interface LoomFinishedProperties {

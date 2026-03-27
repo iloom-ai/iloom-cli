@@ -930,6 +930,47 @@ Containers are named `iloom-dev-<identifier>` where the identifier is derived fr
 
 ---
 
+### iOS Project Configuration
+
+For iOS projects, declare the `"ios"` capability in `.iloom/package.iloom.json` and configure Xcode build settings in `.iloom/settings.json`:
+
+**`.iloom/package.iloom.json`:**
+```json
+{
+  "name": "MyiOSApp",
+  "capabilities": ["ios"]
+}
+```
+
+**`.iloom/settings.json`:**
+```json
+{
+  "capabilities": {
+    "ios": {
+      "simulatorDevice": "iPhone 16",
+      "scheme": "MyApp",
+      "bundleId": "com.example.myapp",
+      "configuration": "Debug",
+      "deployTarget": "simulator",
+      "developmentTeam": "TEAM123456"
+    }
+  }
+}
+```
+
+**iOS Configuration Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `simulatorDevice` | `string` | `"iPhone 16"` | Target simulator device name as shown in Xcode (e.g., `"iPhone 16"`, `"iPad Pro 13-inch"`). |
+| `scheme` | `string` | — | Xcode scheme to build and run. Corresponds to the scheme name in your `.xcodeproj` or `.xcworkspace`. |
+| `bundleId` | `string` | — | App bundle identifier (e.g., `"com.example.myapp"`). Used for device installation and code signing. |
+| `configuration` | `"Debug"` \| `"Release"` | `"Debug"` | Xcode build configuration. |
+| `deployTarget` | `"simulator"` \| `"device"` | `"simulator"` | Whether to deploy to a simulator or a physical device connected via USB. |
+| `developmentTeam` | `string` | — | Apple Developer Team ID for code signing. Required when `deployTarget` is `"device"`. Find your Team ID in Xcode under Signing & Capabilities. |
+
+---
+
 ### il build
 
 Run the build script for a workspace.
