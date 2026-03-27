@@ -218,6 +218,25 @@ export function hasWebDependencies(pkgJson: PackageJson): boolean {
 }
 
 /**
+ * Check if package.json indicates an iOS/mobile application
+ * @param pkgJson Parsed package.json object
+ * @returns true if package has iOS/mobile framework dependencies
+ */
+export function hasIosDependencies(pkgJson: PackageJson): boolean {
+  const iosIndicators = [
+    'react-native',
+    'expo'
+  ]
+
+  const allDeps = {
+    ...pkgJson.dependencies,
+    ...pkgJson.devDependencies
+  }
+
+  return iosIndicators.some(indicator => indicator in allDeps)
+}
+
+/**
  * Check if package.json has a specific script
  * @param pkgJson Parsed package.json object
  * @param scriptName Script name to check for
