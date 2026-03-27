@@ -126,9 +126,11 @@ export class DevServerCommand {
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
 		// 4. Handle iOS capability
+		let useMetroMode = false
 		if (capabilities.includes('ios')) {
 			if (isReactNativeProject(capabilities)) {
 				// React Native iOS: Metro bundler is cross-platform — proceed to web dev server path
+				useMetroMode = true
 				logger.debug('React Native iOS project detected — starting Metro bundler via dev server')
 				try {
 					TelemetryService.getInstance().track('ios.command_invoked', {
@@ -187,7 +189,7 @@ export class DevServerCommand {
 		const url = buildDevServerUrl(port, protocol)
 
 		// 6. Check if server already running
-		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig)
+		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig, useMetroMode)
 
 		if (isRunning) {
 			const message = `Dev server already running at ${url}`
@@ -286,7 +288,8 @@ export class DevServerCommand {
 					},
 					envOverrides,
 					dockerConfig,
-					onOutput
+					onOutput,
+					useMetroMode
 				)
 
 				if (processInfo.pid) {

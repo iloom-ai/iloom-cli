@@ -236,7 +236,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.any(Object),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -395,7 +396,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.any(Object),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -419,7 +421,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.any(Object),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 	})
@@ -508,7 +511,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.any(Object),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -525,7 +529,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.any(Object),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 	})
@@ -568,7 +573,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ DATABASE_URL: 'postgres://test', API_KEY: 'secret', ILOOM_LOOM: '87' }),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -587,7 +593,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -604,7 +611,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -629,7 +637,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -800,7 +809,8 @@ describe('DevServerCommand', () => {
 			expect(DockerManager.assertAvailable).toHaveBeenCalled()
 			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
 				3087,
-				expectedDockerConfig
+				expectedDockerConfig,
+				false
 			)
 			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
@@ -809,7 +819,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
 				expectedDockerConfig,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -844,7 +855,8 @@ describe('DevServerCommand', () => {
 					dockerFile: './Dockerfile',
 					identifier: '87',
 				}),
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -884,7 +896,8 @@ describe('DevServerCommand', () => {
 				expect.objectContaining({
 					identifier: 'feat/docker-support',
 				}),
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -934,7 +947,8 @@ describe('DevServerCommand', () => {
 			expect(DockerManager.assertAvailable).not.toHaveBeenCalled()
 			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
 				3087,
-				undefined
+				undefined,
+				false
 			)
 			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
 				mockWorktree.path,
@@ -943,7 +957,8 @@ describe('DevServerCommand', () => {
 				expect.any(Function),
 				expect.objectContaining({ ILOOM_LOOM: '87' }),
 				undefined,
-				undefined
+				undefined,
+				false
 			)
 		})
 
@@ -955,7 +970,8 @@ describe('DevServerCommand', () => {
 			expect(DockerManager.assertAvailable).not.toHaveBeenCalled()
 			expect(mockDevServerManager.isServerRunning).toHaveBeenCalledWith(
 				3087,
-				undefined
+				undefined,
+				false
 			)
 		})
 	})

@@ -549,7 +549,7 @@ describe('buildForDevice', () => {
 				'-destination', 'platform=iOS,id=00008101-001A2B3C4D5E6F7G',
 				'DEVELOPMENT_TEAM=ABC123DEF',
 				'build',
-			])
+			], undefined)
 		} finally {
 			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 		}
@@ -570,7 +570,7 @@ describe('buildForDevice', () => {
 
 			expect(execa).toHaveBeenCalledWith('xcodebuild', expect.arrayContaining([
 				'-destination', 'generic/platform=iOS',
-			]))
+			]), undefined)
 		} finally {
 			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
 		}

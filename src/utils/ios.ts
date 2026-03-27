@@ -36,6 +36,8 @@ export interface SimulatorBuildOptions extends XcodeBuildOptions {
 export interface DeviceBuildOptions extends XcodeBuildOptions {
 	deviceUDID?: string
 	developmentTeam: string
+	extraArgs?: string[]
+	cwd?: string
 }
 
 // --- Constants ---
@@ -370,8 +372,12 @@ export async function buildForDevice(options: DeviceBuildOptions): Promise<void>
 	args.push(`DEVELOPMENT_TEAM=${options.developmentTeam}`)
 	args.push('build')
 
+	if (options.extraArgs?.length) {
+		args.push(...options.extraArgs)
+	}
+
 	try {
-		await execa('xcodebuild', args)
+		await execa('xcodebuild', args, options.cwd ? { cwd: options.cwd } : undefined)
 	} catch (error: unknown) {
 		const e = error as { stderr?: string; stdout?: string }
 		const output = e.stderr !== '' && e.stderr != null ? e.stderr : (e.stdout ?? '')

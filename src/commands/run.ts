@@ -13,7 +13,7 @@ import { extractIssueNumber } from '../utils/git.js'
 import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
-import { buildAndRunIOS, isReactNativeProject } from '../utils/ios.js'
+import { buildAndRunIOS, buildForDevice, isReactNativeProject } from '../utils/ios.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import type { GitWorktree } from '../types/worktree.js'
 
@@ -67,7 +67,24 @@ export class RunCommand {
 		if (capabilities.includes('ios')) {
 			let iosSuccess = false
 			try {
-				await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+				if (!isReactNativeProject(capabilities)) {
+					// Native iOS: check settings for device deployment
+					const settings = await this.settingsManager.loadSettings()
+					const iosSettings = settings.capabilities?.ios
+					if (iosSettings?.deployTarget === 'device' && iosSettings.developmentTeam) {
+						await buildForDevice({
+							scheme: iosSettings.scheme ?? 'App',
+							developmentTeam: iosSettings.developmentTeam,
+							configuration: iosSettings.configuration,
+							extraArgs: input.args ?? [],
+							cwd: worktree.path,
+						})
+					} else {
+						await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+					}
+				} else {
+					await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+				}
 				iosSuccess = true
 			} finally {
 				try {
