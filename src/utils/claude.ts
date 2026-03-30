@@ -80,6 +80,7 @@ export interface ClaudeCliOptions {
 	effort?: string // Effort level to pass via --effort flag (e.g., 'low', 'high', 'max')
 	env?: Record<string, string> // Additional environment variables to pass to the Claude process
 	signal?: AbortSignal // Optional AbortSignal for graceful termination of the Claude process
+	bare?: boolean // Minimal mode: skip hooks, LSP, plugins, CLAUDE.md auto-discovery. Requires ANTHROPIC_API_KEY (disables OAuth/keychain).
 }
 
 /**
@@ -152,11 +153,18 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal, bare } = options
 	const log = getLogger()
 
 	// Build command arguments
 	const args: string[] = []
+
+	// Auto-apply bare mode for headless utility operations when not explicitly set
+	const effectiveBare = bare ?? (headless && noSessionPersistence ? shouldUseBareMode() : false)
+
+	if (effectiveBare) {
+		args.push('--bare')
+	}
 
 	if (headless) {
 		args.push('-p')
@@ -604,6 +612,15 @@ export async function launchClaudeInNewTerminalWindow(
 		includeEnvSetup: hasEnvFile, // source .env only if it exists
 		...(port !== undefined && { port, includePortExport: true }),
 	})
+}
+
+/**
+ * Check if --bare mode can be used.
+ * Bare mode skips hooks, LSP, plugins, and CLAUDE.md auto-discovery for faster startup.
+ * It requires ANTHROPIC_API_KEY since --bare disables OAuth/keychain auth.
+ */
+export function shouldUseBareMode(): boolean {
+	return !!process.env.ANTHROPIC_API_KEY?.trim()
 }
 
 /**

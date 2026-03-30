@@ -728,6 +728,34 @@ describe('CommitManager', () => {
     })
   })
 
+  describe('Claude Integration - Bare Mode (auto-applied by launchClaude)', () => {
+    beforeEach(() => {
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+    })
+
+    it('should not pass bare option to launchClaude (bare mode is now auto-applied internally)', async () => {
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
+
+      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
+      // CommitManager no longer sets bare - launchClaude auto-applies it when headless + noSessionPersistence
+      expect(claudeCall[1]).not.toHaveProperty('bare')
+    })
+
+    it('should pass headless and noSessionPersistence so launchClaude can auto-apply bare', async () => {
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
+
+      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
+      expect(claudeCall[1]).toEqual(
+        expect.objectContaining({
+          headless: true,
+          noSessionPersistence: true,
+        })
+      )
+    })
+  })
+
   describe('Claude Output Acceptance', () => {
     beforeEach(() => {
       vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)

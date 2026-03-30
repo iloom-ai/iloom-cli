@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
-import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId } from './claude.js'
+import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId, shouldUseBareMode } from './claude.js'
 import { logger } from './logger.js'
 
 const mockLogger = {
@@ -2119,6 +2119,213 @@ describe('claude utils', () => {
 				)
 			})
 		})
+
+		describe('bare parameter', () => {
+			it('should add --bare flag when bare is true', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					bare: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--bare', '-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.any(Object)
+				)
+			})
+
+			it('should not add --bare flag when bare is false', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					bare: false,
+				})
+
+				const execaCall = mockExeca().mock.calls[0]
+				expect(execaCall[1]).not.toContain('--bare')
+			})
+
+			it('should not add --bare flag when bare is undefined and not headless+noSessionPersistence', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = mockExeca().mock.calls[0]
+				expect(execaCall[1]).not.toContain('--bare')
+			})
+
+			it('should auto-apply --bare when headless + noSessionPersistence and ANTHROPIC_API_KEY is set', async () => {
+				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				try {
+					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+					const prompt = 'Test prompt'
+
+					mockExeca().mockResolvedValueOnce({
+						stdout: 'output',
+						exitCode: 0,
+					})
+
+					await launchClaude(prompt, {
+						headless: true,
+						noSessionPersistence: true,
+					})
+
+					expect(execa).toHaveBeenCalledWith(
+						'claude',
+						expect.arrayContaining(['--bare']),
+						expect.any(Object)
+					)
+				} finally {
+					if (originalApiKey !== undefined) {
+						process.env.ANTHROPIC_API_KEY = originalApiKey
+					} else {
+						delete process.env.ANTHROPIC_API_KEY
+					}
+				}
+			})
+
+			it('should not auto-apply --bare when headless + noSessionPersistence but ANTHROPIC_API_KEY is not set', async () => {
+				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				try {
+					delete process.env.ANTHROPIC_API_KEY
+					const prompt = 'Test prompt'
+
+					mockExeca().mockResolvedValueOnce({
+						stdout: 'output',
+						exitCode: 0,
+					})
+
+					await launchClaude(prompt, {
+						headless: true,
+						noSessionPersistence: true,
+					})
+
+					const execaCall = mockExeca().mock.calls[0]
+					expect(execaCall[1]).not.toContain('--bare')
+				} finally {
+					if (originalApiKey !== undefined) {
+						process.env.ANTHROPIC_API_KEY = originalApiKey
+					} else {
+						delete process.env.ANTHROPIC_API_KEY
+					}
+				}
+			})
+
+			it('should not auto-apply --bare when bare is explicitly false even with headless + noSessionPersistence + API key', async () => {
+				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				try {
+					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+					const prompt = 'Test prompt'
+
+					mockExeca().mockResolvedValueOnce({
+						stdout: 'output',
+						exitCode: 0,
+					})
+
+					await launchClaude(prompt, {
+						headless: true,
+						noSessionPersistence: true,
+						bare: false,
+					})
+
+					const execaCall = mockExeca().mock.calls[0]
+					expect(execaCall[1]).not.toContain('--bare')
+				} finally {
+					if (originalApiKey !== undefined) {
+						process.env.ANTHROPIC_API_KEY = originalApiKey
+					} else {
+						delete process.env.ANTHROPIC_API_KEY
+					}
+				}
+			})
+
+			it('should combine --bare with other options in correct order', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					addDir: '/workspace',
+					bare: true,
+					noSessionPersistence: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'--bare',
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--model', 'opus',
+						'--add-dir', '/workspace',
+						'--add-dir', '/tmp',
+						'--no-session-persistence',
+					],
+					expect.any(Object)
+				)
+			})
+		})
+	})
+
+	describe('shouldUseBareMode', () => {
+		let originalApiKey: string | undefined
+
+		beforeEach(() => {
+			originalApiKey = process.env.ANTHROPIC_API_KEY
+		})
+
+		afterEach(() => {
+			if (originalApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = originalApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+		})
+
+		it('should return true when ANTHROPIC_API_KEY is set', () => {
+			process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+			expect(shouldUseBareMode()).toBe(true)
+		})
+
+		it('should return false when ANTHROPIC_API_KEY is not set', () => {
+			delete process.env.ANTHROPIC_API_KEY
+			expect(shouldUseBareMode()).toBe(false)
+		})
+
+		it('should return false when ANTHROPIC_API_KEY is empty string', () => {
+			process.env.ANTHROPIC_API_KEY = ''
+			expect(shouldUseBareMode()).toBe(false)
+		})
+
+		it('should return false when ANTHROPIC_API_KEY is whitespace only', () => {
+			process.env.ANTHROPIC_API_KEY = '   '
+			expect(shouldUseBareMode()).toBe(false)
+		})
 	})
 
 	describe.runIf(process.platform === 'darwin')('launchClaudeInNewTerminalWindow', () => {
@@ -2474,6 +2681,72 @@ describe('claude utils', () => {
 
 			// Should accept the lowercase branch name, not fall back
 			expect(result).toBe('feat/issue-mark-1__nextjs-vercel')
+		})
+
+		describe('bare mode (auto-applied by launchClaude)', () => {
+			let originalApiKey: string | undefined
+
+			beforeEach(() => {
+				originalApiKey = process.env.ANTHROPIC_API_KEY
+			})
+
+			afterEach(() => {
+				if (originalApiKey !== undefined) {
+					process.env.ANTHROPIC_API_KEY = originalApiKey
+				} else {
+					delete process.env.ANTHROPIC_API_KEY
+				}
+			})
+
+			it('should auto-apply --bare when ANTHROPIC_API_KEY is set (headless + noSessionPersistence)', async () => {
+				process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+				const issueTitle = 'Add user authentication'
+				const issueNumber = 123
+
+				// Mock Claude CLI detection
+				mockExeca().mockResolvedValueOnce({
+					stdout: '/usr/local/bin/claude',
+					exitCode: 0,
+				})
+
+				// Mock Claude response
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'feat/issue-123__user-authentication',
+					exitCode: 0,
+				})
+
+				await generateBranchName(issueTitle, issueNumber)
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					expect.arrayContaining(['--bare']),
+					expect.any(Object)
+				)
+			})
+
+			it('should not auto-apply --bare when ANTHROPIC_API_KEY is not set', async () => {
+				delete process.env.ANTHROPIC_API_KEY
+				const issueTitle = 'Add user authentication'
+				const issueNumber = 123
+
+				// Mock Claude CLI detection
+				mockExeca().mockResolvedValueOnce({
+					stdout: '/usr/local/bin/claude',
+					exitCode: 0,
+				})
+
+				// Mock Claude response
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'feat/issue-123__user-authentication',
+					exitCode: 0,
+				})
+
+				await generateBranchName(issueTitle, issueNumber)
+
+				// The second execa call is the launchClaude call
+				const launchClaudeCall = mockExeca().mock.calls[1]
+				expect(launchClaudeCall[1]).not.toContain('--bare')
+			})
 		})
 	})
 

@@ -343,7 +343,7 @@ export class CommitManager {
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
         appendSystemPrompt: 'Output only the requested content. Never include preamble, analysis, or meta-commentary. Your response is used verbatim.',
-        noSessionPersistence: true, // Utility operation - don't persist session
+        noSessionPersistence: true, // Utility operation - bare mode auto-applied by launchClaude
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,
