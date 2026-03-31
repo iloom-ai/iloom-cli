@@ -2264,7 +2264,7 @@ il init "configure neon database with project ID abc-123"
 
 **Configuration Areas:**
 - Issue tracker (GitHub/Linear/Jira)
-- Database provider (Neon)
+- Database provider (Neon, Supabase)
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local, pr, draft-pr)
 - Permission modes
@@ -2338,6 +2338,64 @@ iloom supports multiple version control providers for PR operations. By default,
 - Jira Issues + BitBucket VCS
 
 **Note:** Draft PR mode (`mergeBehavior.mode: "draft-pr"`) is GitHub-only. BitBucket does not support draft pull requests.
+
+---
+
+**Database Provider Settings:**
+
+iloom supports database branching to create isolated database copies per workspace. Configure one provider under `databaseProviders` in `.iloom/settings.json`. Only one provider may be active at a time.
+
+**Neon:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `databaseProviders.neon.projectId` | string | (required) | Neon project ID from your project URL (e.g., `"fantastic-fox-3566354"`) |
+| `databaseProviders.neon.parentBranch` | string | (required) | Branch from which new database branches are created |
+
+**Supabase:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `databaseProviders.supabase.projectRef` | string | (required) | Supabase project reference ID (e.g., `"abcdefghijklmnop"`) |
+| `databaseProviders.supabase.withData` | boolean | `true` | Whether to include data when creating a new branch |
+
+**Prerequisites (Supabase):**
+
+- Supabase CLI installed and authenticated (`supabase login`)
+- Supabase project with database branching enabled
+
+> **Paid plan required:** Supabase database branching requires a paid Supabase plan (Pro or higher). Free-tier projects do not support branching.
+
+**`withData` option:** When `withData` is `true` (the default), new branches include a copy of the parent branch's data. Set to `false` to create branches with schema only (no data), which is faster for large databases.
+
+**Example Configuration (Neon):**
+
+`.iloom/settings.json`:
+```json
+{
+  "databaseProviders": {
+    "neon": {
+      "projectId": "fantastic-fox-3566354",
+      "parentBranch": "main"
+    }
+  }
+}
+```
+
+**Example Configuration (Supabase):**
+
+`.iloom/settings.json`:
+```json
+{
+  "databaseProviders": {
+    "supabase": {
+      "projectRef": "abcdefghijklmnop"
+    }
+  }
+}
+```
+
+**Note:** Configuring both `neon` and `supabase` simultaneously will cause an error at startup.
 
 ---
 

@@ -258,9 +258,11 @@ export class IgniteCommand {
 			// Step 2.0.5.1: Track session.started telemetry
 			try {
 				const hasNeon = !!this.settings?.databaseProviders?.neon
+				const hasSupabase = !!this.settings?.databaseProviders?.supabase
 				const language = await detectProjectLanguage(context.workspacePath)
 				TelemetryService.getInstance().track('session.started', {
 					has_neon: hasNeon,
+					has_supabase: hasSupabase,
 					language,
 					...(effectiveEffort && { effort: effectiveEffort }),
 				})

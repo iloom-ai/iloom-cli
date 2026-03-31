@@ -9,7 +9,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
-import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { createDatabaseProviderFromSettings } from '../utils/database-helpers.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
@@ -104,8 +104,8 @@ export class CleanupCommand {
     const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
     const environmentManager = new EnvironmentManager()
-    const neonProvider = createNeonProviderFromSettings(settings)
-    const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
+    const databaseProvider = createDatabaseProviderFromSettings(settings)
+    const databaseManager = new DatabaseManager(databaseProvider, environmentManager, databaseUrlEnvVarName)
     const cliIsolationManager = new CLIIsolationManager()
 
     this.resourceCleanup ??= new ResourceCleanup(

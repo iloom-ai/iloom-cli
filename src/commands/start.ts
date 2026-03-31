@@ -16,7 +16,7 @@ import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
-import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { createDatabaseProviderFromSettings } from '../utils/database-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions, StartResult } from '../types/index.js'
@@ -100,10 +100,10 @@ export class StartCommand {
 
 		// Create DatabaseManager with NeonProvider and EnvironmentManager
 		const environmentManager = new EnvironmentManager()
-		const neonProvider = createNeonProviderFromSettings(settings)
+		const databaseProvider = createDatabaseProviderFromSettings(settings)
 		const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
-		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
+		const databaseManager = new DatabaseManager(databaseProvider, environmentManager, databaseUrlEnvVarName)
 
 		// Create BranchNamingService (defaults to Claude-based strategy)
 		const branchNaming = new DefaultBranchNamingService({ useClaude: true })

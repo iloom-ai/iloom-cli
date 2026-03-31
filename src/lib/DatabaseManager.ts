@@ -80,16 +80,15 @@ export class DatabaseManager {
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
-      getLogger().warn('Skipping database branch creation: Neon CLI not available')
-      getLogger().warn('Install with: npm install -g neonctl')
+      getLogger().warn(`Skipping database branch creation: ${this.provider.displayName} CLI not available`)
+      getLogger().warn(`Install with: ${this.provider.installHint}`)
       return null
     }
 
     try {
       const isAuth = await this.provider.isAuthenticated(cwd)
       if (!isAuth) {
-        getLogger().warn('Skipping database branch creation: Not authenticated with Neon CLI')
-        getLogger().warn('Run: neon auth')
+        getLogger().warn(`Skipping database branch creation: Not authenticated with ${this.provider.displayName} CLI`)
         return null
       }
     } catch (error) {
@@ -151,12 +150,12 @@ export class DatabaseManager {
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
-      getLogger().info('Skipping database branch deletion: CLI tool not available')
+      getLogger().info(`Skipping database branch deletion: ${this.provider.displayName} CLI not available. Install with: ${this.provider.installHint}`)
       return {
         success: false,
         deleted: false,
         notFound: true,
-        error: "CLI tool not available",
+        error: `${this.provider.displayName} CLI not available`,
         branchName
       }
     }
@@ -164,12 +163,12 @@ export class DatabaseManager {
     try {
       const isAuth = await this.provider.isAuthenticated(cwd)
       if (!isAuth) {
-        getLogger().warn('Skipping database branch deletion: Not authenticated with DB Provider')
+        getLogger().warn(`Skipping database branch deletion: Not authenticated with ${this.provider.displayName}`)
         return {
           success: false,
           deleted: false,
           notFound: false,
-          error: "Not authenticated with DB Provider",
+          error: `Not authenticated with ${this.provider.displayName}`,
           branchName
         }
       }

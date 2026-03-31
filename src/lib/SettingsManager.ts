@@ -466,12 +466,34 @@ export const NeonSettingsSchema = z.object({
 })
 
 /**
+ * Zod schema for Supabase database provider settings
+ */
+export const SupabaseSettingsSchema = z.object({
+	projectRef: z
+		.string()
+		.min(1)
+		.describe('Supabase project reference ID (e.g., "abcdefghijklmnop")'),
+	parentBranch: z
+		.string()
+		.min(1)
+		.optional()
+		.describe('Reserved for future use. Supabase currently always branches from the default branch.'),
+	withData: z
+		.boolean()
+		.optional()
+		.describe('Whether to include data when creating a new branch (defaults to true)'),
+})
+
+/**
  * Zod schema for database provider settings
  */
 export const DatabaseProvidersSettingsSchema = z
 	.object({
 		neon: NeonSettingsSchema.optional().describe(
 			'Neon database configuration. Requires Neon CLI installed and authenticated for database branching.',
+		),
+		supabase: SupabaseSettingsSchema.optional().describe(
+			'Supabase database configuration. Requires Supabase CLI installed and authenticated for database branching.',
 		),
 	})
 	.optional()
@@ -1051,6 +1073,11 @@ export type DevServerSettings = z.infer<typeof DevServerSettingsSchema>
  * TypeScript type for Neon settings derived from Zod schema
  */
 export type NeonSettings = z.infer<typeof NeonSettingsSchema>
+
+/**
+ * TypeScript type for Supabase settings derived from Zod schema
+ */
+export type SupabaseSettings = z.infer<typeof SupabaseSettingsSchema>
 
 /**
  * TypeScript type for database providers settings derived from Zod schema
