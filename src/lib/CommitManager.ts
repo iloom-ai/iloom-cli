@@ -322,9 +322,28 @@ export class CommitManager {
     }
     getLogger().debug('Claude CLI is available')
 
-    // Build XML-based structured prompt
+    // Fetch the staged diff upfront so Claude doesn't need to use tools
+    getLogger().debug('Fetching staged diff...')
+    let stagedDiff: string
+    let stagedStat: string
+    try {
+      const statResult = await executeGitCommand(['diff', '--staged', '--stat'], { cwd: worktreePath })
+      stagedStat = statResult.trim()
+      const diffResult = await executeGitCommand(['diff', '--staged'], { cwd: worktreePath })
+      // Truncate large diffs to avoid token limits
+      const maxDiffLength = 50000
+      stagedDiff = diffResult.length > maxDiffLength
+        ? diffResult.substring(0, maxDiffLength) + '\n\n... [diff truncated, showing first 50KB]'
+        : diffResult
+    } catch {
+      getLogger().warn('Failed to fetch staged diff, falling back to Claude tool use')
+      stagedDiff = ''
+      stagedStat = ''
+    }
+
+    // Build XML-based structured prompt with embedded diff
     getLogger().debug('Building commit message prompt...')
-    const prompt = this.buildCommitMessagePrompt(issueNumber, issuePrefix, trailerType)
+    const prompt = this.buildCommitMessagePrompt(issueNumber, issuePrefix, trailerType, stagedStat, stagedDiff)
     getLogger().debug('Prompt built', { promptLength: prompt.length })
 
     // Debug log the actual prompt content for troubleshooting
@@ -339,19 +358,17 @@ export class CommitManager {
       // Debug log the Claude call parameters
       const claudeOptions = {
         headless: true,
-        addDir: worktreePath,
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
-        systemPrompt: 'You are a software engineer writing a git commit message. Examine the staged changes in the git repository and generate a concise, meaningful commit message. Use imperative mood. Keep subject line under 72 characters. Your entire response will be used directly as the git commit message — output ONLY the raw commit message with no explanatory text, analysis, or meta-commentary.',
+        systemPrompt: 'You are a git commit message generator. Generate a concise commit message in imperative mood with subject line under 72 characters. Your entire response is used verbatim as the commit message — output ONLY the raw commit message, no explanatory text.',
         noSessionPersistence: true, // Utility operation - bare mode auto-applied by launchClaude
+        effort: 'low', // Minimize turns for fast commit message generation
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,
-        worktreePathForAnalysis: worktreePath,
-        addDirContents: 'Will include entire worktree directory for analysis'
       })
 
-      // Launch Claude in headless mode with repository access and shorter timeout for commit messages
+      // Launch Claude in headless mode — diff is embedded in prompt, no addDir needed
       const result = await launchClaude(prompt, claudeOptions)
 
       const claudeDuration = Date.now() - claudeStartTime
@@ -436,7 +453,9 @@ export class CommitManager {
   private buildCommitMessagePrompt(
     issueNumber: string | number | undefined,
     issuePrefix: string,
-    trailerType?: 'Refs' | 'Fixes'
+    trailerType?: 'Refs' | 'Fixes',
+    stagedStat?: string,
+    stagedDiff?: string
   ): string {
     const trailer = trailerType ?? 'Fixes'
     const issueContext = issueNumber
@@ -446,10 +465,22 @@ ${trailer === 'Fixes' ? 'If the changes appear to resolve the issue, include' : 
 </IssueContext>`
       : ''
 
+    const diffSection = stagedStat || stagedDiff
+      ? `\n<StagedChanges>
+<Stat>
+${stagedStat ?? '(not available)'}
+</Stat>
+<Diff>
+${stagedDiff ?? '(not available)'}
+</Diff>
+</StagedChanges>`
+      : ''
+
     const examplePrefix = issuePrefix || ''  // Use empty string for Linear examples
     return `<Task>
-Examine the staged changes in the git repository and generate a concise, meaningful commit message.
+Generate a concise, meaningful commit message for the following staged changes.
 </Task>
+${diffSection}
 
 <Requirements>
 <Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "${trailer} ${examplePrefix}N" at the end of this line.

@@ -3120,7 +3120,7 @@ describe('claude utils', () => {
 			expect(result).toBe('feat/issue-123__user-authentication')
 			expect(execa).toHaveBeenCalledWith(
 				'claude',
-				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp', '--no-session-persistence'],
+				expect.arrayContaining(['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--effort', 'low', '--system-prompt', expect.any(String), '--no-session-persistence']),
 				expect.objectContaining({
 					input: expect.stringContaining(issueTitle),
 					env: expect.objectContaining({ CLAUDECODE: '0' }),
