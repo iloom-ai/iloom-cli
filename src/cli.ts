@@ -1758,7 +1758,7 @@ program
 
 // Test command for GitHub integration
 program
-  .command('test-github')
+  .command('test-github', { hidden: true })
   .description('Test GitHub integration (Issue #3)')
   .argument('<identifier>', 'Issue number or PR number')
   .option('--no-claude', 'Skip Claude for branch name generation')
@@ -1844,7 +1844,7 @@ program
 
 // Test command for Claude integration
 program
-  .command('test-claude')
+  .command('test-claude', { hidden: true })
   .description('Test Claude integration (Issue #10)')
   .option('--detect', 'Test Claude CLI detection')
   .option('--version', 'Get Claude CLI version')
@@ -2032,7 +2032,7 @@ program
 
 // Test command for webserver detection
 program
-  .command('test-webserver')
+  .command('test-webserver', { hidden: true })
   .description('Test if a web server is running on a workspace port')
   .argument('<issue-number>', 'Issue number (port will be calculated as 3000 + issue number)', parseInt)
   .option('--kill', 'Kill the web server if detected')
@@ -2052,7 +2052,7 @@ program
 
 // Test command for Git integration
 program
-  .command('test-git')
+  .command('test-git', { hidden: true })
   .description('Test Git integration - findMainWorktreePath() function (reads .iloom/settings.json)')
   .action(async () => {
     try {
@@ -2070,7 +2070,7 @@ program
 
 // Test command for iTerm2 dual tab functionality
 program
-  .command('test-tabs')
+  .command('test-tabs', { hidden: true })
   .description('Test iTerm2 dual tab functionality - opens two tabs with test commands')
   .action(async () => {
     try {
@@ -2088,7 +2088,7 @@ program
 
 // Test command for worktree prefix configuration
 program
-  .command('test-prefix')
+  .command('test-prefix', { hidden: true })
   .description('[DEPRECATED] Test worktree prefix configuration - preview worktree paths')
   .action(async () => {
     try {
@@ -2097,6 +2097,44 @@ program
       await command.execute()
     } catch (error) {
       logger.error(`Test prefix failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        logger.debug(error.stack)
+      }
+      process.exit(1)
+    }
+  })
+
+// Test command for bare mode branch name generation
+program
+  .command('test-branch-name', { hidden: true })
+  .description('Test bare mode branch name generation')
+  .option('--title <text>', 'Issue title to use for branch name generation')
+  .option('--description <text>', 'Issue description for additional context')
+  .action(async (options: { title?: string; description?: string }) => {
+    try {
+      const { TestBranchNameCommand } = await import('./commands/test-branch-name.js')
+      const command = new TestBranchNameCommand()
+      await command.execute(options)
+    } catch (error) {
+      logger.error(`Test branch name failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        logger.debug(error.stack)
+      }
+      process.exit(1)
+    }
+  })
+
+// Test command for bare mode commit message generation
+program
+  .command('test-commit-msg', { hidden: true })
+  .description('Test bare mode commit message generation')
+  .action(async () => {
+    try {
+      const { TestCommitMsgCommand } = await import('./commands/test-commit-msg.js')
+      const command = new TestCommitMsgCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Test commit msg failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       if (error instanceof Error && error.stack) {
         logger.debug(error.stack)
       }
@@ -2191,7 +2229,7 @@ program
 
 // Test command for Jira integration (hidden from help output)
 const testJiraCommand = program
-  .command('test-jira')
+  .command('test-jira', { hidden: true })
   .description('Test Jira integration methods against a real Jira instance')
 
 testJiraCommand
@@ -2268,7 +2306,7 @@ testJiraCommand
 
 // Test command for Neon integration
 program
-  .command('test-neon')
+  .command('test-neon', { hidden: true })
   .description('Test Neon integration and debug configuration')
   .action(async () => {
     try {

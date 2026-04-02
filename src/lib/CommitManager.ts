@@ -296,7 +296,7 @@ export class CommitManager {
    * Claude examines the git repository directly via --add-dir option
    * Returns null if Claude unavailable or fails validation
    */
-  private async generateClaudeCommitMessage(
+  public async generateClaudeCommitMessage(
     worktreePath: string,
     issueNumber: string | number | undefined,
     issuePrefix: string,
@@ -342,7 +342,7 @@ export class CommitManager {
         addDir: worktreePath,
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
-        appendSystemPrompt: 'Output only the requested content. Never include preamble, analysis, or meta-commentary. Your response is used verbatim.',
+        systemPrompt: 'You are a software engineer writing a git commit message. Examine the staged changes in the git repository and generate a concise, meaningful commit message. Use imperative mood. Keep subject line under 72 characters. Your entire response will be used directly as the git commit message — output ONLY the raw commit message with no explanatory text, analysis, or meta-commentary.',
         noSessionPersistence: true, // Utility operation - bare mode auto-applied by launchClaude
       }
       getLogger().debug('Claude CLI call parameters:', {
@@ -448,7 +448,6 @@ ${trailer === 'Fixes' ? 'If the changes appear to resolve the issue, include' : 
 
     const examplePrefix = issuePrefix || ''  // Use empty string for Linear examples
     return `<Task>
-You are a software engineer writing a commit message for this repository.
 Examine the staged changes in the git repository and generate a concise, meaningful commit message.
 </Task>
 

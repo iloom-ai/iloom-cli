@@ -810,6 +810,129 @@ describe('SessionSummaryService', () => {
 		})
 	})
 
+	describe('prompt too long retry with opus[1m]', () => {
+		const validSummary = '## iloom Session Summary\n\n**Key Themes:**\n- Theme one about testing\n- Theme two about implementation\n\n### Key Insights\n- Test insight one\n- Test insight two'
+
+		it('should retry with opus[1m] when launchClaude returns "Prompt is too long" as result text', async () => {
+			vi.mocked(launchClaude)
+				.mockResolvedValueOnce('Prompt is too long')
+				.mockResolvedValueOnce(validSummary)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Verify launchClaude called twice: first with sonnet, second with opus[1m]
+			expect(launchClaude).toHaveBeenCalledTimes(2)
+			expect(launchClaude).toHaveBeenNthCalledWith(1, expect.any(String), expect.objectContaining({
+				model: 'sonnet',
+				sessionId: 'test-session-id-12345',
+			}))
+			expect(launchClaude).toHaveBeenNthCalledWith(2, expect.any(String), expect.objectContaining({
+				model: 'opus[1m]',
+				sessionId: 'test-session-id-12345',
+			}))
+
+			// Verify comment was posted successfully with the retry result
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: validSummary,
+				type: 'issue',
+			})
+		})
+
+		it('should retry with opus[1m] when launchClaude throws "Prompt is too long" error', async () => {
+			vi.mocked(launchClaude)
+				.mockRejectedValueOnce(new Error('Prompt is too long'))
+				.mockResolvedValueOnce(validSummary)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Verify launchClaude called twice
+			expect(launchClaude).toHaveBeenCalledTimes(2)
+			expect(launchClaude).toHaveBeenNthCalledWith(1, expect.any(String), expect.objectContaining({
+				model: 'sonnet',
+			}))
+			expect(launchClaude).toHaveBeenNthCalledWith(2, expect.any(String), expect.objectContaining({
+				model: 'opus[1m]',
+			}))
+
+			// Verify comment was posted
+			expect(mockIssueProvider.createComment).toHaveBeenCalled()
+		})
+
+		it('should not retry when launchClaude fails with a different error', async () => {
+			vi.mocked(launchClaude).mockRejectedValueOnce(new Error('Claude API error'))
+
+			// generateAndPostSummary is non-blocking, should not throw
+			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
+
+			// Verify launchClaude called only once (no retry)
+			expect(launchClaude).toHaveBeenCalledTimes(1)
+			// Comment should not be posted
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
+		it('should retry with opus[1m] in generateSummary when prompt is too long (thrown error)', async () => {
+			vi.mocked(launchClaude)
+				.mockRejectedValueOnce(new Error('Prompt is too long'))
+				.mockResolvedValueOnce(validSummary)
+
+			const result = await service.generateSummary(
+				'/path/to/worktree',
+				'feat/issue-123__test-feature',
+				'issue',
+				123
+			)
+
+			// Verify launchClaude called twice
+			expect(launchClaude).toHaveBeenCalledTimes(2)
+			expect(launchClaude).toHaveBeenNthCalledWith(2, expect.any(String), expect.objectContaining({
+				model: 'opus[1m]',
+			}))
+
+			// Verify returned summary is from the retry call
+			expect(result.summary).toBe(validSummary)
+		})
+
+		it('should retry with opus[1m] in generateSummary when prompt is too long (result string)', async () => {
+			vi.mocked(launchClaude)
+				.mockResolvedValueOnce('Prompt is too long')
+				.mockResolvedValueOnce(validSummary)
+
+			const result = await service.generateSummary(
+				'/path/to/worktree',
+				'feat/issue-123__test-feature',
+				'issue',
+				123
+			)
+
+			// Verify launchClaude called twice
+			expect(launchClaude).toHaveBeenCalledTimes(2)
+			expect(launchClaude).toHaveBeenNthCalledWith(2, expect.any(String), expect.objectContaining({
+				model: 'opus[1m]',
+			}))
+
+			// Verify returned summary is from the retry call
+			expect(result.summary).toBe(validSummary)
+		})
+
+		it('should throw when retry also fails in generateSummary', async () => {
+			vi.mocked(launchClaude)
+				.mockRejectedValueOnce(new Error('Prompt is too long'))
+				.mockRejectedValueOnce(new Error('Opus also failed'))
+
+			// generateSummary throws (not non-blocking like generateAndPostSummary)
+			await expect(service.generateSummary(
+				'/path/to/worktree',
+				'feat/issue-123__test-feature',
+				'issue',
+				123
+			)).rejects.toThrow('Opus also failed')
+
+			// Verify launchClaude called twice
+			expect(launchClaude).toHaveBeenCalledTimes(2)
+		})
+	})
+
 	describe('shouldGenerateSummary - epic type', () => {
 		it('should use issue workflow config for epic loom type', () => {
 			const settings: IloomSettings = {

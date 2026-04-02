@@ -78,6 +78,42 @@ export class SessionSummaryService {
 	}
 
 	/**
+	 * Launch Claude for session summary with automatic retry using opus[1m] if the prompt is too long.
+	 *
+	 * When resuming long sessions, the transcript can exceed Sonnet's 200K context window,
+	 * causing a "Prompt is too long" error. This helper detects that condition (either as a
+	 * thrown error or as a returned result string) and retries with opus[1m] (1M context).
+	 */
+	private async launchSessionSummary(prompt: string, model: string, sessionId: string): Promise<string | void> {
+		const launchOptions = {
+			headless: true,
+			model,
+			sessionId,
+			noSessionPersistence: true,
+		}
+
+		try {
+			const result = await launchClaude(prompt, launchOptions)
+
+			// Check if the result string indicates the prompt was too long
+			if (typeof result === 'string' && result.includes('Prompt is too long')) {
+				logger.warn(`Session too long for ${model}, retrying with Opus (1M context)...`)
+				return await launchClaude(prompt, { ...launchOptions, model: 'opus[1m]' })
+			}
+
+			return result
+		} catch (error) {
+			// Check if the thrown error indicates the prompt was too long
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			if (errorMessage.includes('Prompt is too long')) {
+				logger.warn(`Session too long for ${model}, retrying with Opus (1M context)...`)
+				return await launchClaude(prompt, { ...launchOptions, model: 'opus[1m]' })
+			}
+			throw error
+		}
+	}
+
+	/**
 	 * Generate and post a session summary to the issue
 	 *
 	 * Non-blocking: Catches all errors and logs warnings instead of throwing
@@ -135,12 +171,7 @@ export class SessionSummaryService {
 			// 7. Invoke Claude headless to generate summary
 			// Use --resume with session ID so Claude knows which conversation to summarize
 			const summaryModel = this.settingsManager.getSummaryModel(settings)
-			const summaryResult = await launchClaude(prompt, {
-				headless: true,
-				model: summaryModel,
-				sessionId: sessionId, // Resume this session so Claude has conversation context
-				noSessionPersistence: true, // Don't persist new data after generating summary
-			})
+			const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId)
 
 			if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
 				logger.warn('Session summary generation returned empty result')
@@ -339,12 +370,7 @@ export class SessionSummaryService {
 
 		// 6. Invoke Claude headless to generate summary
 		const summaryModel = this.settingsManager.getSummaryModel(settings)
-		const summaryResult = await launchClaude(prompt, {
-			headless: true,
-			model: summaryModel,
-			sessionId: sessionId,
-			noSessionPersistence: true, // Don't persist new data after generating summary
-		})
+		const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId)
 
 		if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
 			throw new Error('Session summary generation returned empty result')

@@ -2,7 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
-import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId, shouldUseBareMode } from './claude.js'
+import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId, hasApiKeyForBareMode, extractOAuthToken, resolveBareModeConfig } from './claude.js'
+import { readFile } from 'node:fs/promises'
 import { logger } from './logger.js'
 
 const mockLogger = {
@@ -20,6 +21,7 @@ const mockLogger = {
 
 vi.mock('execa')
 vi.mock('node:fs')
+vi.mock('node:fs/promises')
 vi.mock('./logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -2011,8 +2013,38 @@ describe('claude utils', () => {
 		})
 
 		describe('noSessionPersistence parameter', () => {
+			let originalApiKey: string | undefined
+			let originalOAuthToken: string | undefined
+
+			beforeEach(() => {
+				originalApiKey = process.env.ANTHROPIC_API_KEY
+				originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+				delete process.env.ANTHROPIC_API_KEY
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			})
+
+			afterEach(() => {
+				if (originalApiKey !== undefined) {
+					process.env.ANTHROPIC_API_KEY = originalApiKey
+				} else {
+					delete process.env.ANTHROPIC_API_KEY
+				}
+				if (originalOAuthToken !== undefined) {
+					process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+				} else {
+					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+				}
+			})
+
 			it('should add --no-session-persistence flag when noSessionPersistence is true', async () => {
 				const prompt = 'Test prompt'
+
+				// resolveBareModeConfig will try OAuth extraction - make it fail
+				if (process.platform === 'darwin') {
+					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+				} else {
+					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+				}
 
 				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
@@ -2089,6 +2121,13 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 				const sessionId = '12345678-1234-5678-1234-567812345678'
 
+				// resolveBareModeConfig will try OAuth extraction - make it fail
+				if (process.platform === 'darwin') {
+					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+				} else {
+					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+				}
+
 				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
@@ -2121,6 +2160,30 @@ describe('claude utils', () => {
 		})
 
 		describe('bare parameter', () => {
+			let savedApiKey: string | undefined
+			let savedOAuthToken: string | undefined
+
+			beforeEach(() => {
+				savedApiKey = process.env.ANTHROPIC_API_KEY
+				savedOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+				// Set API key so resolveBareModeConfig() returns early without OAuth extraction
+				process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key-for-bare'
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			})
+
+			afterEach(() => {
+				if (savedApiKey !== undefined) {
+					process.env.ANTHROPIC_API_KEY = savedApiKey
+				} else {
+					delete process.env.ANTHROPIC_API_KEY
+				}
+				if (savedOAuthToken !== undefined) {
+					process.env.CLAUDE_CODE_OAUTH_TOKEN = savedOAuthToken
+				} else {
+					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+				}
+			})
+
 			it('should add --bare flag when bare is true', async () => {
 				const prompt = 'Test prompt'
 
@@ -2202,11 +2265,20 @@ describe('claude utils', () => {
 				}
 			})
 
-			it('should not auto-apply --bare when headless + noSessionPersistence but ANTHROPIC_API_KEY is not set', async () => {
+			it('should not auto-apply --bare when headless + noSessionPersistence but no API key or OAuth token available', async () => {
 				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				const originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
 				try {
 					delete process.env.ANTHROPIC_API_KEY
+					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 					const prompt = 'Test prompt'
+
+					// On macOS, extractOAuthToken will call security command - make it fail
+					if (process.platform === 'darwin') {
+						mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+					} else {
+						vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+					}
 
 					mockExeca().mockResolvedValueOnce({
 						stdout: 'output',
@@ -2218,13 +2290,21 @@ describe('claude utils', () => {
 						noSessionPersistence: true,
 					})
 
-					const execaCall = mockExeca().mock.calls[0]
-					expect(execaCall[1]).not.toContain('--bare')
+					// Find the claude call (skip the security call on macOS)
+					const claudeCall = mockExeca().mock.calls.find(
+						(call: unknown[]) => call[0] === 'claude'
+					)
+					expect(claudeCall?.[1]).not.toContain('--bare')
 				} finally {
 					if (originalApiKey !== undefined) {
 						process.env.ANTHROPIC_API_KEY = originalApiKey
 					} else {
 						delete process.env.ANTHROPIC_API_KEY
+					}
+					if (originalOAuthToken !== undefined) {
+						process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+					} else {
+						delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 					}
 				}
 			})
@@ -2292,7 +2372,7 @@ describe('claude utils', () => {
 		})
 	})
 
-	describe('shouldUseBareMode', () => {
+	describe('hasApiKeyForBareMode', () => {
 		let originalApiKey: string | undefined
 
 		beforeEach(() => {
@@ -2309,22 +2389,494 @@ describe('claude utils', () => {
 
 		it('should return true when ANTHROPIC_API_KEY is set', () => {
 			process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
-			expect(shouldUseBareMode()).toBe(true)
+			expect(hasApiKeyForBareMode()).toBe(true)
 		})
 
 		it('should return false when ANTHROPIC_API_KEY is not set', () => {
 			delete process.env.ANTHROPIC_API_KEY
-			expect(shouldUseBareMode()).toBe(false)
+			expect(hasApiKeyForBareMode()).toBe(false)
 		})
 
 		it('should return false when ANTHROPIC_API_KEY is empty string', () => {
 			process.env.ANTHROPIC_API_KEY = ''
-			expect(shouldUseBareMode()).toBe(false)
+			expect(hasApiKeyForBareMode()).toBe(false)
 		})
 
 		it('should return false when ANTHROPIC_API_KEY is whitespace only', () => {
 			process.env.ANTHROPIC_API_KEY = '   '
-			expect(shouldUseBareMode()).toBe(false)
+			expect(hasApiKeyForBareMode()).toBe(false)
+		})
+	})
+
+	describe('extractOAuthToken', () => {
+		let originalApiKey: string | undefined
+		let originalOAuthToken: string | undefined
+		let originalPlatform: string
+
+		beforeEach(() => {
+			originalApiKey = process.env.ANTHROPIC_API_KEY
+			originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+			originalPlatform = process.platform
+			delete process.env.ANTHROPIC_API_KEY
+			delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+		})
+
+		afterEach(() => {
+			if (originalApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = originalApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+			if (originalOAuthToken !== undefined) {
+				process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+			} else {
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			}
+			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+		})
+
+		it('should return CLAUDE_CODE_OAUTH_TOKEN env var if set', async () => {
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+			const token = await extractOAuthToken()
+			expect(token).toBe('sk-ant-oat01-test-token')
+		})
+
+		it('should return null when CLAUDE_CODE_OAUTH_TOKEN is empty', async () => {
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = ''
+			// Mock platform-specific fallback to also return nothing
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+			vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+			const token = await extractOAuthToken()
+			expect(token).toBeNull()
+		})
+
+		describe('macOS (darwin)', () => {
+			beforeEach(() => {
+				Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+			})
+
+			it('should extract token from macOS Keychain via security command', async () => {
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-keychain-token',
+						refreshToken: 'rt-test',
+						expiresAt: Date.now() + 3600000,
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBe('sk-ant-oat01-keychain-token')
+
+				expect(execa).toHaveBeenCalledWith(
+					'security',
+					['find-generic-password', '-s', 'Claude Code-credentials', '-a', expect.any(String), '-w'],
+					{ timeout: 3000 }
+				)
+			})
+
+			it('should return null when security command fails', async () => {
+				mockExeca().mockRejectedValueOnce(new Error('security: SecKeychainSearchCopyNext: The specified item could not be found'))
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should return null when keychain JSON is malformed', async () => {
+				mockExeca().mockResolvedValueOnce({ stdout: 'not-valid-json', exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should return null when claudeAiOauth.accessToken is missing', async () => {
+				const credJson = JSON.stringify({ someOtherField: 'value' })
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should return null when token is expired', async () => {
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-expired-token',
+						expiresAt: Date.now() - 1000, // expired 1 second ago
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should return null when token expires within 60 seconds (buffer)', async () => {
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-expiring-soon',
+						expiresAt: Date.now() + 30_000, // expires in 30s, within 60s buffer
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should handle expiresAt in seconds (heuristic: value < 10 billion)', async () => {
+				const nowInSeconds = Math.floor(Date.now() / 1000)
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-seconds-token',
+						expiresAt: nowInSeconds + 3600, // 1 hour from now, in seconds
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBe('sk-ant-oat01-seconds-token')
+			})
+
+			it('should treat expired token in seconds format as expired', async () => {
+				const nowInSeconds = Math.floor(Date.now() / 1000)
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-expired-seconds',
+						expiresAt: nowInSeconds - 100, // expired 100 seconds ago, in seconds
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should use 3-second timeout on security command', async () => {
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-token',
+						expiresAt: Date.now() + 3600000,
+					},
+				})
+				mockExeca().mockResolvedValueOnce({ stdout: credJson, exitCode: 0 })
+
+				await extractOAuthToken()
+
+				expect(execa).toHaveBeenCalledWith(
+					'security',
+					expect.any(Array),
+					expect.objectContaining({ timeout: 3000 })
+				)
+			})
+		})
+
+		describe('Linux/other platforms', () => {
+			beforeEach(() => {
+				Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+			})
+
+			it('should extract token from ~/.claude/.credentials.json', async () => {
+				const credJson = JSON.stringify({
+					claudeAiOauth: {
+						accessToken: 'sk-ant-oat01-linux-token',
+						refreshToken: 'rt-test',
+						expiresAt: Date.now() + 3600000,
+					},
+				})
+				vi.mocked(readFile).mockResolvedValueOnce(credJson)
+
+				const token = await extractOAuthToken()
+				expect(token).toBe('sk-ant-oat01-linux-token')
+			})
+
+			it('should return null when credentials file does not exist', async () => {
+				vi.mocked(readFile).mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+
+			it('should return null when credentials JSON is malformed', async () => {
+				vi.mocked(readFile).mockResolvedValueOnce('not-valid-json')
+
+				const token = await extractOAuthToken()
+				expect(token).toBeNull()
+			})
+		})
+	})
+
+	describe('resolveBareModeConfig', () => {
+		let originalApiKey: string | undefined
+		let originalOAuthToken: string | undefined
+		let originalPlatform: string
+
+		beforeEach(() => {
+			originalApiKey = process.env.ANTHROPIC_API_KEY
+			originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+			originalPlatform = process.platform
+			delete process.env.ANTHROPIC_API_KEY
+			delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+		})
+
+		afterEach(() => {
+			if (originalApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = originalApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+			if (originalOAuthToken !== undefined) {
+				process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+			} else {
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			}
+			Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+		})
+
+		it('should return { bare: true } when ANTHROPIC_API_KEY is set', async () => {
+			process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+			const config = await resolveBareModeConfig()
+			expect(config).toEqual({ bare: true })
+		})
+
+		it('should return { bare: true, settings: ..., oauthToken: ... } when OAuth token is available', async () => {
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+			const config = await resolveBareModeConfig()
+			expect(config.bare).toBe(true)
+			expect(config.settings).toBeDefined()
+			const parsed = JSON.parse(config.settings!)
+			// Token should NOT appear in settings (passed via env var instead)
+			expect(parsed.apiKeyHelper).toBe('echo $__ILOOM_OAUTH_TOKEN')
+			expect(parsed.apiKeyHelper).not.toContain('sk-ant-oat01-test-token')
+			// Token should be returned separately for env var injection
+			expect(config.oauthToken).toBe('sk-ant-oat01-test-token')
+		})
+
+		it('should return { bare: false } when neither API key nor OAuth token available', async () => {
+			Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+			vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+			const config = await resolveBareModeConfig()
+			expect(config).toEqual({ bare: false })
+		})
+	})
+
+	describe('settings parameter in launchClaude', () => {
+		let savedApiKey: string | undefined
+		let savedOAuthToken: string | undefined
+
+		beforeEach(() => {
+			savedApiKey = process.env.ANTHROPIC_API_KEY
+			savedOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+			// Set API key so resolveBareModeConfig returns early (no OAuth extraction)
+			process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key-for-settings'
+			delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+		})
+
+		afterEach(() => {
+			if (savedApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = savedApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+			if (savedOAuthToken !== undefined) {
+				process.env.CLAUDE_CODE_OAUTH_TOKEN = savedOAuthToken
+			} else {
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			}
+		})
+
+		it('should add --settings flag when settings is provided', async () => {
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.resolve({ stdout: 'output', exitCode: 0 }), fakeSubprocess)
+			)
+
+			await launchClaude('test prompt', {
+				headless: true,
+				bare: true,
+				settings: '{"apiKeyHelper": "echo token"}',
+			})
+
+			expect(execa).toHaveBeenCalledWith(
+				'claude',
+				expect.arrayContaining(['--settings', '{"apiKeyHelper": "echo token"}']),
+				expect.any(Object)
+			)
+		})
+
+		it('should not add --settings flag when settings is undefined and ANTHROPIC_API_KEY is set', async () => {
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.resolve({ stdout: 'output', exitCode: 0 }), fakeSubprocess)
+			)
+
+			await launchClaude('test prompt', {
+				headless: true,
+				bare: true,
+			})
+
+			const callArgs = mockExeca().mock.calls[0][1] as string[]
+			expect(callArgs).not.toContain('--settings')
+		})
+	})
+
+	describe('bare mode auth failure retry', () => {
+		let originalApiKey: string | undefined
+		let originalOAuthToken: string | undefined
+
+		beforeEach(() => {
+			originalApiKey = process.env.ANTHROPIC_API_KEY
+			originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+			delete process.env.ANTHROPIC_API_KEY
+		})
+
+		afterEach(() => {
+			if (originalApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = originalApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+			if (originalOAuthToken !== undefined) {
+				process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+			} else {
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			}
+		})
+
+		it('should retry without --bare when auto-applied bare mode fails with auth error', async () => {
+			// Set up OAuth token so bare mode will be auto-applied
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+
+			const fakeSubprocess1 = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			const fakeSubprocess2 = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			// First call: fails with auth error (bare mode auto-applied)
+			const authError = Object.assign(new Error('Invalid API Key'), {
+				stderr: 'Invalid API Key',
+				exitCode: 1,
+			})
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(authError), fakeSubprocess1)
+			)
+
+			// Second call: succeeds (retry without bare)
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.resolve({ stdout: 'retry output', exitCode: 0 }), fakeSubprocess2)
+			)
+
+			const result = await launchClaude('test prompt', {
+				headless: true,
+				noSessionPersistence: true,
+			})
+
+			expect(result).toBe('retry output')
+
+			// Verify first call had --bare and --settings
+			const firstCallArgs = mockExeca().mock.calls[0][1] as string[]
+			expect(firstCallArgs).toContain('--bare')
+			expect(firstCallArgs).toContain('--settings')
+
+			// Verify first call passes OAuth token via env var, not in args
+			const firstCallOpts = mockExeca().mock.calls[0][2] as Record<string, unknown>
+			const firstCallEnv = firstCallOpts.env as Record<string, string>
+			expect(firstCallEnv.__ILOOM_OAUTH_TOKEN).toBe('sk-ant-oat01-test-token')
+
+			// Verify settings JSON does NOT contain the actual token
+			const settingsIdx = firstCallArgs.indexOf('--settings')
+			const settingsJson = firstCallArgs[settingsIdx + 1]
+			expect(settingsJson).not.toContain('sk-ant-oat01-test-token')
+			expect(settingsJson).toContain('__ILOOM_OAUTH_TOKEN')
+
+			// Verify second call does NOT have --bare or --settings
+			const secondCallArgs = mockExeca().mock.calls[1][1] as string[]
+			expect(secondCallArgs).not.toContain('--bare')
+			expect(secondCallArgs).not.toContain('--settings')
+
+			// Verify warning was logged
+			expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Bare mode failed'))
+		})
+
+		it('should NOT retry when bare was explicitly set by caller', async () => {
+			// Mock OAuth extraction failure so resolveBareModeConfig can complete
+			// (bare:true without settings triggers resolveBareModeConfig for OAuth)
+			if (process.platform === 'darwin') {
+				mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+			} else {
+				vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+			}
+
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			const authError = Object.assign(new Error('Invalid API Key'), {
+				stderr: 'Invalid API Key',
+				exitCode: 1,
+			})
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(authError), fakeSubprocess)
+			)
+
+			await expect(
+				launchClaude('test prompt', {
+					headless: true,
+					bare: true,
+				})
+			).rejects.toThrow('Claude CLI error')
+
+			// execa called for OAuth extraction (on macOS) + claude call = 2 on darwin, 1 on linux
+			// Only the claude call matters - verify no retry happened
+			const claudeCalls = mockExeca().mock.calls.filter(
+				(call: unknown[]) => call[0] === 'claude'
+			)
+			expect(claudeCalls).toHaveLength(1)
+		})
+
+		it('should NOT retry for non-auth errors', async () => {
+			// Set up OAuth token so bare mode will be auto-applied
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+
+			const fakeSubprocess = {
+				stdout: null,
+				on: vi.fn(),
+				kill: vi.fn(),
+			}
+
+			const timeoutError = Object.assign(new Error('Command timed out'), {
+				stderr: 'Command timed out after 30000ms',
+				exitCode: 1,
+			})
+			mockExeca().mockReturnValueOnce(
+				Object.assign(Promise.reject(timeoutError), fakeSubprocess)
+			)
+
+			await expect(
+				launchClaude('test prompt', {
+					headless: true,
+					noSessionPersistence: true,
+				})
+			).rejects.toThrow('Claude CLI error')
+
+			// Should only have been called once (no retry)
+			expect(execa).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -2512,6 +3064,38 @@ describe('claude utils', () => {
 	})
 
 	describe('generateBranchName', () => {
+		let originalApiKey: string | undefined
+		let originalOAuthToken: string | undefined
+
+		beforeEach(() => {
+			originalApiKey = process.env.ANTHROPIC_API_KEY
+			originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
+			delete process.env.ANTHROPIC_API_KEY
+			delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+		})
+
+		afterEach(() => {
+			if (originalApiKey !== undefined) {
+				process.env.ANTHROPIC_API_KEY = originalApiKey
+			} else {
+				delete process.env.ANTHROPIC_API_KEY
+			}
+			if (originalOAuthToken !== undefined) {
+				process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+			} else {
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+			}
+		})
+
+		// Helper: mock OAuth extraction failure for macOS (security command) or Linux (readFile)
+		function mockOAuthExtractionFailure(): void {
+			if (process.platform === 'darwin') {
+				mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+			} else {
+				vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+			}
+		}
+
 		it('should generate branch name using Claude when available', async () => {
 			const issueTitle = 'Add user authentication'
 			const issueNumber = 123
@@ -2521,6 +3105,9 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
+
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
 
 			// Mock Claude response with full branch name
 			mockExeca().mockResolvedValueOnce({
@@ -2565,6 +3152,9 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
+
 			// Mock Claude returning error message
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'API error: rate limit exceeded',
@@ -2585,6 +3175,9 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
+
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
 
 			// Mock Claude returning empty string
 			mockExeca().mockResolvedValueOnce({
@@ -2607,6 +3200,9 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
+
 			// Mock Claude returning properly formatted branch
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'fix/issue-123__authentication-bug',
@@ -2628,6 +3224,9 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
+
 			// Mock Claude returning invalid format (no prefix)
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'add-user-auth',
@@ -2648,6 +3247,9 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
+
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
 
 			// Mock Claude execution fails
 			mockExeca().mockRejectedValueOnce({
@@ -2671,6 +3273,9 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
+			// OAuth extraction will fail (no credentials)
+			mockOAuthExtractionFailure()
+
 			// Mock Claude returning lowercase branch name (correct behavior)
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'feat/issue-mark-1__nextjs-vercel',
@@ -2685,9 +3290,11 @@ describe('claude utils', () => {
 
 		describe('bare mode (auto-applied by launchClaude)', () => {
 			let originalApiKey: string | undefined
+			let originalOAuthToken: string | undefined
 
 			beforeEach(() => {
 				originalApiKey = process.env.ANTHROPIC_API_KEY
+				originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
 			})
 
 			afterEach(() => {
@@ -2695,6 +3302,11 @@ describe('claude utils', () => {
 					process.env.ANTHROPIC_API_KEY = originalApiKey
 				} else {
 					delete process.env.ANTHROPIC_API_KEY
+				}
+				if (originalOAuthToken !== undefined) {
+					process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
+				} else {
+					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 				}
 			})
 
@@ -2724,8 +3336,9 @@ describe('claude utils', () => {
 				)
 			})
 
-			it('should not auto-apply --bare when ANTHROPIC_API_KEY is not set', async () => {
+			it('should not auto-apply --bare when no API key or OAuth token available', async () => {
 				delete process.env.ANTHROPIC_API_KEY
+				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 				const issueTitle = 'Add user authentication'
 				const issueNumber = 123
 
@@ -2735,6 +3348,13 @@ describe('claude utils', () => {
 					exitCode: 0,
 				})
 
+				// On macOS, extractOAuthToken calls security command - make it fail
+				if (process.platform === 'darwin') {
+					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
+				} else {
+					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
+				}
+
 				// Mock Claude response
 				mockExeca().mockResolvedValueOnce({
 					stdout: 'feat/issue-123__user-authentication',
@@ -2743,9 +3363,11 @@ describe('claude utils', () => {
 
 				await generateBranchName(issueTitle, issueNumber)
 
-				// The second execa call is the launchClaude call
-				const launchClaudeCall = mockExeca().mock.calls[1]
-				expect(launchClaudeCall[1]).not.toContain('--bare')
+				// Find the launchClaude call (the claude command, not security)
+				const claudeCall = mockExeca().mock.calls.find(
+					(call: unknown[]) => call[0] === 'claude' && (call[1] as string[])?.includes('-p')
+				)
+				expect(claudeCall?.[1]).not.toContain('--bare')
 			})
 		})
 	})
