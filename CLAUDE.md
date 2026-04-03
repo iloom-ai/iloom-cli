@@ -117,6 +117,23 @@ The orchestrator and child workers have strictly separated responsibilities. Get
 - **Strategy Pattern**: Branch naming (Simple vs Claude), dev server (Native vs Docker)
 - **Configuration Layering**: Defaults → global (`~/.config/iloom-ai/settings.json`) → project (`.iloom/settings.json`) → local (`.iloom/settings.local.json`) → CLI flags
 
+### Persistent Data Storage
+
+All per-user iloom data lives under `~/.config/iloom-ai/`. Key subdirectories:
+
+- **`looms/`** — Loom metadata JSON files, one per active worktree. Filename is the slugified worktree path (triple underscores replace path separators). Contains issue details, branch name, dependency map, child issues, swarm config, and loom state. Finished looms move to `looms/finished/`.
+- **`recaps/`** — Recap JSON files, one per loom. Contains the goal, decisions, insights, risks, assumptions, fixes, and artifacts logged by agents during a loom's lifecycle. Archived recaps move to `recaps/archived/`.
+- **`mcp-configs/`** — Per-loom MCP server configuration files used by swarm workers to connect to the orchestrator's MCP server.
+- **`cache/`** — Cached issue data fetched from issue trackers.
+- **`projects/`** — Project marker files tracking which directories have been configured with `il init`.
+- **`settings.json`** — Global user settings (applies to all projects).
+- **`migration-state.json`** — Tracks which data migrations have been applied.
+- **`telemetry-id` / `telemetry.json`** — Anonymous telemetry state.
+- **`update-check.json`** — Version update check cache.
+- **`*-first-run`** — First-run markers for features (e.g., `spin-first-run`).
+
+Key code: `MetadataManager` (`src/lib/MetadataManager.ts`) manages loom files, `resolveRecapFilePath()` in `src/utils/mcp.ts` resolves recap paths, `SettingsManager` (`src/lib/SettingsManager.ts`) handles settings.
+
 ### Component Documentation
 
 Each major directory has its own CLAUDE.md with detailed component documentation. These load automatically when you access files in that directory:
