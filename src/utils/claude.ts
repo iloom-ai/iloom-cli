@@ -2,7 +2,7 @@
 import { execa, type ExecaChildProcess } from 'execa'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { logger } from './logger.js'
@@ -225,7 +225,7 @@ export async function launchClaude(
 			args.push('--add-dir', addDir)
 		}
 
-		args.push('--add-dir', '/tmp') //TODO: Won't work on Windows
+		args.push('--add-dir', tmpdir())
 
 		if (systemPrompt) {
 			args.push('--system-prompt', systemPrompt)
