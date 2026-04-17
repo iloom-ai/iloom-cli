@@ -48,6 +48,11 @@ vi.mock('../../src/utils/remote.js', () => ({
 	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
 }))
 
+// Auto-mock the GitHubService module so the fallback path in fetchPullRequest()
+// (used when the configured issue tracker doesn't support PRs, e.g. Linear) can be
+// intercepted via `GitHubService.prototype.fetchPR` without touching the network.
+vi.mock('../../src/lib/GitHubService.js')
+
 // Mock SettingsManager to prevent reading actual settings files
 vi.mock('../../src/lib/SettingsManager.js', () => {
 	return {
@@ -1140,3 +1145,146 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 	})
 })
 
+describe('FinishCommand - Linear issue tracker with GitHub PRs', () => {
+	let finishCommand: FinishCommand
+	let mockLinearTracker: {
+		supportsPullRequests: boolean
+		providerName: string
+		fetchIssue: ReturnType<typeof vi.fn>
+		fetchPR?: ReturnType<typeof vi.fn>
+	}
+	let mockGitWorktreeManager: GitWorktreeManager
+	let mockCommitManager: CommitManager
+	let mockMergeManager: MergeManager
+	let mockIdentifierParser: IdentifierParser
+	let mockResourceCleanup: ResourceCleanup
+
+	const mockWorktree: GitWorktree = {
+		path: '/test/worktree/fix-issue-web-2290__add-project-ids-to-analytics_pr_4008',
+		branch: 'fix-issue-web-2290__add-project-ids-to-analytics',
+		commit: 'abc123',
+		bare: false,
+		detached: false,
+		locked: false,
+	}
+
+	beforeEach(() => {
+		// Linear doesn't support PRs; PRs live on GitHub (the VCS)
+		mockLinearTracker = {
+			supportsPullRequests: false,
+			providerName: 'linear',
+			fetchIssue: vi.fn(),
+			// Note: no fetchPR on Linear
+		}
+
+		mockGitWorktreeManager = {
+			findWorktreeForPR: vi.fn().mockResolvedValue(mockWorktree),
+			findWorktreeForIssue: vi.fn().mockResolvedValue(mockWorktree),
+			findWorktreeForBranch: vi.fn().mockResolvedValue(mockWorktree),
+			getRepoInfo: vi.fn().mockResolvedValue({
+				root: '/test/repo',
+				currentBranch: 'main',
+			}),
+		} as unknown as GitWorktreeManager
+
+		mockCommitManager = {
+			detectUncommittedChanges: vi.fn().mockResolvedValue({
+				hasUncommittedChanges: false,
+				unstagedFiles: [],
+				stagedFiles: [],
+				currentBranch: mockWorktree.branch,
+				isAheadOfRemote: false,
+				isBehindRemote: false,
+			}),
+			commitChanges: vi.fn().mockResolvedValue(undefined),
+		} as unknown as CommitManager
+
+		mockMergeManager = {
+			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
+		} as unknown as MergeManager
+
+		mockIdentifierParser = {
+			parseForPatternDetection: vi.fn().mockResolvedValue({
+				type: 'pr',
+				number: 4008,
+				originalInput: '4008',
+			}),
+		} as unknown as IdentifierParser
+
+		mockResourceCleanup = {
+			cleanupWorktree: vi.fn().mockResolvedValue({
+				identifier: '4008',
+				success: true,
+				operations: [],
+				errors: [],
+				rollbackRequired: false,
+			}),
+		} as unknown as ResourceCleanup
+
+		finishCommand = new FinishCommand(
+			mockLinearTracker as unknown as GitHubService,
+			mockGitWorktreeManager,
+			{ runValidations: vi.fn().mockResolvedValue(undefined) } as unknown as ValidationRunner,
+			mockCommitManager,
+			mockMergeManager,
+			mockIdentifierParser,
+			mockResourceCleanup
+		)
+	})
+
+	it('should fall back to GitHubService.fetchPR when issue tracker does not support PRs (numeric identifier)', async () => {
+		const mockOpenPR: PullRequest = {
+			number: 4008,
+			title: 'Add project IDs to analytics',
+			body: '',
+			state: 'open',
+			branch: mockWorktree.branch,
+			baseBranch: 'main',
+			url: 'https://github.com/owner/repo/pull/4008',
+			isDraft: false,
+		}
+
+		const MockedGitHubService = vi.mocked(GitHubService)
+		MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockOpenPR)
+
+		await expect(
+			finishCommand.execute({
+				identifier: '4008',
+				options: { noCleanup: true },
+			})
+		).resolves.not.toThrow()
+
+		// Called twice (once in validateInput, once in execute()'s main branch)
+		expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(4008)
+		expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledTimes(2)
+		expect(pushBranchToRemote).toHaveBeenCalled()
+	})
+
+	it('should fall back to GitHubService.fetchPR when --pr flag is used on Linear project', async () => {
+		const mockMergedPR: PullRequest = {
+			number: 4008,
+			title: 'Add project IDs to analytics',
+			body: '',
+			state: 'merged',
+			branch: mockWorktree.branch,
+			baseBranch: 'main',
+			url: 'https://github.com/owner/repo/pull/4008',
+			isDraft: false,
+		}
+
+		const MockedGitHubService = vi.mocked(GitHubService)
+		MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockMergedPR)
+
+		await expect(
+			finishCommand.execute({
+				identifier: undefined,
+				options: { pr: 4008, noCleanup: true },
+			})
+		).resolves.not.toThrow()
+
+		expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(4008)
+		// PR workflow for merged state triggers cleanup
+		expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+	})
+})

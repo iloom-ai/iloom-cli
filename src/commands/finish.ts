@@ -1,6 +1,7 @@
 import { getLogger } from '../utils/logger-context.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
+import { GitHubService } from '../lib/GitHubService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
@@ -59,6 +60,7 @@ export class FinishCommand {
 	private settingsManager: SettingsManager
 	private loomManager?: LoomManager
 	private sessionSummaryService?: SessionSummaryService
+	private githubService: GitHubService | null = null
 
 	constructor(
 		issueTracker: IssueTracker,
@@ -101,6 +103,22 @@ export class FinishCommand {
 		if (loomManager) {
 			this.loomManager = loomManager
 		}
+	}
+
+	/**
+	 * Fetch a PR using the issue tracker if it supports PRs, otherwise fall back to GitHubService.
+	 * Mirrors the pattern used in StartCommand for Linear/Jira projects where PRs live on GitHub.
+	 */
+	private async fetchPullRequest(prNumber: number, repo?: string): Promise<PullRequest> {
+		if (this.issueTracker.supportsPullRequests && this.issueTracker.fetchPR) {
+			return repo === undefined
+				? await this.issueTracker.fetchPR(prNumber)
+				: await this.issueTracker.fetchPR(prNumber, repo)
+		}
+		this.githubService ??= new GitHubService()
+		return repo === undefined
+			? await this.githubService.fetchPR(prNumber)
+			: await this.githubService.fetchPR(prNumber, repo)
 	}
 
 	/**
@@ -274,11 +292,11 @@ export class FinishCommand {
 			if (!parsed.number) {
 				throw new Error('Invalid PR number')
 			}
-			// Check if provider supports PRs before calling PR methods
-			if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
-				throw new Error('Issue tracker does not support pull requests')
+			const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+			if (isNaN(prNumber) || !isFinite(prNumber)) {
+				throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
 			}
-			const pr = await this.issueTracker.fetchPR(parsed.number, repo)
+			const pr = await this.fetchPullRequest(prNumber, repo)
 			await this.executePRWorkflow(parsed, input.options, worktree, pr, result)
 		} else {
 			// Execute traditional issue/branch workflow
@@ -493,14 +511,13 @@ export class FinishCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
-
-				// Check if provider supports PRs before calling PR methods
-				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
-					throw new Error('Issue tracker does not support pull requests')
+				const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+				if (isNaN(prNumber) || !isFinite(prNumber)) {
+					throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
 				}
 
-				// Fetch PR from GitHub
-				const pr = await this.issueTracker.fetchPR(parsed.number)
+				// Fetch PR (from issue tracker if supported, otherwise GitHub)
+				const pr = await this.fetchPullRequest(prNumber)
 
 				// For PRs, we allow closed/merged state (cleanup-only mode)
 				// But we still validate it exists
