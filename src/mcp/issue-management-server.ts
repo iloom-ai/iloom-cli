@@ -441,6 +441,10 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			type: z
+				.enum(['issue', 'pr'])
+				.optional()
+				.describe('Optional type to route PR comments to GitHub regardless of configured provider'),
 		},
 		outputSchema: {
 			id: z.string().describe('Comment identifier'),
@@ -452,15 +456,15 @@ server.registerTool(
 			updated_at: z.string().optional().describe('Comment last updated timestamp'),
 		},
 	},
-	async ({ commentId, number, repo }: GetCommentInput) => {
-		console.error(`Fetching comment ${commentId} from issue ${number}${repo ? ` in ${repo}` : ''}`)
+	async ({ commentId, number, repo, type }: GetCommentInput) => {
+		console.error(`Fetching comment ${commentId} from ${type === 'pr' ? 'PR' : 'issue'} ${number}${repo ? ` in ${repo}` : ''}`)
 
 		try {
-			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider,
-				settings
-			)
-			const result = await provider.getComment({ commentId, number, repo })
+			// Route PR comments to GitHub regardless of configured provider
+			// (mirrors create_comment / update_comment behavior for Linear/Jira projects)
+			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
+			const provider = IssueManagementProviderFactory.create(providerType, settings)
+			const result = await provider.getComment({ commentId, number, repo, type })
 
 			console.error(`Comment fetched successfully: ${result.id}`)
 

@@ -68,6 +68,7 @@ export interface GetCommentInput {
 	commentId: string // Comment identifier to fetch
 	number: string // Issue or PR identifier (context for providers that need it)
 	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+	type?: 'issue' | 'pr' | undefined // Optional type to route PR comments to GitHub regardless of configured provider
 }
 
 /**
