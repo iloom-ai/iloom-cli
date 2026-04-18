@@ -3197,7 +3197,7 @@ describe('claude utils', () => {
 				expect.arrayContaining(['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--effort', 'low', '--system-prompt', expect.any(String), '--no-session-persistence']),
 				expect.objectContaining({
 					input: expect.stringContaining(issueTitle),
-					env: expect.objectContaining({ CLAUDECODE: '0' }),
+					env: expect.objectContaining({ CLAUDECODE: '0', CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: '1' }),
 				})
 			)
 		})

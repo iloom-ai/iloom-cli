@@ -186,7 +186,7 @@ export async function launchClaude(
 	const isDebugMode = logger.isDebugEnabled()
 
 	// Set CLAUDECODE=0 to prevent Claude from detecting it's running inside Claude Code
-	const claudeEnv = { ...process.env, CLAUDECODE: '0' }
+	const claudeEnv = { ...process.env, CLAUDECODE: '0', CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: '1' }
 
 	// Helper to build common args (avoids duplication between attempts)
 	function buildBaseArgs(includeBare: boolean): string[] {
