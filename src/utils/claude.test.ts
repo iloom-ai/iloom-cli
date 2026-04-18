@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId, hasApiKeyForBareMode, extractOAuthToken, resolveBareModeConfig } from './claude.js'
 import { readFile } from 'node:fs/promises'
 import { logger } from './logger.js'
@@ -22,6 +23,13 @@ const mockLogger = {
 vi.mock('execa')
 vi.mock('node:fs')
 vi.mock('node:fs/promises')
+vi.mock('node:os', async () => {
+	const actual = await vi.importActual<typeof import('node:os')>('node:os')
+	return {
+		...actual,
+		tmpdir: vi.fn(() => '/tmp'),
+	}
+})
 vi.mock('./logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -300,6 +308,72 @@ describe('claude utils', () => {
 					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', workspacePath, '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
+			})
+
+			describe('tmpdir platform behavior', () => {
+				let originalPlatform: NodeJS.Platform
+
+				beforeEach(() => {
+					originalPlatform = process.platform
+				})
+
+				afterEach(() => {
+					Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+				})
+
+				it('should pass the OS tmpdir via --add-dir on Windows without /tmp', async () => {
+					const winTmp = 'C:\\Users\\test\\AppData\\Local\\Temp'
+					vi.mocked(tmpdir).mockReturnValue(winTmp)
+					Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+					mockExeca().mockResolvedValueOnce({ stdout: 'output', exitCode: 0 })
+
+					await launchClaude('Test prompt', { headless: true })
+
+					const callArgs = mockExeca().mock.calls[0][1] as string[]
+					expect(callArgs).toContain(winTmp)
+					expect(callArgs).not.toContain('/tmp')
+				})
+
+				it('should include both tmpdir() and /tmp on macOS when they differ', async () => {
+					const macTmp = '/var/folders/ab/cd/T'
+					vi.mocked(tmpdir).mockReturnValue(macTmp)
+					vi.mocked(existsSync).mockImplementation((p) => p === '/tmp')
+					Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+					mockExeca().mockResolvedValueOnce({ stdout: 'output', exitCode: 0 })
+
+					await launchClaude('Test prompt', { headless: true })
+
+					const callArgs = mockExeca().mock.calls[0][1] as string[]
+					expect(callArgs).toContain(macTmp)
+					expect(callArgs).toContain('/tmp')
+				})
+
+				it('should not duplicate /tmp when tmpdir() already returns /tmp on Linux', async () => {
+					vi.mocked(tmpdir).mockReturnValue('/tmp')
+					vi.mocked(existsSync).mockReturnValue(true)
+					Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+					mockExeca().mockResolvedValueOnce({ stdout: 'output', exitCode: 0 })
+
+					await launchClaude('Test prompt', { headless: true })
+
+					const callArgs = mockExeca().mock.calls[0][1] as string[]
+					const tmpCount = callArgs.filter((a) => a === '/tmp').length
+					expect(tmpCount).toBe(1)
+				})
+
+				it('should not add /tmp on non-Windows when /tmp does not exist', async () => {
+					const customTmp = '/custom/tmp'
+					vi.mocked(tmpdir).mockReturnValue(customTmp)
+					vi.mocked(existsSync).mockReturnValue(false)
+					Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+					mockExeca().mockResolvedValueOnce({ stdout: 'output', exitCode: 0 })
+
+					await launchClaude('Test prompt', { headless: true })
+
+					const callArgs = mockExeca().mock.calls[0][1] as string[]
+					expect(callArgs).toContain(customTmp)
+					expect(callArgs).not.toContain('/tmp')
+				})
 			})
 
 			it('should set cwd to addDir in headless mode when addDir is specified', async () => {

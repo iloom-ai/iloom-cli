@@ -225,7 +225,12 @@ export async function launchClaude(
 			args.push('--add-dir', addDir)
 		}
 
-		args.push('--add-dir', tmpdir())
+		const osTmpDir = tmpdir()
+		args.push('--add-dir', osTmpDir)
+
+		if (process.platform !== 'win32' && osTmpDir !== '/tmp' && existsSync('/tmp')) {
+			args.push('--add-dir', '/tmp')
+		}
 
 		if (systemPrompt) {
 			args.push('--system-prompt', systemPrompt)
