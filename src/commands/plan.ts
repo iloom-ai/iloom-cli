@@ -82,7 +82,7 @@ export class PlanCommand {
 	/**
 	 * Main entry point for the plan command
 	 * @param prompt - Optional initial planning prompt or topic
-	 * @param model - Optional model to use (defaults to 'opus')
+	 * @param model - Optional model to use (defaults to 'opus[1m]')
 	 * @param flags - Optional flags object controlling permissions and auto-swarm
 	 * @param planner - Optional planner provider (defaults to 'claude')
 	 * @param reviewer - Optional reviewer provider (defaults to 'none')
@@ -272,7 +272,7 @@ export class PlanCommand {
 			}
 		}
 
-		// Use CLI model if provided, otherwise use settings (plan.model), defaults to opus
+		// Use CLI model if provided, otherwise use settings (plan.model), defaults to opus[1m]
 		const effectiveModel = model ?? settingsManager.getPlanModel(settings ?? undefined)
 
 		// Get effective effort level (CLI > settings > undefined/defer to Claude Code)

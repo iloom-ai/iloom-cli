@@ -101,7 +101,7 @@ export const SpinAgentSettingsSchema = z.object({
 export const PlanCommandSettingsSchema = z.object({
 	model: z
 		.enum(VALID_CLAUDE_MODELS)
-		.default('opus')
+		.default('opus[1m]')
 		.describe('Claude model shorthand for plan command'),
 	effort: z
 		.enum(VALID_EFFORT_LEVELS)
@@ -561,7 +561,7 @@ export const IloomSettingsSchema = z.object({
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
 	),
 	plan: PlanCommandSettingsSchema.optional().describe(
-		'Plan command configuration. Model defaults to opus, planner to claude, reviewer to none when not configured.',
+		'Plan command configuration. Model defaults to opus[1m], planner to claude, reviewer to none when not configured.',
 	),
 	summary: SummarySettingsSchema.optional().describe(
 		'Session summary generation configuration. Model defaults to sonnet when not configured.',

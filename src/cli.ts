@@ -1622,7 +1622,7 @@ program
   .command('plan')
   .description('Launch interactive planning session with Architect persona')
   .argument('[prompt]', 'Initial planning prompt or topic')
-  .option('--model <model>', 'Model to use: opus, sonnet, haiku, opus[1m], sonnet[1m] (default: opus)')
+  .option('--model <model>', 'Model to use: opus, sonnet, haiku, opus[1m], sonnet[1m] (default: opus[1m])')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])
