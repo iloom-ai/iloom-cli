@@ -458,15 +458,8 @@ export class LoomManager {
     // Each loom gets a unique session ID, enabling fresh Claude sessions
     const sessionId = generateRandomSessionId()
 
-    // Build issueUrls/prUrls based on workflow type
-    // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
-    let issueUrls: Record<string, string> = {}
-    if ((input.type === 'issue' || input.type === 'epic') && issueData?.url) {
-      issueUrls = { [String(input.identifier)]: issueData.url }
-    } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
-      const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
-      issueUrls = { [extractedIssueNum]: issueUrl }
-    }
+    // Build issueUrls based on workflow type and configured tracker
+    const issueUrls = await this.resolveIssueUrls(input, extractedIssueNum, issueData)
     // Include draft PR URL in prUrls if created
     const prUrls: Record<string, string> = draftPrNumber && draftPrUrl
       ? { [String(draftPrNumber)]: draftPrUrl }
@@ -642,6 +635,52 @@ export class LoomManager {
     }
 
     return false
+  }
+
+  /**
+   * Resolve the canonical issue URL map for loom metadata.
+   *
+   * Returns `{}` on any failure path so callers do not need to guard the result.
+   *
+   * - For `issue`/`epic`: uses the already-fetched `issueData.url` (canonical for the
+   *   configured tracker — `linear.app` for Linear, `github.com` for GitHub).
+   * - For `pr` in a GitHub-tracked project with a numeric issue key: synthesizes the
+   *   issue URL locally by swapping `/pull/N` for `/issues/M` (preserves prior behavior
+   *   and avoids an extra `gh` round-trip).
+   * - For `pr` otherwise (e.g. Linear-tracked project): calls
+   *   `IssueTracker.getIssueUrl(extractedIssueNum)`. On any throw from that call, logs
+   *   at debug level and omits the entry — the map is cosmetic for `il list --json` and
+   *   the VS Code icon, so a transient lookup failure must not break `il start`.
+   */
+  private async resolveIssueUrls(
+    input: CreateLoomInput,
+    extractedIssueNum: string | null,
+    issueData: Issue | PullRequest | null,
+  ): Promise<Record<string, string>> {
+    if ((input.type === 'issue' || input.type === 'epic') && issueData?.url) {
+      return { [String(input.identifier)]: issueData.url }
+    }
+
+    if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
+      const isGithubProject = this.issueTracker.providerName === 'github'
+      const isNumericKey = /^\d+$/.test(extractedIssueNum)
+      const isGithubPrUrl = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(issueData.url)
+      if (isGithubProject && isNumericKey && isGithubPrUrl) {
+        const synthesized = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
+        return { [extractedIssueNum]: synthesized }
+      }
+      try {
+        const canonical = await this.issueTracker.getIssueUrl(extractedIssueNum)
+        return { [extractedIssueNum]: canonical }
+      } catch (error) {
+        getLogger().debug(
+          `Could not resolve canonical URL for ${extractedIssueNum} via ${this.issueTracker.providerName}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+        return {}
+      }
+    }
+
+    return {}
   }
 
   /**
@@ -1449,15 +1488,8 @@ export class LoomManager {
       // Each loom gets a unique session ID, enabling fresh Claude sessions
       const sessionId = generateRandomSessionId()
 
-      // Build issueUrls/prUrls based on workflow type
-      // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
-      let issueUrls: Record<string, string> = {}
-      if (input.type === 'issue' && issueData?.url) {
-        issueUrls = { [String(input.identifier)]: issueData.url }
-      } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
-        const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
-        issueUrls = { [extractedIssueNum]: issueUrl }
-      }
+      // Build issueUrls based on workflow type and configured tracker
+      const issueUrls = await this.resolveIssueUrls(input, extractedIssueNum, issueData)
       const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
         ? { [String(input.identifier)]: issueData.url }
         : {}

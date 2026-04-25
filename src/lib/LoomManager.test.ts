@@ -1331,6 +1331,110 @@ describe('LoomManager', testOptions, () => {
         )
       })
     })
+
+    describe('issueUrls resolution (issue #1001)', () => {
+      it('should populate issueUrls with canonical Linear URL for PR in Linear-configured project', async () => {
+        // Configure Linear provider. Keep supportsPullRequests=true so fetchIssueData
+        // uses our mocked tracker.fetchPR directly (avoids `new GitHubService()` fallback
+        // which is auto-mocked and would return undefined). The helper branches on
+        // providerName, not supportsPullRequests, so this still exercises the Linear path.
+        mockGitHub.providerName = 'linear'
+        mockIssuePrefix = ''
+
+        // Linear getIssueUrl returns the canonical linear.app URL
+        vi.mocked(mockGitHub.getIssueUrl).mockResolvedValue('https://linear.app/team/issue/WEB-2423')
+
+        // PR branch encodes a Linear key
+        vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+          number: 4049,
+          title: 'Test PR',
+          body: '',
+          state: 'open',
+          branch: 'feat/issue-WEB-2423__list-json-linear-url',
+          baseBranch: 'main',
+          url: 'https://github.com/owner/repo/pull/4049',
+          isDraft: false,
+        })
+
+        const expectedPath = '/test/worktree-feat-issue-WEB-2423'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(4049)
+
+        await manager.createIloom({ type: 'pr', identifier: 4049, originalInput: 'pr/4049' })
+
+        expect(mockGitHub.getIssueUrl).toHaveBeenCalledWith('WEB-2423')
+        expect(mockWriteMetadata).toHaveBeenCalled()
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        // Map KEY preserves the extracted casing (`WEB-2423`); VALUE is the canonical
+        // Linear URL — not the buggy `github.com/.../issues/WEB-2423` synthesis.
+        expect(metadataInput.issueUrls).toEqual({
+          'WEB-2423': 'https://linear.app/team/issue/WEB-2423',
+        })
+        expect(metadataInput.prUrls).toEqual({
+          '4049': 'https://github.com/owner/repo/pull/4049',
+        })
+      })
+
+      it('should NOT call getIssueUrl for GitHub-numeric PR path (regression: avoids extra gh round-trip)', async () => {
+        // Default GitHub provider; PR branch with numeric issue key
+        vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+          number: 456,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          branch: 'issue-42__feature-branch',
+          baseBranch: 'main',
+          url: 'https://github.com/owner/repo/pull/456',
+          isDraft: false,
+        })
+
+        const expectedPath = '/test/worktree-issue-42__feature-branch'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+        await manager.createIloom({ type: 'pr', identifier: 456, originalInput: 'pr/456' })
+
+        // Synthesis preserves prior behavior - getIssueUrl must NOT be called for github-numeric path
+        expect(mockGitHub.getIssueUrl).not.toHaveBeenCalled()
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        expect(metadataInput.issueUrls).toEqual({ '42': 'https://github.com/owner/repo/issues/42' })
+      })
+
+      it('should fail-soft and omit issueUrls entry when getIssueUrl throws', async () => {
+        // Linear-tracked project where the canonical URL lookup fails.
+        // Keep supportsPullRequests=true (see note on the prior test).
+        mockGitHub.providerName = 'linear'
+        vi.mocked(mockGitHub.getIssueUrl).mockRejectedValue(new Error('Linear API timeout'))
+
+        vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+          number: 4049,
+          title: 'Test PR',
+          body: '',
+          state: 'open',
+          branch: 'feat/issue-WEB-2423__x',
+          baseBranch: 'main',
+          url: 'https://github.com/owner/repo/pull/4049',
+          isDraft: false,
+        })
+
+        const expectedPath = '/test/worktree-feat-issue-WEB-2423'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(4049)
+
+        // Must not throw - cosmetic field, fail-soft per plan
+        await expect(
+          manager.createIloom({ type: 'pr', identifier: 4049, originalInput: 'pr/4049' })
+        ).resolves.toBeDefined()
+
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        expect(metadataInput.issueUrls).toEqual({})
+        // PR URL still populated (unaffected by issue URL resolution)
+        expect(metadataInput.prUrls).toEqual({ '4049': 'https://github.com/owner/repo/pull/4049' })
+      })
+    })
   })
 
   describe('listLooms', () => {
@@ -2502,6 +2606,48 @@ describe('LoomManager', testOptions, () => {
       expect(result).toBeDefined()
       expect(result.path).toBe('/test/worktree-issue-39')
       expect(mockGitHub.moveIssueToInProgress).toHaveBeenCalledWith(39)
+    })
+
+    it('should write canonical Linear URL into issueUrls when reusing PR worktree without prior metadata (issue #1001)', async () => {
+      // Linear-tracked project; reuseIloom path with no existing metadata file.
+      // Keep supportsPullRequests=true so fetchIssueData uses the mocked tracker.fetchPR.
+      mockGitHub.providerName = 'linear'
+      mockReadMetadata.mockResolvedValue(null) // no prior metadata → write path fires
+      vi.mocked(mockGitHub.getIssueUrl).mockResolvedValue('https://linear.app/team/issue/WEB-2423')
+
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 4049,
+        title: 'Test PR',
+        body: '',
+        state: 'open',
+        branch: 'feat/issue-WEB-2423__x',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/4049',
+        isDraft: false,
+      })
+
+      vi.mocked(mockGitWorktree.findWorktreeForPR).mockResolvedValue({
+        path: '/test/worktree-feat-issue-WEB-2423__x',
+        branch: 'feat/issue-WEB-2423__x',
+        commit: 'abc',
+        bare: false,
+        detached: false,
+        locked: false,
+      })
+
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+
+      await manager.createIloom({ type: 'pr', identifier: 4049, originalInput: 'pr/4049' })
+
+      expect(mockGitHub.getIssueUrl).toHaveBeenCalledWith('WEB-2423')
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.issueUrls).toEqual({
+        'WEB-2423': 'https://linear.app/team/issue/WEB-2423',
+      })
     })
   })
 
