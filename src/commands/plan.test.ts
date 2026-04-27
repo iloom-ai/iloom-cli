@@ -6,6 +6,7 @@ import type { AgentManager } from '../lib/AgentManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as claudeTrust from '../utils/claude-trust.js'
 import * as mcpUtils from '../utils/mcp.js'
+import * as systemPromptWriter from '../utils/system-prompt-writer.js'
 import * as firstRunSetup from '../utils/first-run-setup.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
@@ -18,6 +19,7 @@ import type { HarnessHandler } from '../lib/HarnessServer.js'
 vi.mock('../utils/claude.js')
 vi.mock('../utils/claude-trust.js')
 vi.mock('../utils/mcp.js')
+vi.mock('../utils/system-prompt-writer.js')
 vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('../mcp/IssueManagementProviderFactory.js')
@@ -105,6 +107,9 @@ describe('PlanCommand', () => {
 		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue([
 			{ mcpServers: { issue_management: {} } },
 		])
+		vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mockResolvedValue({
+			appendSystemPromptFile: '/tmp/iloom-system-prompt-test.md',
+		})
 		// Default: project is already configured (no first-run setup needed)
 		vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
 		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
@@ -337,16 +342,24 @@ describe('PlanCommand', () => {
 	})
 
 	describe('Claude launch options', () => {
-		it('should pass appendSystemPrompt with template content', async () => {
+		it('should write the architect prompt to a file and pass appendSystemPromptFile', async () => {
 			const mockPromptContent = 'Test architect prompt content'
+			const mockPromptFile = '/tmp/iloom-system-prompt-test.md'
 			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
+			vi.mocked(systemPromptWriter.prepareSystemPromptForPlatform).mockResolvedValue({
+				appendSystemPromptFile: mockPromptFile,
+			})
 
 			await command.execute()
 
+			expect(systemPromptWriter.prepareSystemPromptForPlatform).toHaveBeenCalledWith(
+				mockPromptContent,
+				expect.any(String),
+			)
 			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
 				expect.any(String),
 				expect.objectContaining({
-					appendSystemPrompt: mockPromptContent,
+					appendSystemPromptFile: mockPromptFile,
 				})
 			)
 		})

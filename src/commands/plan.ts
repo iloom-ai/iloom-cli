@@ -4,6 +4,7 @@ import { withLogger } from '../utils/logger-context.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
+import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
@@ -523,11 +524,19 @@ export class PlanCommand {
 			...(autoSwarm ? ['mcp__harness__signal'] : []),
 		]
 
+		// Write the architect prompt to a file to keep the claude argv under the
+		// OS arg-list limit — inlining via --append-system-prompt can push large
+		// prompts past ARG_MAX and fail with E2BIG (spawn error -8) on macOS.
+		const systemPromptConfig = await prepareSystemPromptForPlatform(
+			architectPrompt,
+			process.cwd(),
+		)
+
 		// Build Claude options
 		const claudeOptions: Parameters<typeof launchClaude>[1] = {
 			model: effectiveModel,
 			headless: isHeadless,
-			appendSystemPrompt: architectPrompt,
+			appendSystemPromptFile: systemPromptConfig.appendSystemPromptFile,
 			mcpConfig,
 			addDir: process.cwd(),
 			allowedTools,
@@ -575,7 +584,7 @@ export class PlanCommand {
 		logger.debug('Launching Claude with options', {
 			optionKeys: Object.keys(claudeOptions),
 			headless: claudeOptions.headless,
-			hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
+			hasSystemPrompt: !!claudeOptions.appendSystemPromptFile,
 			addDir: claudeOptions.addDir,
 			effectiveAutonomous,
 			effectiveOneShot,
