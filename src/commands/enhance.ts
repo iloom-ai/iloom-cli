@@ -2,12 +2,14 @@ import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { SettingsManager } from '../lib/SettingsManager.js'
 import type { EnhanceResult } from '../types/index.js'
 import type { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
+import type { IssueProvider } from '../mcp/types.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { getLogger } from '../utils/logger-context.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 
 export interface EnhanceCommandInput {
 	issueNumber: string | number
@@ -79,6 +81,23 @@ export class EnhanceCommand {
 		}
 		const issue = await this.issueTracker.fetchIssue(issueNumber, repo)
 		getLogger().debug('Issue fetched successfully', { number: issue.number, title: issue.title })
+
+		// Process authenticated image URLs in issue body to local cached file paths
+		// before the body is consumed downstream (e.g. by the enhancer Claude prompt).
+		// Only Linear/GitHub providers are supported by processMarkdownImages.
+		const providerName = this.issueTracker.providerName
+		if (issue.body && (providerName === 'linear' || providerName === 'github')) {
+			try {
+				issue.body = await processMarkdownImages(issue.body, providerName as IssueProvider)
+			} catch (error) {
+				if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+					throw error
+				}
+				getLogger().debug(
+					`Failed to process markdown images, falling back to original body: ${error instanceof Error ? error.message : String(error)}`
+				)
+			}
+		}
 
 		// Step 3: Invoke enhancement service
 		if (!isJsonMode) {

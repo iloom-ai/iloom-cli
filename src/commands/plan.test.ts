@@ -14,6 +14,7 @@ import * as identifierParser from '../utils/IdentifierParser.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { HarnessServer } from '../lib/HarnessServer.js'
 import type { HarnessHandler } from '../lib/HarnessServer.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
@@ -24,6 +25,9 @@ vi.mock('../utils/first-run-setup.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('../mcp/IssueManagementProviderFactory.js')
 vi.mock('../lib/HarnessServer.js')
+vi.mock('../utils/image-processor.js', () => ({
+	processMarkdownImages: vi.fn(),
+}))
 vi.mock('./start.js', () => {
 	class MockStartCommand {
 		async execute() {
@@ -118,6 +122,8 @@ describe('PlanCommand', () => {
 		// Default: TelemetryService mock
 		const mockTrack = vi.fn()
 		vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
+		// Default: processMarkdownImages returns the input unchanged
+		vi.mocked(processMarkdownImages).mockImplementation(async (content: string) => content)
 	})
 
 	describe('VS Code mode detection', () => {
@@ -951,6 +957,8 @@ describe('PlanCommand', () => {
 			// Setup IssueManagementProviderFactory mock
 			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
 				getChildIssues: mockGetChildIssues,
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockResolvedValue({ id: '42', title: 'Test epic', body: 'Epic body', state: 'open', url: '', provider: 'github', author: null }),
 			} as never)
 
 			// Setup decomposition mode: matchIssueIdentifier returns true for "42"
@@ -1179,6 +1187,220 @@ describe('PlanCommand', () => {
 
 			// generateHarnessMcpConfig called with the harness socket path
 			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith(mockHarnessInstance.path)
+		})
+	})
+
+	describe('image processing on fetched issue body', () => {
+		beforeEach(() => {
+			// Decomposition mode: matchIssueIdentifier returns true for "42"
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+
+			// IssueManagementProviderFactory mock — children/dependencies/comments path
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockResolvedValue({ id: '42', title: 'Test', body: '', state: 'open', url: '', provider: 'github', author: null }),
+			} as never)
+		})
+
+		it('invokes processMarkdownImages with provider="github" when tracker is github', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			const linearImageBody = 'See screenshot ![](https://github.com/user-attachments/assets/abc.png)'
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: linearImageBody }),
+			} as never)
+			vi.mocked(processMarkdownImages).mockResolvedValue('processed-github-body')
+
+			await command.execute('42')
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(linearImageBody, 'github')
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'processed-github-body' })
+			)
+		})
+
+		it('invokes processMarkdownImages with provider="linear" when tracker is linear', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({ issueManagement: { provider: 'linear' } }),
+				getPlanModel: vi.fn().mockReturnValue('opus'),
+				getPlanPlanner: vi.fn().mockReturnValue('claude'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue('high'),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			const linearImageBody = 'See screenshot ![](https://uploads.linear.app/abc.png)'
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: 'ENG-42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 'ENG-42', title: 'Test', body: linearImageBody }),
+			} as never)
+			vi.mocked(processMarkdownImages).mockResolvedValue('processed-linear-body')
+
+			await command.execute('ENG-42')
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(linearImageBody, 'linear')
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'processed-linear-body' })
+			)
+		})
+
+		it('returns body unchanged when there are no images', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			const plainBody = 'Plain text body with no images'
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: plainBody }),
+			} as never)
+			// processMarkdownImages's own contract: no images -> returns input unchanged
+			vi.mocked(processMarkdownImages).mockImplementation(async (content: string) => content)
+
+			await command.execute('42')
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(plainBody, 'github')
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: plainBody })
+			)
+		})
+
+		it('falls back to original body when processMarkdownImages throws', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			const originalBody = 'body with image ![](https://github.com/user-attachments/assets/x.png)'
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: originalBody }),
+			} as never)
+			vi.mocked(processMarkdownImages).mockRejectedValue(new Error('boom'))
+
+			await command.execute('42')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: originalBody })
+			)
+		})
+	})
+
+	describe('comment fetching for plan decomposition', () => {
+		beforeEach(() => {
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: 'Body' }),
+			} as never)
+			vi.mocked(processMarkdownImages).mockImplementation(async (content: string) => content)
+		})
+
+		it('appends a Comments section to the body when MCP returns comments', async () => {
+			const mockGetIssue = vi.fn().mockResolvedValue({
+				id: '42',
+				title: 'Test',
+				body: 'Body',
+				state: 'open',
+				url: '',
+				provider: 'github',
+				author: null,
+				comments: [
+					{ id: 'c1', body: 'First comment', author: { id: 'u1', displayName: 'Alice' }, createdAt: '' },
+					{ id: 'c2', body: 'Second comment', author: { id: 'u2', displayName: 'Bob' }, createdAt: '' },
+				],
+			})
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: mockGetIssue,
+			} as never)
+
+			await command.execute('42')
+
+			expect(mockGetIssue).toHaveBeenCalledWith({ number: '42', includeComments: true })
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({
+					PARENT_ISSUE_BODY: expect.stringContaining('## Comments'),
+				})
+			)
+			const call = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(c => c[0] === 'plan')
+			const body = (call?.[1] as { PARENT_ISSUE_BODY?: string } | undefined)?.PARENT_ISSUE_BODY ?? ''
+			expect(body).toContain('### Comment by Alice')
+			expect(body).toContain('First comment')
+			expect(body).toContain('### Comment by Bob')
+			expect(body).toContain('Second comment')
+		})
+
+		it('omits the Comments section when MCP returns no comments', async () => {
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockResolvedValue({
+					id: '42',
+					title: 'Test',
+					body: 'Body',
+					state: 'open',
+					url: '',
+					provider: 'github',
+					author: null,
+					comments: [],
+				}),
+			} as never)
+
+			await command.execute('42')
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'Body' })
+			)
+		})
+
+		it('continues with body-only context when MCP getIssue throws', async () => {
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockRejectedValue(new Error('MCP fetch failure')),
+			} as never)
+
+			await expect(command.execute('42')).resolves.toBeUndefined()
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'Body' })
+			)
+		})
+
+		it('passes includeComments: true to the MCP getIssue call', async () => {
+			const mockGetIssue = vi.fn().mockResolvedValue({
+				id: '42',
+				title: 'Test',
+				body: 'Body',
+				state: 'open',
+				url: '',
+				provider: 'github',
+				author: null,
+			})
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: mockGetIssue,
+			} as never)
+
+			await command.execute('42')
+
+			expect(mockGetIssue).toHaveBeenCalledWith(expect.objectContaining({ includeComments: true }))
 		})
 	})
 })

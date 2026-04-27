@@ -11,6 +11,8 @@
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import { logger } from './logger.js'
+import { processMarkdownImages } from './image-processor.js'
+import type { IssueProvider } from '../mcp/types.js'
 
 // ============================================================================
 // Type Definitions
@@ -315,10 +317,11 @@ export async function fetchChildIssueDetails(
     childIssues.map(async (child): Promise<ChildIssueDetail> => {
       try {
         const fullIssue = await issueTracker.fetchIssue(child.id, repo)
+        const processedBody = await processChildIssueBody(fullIssue.body, providerName)
         return {
           number: formatIssueNumber(child.id, providerName),
           title: fullIssue.title,
-          body: fullIssue.body,
+          body: processedBody,
           url: child.url,
         }
       } catch {
@@ -344,6 +347,32 @@ export async function fetchChildIssueDetails(
   }
 
   return details
+}
+
+/**
+ * Process a child issue body to download authenticated images and rewrite URLs to local cache paths.
+ *
+ * Only runs for providers supported by image-processor ('github' | 'linear'). Other providers
+ * (e.g., 'jira') pass through unchanged. Errors are logged at debug level and the original
+ * body is returned, so image processing failures never block CHILD_ISSUES JSON construction.
+ */
+async function processChildIssueBody(body: string, providerName: string): Promise<string> {
+  if (providerName !== 'github' && providerName !== 'linear') {
+    return body
+  }
+
+  try {
+    return await processMarkdownImages(body, providerName as IssueProvider)
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+      throw error
+    }
+    logger.debug('Failed to process images in child issue body', {
+      error: error instanceof Error ? error.message : String(error),
+      providerName,
+    })
+    return body
+  }
 }
 
 /**

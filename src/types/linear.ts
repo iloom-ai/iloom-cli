@@ -3,6 +3,20 @@
  */
 
 /**
+ * Linear issue attachment (paperclip-uploaded files separate from description body)
+ */
+export interface LinearIssueAttachment {
+  /** Attachment UUID */
+  id: string
+  /** Attachment URL (may be on uploads.linear.app or external) */
+  url: string
+  /** Title shown in Linear's attachment widget */
+  title: string
+  /** Optional subtitle */
+  subtitle?: string
+}
+
+/**
  * Linear issue response from SDK
  */
 export interface LinearIssue {
@@ -22,6 +36,8 @@ export interface LinearIssue {
   createdAt: string
   /** Last update timestamp (ISO string) */
   updatedAt: string
+  /** Issue attachments (paperclip-uploaded files) */
+  attachments?: LinearIssueAttachment[]
 }
 
 /**

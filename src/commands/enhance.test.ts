@@ -6,9 +6,13 @@ import type { SettingsManager, IloomSettings } from '../lib/SettingsManager.js'
 import type { Issue } from '../types/index.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 
 // Mock dependencies
 vi.mock('../utils/browser.js')
+vi.mock('../utils/image-processor.js', () => ({
+	processMarkdownImages: vi.fn(),
+}))
 vi.mock('../utils/prompt.js', () => ({
 	waitForKeypress: vi.fn(),
 	promptConfirmation: vi.fn(),
@@ -659,6 +663,151 @@ describe('EnhanceCommand', () => {
 			await expect(
 				command.execute({ issueNumber: 42, options: {} })
 			).resolves.not.toThrow()
+		})
+	})
+
+	describe('image processing', () => {
+		beforeEach(() => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
+		})
+
+		it('should rewrite image URLs for Linear-provider issue bodies', async () => {
+			const linearService = {
+				fetchIssue: vi.fn(),
+				providerName: 'linear',
+			} as unknown as GitHubService
+			const linearCommand = new EnhanceCommand(linearService, mockEnhancementService, mockSettingsManager)
+
+			const originalBody = 'See ![mockup](https://uploads.linear.app/abc/foo.png)'
+			const rewrittenBody = 'See ![mockup](/tmp/iloom-images/abc.png)'
+
+			vi.mocked(linearService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: originalBody,
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://linear.app/team/issue/TEAM-42',
+			} as Issue)
+
+			vi.mocked(processMarkdownImages).mockResolvedValue(rewrittenBody)
+
+			await linearCommand.execute({ issueNumber: 42, options: {} })
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'linear')
+		})
+
+		it('should rewrite image URLs for GitHub-provider issue bodies', async () => {
+			const originalBody = 'Screenshot ![](https://private-user-images.githubusercontent.com/x/y.png)'
+			const rewrittenBody = 'Screenshot ![](/tmp/iloom-images/y.png)'
+
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: originalBody,
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			} as Issue)
+
+			vi.mocked(processMarkdownImages).mockResolvedValue(rewrittenBody)
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'github')
+		})
+
+		it('should pass through bodies with no images unchanged', async () => {
+			const plainBody = 'Just some text with no images.'
+
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: plainBody,
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			} as Issue)
+
+			// processMarkdownImages returns the content unchanged when no images exist
+			vi.mocked(processMarkdownImages).mockResolvedValue(plainBody)
+
+			await expect(
+				command.execute({ issueNumber: 42, options: {} })
+			).resolves.not.toThrow()
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(plainBody, 'github')
+		})
+
+		it('should fall back to the original body when image processing throws', async () => {
+			const originalBody = '![img](https://uploads.linear.app/abc/foo.png)'
+
+			const linearService = {
+				fetchIssue: vi.fn(),
+				providerName: 'linear',
+			} as unknown as GitHubService
+			const linearCommand = new EnhanceCommand(linearService, mockEnhancementService, mockSettingsManager)
+
+			vi.mocked(linearService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: originalBody,
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://linear.app/team/issue/TEAM-42',
+			} as Issue)
+
+			vi.mocked(processMarkdownImages).mockRejectedValue(new Error('network failure'))
+
+			// Should not throw - fall back to original body
+			await expect(
+				linearCommand.execute({ issueNumber: 42, options: {} })
+			).resolves.not.toThrow()
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'linear')
+		})
+
+		it('should skip image processing for unsupported providers (e.g. jira)', async () => {
+			const jiraService = {
+				fetchIssue: vi.fn(),
+				providerName: 'jira',
+			} as unknown as GitHubService
+			const jiraCommand = new EnhanceCommand(jiraService, mockEnhancementService, mockSettingsManager)
+
+			vi.mocked(jiraService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: 'Body with image',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://example.atlassian.net/browse/PROJ-42',
+			} as Issue)
+
+			await jiraCommand.execute({ issueNumber: 42, options: {} })
+
+			expect(processMarkdownImages).not.toHaveBeenCalled()
+		})
+
+		it('should skip image processing when issue body is empty', async () => {
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+				number: 42,
+				title: 'Test Issue',
+				body: '',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			} as Issue)
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(processMarkdownImages).not.toHaveBeenCalled()
 		})
 	})
 })

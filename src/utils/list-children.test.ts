@@ -6,6 +6,7 @@ import {
   assembleChildrenData,
   fetchChildIssueDetails,
 } from './list-children.js'
+import { processMarkdownImages } from './image-processor.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { LoomMetadata, MetadataManager } from '../lib/MetadataManager.js'
 
@@ -16,6 +17,10 @@ vi.mock('./logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
   },
+}))
+
+vi.mock('./image-processor.js', () => ({
+  processMarkdownImages: vi.fn(async (content: string) => content),
 }))
 
 // Helper factories
@@ -666,6 +671,91 @@ describe('list-children', () => {
       await fetchChildIssueDetails('100', mockTracker, 'owner/repo')
 
       expect(mockTracker.getChildIssues).toHaveBeenCalledWith('100', 'owner/repo')
+    })
+
+    it('should rewrite images via processMarkdownImages for GitHub provider', async () => {
+      const originalBody = 'See ![img](https://github.com/user-attachments/assets/abc)'
+      const rewrittenBody = 'See ![img](/tmp/iloom-images/cached.png)'
+
+      vi.mocked(processMarkdownImages).mockResolvedValueOnce(rewrittenBody)
+
+      const mockTracker = createMockIssueTracker({
+        providerName: 'github',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: '101', title: 'Task 1', url: 'https://github.com/o/r/issues/101', state: 'open' },
+        ]),
+        fetchIssue: vi.fn().mockResolvedValue({
+          number: 101, title: 'Task 1', body: originalBody, state: 'open', labels: [], assignees: [], url: 'url1',
+        }),
+      })
+
+      const result = await fetchChildIssueDetails('100', mockTracker)
+
+      expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'github')
+      expect(result[0].body).toBe(rewrittenBody)
+    })
+
+    it('should rewrite images via processMarkdownImages for Linear provider', async () => {
+      const originalBody = 'See ![img](https://uploads.linear.app/abc)'
+      const rewrittenBody = 'See ![img](/tmp/iloom-images/cached.png)'
+
+      vi.mocked(processMarkdownImages).mockResolvedValueOnce(rewrittenBody)
+
+      const mockTracker = createMockIssueTracker({
+        providerName: 'linear',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: 'ENG-101', title: 'Linear Task', url: 'https://linear.app/i/ENG-101', state: 'In Progress' },
+        ]),
+        fetchIssue: vi.fn().mockResolvedValue({
+          number: 'ENG-101', title: 'Linear Task', body: originalBody, state: 'open', labels: [], assignees: [], url: 'url',
+        }),
+      })
+
+      const result = await fetchChildIssueDetails('ENG-100', mockTracker)
+
+      expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'linear')
+      expect(result[0].body).toBe(rewrittenBody)
+    })
+
+    it('should pass through Jira bodies without invoking processMarkdownImages', async () => {
+      const originalBody = 'Jira body with ![img](https://example.com/img.png)'
+
+      vi.mocked(processMarkdownImages).mockClear()
+
+      const mockTracker = createMockIssueTracker({
+        providerName: 'jira',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: 'PROJ-101', title: 'Jira Task', url: 'https://example.atlassian.net/browse/PROJ-101', state: 'Open' },
+        ]),
+        fetchIssue: vi.fn().mockResolvedValue({
+          number: 'PROJ-101', title: 'Jira Task', body: originalBody, state: 'open', labels: [], assignees: [], url: 'url',
+        }),
+      })
+
+      const result = await fetchChildIssueDetails('PROJ-100', mockTracker)
+
+      expect(processMarkdownImages).not.toHaveBeenCalled()
+      expect(result[0].body).toBe(originalBody)
+    })
+
+    it('should fall back to original body when processMarkdownImages throws', async () => {
+      const originalBody = 'See ![img](https://uploads.linear.app/abc)'
+
+      vi.mocked(processMarkdownImages).mockRejectedValueOnce(new Error('download failed'))
+
+      const mockTracker = createMockIssueTracker({
+        providerName: 'linear',
+        getChildIssues: vi.fn().mockResolvedValue([
+          { id: 'ENG-101', title: 'Linear Task', url: 'https://linear.app/i/ENG-101', state: 'In Progress' },
+        ]),
+        fetchIssue: vi.fn().mockResolvedValue({
+          number: 'ENG-101', title: 'Linear Task', body: originalBody, state: 'open', labels: [], assignees: [], url: 'url',
+        }),
+      })
+
+      const result = await fetchChildIssueDetails('ENG-100', mockTracker)
+
+      expect(result[0].body).toBe(originalBody)
     })
   })
 })

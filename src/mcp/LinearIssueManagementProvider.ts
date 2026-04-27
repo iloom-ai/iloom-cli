@@ -46,6 +46,20 @@ import {
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
 
+// Heuristic: file extension indicates an image. Used to filter Linear's mixed attachment list
+// (which may contain non-image files like PDFs, Slack message links, GitHub PR links, etc.).
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic|heif)(\?|#|$)/i
+
+function isImageAttachment(att: { url: string; title?: string }): boolean {
+	try {
+		const parsed = new URL(att.url)
+		if (parsed.hostname === 'uploads.linear.app') return true
+	} catch {
+		// invalid URL — fall through to extension check
+	}
+	return IMAGE_EXTENSIONS.test(att.url) || (att.title ? IMAGE_EXTENSIONS.test(att.title) : false)
+}
+
 /**
  * Linear-specific implementation of IssueManagementProvider
  */
@@ -94,6 +108,21 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 			linearState: raw.state,
 			createdAt: raw.createdAt,
 			updatedAt: raw.updatedAt,
+		}
+
+		// Append image attachments as markdown image refs so processMarkdownImages picks them up.
+		// Sanitize titles to prevent brackets/newlines/backslashes from breaking the markdown
+		// image syntax (which would also cause extractMarkdownImageUrls's regex to miss them).
+		if (raw.attachments && raw.attachments.length > 0) {
+			const imageAttachments = raw.attachments.filter(isImageAttachment)
+			if (imageAttachments.length > 0) {
+				const lines = imageAttachments.map((a) => {
+					const sanitizedTitle = (a.title || 'attachment').replace(/[[\]\\\n\r]/g, ' ').trim() || 'attachment'
+					return `![${sanitizedTitle}](${a.url})`
+				})
+				const separator = result.body.length > 0 ? '\n\n' : ''
+				result.body = `${result.body}${separator}## Attachments\n\n${lines.join('\n\n')}`
+			}
 		}
 
 		// Fetch comments if requested

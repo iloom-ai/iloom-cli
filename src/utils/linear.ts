@@ -157,6 +157,26 @@ export async function fetchLinearIssue(identifier: string): Promise<LinearIssue>
       }
     }
 
+    // Fetch attachments fail-open: an attachment-fetch failure must not break issue retrieval
+    try {
+      const attachmentConnection = await issue.attachments()
+      if (attachmentConnection?.nodes && attachmentConnection.nodes.length > 0) {
+        result.attachments = attachmentConnection.nodes.map((a) => ({
+          id: a.id,
+          url: a.url,
+          title: a.title,
+          ...(a.subtitle !== undefined && { subtitle: a.subtitle }),
+        }))
+      }
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+        throw error
+      }
+      logger.debug(
+        `Failed to fetch Linear attachments for ${identifier}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+
     return result
   } catch (error) {
     if (error instanceof LinearServiceError) {

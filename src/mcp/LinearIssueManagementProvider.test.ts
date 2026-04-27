@@ -22,6 +22,16 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 	}
 })
 
+// Mock image-processor so we can assert what body it sees, but preserve the
+// rest of the module (extractMarkdownImageUrls, etc.) for tests that need it.
+vi.mock('../utils/image-processor.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/image-processor.js')>()
+	return {
+		...actual,
+		processMarkdownImages: vi.fn(async (content: string) => content),
+	}
+})
+
 // Import mocked functions for assertions
 import {
 	fetchLinearIssue,
@@ -38,6 +48,7 @@ import {
 	updateLinearIssueState,
 	editLinearIssue,
 } from '../utils/linear.js'
+import { processMarkdownImages, extractMarkdownImageUrls } from '../utils/image-processor.js'
 
 describe('LinearIssueManagementProvider', () => {
 	let provider: LinearIssueManagementProvider
@@ -143,6 +154,173 @@ describe('LinearIssueManagementProvider', () => {
 
 			expect(fetchLinearIssueComments).not.toHaveBeenCalled()
 			expect(result.comments).toBeUndefined()
+		})
+
+		it('should append image attachments to body before image processing', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with attachments',
+				description: 'Original body content',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://uploads.linear.app/abc/screenshot.png',
+						title: 'Screenshot',
+					},
+					{
+						id: 'att-2',
+						url: 'https://example.com/image.jpg',
+						title: 'External image',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			expect(result.body).toContain('Original body content')
+			expect(result.body).toContain('## Attachments')
+			expect(result.body).toContain('![Screenshot](https://uploads.linear.app/abc/screenshot.png)')
+			expect(result.body).toContain('![External image](https://example.com/image.jpg)')
+
+			// Verify processMarkdownImages was invoked with the FINAL body (including attachments)
+			expect(processMarkdownImages).toHaveBeenCalledWith(
+				expect.stringContaining('## Attachments'),
+				'linear',
+			)
+		})
+
+		it('should not add Attachments section when attachments are non-image', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with non-image attachments',
+				description: 'Body content',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://slack.com/archives/C123/p456',
+						title: 'Slack message',
+					},
+					{
+						id: 'att-2',
+						url: 'https://github.com/foo/bar/pull/123',
+						title: 'GitHub PR',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			expect(result.body).toBe('Body content')
+			expect(result.body).not.toContain('## Attachments')
+		})
+
+		it('should not add Attachments section when no attachments are present', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue without attachments',
+				description: 'Body content',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			expect(result.body).toBe('Body content')
+			expect(result.body).not.toContain('## Attachments')
+		})
+
+		it('should produce body starting with Attachments section when description is empty', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with no description',
+				// no description field
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://uploads.linear.app/abc/image.png',
+						title: 'Image',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			expect(result.body.startsWith('## Attachments')).toBe(true)
+		})
+
+		it('should sanitize attachment titles containing markdown-breaking characters', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with hostile titles',
+				description: 'Body',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://uploads.linear.app/abc/img1.png',
+						title: 'Has [brackets] and \\backslash',
+					},
+					{
+						id: 'att-2',
+						url: 'https://uploads.linear.app/abc/img2.png',
+						title: 'Has\nnewlines\rcarriage',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			// None of the markdown-breaking characters should remain in the alt-text portion.
+			// Confirm by re-extracting image URLs from the resulting body — both should round-trip.
+			const extracted = extractMarkdownImageUrls(result.body)
+			const urls = extracted.map((m) => m.url)
+			expect(urls).toContain('https://uploads.linear.app/abc/img1.png')
+			expect(urls).toContain('https://uploads.linear.app/abc/img2.png')
+
+			// The body must not contain raw `[`/`]`/`\\`/newline characters between the `![` opener
+			// and the closing `]` of the alt text — otherwise extractMarkdownImageUrls's regex would
+			// have failed and the URLs above would not have been recovered. The assertion above is
+			// the strongest check; additionally verify the literal hostile substrings are gone.
+			expect(result.body).not.toContain('[brackets]')
+			expect(result.body).not.toContain('\\backslash')
+			expect(result.body).not.toMatch(/!\[[^\]]*\n[^\]]*\]/)
 		})
 
 		it('should include comments when requested', async () => {
