@@ -436,14 +436,16 @@ export class LoomManager {
 
     // Build issue/pr numbers arrays based on type
     // For PR workflows, extract issue number from branch name if present
+    // Normalize identifiers via the configured issue tracker so issue_numbers
+    // stores canonical/properly-cased values (e.g., "WEB-2423" not "web-2423")
     let issue_numbers: string[] = []
     let extractedIssueNum: string | null = null
     if (input.type === 'issue' || input.type === 'epic') {
-      issue_numbers = [String(input.identifier)]
+      issue_numbers = [this.issueTracker.normalizeIdentifier(String(input.identifier))]
     } else if (input.type === 'pr') {
       extractedIssueNum = extractIssueNumber(branchName)
       if (extractedIssueNum) {
-        issue_numbers = [extractedIssueNum]
+        issue_numbers = [this.issueTracker.normalizeIdentifier(extractedIssueNum)]
       }
     }
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
@@ -658,20 +660,25 @@ export class LoomManager {
     issueData: Issue | PullRequest | null,
   ): Promise<Record<string, string>> {
     if ((input.type === 'issue' || input.type === 'epic') && issueData?.url) {
-      return { [String(input.identifier)]: issueData.url }
+      // Normalize the key so it matches issue_numbers (e.g. "WEB-2423" not "web-2423"),
+      // letting consumers do `loom.issueUrls[loom.issue_numbers[0]]` reliably.
+      const key = this.issueTracker.normalizeIdentifier(String(input.identifier))
+      return { [key]: issueData.url }
     }
 
     if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
       const isGithubProject = this.issueTracker.providerName === 'github'
       const isNumericKey = /^\d+$/.test(extractedIssueNum)
       const isGithubPrUrl = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(issueData.url)
+      // Normalize the key so it matches issue_numbers regardless of casing.
+      const normalizedKey = this.issueTracker.normalizeIdentifier(extractedIssueNum)
       if (isGithubProject && isNumericKey && isGithubPrUrl) {
         const synthesized = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
-        return { [extractedIssueNum]: synthesized }
+        return { [normalizedKey]: synthesized }
       }
       try {
         const canonical = await this.issueTracker.getIssueUrl(extractedIssueNum)
-        return { [extractedIssueNum]: canonical }
+        return { [normalizedKey]: canonical }
       } catch (error) {
         getLogger().debug(
           `Could not resolve canonical URL for ${extractedIssueNum} via ${this.issueTracker.providerName}: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -1472,14 +1479,16 @@ export class LoomManager {
     if (!existingMetadata) {
       // Build issue/pr numbers arrays based on type
       // For PR workflows, extract issue number from branch name if present
+      // Normalize identifiers via the configured issue tracker so issue_numbers
+      // stores canonical/properly-cased values (e.g., "WEB-2423" not "web-2423")
       let issue_numbers: string[] = []
       let extractedIssueNum: string | null = null
       if (input.type === 'issue') {
-        issue_numbers = [String(input.identifier)]
+        issue_numbers = [this.issueTracker.normalizeIdentifier(String(input.identifier))]
       } else if (input.type === 'pr') {
         extractedIssueNum = extractIssueNumber(branchName)
         if (extractedIssueNum) {
-          issue_numbers = [extractedIssueNum]
+          issue_numbers = [this.issueTracker.normalizeIdentifier(extractedIssueNum)]
         }
       }
       const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []

@@ -378,6 +378,44 @@ describe('list-children', () => {
       expect(result.looms[0].hasMatchingIssue).toBe(true)
       expect(result.summary.issuesWithLooms).toBe(2)
     })
+
+    it('should match cross-source identifiers case-insensitively (API uppercase vs metadata lowercase)', () => {
+      // Simulates legacy metadata storing lowercase Linear identifiers while
+      // the API returns canonical uppercase casing.
+      const childIssues = [
+        { id: 'WEB-2423', title: 'Linear feature', url: 'url1', state: 'open' },
+      ]
+      const childLooms = [
+        createChildLoomMetadata('issue-WEB-2422__parent', 'WEB-2423', {
+          issue_numbers: ['web-2423'],
+        }),
+      ]
+
+      const result = matchChildrenData(childIssues, childLooms)
+
+      expect(result.issues[0].hasActiveLoom).toBe(true)
+      expect(result.issues[0].loomBranch).toBe(childLooms[0].branchName)
+      expect(result.looms[0].hasMatchingIssue).toBe(true)
+      expect(result.summary.issuesWithLooms).toBe(1)
+      expect(result.summary.orphanLooms).toBe(0)
+    })
+
+    it('should match cross-source identifiers case-insensitively (API lowercase vs metadata uppercase)', () => {
+      const childIssues = [
+        { id: 'web-2423', title: 'Linear feature', url: 'url1', state: 'open' },
+      ]
+      const childLooms = [
+        createChildLoomMetadata('issue-WEB-2422__parent', 'WEB-2423', {
+          issue_numbers: ['WEB-2423'],
+        }),
+      ]
+
+      const result = matchChildrenData(childIssues, childLooms)
+
+      expect(result.issues[0].hasActiveLoom).toBe(true)
+      expect(result.looms[0].hasMatchingIssue).toBe(true)
+      expect(result.summary.orphanLooms).toBe(0)
+    })
   })
 
   describe('assembleChildrenData', () => {

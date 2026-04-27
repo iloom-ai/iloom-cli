@@ -258,6 +258,9 @@ describe('LoomManager', testOptions, () => {
 
     vi.clearAllMocks()
 
+    // Default mock for normalizeIdentifier (GitHub returns numeric identifiers as-is)
+    vi.mocked(mockGitHub.normalizeIdentifier).mockImplementation((id) => String(id))
+
     // Set up shared mock return values (after clearAllMocks)
     mockWriteMetadata.mockResolvedValue(undefined)
     mockReadMetadata.mockResolvedValue(null)
@@ -1433,6 +1436,131 @@ describe('LoomManager', testOptions, () => {
         expect(metadataInput.issueUrls).toEqual({})
         // PR URL still populated (unaffected by issue URL resolution)
         expect(metadataInput.prUrls).toEqual({ '4049': 'https://github.com/owner/repo/pull/4049' })
+      })
+    })
+
+    describe('issue_numbers / issueUrls normalization', () => {
+      it('should normalize issue identifiers to canonical casing in issue_numbers and issueUrls (issue input)', async () => {
+        // Linear-tracked project: lowercase input identifier should be normalized to uppercase.
+        mockGitHub.providerName = 'linear'
+        vi.mocked(mockGitHub.normalizeIdentifier).mockImplementation((id) => String(id).toUpperCase())
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 'WEB-2423',
+          title: 'Linear feature',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://linear.app/team/issue/WEB-2423',
+        })
+
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree-web-2423')
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree-web-2423')
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3001)
+        vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
+
+        await manager.createIloom({
+          type: 'issue',
+          identifier: 'web-2423',
+          originalInput: 'web-2423',
+        })
+
+        expect(mockWriteMetadata).toHaveBeenCalled()
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        expect(metadataInput.issue_numbers).toEqual(['WEB-2423'])
+        expect(metadataInput.issueUrls).toEqual({
+          'WEB-2423': 'https://linear.app/team/issue/WEB-2423',
+        })
+        // Sanity: lookup by issue_numbers[0] succeeds (the original bug).
+        const firstIssueNumber = metadataInput.issue_numbers[0]
+        expect(metadataInput.issueUrls[firstIssueNumber]).toBe(
+          'https://linear.app/team/issue/WEB-2423'
+        )
+      })
+
+      it('should normalize extracted issue identifier in PR workflows (issue_numbers and issueUrls keyed canonically)', async () => {
+        // Linear-tracked project; PR branch contains lowercase issue id "web-2423".
+        // After normalization both issue_numbers and issueUrls should use "WEB-2423".
+        mockGitHub.providerName = 'linear'
+        vi.mocked(mockGitHub.normalizeIdentifier).mockImplementation((id) => String(id).toUpperCase())
+        vi.mocked(mockGitHub.getIssueUrl).mockResolvedValue('https://linear.app/team/issue/WEB-2423')
+
+        vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+          number: 4049,
+          title: 'Test PR',
+          body: '',
+          state: 'open',
+          branch: 'feat/issue-web-2423__feature',
+          baseBranch: 'main',
+          url: 'https://github.com/owner/repo/pull/4049',
+          isDraft: false,
+        })
+
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree-pr-4049')
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree-pr-4049')
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3049)
+        vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
+        vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+          capabilities: [],
+          binEntries: {},
+        })
+
+        await manager.createIloom({
+          type: 'pr',
+          identifier: 4049,
+          originalInput: 'pr/4049',
+        })
+
+        expect(mockWriteMetadata).toHaveBeenCalled()
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        expect(metadataInput.issue_numbers).toEqual(['WEB-2423'])
+        expect(metadataInput.issueUrls).toEqual({
+          'WEB-2423': 'https://linear.app/team/issue/WEB-2423',
+        })
+      })
+
+      it('should normalize identifier in reuseIloom path (no prior metadata, issue input)', async () => {
+        // reuseIloom fires when worktree already exists. Use lowercase identifier.
+        mockGitHub.providerName = 'linear'
+        vi.mocked(mockGitHub.normalizeIdentifier).mockImplementation((id) => String(id).toUpperCase())
+        mockReadMetadata.mockResolvedValue(null) // forces the metadata write branch in reuseIloom
+
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 'WEB-2423',
+          title: 'Linear feature',
+          body: '',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://linear.app/team/issue/WEB-2423',
+        })
+
+        vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue({
+          path: '/test/worktree-web-2423',
+          branch: 'issue-web-2423',
+          commit: 'abc',
+          bare: false,
+          detached: false,
+          locked: false,
+        })
+        vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+          capabilities: [],
+          binEntries: {},
+        })
+
+        await manager.createIloom({
+          type: 'issue',
+          identifier: 'web-2423',
+          originalInput: 'web-2423',
+        })
+
+        expect(mockWriteMetadata).toHaveBeenCalled()
+        const metadataInput = mockWriteMetadata.mock.calls[0][1]
+        expect(metadataInput.issue_numbers).toEqual(['WEB-2423'])
+        expect(metadataInput.issueUrls).toEqual({
+          'WEB-2423': 'https://linear.app/team/issue/WEB-2423',
+        })
       })
     })
   })

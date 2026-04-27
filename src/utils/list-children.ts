@@ -154,20 +154,25 @@ export function matchChildrenData(
   childIssues: RawChildIssue[],
   childLooms: LoomMetadata[],
 ): ChildrenData {
-  // Build a map of issue ID -> child loom for fast lookup
+  // Build a map of issue ID -> child loom for fast lookup.
+  // Keys are lowercased so that cross-source matching is case-insensitive: the
+  // map is populated from stored issue_numbers (which may be legacy lowercase
+  // like "web-2423") and looked up using API-sourced canonical IDs (e.g.,
+  // "WEB-2423"). The stored values keep their original casing.
   const issueToLoomMap = new Map<string, LoomMetadata>()
   for (const loom of childLooms) {
     for (const issueNum of loom.issue_numbers) {
-      issueToLoomMap.set(issueNum, loom)
+      issueToLoomMap.set(issueNum.toLowerCase(), loom)
     }
   }
 
-  // Build a set of all issue IDs from child issues for fast lookup
-  const childIssueIds = new Set(childIssues.map((issue) => issue.id))
+  // Build a set of all issue IDs from child issues for fast lookup.
+  // Lowercased for the same case-insensitive cross-source matching reason.
+  const childIssueIds = new Set(childIssues.map((issue) => issue.id.toLowerCase()))
 
   // Match child issues to looms
   const matchedIssues: ChildIssueInfo[] = childIssues.map((issue) => {
-    const matchingLoom = issueToLoomMap.get(issue.id)
+    const matchingLoom = issueToLoomMap.get(issue.id.toLowerCase())
     return {
       id: issue.id,
       title: issue.title,
@@ -181,7 +186,7 @@ export function matchChildrenData(
   // Match child looms to issues
   const matchedLooms: ChildLoomInfo[] = childLooms.map((loom) => {
     // Check if any of the loom's issue_numbers match a child issue
-    const hasMatchingIssue = loom.issue_numbers.some((issueNum) => childIssueIds.has(issueNum))
+    const hasMatchingIssue = loom.issue_numbers.some((issueNum) => childIssueIds.has(issueNum.toLowerCase()))
     return {
       branch: loom.branchName ?? '',
       issueNumbers: loom.issue_numbers,

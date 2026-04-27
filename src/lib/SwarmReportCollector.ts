@@ -132,6 +132,9 @@ export class SwarmReportCollector {
 		epicWorktreePath: string
 	): Promise<Map<string, string>> {
 		const map = new Map<string, string>()
+		// Lowercase set for case-insensitive matching against legacy metadata
+		// that may have inconsistent casing (e.g., "web-2423" vs "WEB-2423").
+		const childIssueNumbersLower = new Set(childIssueNumbers.map(n => n.toLowerCase()))
 		try {
 			const allMetadata = await this.metadataManager.listAllMetadata()
 			for (const metadata of allMetadata) {
@@ -141,7 +144,7 @@ export class SwarmReportCollector {
 
 				// Map each issue number associated with this child loom
 				for (const issueNum of metadata.issue_numbers) {
-					if (childIssueNumbers.includes(issueNum)) {
+					if (childIssueNumbersLower.has(issueNum.toLowerCase())) {
 						map.set(issueNum, metadata.worktreePath)
 					}
 				}

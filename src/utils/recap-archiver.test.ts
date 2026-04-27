@@ -322,6 +322,42 @@ describe('RecapArchiver', () => {
 
 			expect(result).toBeNull()
 		})
+
+		it('should match issue identifiers case-insensitively (uppercase query, lowercase metadata)', async () => {
+			const linearWorktree = '/Users/test/projects/my-repo-issue-web-2423__feature'
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath: linearWorktree,
+					issue_numbers: ['web-2423'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('issue', 'WEB-2423')
+
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(linearWorktree)))
+		})
+
+		it('should match issue identifiers case-insensitively (lowercase query, uppercase metadata)', async () => {
+			const linearWorktree = '/Users/test/projects/my-repo-issue-WEB-2423__feature'
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue(currentProjectPath)
+			setupMetadataMock([
+				{
+					projectPath: currentProjectPath,
+					worktreePath: linearWorktree,
+					issue_numbers: ['WEB-2423'],
+					pr_numbers: [],
+				},
+			])
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+
+			const result = await findArchivedRecap('issue', 'web-2423')
+
+			expect(result).toBe(path.join(ARCHIVED_DIR, slugifyPath(linearWorktree)))
+		})
 	})
 
 	describe('constants', () => {

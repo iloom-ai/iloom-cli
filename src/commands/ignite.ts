@@ -907,6 +907,11 @@ export class IgniteCommand {
 		const mainWorktreePath = await findMainWorktreePathWithSettings()
 		const providerName = IssueTrackerFactory.getProviderName(settings)
 
+		// Construct the issue tracker once for use during child loom metadata
+		// pre-creation so that child issue identifiers are normalized to canonical
+		// casing (e.g. "WEB-2423" instead of "web-2423") before being written.
+		const issueTracker = IssueTrackerFactory.create(settings)
+
 		// Create SwarmSetupService
 		const swarmSetup = new SwarmSetupService(
 			this.agentManager,
@@ -973,9 +978,12 @@ export class IgniteCommand {
 				continue
 			}
 			for (const issueNum of meta.issue_numbers) {
-				// listFinishedMetadata returns newest first; preserve the newest entry
-				if (!finishedByIssueNumber.has(issueNum)) {
-					finishedByIssueNumber.set(issueNum, meta)
+				// listFinishedMetadata returns newest first; preserve the newest entry.
+				// Key by lowercase to handle legacy metadata with inconsistent casing
+				// (e.g., "web-2423" vs "WEB-2423").
+				const key = issueNum.toLowerCase()
+				if (!finishedByIssueNumber.has(key)) {
+					finishedByIssueNumber.set(key, meta)
 				}
 			}
 		}
@@ -990,8 +998,9 @@ export class IgniteCommand {
 			const childWorktreePath = generateWorktreePath(childBranch, mainWorktreePath)
 
 			// Check active worktree metadata first, then fall back to finished metadata
+			// (lowercase lookup for case-insensitive matching against legacy data).
 			const childMeta = await metadataManager.readMetadata(childWorktreePath)
-				?? finishedByIssueNumber.get(rawId) ?? null
+				?? finishedByIssueNumber.get(rawId.toLowerCase()) ?? null
 
 			if (childMeta?.state === 'done') {
 				skippedChildren.push({ number: child.number, state: childMeta.state })
@@ -1039,7 +1048,7 @@ export class IgniteCommand {
 					branchName: child.branchName,
 					worktreePath: child.worktreePath,
 					issueType: 'issue',
-					issue_numbers: [child.number],
+					issue_numbers: [issueTracker.normalizeIdentifier(child.number)],
 					pr_numbers: [],
 					issueTracker: metadata.issueTracker ?? 'github',
 					colorHex: '#808080',

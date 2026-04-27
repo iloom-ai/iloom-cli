@@ -94,7 +94,7 @@ export async function archiveRecap(worktreePath: string): Promise<void> {
  */
 export async function findArchivedRecap(
 	type: 'issue' | 'pr',
-	number: number
+	number: number | string
 ): Promise<string | null> {
 	try {
 		const currentProjectPath = await findMainWorktreePathWithSettings()
@@ -108,8 +108,14 @@ export async function findArchivedRecap(
 			if (!loom.projectPath || loom.projectPath !== currentProjectPath) return false
 			// Must have worktreePath to derive filename
 			if (!loom.worktreePath) return false
-			// Match by issue or PR number
-			if (type === 'issue') return loom.issue_numbers?.includes(numberStr) ?? false
+			// Match by issue or PR number. Issue comparison is case-insensitive
+			// to handle legacy metadata that may have lowercase Linear/Jira
+			// identifiers (e.g., "web-2423") while callers may pass "WEB-2423",
+			// or vice versa.
+			if (type === 'issue') {
+				const target = numberStr.toLowerCase()
+				return loom.issue_numbers?.some(n => n.toLowerCase() === target) ?? false
+			}
 			if (type === 'pr') return loom.pr_numbers?.includes(numberStr) ?? false
 			return false
 		})
