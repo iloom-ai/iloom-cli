@@ -1,6 +1,7 @@
-/* global ReadableStream */
+/* global ReadableStream, setTimeout */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync, readdirSync } from 'node:fs'
 
 // Mock execa before importing the module
@@ -24,6 +25,7 @@ import {
   processMarkdownImages,
   clearCachedGitHubToken,
   resetPruneFlagForTesting,
+  resetLegacyCleanupFlagForTesting,
   CACHE_DIR
 } from './image-processor.js'
 import { execa } from 'execa'
@@ -33,6 +35,7 @@ describe('ImageProcessor', () => {
   beforeEach(() => {
     clearCachedGitHubToken()
     resetPruneFlagForTesting()
+    resetLegacyCleanupFlagForTesting()
   })
   describe('extractMarkdownImageUrls', () => {
     test('extracts standard markdown image syntax: ![alt](url)', () => {
@@ -404,6 +407,84 @@ End of content
       await expect(downloadAndSaveImage('https://example.com/image.png', destPath))
         .rejects.toThrow('Response body is null')
     })
+
+    test('strips auth header on cross-origin redirect (case-insensitive match)', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      // First response: 302 redirect to a different origin
+      mockFetch.mockResolvedValueOnce({
+        status: 302,
+        headers: new Map([['Location', 'https://s3.amazonaws.com/bucket/image.png']])
+      })
+      // Second response: success at new origin (must not include Authorization)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-redirect-strip-lower.png')
+      await downloadAndSaveImage('https://github.com/img.png', destPath, 'Bearer secret')
+
+      // Verify the second call (after redirect) does NOT include any auth header,
+      // regardless of case. The strip iterates all keys with lowercased comparison
+      // so any future variant ('authorization', 'AUTHORIZATION', etc.) is also dropped.
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      const headerKeys = Object.keys(sentHeaders).map(k => k.toLowerCase())
+      expect(headerKeys).not.toContain('authorization')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
+
+    test('preserves Authorization header on same-origin redirect', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      mockFetch.mockResolvedValueOnce({
+        status: 302,
+        headers: new Map([['Location', 'https://github.com/different-path.png']])
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-redirect-same-origin.png')
+      await downloadAndSaveImage('https://github.com/img.png', destPath, 'Bearer secret')
+
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      expect(sentHeaders['Authorization']).toBe('Bearer secret')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
+
+    test('preserves Authorization on same-host http -> https upgrade', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      mockFetch.mockResolvedValueOnce({
+        status: 301,
+        headers: new Map([['Location', 'https://api.example.com/asset.png']])
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-https-upgrade.png')
+      await downloadAndSaveImage('http://api.example.com/asset.png', destPath, 'Bearer secret')
+
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      expect(sentHeaders['Authorization']).toBe('Bearer secret')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
   })
 
   describe('getCacheDestPath', () => {
@@ -421,6 +502,45 @@ End of content
 
       expect(existsSync(CACHE_DIR)).toBe(true)
       expect(destPath.startsWith(CACHE_DIR)).toBe(true)
+    })
+  })
+
+  describe('legacy cache cleanup', () => {
+    test('removes legacy /tmp/iloom-images dir on first ensureCacheDir call', async () => {
+      const legacyDir = join(tmpdir(), 'iloom-images')
+      mkdirSync(legacyDir, { recursive: true })
+      writeFileSync(join(legacyDir, 'stale.png'), 'stale')
+      expect(existsSync(legacyDir)).toBe(true)
+
+      // Trigger ensureCacheDir via the public API
+      getCacheDestPath('https://uploads.linear.app/x/image.png')
+
+      // rm is async fire-and-forget; wait for the microtask/IO to settle
+      for (let i = 0; i < 20 && existsSync(legacyDir); i++) {
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+      expect(existsSync(legacyDir)).toBe(false)
+    })
+
+    test('legacy cleanup runs only once per process (idempotent)', async () => {
+      const legacyDir = join(tmpdir(), 'iloom-images')
+
+      // First call: cleanup runs (flag flips). Reset flag to simulate fresh process.
+      resetLegacyCleanupFlagForTesting()
+      getCacheDestPath('https://uploads.linear.app/x/first.png')
+
+      // Now without resetting, recreate the legacy dir and call again — should NOT be removed.
+      mkdirSync(legacyDir, { recursive: true })
+      writeFileSync(join(legacyDir, 'stale-second.png'), 'stale')
+
+      getCacheDestPath('https://uploads.linear.app/x/second.png')
+
+      // Wait briefly to give any cleanup a chance to run (it shouldn't).
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(existsSync(legacyDir)).toBe(true)
+
+      // Cleanup
+      rmSync(legacyDir, { recursive: true, force: true })
     })
   })
 

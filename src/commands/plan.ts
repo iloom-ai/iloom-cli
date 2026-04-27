@@ -227,23 +227,10 @@ export class PlanCommand {
 				// Valid issue found - fetch full details for decomposition context
 				const issue = await issueTracker.fetchIssue(detection.identifier)
 
-				// Process authenticated image URLs in the body (download + cache + rewrite to local paths).
-				// processMarkdownImages is already fail-open, but wrap defensively so any unexpected
-				// error here cannot break the planning session — fall back to the original body.
-				let processedBody = issue.body
-				try {
-					processedBody = await processMarkdownImages(issue.body, provider as IssueProvider)
-				} catch (error) {
-					if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
-						throw error
-					}
-					logger.debug(`processMarkdownImages failed for issue body, falling back to original: ${error instanceof Error ? error.message : String(error)}`)
-					processedBody = issue.body
-				}
-
-				// Construct the MCP provider once and reuse for both comments and children/dependencies.
-				// If construction fails, both fetches are skipped — the planning session continues
-				// with body-only context.
+				// Construct the MCP provider once and reuse for body+comments and
+				// children/dependencies. If construction fails, all MCP fetches are
+				// skipped and the planning session falls back to issueTracker.fetchIssue's
+				// body, with image-processing run on it explicitly below.
 				let mcpProvider: ReturnType<typeof IssueManagementProviderFactory.create> | null = null
 				try {
 					mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
@@ -254,13 +241,20 @@ export class PlanCommand {
 					logger.debug(`Failed to construct MCP provider, continuing without comments/children/dependencies: ${error instanceof Error ? error.message : String(error)}`)
 				}
 
-				// Fetch comments via MCP provider so they are image-processed by the same path
-				// as the MCP get_issue tool. We use only the comments here — body was already
-				// fetched and image-processed above via the IssueTracker path.
+				// The MCP provider's getIssue is the source of truth for body content:
+				// it already runs processMarkdownImages AND appends provider-specific extras
+				// (e.g. Linear paperclip attachments). Discarding its body would silently drop
+				// attachments from the planning context.
+				let bodyForPlan = issue.body
+				let bodyFromMcp = false
 				let commentsSection = ''
 				if (mcpProvider) {
 					try {
 						const mcpIssue = await mcpProvider.getIssue({ number: detection.identifier, includeComments: true })
+						if (mcpIssue.body) {
+							bodyForPlan = mcpIssue.body
+							bodyFromMcp = true
+						}
 						if (mcpIssue.comments && mcpIssue.comments.length > 0) {
 							const commentBlocks = mcpIssue.comments.map(c => {
 								const displayName = c.author?.displayName
@@ -275,14 +269,29 @@ export class PlanCommand {
 						if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
 							throw error
 						}
-						logger.debug(`Failed to fetch comments for plan context, continuing without comments: ${error instanceof Error ? error.message : String(error)}`)
+						logger.debug(`MCP getIssue failed for plan context, falling back to issueTracker body: ${error instanceof Error ? error.message : String(error)}`)
+					}
+				}
+
+				// Fallback: if MCP didn't supply a body (provider construction failed or
+				// getIssue threw), run image processing directly on the raw fetchIssue body
+				// so authenticated image URLs are still rewritten to local paths.
+				if (!bodyFromMcp) {
+					try {
+						bodyForPlan = await processMarkdownImages(issue.body, provider as IssueProvider)
+					} catch (error) {
+						if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+							throw error
+						}
+						logger.debug(`processMarkdownImages fallback failed, using raw body: ${error instanceof Error ? error.message : String(error)}`)
+						bodyForPlan = issue.body
 					}
 				}
 
 				decompositionContext = {
 					identifier: String(issue.number),
 					title: issue.title,
-					body: processedBody + commentsSection
+					body: bodyForPlan + commentsSection
 				}
 				logger.info(chalk.dim(`Preparing to create a detailed plan for issue #${decompositionContext.identifier}: ${decompositionContext.title}`))
 

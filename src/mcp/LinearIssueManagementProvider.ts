@@ -54,10 +54,13 @@ function isImageAttachment(att: { url: string; title?: string }): boolean {
 	try {
 		const parsed = new URL(att.url)
 		if (parsed.hostname === 'uploads.linear.app') return true
+		// Test only the pathname so query/fragment fragments like
+		// "...#section-image.png" don't false-positive a docs URL as an image.
+		if (IMAGE_EXTENSIONS.test(parsed.pathname)) return true
 	} catch {
-		// invalid URL — fall through to extension check
+		// invalid URL — fall through to title check
 	}
-	return IMAGE_EXTENSIONS.test(att.url) || (att.title ? IMAGE_EXTENSIONS.test(att.title) : false)
+	return att.title ? IMAGE_EXTENSIONS.test(att.title) : false
 }
 
 /**
@@ -118,7 +121,10 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 			if (imageAttachments.length > 0) {
 				const lines = imageAttachments.map((a) => {
 					const sanitizedTitle = (a.title || 'attachment').replace(/[[\]\\\n\r]/g, ' ').trim() || 'attachment'
-					return `![${sanitizedTitle}](${a.url})`
+					// encodeURI preserves existing percent-encoding while encoding spaces, parens,
+					// and other chars that would break extractMarkdownImageUrls's URL regex.
+					// encodeURIComponent would over-encode `://` and break the URL.
+					return `![${sanitizedTitle}](${encodeURI(a.url)})`
 				})
 				const separator = result.body.length > 0 ? '\n\n' : ''
 				result.body = `${result.body}${separator}## Attachments\n\n${lines.join('\n\n')}`

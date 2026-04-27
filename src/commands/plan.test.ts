@@ -1190,7 +1190,7 @@ describe('PlanCommand', () => {
 		})
 	})
 
-	describe('image processing on fetched issue body', () => {
+	describe('body source-of-truth for plan decomposition', () => {
 		beforeEach(() => {
 			// Decomposition mode: matchIssueIdentifier returns true for "42"
 			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
@@ -1198,34 +1198,41 @@ describe('PlanCommand', () => {
 				type: 'numeric',
 				identifier: '42',
 			})
+		})
 
-			// IssueManagementProviderFactory mock — children/dependencies/comments path
+		it('uses mcpIssue.body as PARENT_ISSUE_BODY (already image-processed by MCP layer)', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: 'raw-fetchIssue-body' }),
+			} as never)
+			const mockGetIssue = vi.fn().mockResolvedValue({
+				id: '42',
+				title: 'Test',
+				body: 'mcp-processed-body',
+				state: 'open',
+				url: '',
+				provider: 'github',
+				author: null,
+			})
 			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
 				getChildIssues: vi.fn().mockResolvedValue([]),
 				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
-				getIssue: vi.fn().mockResolvedValue({ id: '42', title: 'Test', body: '', state: 'open', url: '', provider: 'github', author: null }),
+				getIssue: mockGetIssue,
 			} as never)
-		})
-
-		it('invokes processMarkdownImages with provider="github" when tracker is github', async () => {
-			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-			const linearImageBody = 'See screenshot ![](https://github.com/user-attachments/assets/abc.png)'
-			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
-				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
-				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: linearImageBody }),
-			} as never)
-			vi.mocked(processMarkdownImages).mockResolvedValue('processed-github-body')
 
 			await command.execute('42')
 
-			expect(processMarkdownImages).toHaveBeenCalledWith(linearImageBody, 'github')
+			expect(mockGetIssue).toHaveBeenCalledWith({ number: '42', includeComments: true })
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 				'plan',
-				expect.objectContaining({ PARENT_ISSUE_BODY: 'processed-github-body' })
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'mcp-processed-body' })
 			)
+			// Source-of-truth comes from MCP, so the explicit fallback path is not used.
+			expect(processMarkdownImages).not.toHaveBeenCalled()
 		})
 
-		it('invokes processMarkdownImages with provider="linear" when tracker is linear', async () => {
+		it('preserves Linear attachment section appended by the MCP provider', async () => {
 			const { SettingsManager } = await import('../lib/SettingsManager.js')
 			vi.mocked(SettingsManager).mockImplementation(() => ({
 				loadSettings: vi.fn().mockResolvedValue({ issueManagement: { provider: 'linear' } }),
@@ -1238,47 +1245,67 @@ describe('PlanCommand', () => {
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('linear')
 			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
 
-			const linearImageBody = 'See screenshot ![](https://uploads.linear.app/abc.png)'
 			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
 				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: 'ENG-42' }),
-				fetchIssue: vi.fn().mockResolvedValue({ number: 'ENG-42', title: 'Test', body: linearImageBody }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 'ENG-42', title: 'Test', body: 'Original body' }),
 			} as never)
-			vi.mocked(processMarkdownImages).mockResolvedValue('processed-linear-body')
+			const mcpBodyWithAttachments = 'Original body\n\n## Attachments\n\n![screenshot](https://uploads.linear.app/abc.png)'
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockResolvedValue({
+					id: 'ENG-42',
+					title: 'Test',
+					body: mcpBodyWithAttachments,
+					state: 'open',
+					url: '',
+					provider: 'linear',
+					author: null,
+				}),
+			} as never)
 
 			await command.execute('ENG-42')
 
-			expect(processMarkdownImages).toHaveBeenCalledWith(linearImageBody, 'linear')
-			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-				'plan',
-				expect.objectContaining({ PARENT_ISSUE_BODY: 'processed-linear-body' })
-			)
+			const call = vi.mocked(mockTemplateManager.getPrompt).mock.calls.find(c => c[0] === 'plan')
+			const body = (call?.[1] as { PARENT_ISSUE_BODY?: string } | undefined)?.PARENT_ISSUE_BODY ?? ''
+			expect(body).toContain('## Attachments')
+			expect(body).toContain('![screenshot](https://uploads.linear.app/abc.png)')
 		})
 
-		it('returns body unchanged when there are no images', async () => {
-			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
-			const plainBody = 'Plain text body with no images'
-			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
-				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
-				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: plainBody }),
-			} as never)
-			// processMarkdownImages's own contract: no images -> returns input unchanged
-			vi.mocked(processMarkdownImages).mockImplementation(async (content: string) => content)
-
-			await command.execute('42')
-
-			expect(processMarkdownImages).toHaveBeenCalledWith(plainBody, 'github')
-			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
-				'plan',
-				expect.objectContaining({ PARENT_ISSUE_BODY: plainBody })
-			)
-		})
-
-		it('falls back to original body when processMarkdownImages throws', async () => {
+		it('falls back to processMarkdownImages on raw body when MCP getIssue throws', async () => {
 			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
 			const originalBody = 'body with image ![](https://github.com/user-attachments/assets/x.png)'
 			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
 				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
 				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: originalBody }),
+			} as never)
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockRejectedValue(new Error('MCP fetch failure')),
+			} as never)
+			vi.mocked(processMarkdownImages).mockResolvedValue('fallback-processed-body')
+
+			await command.execute('42')
+
+			expect(processMarkdownImages).toHaveBeenCalledWith(originalBody, 'github')
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ PARENT_ISSUE_BODY: 'fallback-processed-body' })
+			)
+		})
+
+		it('falls back to raw body when both MCP getIssue and processMarkdownImages throw', async () => {
+			vi.mocked(IssueTrackerFactory.getProviderName).mockReturnValue('github')
+			const originalBody = 'body with image ![](https://github.com/user-attachments/assets/x.png)'
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue({
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test', body: originalBody }),
+			} as never)
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockRejectedValue(new Error('MCP fetch failure')),
 			} as never)
 			vi.mocked(processMarkdownImages).mockRejectedValue(new Error('boom'))
 

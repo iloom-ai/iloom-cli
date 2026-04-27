@@ -1,8 +1,8 @@
 /* global fetch, AbortController, AbortSignal, Response, setTimeout, clearTimeout */
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join, extname } from 'node:path'
-import { existsSync, mkdirSync, createWriteStream } from 'node:fs'
-import { readdir, stat, unlink, rename, chmod } from 'node:fs/promises'
+import { existsSync, mkdirSync, createWriteStream, chmodSync } from 'node:fs'
+import { readdir, stat, unlink, rename, rm } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { createHash, randomUUID } from 'node:crypto'
@@ -63,22 +63,54 @@ let lastPruneAt = 0
 let cachedGitHubToken: string | undefined
 
 /**
+ * One-shot flag for legacy cache cleanup. Reset via resetLegacyCleanupFlagForTesting()
+ * in tests so each test can re-trigger the cleanup path.
+ */
+let legacyCleanedThisRun = false
+
+/**
+ * Best-effort recursive cleanup of the legacy /tmp/iloom-images cache dir from
+ * earlier builds. macOS doesn't reliably purge /tmp on reboot, so users who
+ * upgrade leave a world-readable image cache behind. Runs once per process.
+ */
+function cleanupLegacyCache(): void {
+  if (legacyCleanedThisRun) return
+  legacyCleanedThisRun = true
+
+  const legacyDir = join(tmpdir(), 'iloom-images')
+  if (!existsSync(legacyDir)) return
+
+  rm(legacyDir, { recursive: true, force: true }).catch((error: unknown) => {
+    if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+      throw error
+    }
+    logger.debug(`Failed to remove legacy cache at ${legacyDir}: ${error instanceof Error ? error.message : String(error)}`)
+  })
+}
+
+/**
  * Ensure CACHE_DIR exists with restrictive (0o700) permissions.
  * mkdir's mode is only honored on creation, so chmod defensively to fix
  * pre-existing dirs that may have been created with broader permissions.
+ *
+ * Uses sync chmod so the tightened perms are guaranteed in place before
+ * any caller writes to the dir (the next line in downloadAndSaveImage is
+ * createWriteStream — async chmod could race with the write).
  */
 function ensureCacheDir(): void {
   if (!existsSync(CACHE_DIR)) {
     mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 })
   }
-  // Best-effort defensive chmod; tighten perms if dir already existed with broader mode.
-  // chmod is a no-op on Windows but harmless. Failures are non-fatal.
-  chmod(CACHE_DIR, 0o700).catch((error: unknown) => {
+  try {
+    chmodSync(CACHE_DIR, 0o700)
+  } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
       throw error
     }
     logger.debug(`chmod on cache dir failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`)
-  })
+  }
+
+  cleanupLegacyCache()
 }
 
 /**
@@ -281,6 +313,13 @@ export function resetPruneFlagForTesting(): void {
 }
 
 /**
+ * Reset the legacy-cleanup one-shot flag (for testing purposes)
+ */
+export function resetLegacyCleanupFlagForTesting(): void {
+  legacyCleanedThisRun = false
+}
+
+/**
  * Delete cached image files older than CACHE_TTL_MS.
  * Fail-open: pruning errors must NEVER break the actual image-fetch flow.
  */
@@ -347,13 +386,26 @@ async function fetchFollowingRedirects(
     }
 
     const nextUrl = new URL(location, currentUrl).toString()
-    const fromOrigin = new URL(currentUrl).origin
-    const toOrigin = new URL(nextUrl).origin
+    const fromUrl = new URL(currentUrl)
+    const toUrl = new URL(nextUrl)
 
-    if (fromOrigin !== toOrigin && currentHeaders['Authorization']) {
-      // Drop auth header on cross-origin redirect to avoid leaking tokens to third parties.
-      const next = { ...currentHeaders }
-      delete next['Authorization']
+    // Treat http→https on the same hostname as same-origin for auth purposes.
+    // URL.origin includes the protocol, so a same-host upgrade would otherwise
+    // strip auth and break the follow-up GET with 401.
+    const isHttpsUpgrade =
+      fromUrl.hostname === toUrl.hostname &&
+      fromUrl.protocol === 'http:' &&
+      toUrl.protocol === 'https:'
+    const sameOrigin = fromUrl.origin === toUrl.origin || isHttpsUpgrade
+
+    if (!sameOrigin) {
+      // Drop auth header(s) case-insensitively on cross-origin redirect to avoid
+      // leaking tokens to third parties. HTTP header names are case-insensitive
+      // per spec — strip any key whose lowercased name is 'authorization'.
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(currentHeaders)) {
+        if (k.toLowerCase() !== 'authorization') next[k] = v
+      }
       currentHeaders = next
     }
 

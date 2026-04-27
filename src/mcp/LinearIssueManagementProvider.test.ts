@@ -323,6 +323,66 @@ describe('LinearIssueManagementProvider', () => {
 			expect(result.body).not.toMatch(/!\[[^\]]*\n[^\]]*\]/)
 		})
 
+		it('should not classify a docs URL with image-extension fragment as an image', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with docs link attachment',
+				description: 'Body',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://docs.example.com/guide#section-image.png',
+						title: 'Section guide',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			// The fragment-only "image" must not trigger an Attachments section.
+			expect(result.body).not.toContain('## Attachments')
+			expect(result.body).not.toContain('docs.example.com/guide')
+		})
+
+		it('should URL-encode attachment URLs containing spaces so they remain markdown-extractable', async () => {
+			const mockLinearIssue = {
+				id: 'uuid-123',
+				identifier: 'ENG-123',
+				title: 'Issue with spaced URL',
+				description: 'Body',
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+				attachments: [
+					{
+						id: 'att-1',
+						url: 'https://uploads.linear.app/abc/file with space.png',
+						title: 'spaced',
+					},
+				],
+			}
+
+			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
+
+			const result = await provider.getIssue({ number: 'ENG-123' })
+
+			expect(result.body).toContain('![spaced](https://uploads.linear.app/abc/file%20with%20space.png)')
+			// The encoded URL must round-trip through extractMarkdownImageUrls
+			const extracted = extractMarkdownImageUrls(result.body)
+			const urls = extracted.map((m) => m.url)
+			expect(urls).toContain('https://uploads.linear.app/abc/file%20with%20space.png')
+		})
+
 		it('should include comments when requested', async () => {
 			const mockLinearIssue = {
 				id: 'uuid-123',
