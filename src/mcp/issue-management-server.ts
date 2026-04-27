@@ -110,7 +110,8 @@ server.registerTool(
 		description:
 			'Fetch issue details including body, title, comments, labels, assignees, and other metadata. ' +
 			'Author fields vary by provider: GitHub uses { login }, Linear uses { name, displayName }, Jira uses { displayName, accountId }. ' +
-			'All authors have normalized core fields: { id, displayName } plus provider-specific fields.',
+			'All authors have normalized core fields: { id, displayName } plus provider-specific fields. ' +
+			'Authenticated images embedded in the body and comments (Linear `uploads.linear.app`, GitHub user-attachments) are automatically downloaded, cached, and rewritten to local file paths so they can be viewed directly. Linear paperclip attachments are surfaced inline as a `## Attachments` section.',
 		inputSchema: {
 			number: z.string().describe('The issue identifier'),
 			includeComments: z
@@ -199,7 +200,8 @@ server.registerTool(
 		description:
 			'Fetch pull request details including title, body, comments, files, commits, and branch information. ' +
 			'Uses the configured VCS provider (GitHub or BitBucket). Falls back to GitHub when no VCS provider is configured. ' +
-			'Author fields have normalized core fields: { id, displayName } plus provider-specific fields.',
+			'Author fields have normalized core fields: { id, displayName } plus provider-specific fields. ' +
+			'Authenticated images embedded in the body and comments (Linear `uploads.linear.app`, GitHub user-attachments) are automatically downloaded, cached, and rewritten to local file paths so they can be viewed directly.',
 		inputSchema: {
 			number: z.string().describe('The PR number'),
 			includeComments: z
@@ -330,7 +332,8 @@ server.registerTool(
 		description:
 			'Fetch inline code review comments on a pull request (comments on specific files and lines). ' +
 			'Returns comments with file path, line number, diff side, author, and reply threading. ' +
-			'Uses the configured VCS provider when available, falls back to GitHub.',
+			'Uses the configured VCS provider when available, falls back to GitHub. ' +
+			'Authenticated images embedded in comment bodies (Linear `uploads.linear.app`, GitHub user-attachments) are automatically downloaded, cached, and rewritten to local file paths so they can be viewed directly.',
 		inputSchema: {
 			number: z.string().describe('The PR number'),
 			reviewId: z
@@ -430,7 +433,8 @@ server.registerTool(
 	{
 		title: 'Get Comment',
 		description:
-			'Fetch a specific comment by ID. Author has normalized core fields { id, displayName } plus provider-specific fields.',
+			'Fetch a specific comment by ID. Author has normalized core fields { id, displayName } plus provider-specific fields. ' +
+			'Authenticated images embedded in the comment body (Linear `uploads.linear.app`, GitHub user-attachments) are automatically downloaded, cached, and rewritten to local file paths so they can be viewed directly.',
 		inputSchema: {
 			commentId: z.string().describe('The comment identifier to fetch'),
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),

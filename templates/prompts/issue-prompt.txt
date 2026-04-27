@@ -54,6 +54,19 @@ If you need to access the web server for testing purposes, use localhost:{{PORT}
 {{/if}}
 {{/unless}}
 
+## Issue Tracker Tools — Use iloom's `mcp__issue_management__*` Tools
+
+Always use the bundled `mcp__issue_management__*` MCP tools (e.g. `mcp__issue_management__get_issue`, `mcp__issue_management__get_pr`, `mcp__issue_management__get_child_issues`, `mcp__issue_management__create_comment`) for ALL issue-tracker reads and writes.
+
+DO NOT use provider-specific MCP servers the user may have installed globally (e.g. `mcp__claude_ai_Linear__*`, `mcp__claude_ai_Github__*`, `mcp__github__*`). Those return raw image URLs that you cannot view without manual auth handling.
+
+iloom's `mcp__issue_management__*` tools automatically:
+- Download authenticated images (Linear `uploads.linear.app`, GitHub user-attachments) and rewrite the URLs in issue/comment bodies to local cached file paths, so embedded screenshots and attachment images are immediately viewable.
+- Surface Linear paperclip attachments inline in the body as a `## Attachments` section.
+- Route correctly across GitHub, Linear, and Jira based on project configuration.
+
+If you see a raw `https://uploads.linear.app/...` or `https://github.com/user-attachments/assets/...` URL in tool output, that means you used the wrong tool — fall back to `mcp__issue_management__get_issue` instead.
+
 ## Loom Recap
 
 **IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
