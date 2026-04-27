@@ -625,11 +625,16 @@ export async function processMarkdownImages(
       // Cache miss - download and stream directly to file
       logger.debug(`Downloading image: ${url}`)
       const destPath = getCacheDestPath(url)
-      await downloadAndSaveImage(
-        url,
-        destPath,
-        authToken ? `Bearer ${authToken}` : undefined
-      )
+      // Linear personal API keys (lin_api_*) require the raw token in the
+      // Authorization header — Linear's docs reject `Bearer <key>` for personal
+      // keys (only OAuth access tokens use the Bearer scheme). GitHub tokens
+      // continue to use the standard `Bearer <token>` form.
+      const authHeader = authToken
+        ? provider === 'linear'
+          ? authToken
+          : `Bearer ${authToken}`
+        : undefined
+      await downloadAndSaveImage(url, destPath, authHeader)
       return { url, localPath: destPath }
     } catch (error) {
       // Graceful degradation - log warning, return null to keep original URL

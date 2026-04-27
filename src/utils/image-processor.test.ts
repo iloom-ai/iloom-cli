@@ -704,6 +704,70 @@ Some text
       }
     })
 
+    test('sends raw Linear API key without Bearer prefix in Authorization header', async () => {
+      const originalToken = process.env.LINEAR_API_TOKEN
+      process.env.LINEAR_API_TOKEN = 'lin_api_test123'
+
+      // Unique URL to avoid hitting any cached file from prior runs.
+      const url = `https://uploads.linear.app/auth-header-linear-${Date.now()}/image.png`
+
+      try {
+        const content = `![diagram](${url})`
+
+        const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+        const mockStream = createMockReadableStream([imageData])
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          headers: new Map([['Content-Length', String(imageData.length)]]),
+          body: mockStream
+        })
+
+        await processMarkdownImages(content, 'linear')
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({
+            headers: { Authorization: 'lin_api_test123' }
+          })
+        )
+      } finally {
+        if (originalToken) {
+          process.env.LINEAR_API_TOKEN = originalToken
+        } else {
+          delete process.env.LINEAR_API_TOKEN
+        }
+      }
+    })
+
+    test('sends Bearer-prefixed token in Authorization header for GitHub', async () => {
+      // Unique URL to avoid hitting any cached file from prior runs.
+      const url = `https://private-user-images.githubusercontent.com/auth-header-github-${Date.now()}/image.png?jwt=token`
+      const content = `![screenshot](${url})`
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'ghp_testtoken',
+        stderr: '',
+        exitCode: 0
+      } as never)
+
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+      const mockStream = createMockReadableStream([imageData])
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: mockStream
+      })
+
+      await processMarkdownImages(content, 'github')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer ghp_testtoken' }
+        })
+      )
+    })
+
     test('uses cached image path when file exists', async () => {
       // Create a cached file
       mkdirSync(CACHE_DIR, { recursive: true })
