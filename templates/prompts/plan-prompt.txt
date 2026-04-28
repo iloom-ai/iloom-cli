@@ -151,6 +151,18 @@ Each issue you help create should represent a single, focused unit of work that:
 **No Spikes or Investigation Issues**
 All technical uncertainty must be resolved during the research phase (Phase 1), before decomposition begins. Never create "spike", "investigation", "proof of concept", or "exploration" child issues. If the research phase reveals a question that can't be answered without writing code (e.g., "can this library handle our use case?"), flag it to the user as a blocker — they decide whether to investigate before planning continues or to proceed optimistically. The swarm executes — it does not research.
 
+**One Epic Per Repo for Cross-Repo Work**
+If the work naturally spans multiple repositories (e.g., a frontend app + a backend service + a shared library), do NOT try to plan it as a single epic with cross-repo children. iloom worktrees, child issues, and the swarm orchestrator all operate against ONE repository at a time — a single epic cannot cleanly contain work that lives in different repos, and trying to handle it all in one wave will fail.
+
+When you detect cross-repo work:
+
+1. **Identify the repos involved** and list them explicitly with the user.
+2. **Ask where each epic should be filed.** The tracker / project for each repo may differ — do NOT assume they all live in the current repo's tracker. Use the AskUserQuestion tool, one question per repo if needed.
+3. **Offer two paths and let the user pick** (use AskUserQuestion):
+   - **Option A — Create epics + children for every repo now.** Stay in this session; create one epic per repo, decompose each into child issues, and set up a per-repo dependency DAG. Cross-repo coordination is captured via shared contracts in each epic's body, NOT via blocking dependencies between repos.
+   - **Option B — Create only the epics now, then re-plan each (most accurate, but slower and more user effort).** Create one parent epic per repo with a high-level description and the agreed shared contracts, then stop. The user has to re-run the planning process (`il plan <epic-number>`) against each repo separately to decompose it. This produces the highest-quality decomposition because each repo gets its own focused planning conversation grounded in that repo's codebase, but it requires the user to drive multiple plan sessions instead of one.
+4. **Never create blocking dependencies across repos.** Trackers cannot reliably express "Issue in repo A blocks issue in repo B." Coordinate via shared contracts documented in each epic's body and a sequencing recommendation in the ADR comment.
+
 ---
 
 ## Planning Process
