@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { UpdateCommand } from './update.js'
-import { detectInstallationMethod } from '../utils/installation-detector.js'
+import { detectInstallationMethod, isVoltaInstall } from '../utils/installation-detector.js'
 import { logger } from '../utils/logger.js'
 import { UpdateNotifier } from '../utils/update-notifier.js'
-import { spawn } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import { default as fs } from 'fs-extra'
 
 // Mock dependencies
@@ -18,7 +18,8 @@ vi.mock('../utils/logger.js', () => ({
 }))
 
 vi.mock('../utils/installation-detector.js', () => ({
-  detectInstallationMethod: vi.fn()
+  detectInstallationMethod: vi.fn(),
+  isVoltaInstall: vi.fn()
 }))
 
 vi.mock('../utils/update-notifier.js', () => ({
@@ -32,7 +33,8 @@ vi.mock('fs-extra', () => ({
 }))
 
 vi.mock('child_process', () => ({
-  spawn: vi.fn()
+  spawn: vi.fn(),
+  spawnSync: vi.fn()
 }))
 
 describe('UpdateCommand', () => {
@@ -53,6 +55,11 @@ describe('UpdateCommand', () => {
       name: '@iloom/cli',
       version: '1.0.0'
     }))
+
+    // Default: not a Volta install
+    vi.mocked(isVoltaInstall).mockReturnValue(false)
+    // Default: any command is available
+    vi.mocked(spawnSync).mockReturnValue({ status: 0 } as never)
   })
 
   it('exits with error for non-global installations', async () => {
@@ -151,6 +158,79 @@ describe('UpdateCommand', () => {
     expect(logger.info).toHaveBeenCalledWith('   Would run: npm install -g @iloom/cli@latest')
     expect(logger.info).toHaveBeenCalledWith('   Current version: 1.0.0')
     expect(logger.info).toHaveBeenCalledWith('   Target version: 1.1.0')
+  })
+
+  it('uses volta install when running under a Volta-managed install', async () => {
+    vi.mocked(detectInstallationMethod).mockReturnValue('global')
+    vi.mocked(isVoltaInstall).mockReturnValue(true)
+
+    const mockCheckForUpdates = vi.fn().mockResolvedValue({
+      updateAvailable: true,
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0'
+    })
+    vi.mocked(UpdateNotifier).mockImplementation(() => ({
+      checkForUpdates: mockCheckForUpdates
+    }) as never)
+
+    let closeCallback: ((code: number) => void) | undefined
+    const mockOn = vi.fn((event: string, callback: (code: number) => void) => {
+      if (event === 'close') closeCallback = callback
+    })
+    vi.mocked(spawn).mockReturnValue({ on: mockOn } as never)
+    mockExit.mockImplementation((() => {}) as never)
+
+    await updateCommand.execute()
+
+    expect(spawn).toHaveBeenCalledWith('volta', ['install', '@iloom/cli@latest'], {
+      stdio: 'inherit'
+    })
+    closeCallback!(0)
+    expect(mockExit).toHaveBeenCalledWith(0)
+  })
+
+  it('shows a helpful error when Volta-managed but volta is not on PATH', async () => {
+    vi.mocked(detectInstallationMethod).mockReturnValue('global')
+    vi.mocked(isVoltaInstall).mockReturnValue(true)
+    vi.mocked(spawnSync).mockReturnValue({ status: 1 } as never)
+
+    const mockCheckForUpdates = vi.fn().mockResolvedValue({
+      updateAvailable: true,
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0'
+    })
+    vi.mocked(UpdateNotifier).mockImplementation(() => ({
+      checkForUpdates: mockCheckForUpdates
+    }) as never)
+
+    await expect(updateCommand.execute()).rejects.toThrow('process.exit(1)')
+
+    expect(spawn).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Volta')
+    )
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('~/.volta/bin')
+    )
+    expect(mockExit).toHaveBeenCalledWith(1)
+  })
+
+  it('shows volta command in dry run when Volta-managed', async () => {
+    vi.mocked(detectInstallationMethod).mockReturnValue('global')
+    vi.mocked(isVoltaInstall).mockReturnValue(true)
+
+    const mockCheckForUpdates = vi.fn().mockResolvedValue({
+      updateAvailable: true,
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0'
+    })
+    vi.mocked(UpdateNotifier).mockImplementation(() => ({
+      checkForUpdates: mockCheckForUpdates
+    }) as never)
+
+    await updateCommand.execute({ dryRun: true })
+
+    expect(logger.info).toHaveBeenCalledWith('   Would run: volta install @iloom/cli@latest')
   })
 
   it('exits with error when update check fails', async () => {

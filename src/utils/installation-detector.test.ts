@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { detectInstallationMethod, shouldShowUpdateNotification } from './installation-detector.js'
+import { detectInstallationMethod, isVoltaInstall, shouldShowUpdateNotification } from './installation-detector.js'
 import fs from 'fs'
 import type { Stats } from 'fs'
 
@@ -135,6 +135,38 @@ describe('detectInstallationMethod', () => {
 
     const result = detectInstallationMethod('/path/to/script')
     expect(result).toBe('unknown')
+  })
+})
+
+describe('isVoltaInstall', () => {
+  beforeEach(() => {
+    vi.mocked(fs.realpathSync).mockImplementation((path: string | Buffer) => path as string)
+  })
+
+  it('returns true for paths under ~/.volta/', () => {
+    expect(
+      isVoltaInstall('/Users/user/.volta/tools/image/packages/@iloom/cli/lib/node_modules/@iloom/cli/dist/cli.js')
+    ).toBe(true)
+  })
+
+  it('returns true when a symlink resolves into ~/.volta/', () => {
+    vi.mocked(fs.realpathSync).mockReturnValue(
+      '/Users/user/.volta/tools/image/packages/@iloom/cli/lib/node_modules/@iloom/cli/dist/cli.js'
+    )
+    expect(isVoltaInstall('/Users/user/.volta/bin/il')).toBe(true)
+  })
+
+  it('returns false for non-Volta global installs', () => {
+    expect(
+      isVoltaInstall('/Users/user/.nvm/versions/node/v22.17.0/lib/node_modules/@iloom/cli/dist/cli.js')
+    ).toBe(false)
+  })
+
+  it('returns false when realpathSync throws and the original path is not Volta', () => {
+    vi.mocked(fs.realpathSync).mockImplementation(() => {
+      throw new Error('ENOENT')
+    })
+    expect(isVoltaInstall('/usr/local/lib/node_modules/@iloom/cli/dist/cli.js')).toBe(false)
   })
 })
 

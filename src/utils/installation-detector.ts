@@ -99,3 +99,19 @@ export function detectInstallationMethod(scriptPath: string): InstallationMethod
 export function shouldShowUpdateNotification(method: InstallationMethod): boolean {
   return method === 'global'
 }
+
+/**
+ * Detect whether the script is installed under Volta's tools directory.
+ * Volta installs packages at ~/.volta/tools/image/packages/<pkg>/lib/node_modules/<pkg>/...
+ * so a `/.volta/` segment in the resolved script path is a reliable signal.
+ */
+export function isVoltaInstall(scriptPath: string): boolean {
+  let resolved = scriptPath
+  try {
+    resolved = realpathSync(scriptPath)
+  } catch {
+    // fall through with the original path
+  }
+  const normalized = resolved.replace(/\\/g, '/')
+  return normalized.includes('/.volta/')
+}
