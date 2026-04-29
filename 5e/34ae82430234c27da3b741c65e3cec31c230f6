@@ -1,0 +1,27 @@
+package.json
+  942e7fc0a50f7510 3
+README.md
+  942e7fc0a50f7510 883
+LICENSE
+  942e7fc0a50f7510 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5e34ae82430234c27da3b741c65e3cec31c230f6",
+  "prompts": {
+    "942e7fc0a50f7510": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac8044a0-8f5a-4588-89e8-cdfd17b46441",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Adam Creeger",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
