@@ -1,0 +1,23 @@
+package.json
+  942e7fc0a50f7510 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c8c57462bd79e60e55946ce3f5d5e0792a99e1a7",
+  "prompts": {
+    "942e7fc0a50f7510": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac8044a0-8f5a-4588-89e8-cdfd17b46441",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Adam Creeger",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
