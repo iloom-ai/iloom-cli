@@ -29,6 +29,16 @@ export interface LoomCreatedProperties {
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
   complexity_override: boolean
   create_only: boolean
+  /**
+   * Whether the loom was started from a tracker URL or a bare identifier.
+   * Privacy: only the source enum is logged — never the URL itself.
+   */
+  identifier_source?: 'url' | 'identifier'
+  /**
+   * When `identifier_source === 'url'`, the tracker provider extracted from
+   * the URL. Helps surface adoption of the URL-parsing feature per tracker.
+   */
+  url_provider?: 'github' | 'linear' | 'jira'
 }
 
 export interface LoomFinishedProperties {
@@ -44,6 +54,11 @@ export interface LoomAbandonedProperties {
 export interface EpicPlannedProperties {
   child_count: number
   tracker: string
+  /**
+   * Whether the epic was started from a tracker URL or a bare identifier.
+   * Privacy: only the source enum is logged — never the URL itself.
+   */
+  identifier_source?: 'url' | 'identifier'
 }
 
 export interface SwarmStartedProperties {
@@ -99,6 +114,11 @@ export interface InitCompletedProperties {
 export interface AutoSwarmStartedProperties {
   source: 'decomposition' | 'fresh'
   planner: string // 'claude' | 'gemini' | 'codex'
+  /**
+   * Whether the auto-swarm was triggered from a tracker URL or a bare
+   * identifier. Privacy: only the source enum is logged — never the URL.
+   */
+  identifier_source?: 'url' | 'identifier'
 }
 
 export interface AutoSwarmCompletedProperties {

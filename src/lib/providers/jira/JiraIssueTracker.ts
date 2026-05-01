@@ -94,8 +94,15 @@ export class JiraIssueTracker implements IssueTracker {
 	/**
 	 * Detect input type from user input
 	 * Jira issues follow pattern: PROJECTKEY-123 (case-insensitive)
+	 *
+	 * @param input User input (identifier or URL-derived identifier)
+	 * @param repo Optional repo override (ignored — Jira does not support cross-repo
+	 *             addressing via owner/repo. Logged at debug level if provided.)
 	 */
-	async detectInputType(input: string): Promise<IssueTrackerInputDetection> {
+	async detectInputType(input: string, repo?: string): Promise<IssueTrackerInputDetection> {
+		if (repo) {
+			getLogger().debug(`JiraIssueTracker.detectInputType: ignoring repo argument "${repo}" — Jira does not support cross-repo addressing.`)
+		}
 		// Pattern: PROJECTKEY-123 (case-insensitive to accept lowercase from branch names or user input)
 		const jiraPattern = /^([A-Z][A-Z0-9]+)-(\d+)$/i
 		const match = input.match(jiraPattern)
@@ -122,8 +129,15 @@ export class JiraIssueTracker implements IssueTracker {
 
 	/**
 	 * Fetch issue details
+	 *
+	 * @param identifier Jira issue key or numeric id
+	 * @param repo Optional repo override (ignored — Jira does not support cross-repo
+	 *             addressing via owner/repo. Logged at debug level if provided.)
 	 */
-	async fetchIssue(identifier: string | number): Promise<Issue> {
+	async fetchIssue(identifier: string | number, repo?: string): Promise<Issue> {
+		if (repo) {
+			getLogger().debug(`JiraIssueTracker.fetchIssue: ignoring repo argument "${repo}" — Jira does not support cross-repo addressing.`)
+		}
 		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Fetching Jira issue', { issueKey })
 
@@ -134,7 +148,7 @@ export class JiraIssueTracker implements IssueTracker {
 	/**
 	 * Check if issue exists (silent validation)
 	 */
-	async isValidIssue(identifier: string | number): Promise<Issue | false> {
+	async isValidIssue(identifier: string | number, _repo?: string): Promise<Issue | false> {
 		try {
 			return await this.fetchIssue(identifier)
 		} catch (error) {

@@ -13,6 +13,9 @@ import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManag
 import type { EffortLevel } from '../types/index.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
+import { parseTrackerUrl, TrackerUrlError, type TrackerUrlParseResult } from '../utils/TrackerUrlParser.js'
+import { validateTrackerUrlAgainstSettings } from '../utils/tracker-url-validation.js'
+import { getConfiguredRepoFromSettings } from '../utils/remote.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
@@ -201,7 +204,63 @@ export class PlanCommand {
 		// Uses shared matchIssueIdentifier() utility to identify issue identifiers:
 		// - Numeric pattern: #123 or 123 (GitHub format)
 		// - Project key pattern: ENG-123, PROJ-456 (requires at least 2 letters before dash)
-		const identifierMatch = prompt ? matchIssueIdentifier(prompt) : { isIssueIdentifier: false }
+		// URL inputs (GitHub issue, Linear, Jira) are detected first via parseTrackerUrl().
+		const provider = settings ? IssueTrackerFactory.getProviderName(settings) : 'github'
+		const issuePrefix = provider === 'github' ? '#' : ''
+
+		// URL parsing: try parseTrackerUrl() before falling back to matchIssueIdentifier.
+		// On a recognized URL, we override the identifier (canonical form) and set
+		// `urlRepo` so downstream IssueTracker calls receive the correct repo.
+		let identifierForLookup: string | undefined = prompt
+		let urlRepo: string | undefined
+		let identifierSource: 'url' | 'identifier' = 'identifier'
+
+		if (prompt) {
+			let parsed
+			try {
+				parsed = parseTrackerUrl(prompt)
+			} catch (error) {
+				if (error instanceof TrackerUrlError) {
+					throw new Error(`Invalid tracker URL: ${error.message}`)
+				}
+				throw error
+			}
+
+			if (parsed) {
+				// Reject GitHub PR URLs — `il plan` is for issues only.
+				if (parsed.kind === 'pr') {
+					throw new Error(
+						`'il plan' decomposes issues, not pull requests. Paste the underlying issue URL or identifier instead.`
+					)
+				}
+
+				// Provider mismatch + Jira host mismatch (shared with `il start`).
+				// No PR carve-out for plan since PRs are rejected above.
+				const configuredJiraHost = settings?.issueManagement?.jira?.host
+				validateTrackerUrlAgainstSettings(parsed, {
+					configuredProvider: provider as TrackerUrlParseResult['provider'],
+					...(configuredJiraHost !== undefined && { configuredJiraHost }),
+					allowPrCarveOut: false,
+				})
+
+				// Normalize identifier defensively (handles legacy storage casing too).
+				const issueTracker = IssueTrackerFactory.create(settings)
+				identifierForLookup = issueTracker.normalizeIdentifier(parsed.identifier)
+				urlRepo = parsed.repo
+				identifierSource = 'url'
+				logger.debug('Parsed tracker URL', {
+					urlProvider: parsed.provider,
+					identifier: identifierForLookup,
+					hasRepo: !!urlRepo,
+				})
+			}
+		}
+
+		const identifierMatch = identifierForLookup
+			? (identifierSource === 'url'
+				? { isIssueIdentifier: true as const, type: 'numeric' as const, identifier: identifierForLookup }
+				: matchIssueIdentifier(identifierForLookup))
+			: { isIssueIdentifier: false }
 		const looksLikeIssueIdentifier = identifierMatch.isIssueIdentifier
 		let decompositionContext: {
 			identifier: string
@@ -211,21 +270,56 @@ export class PlanCommand {
 			dependencies?: DependenciesResult
 		} | null = null
 
-		const provider = settings ? IssueTrackerFactory.getProviderName(settings) : 'github'
-		const issuePrefix = provider === 'github' ? '#' : ''
+		// Determine if URL repo differs from cwd repo — affects MCP cross-repo handling.
+		// For non-GitHub providers or when no urlRepo, the comparison is moot (urlRepo is undefined for Linear/Jira).
+		let isCrossRepo = false
+		if (urlRepo && provider === 'github') {
+			try {
+				const cwdRepo = settings ? await getConfiguredRepoFromSettings(settings) : undefined
+				if (cwdRepo && cwdRepo.toLowerCase() !== urlRepo.toLowerCase()) {
+					isCrossRepo = true
+				}
+			} catch (error) {
+				// Narrow catch: only graceful-degrade when the cwd has no
+				// configured/known GitHub remote. The user supplied a tracker URL
+				// with an explicit repo, so we already have everything we need
+				// to identify the issue — assuming cross-repo here just disables
+				// MCP-backed write features (children/dependencies), which is
+				// the intended fallback. Any OTHER error (e.g. unrelated I/O,
+				// programming error) should surface, not be swallowed.
+				//
+				// `getConfiguredRepoFromSettings` and `validateConfiguredRemote`
+				// throw plain `Error` (no typed class), so we match on message
+				// substrings emitted by those helpers and by `git remote -v`
+				// when the cwd is not a git repo.
+				const message = error instanceof Error ? error.message : String(error)
+				const isMissingRemote =
+					/GitHub remote not configured/i.test(message) ||
+					/Configured remote ".*" not found/i.test(message) ||
+					/Remote ".*" does not exist/i.test(message) ||
+					/not a git repository/i.test(message)
+				if (!isMissingRemote) {
+					throw error
+				}
+				logger.debug(
+					`No configured cwd repo; treating as cross-repo so MCP write features are skipped. ${message}`
+				)
+				isCrossRepo = true
+			}
+		}
 
-		if (prompt && looksLikeIssueIdentifier) {
+		if (identifierForLookup && looksLikeIssueIdentifier) {
 			// Validate and fetch issue using issueTracker.detectInputType() pattern from StartCommand
 			const issueTracker = IssueTrackerFactory.create(settings)
 
-			logger.debug('Detected potential issue identifier, validating via issueTracker', { identifier: prompt })
+			logger.debug('Detected potential issue identifier, validating via issueTracker', { identifier: identifierForLookup, isCrossRepo })
 
 			// Use detectInputType to validate the identifier exists (same pattern as StartCommand)
-			const detection = await issueTracker.detectInputType(prompt)
+			const detection = await issueTracker.detectInputType(identifierForLookup, urlRepo)
 
 			if (detection.type === 'issue' && detection.identifier) {
 				// Valid issue found - fetch full details for decomposition context
-				const issue = await issueTracker.fetchIssue(detection.identifier)
+				const issue = await issueTracker.fetchIssue(detection.identifier, urlRepo)
 
 				// Construct the MCP provider once and reuse for body+comments and
 				// children/dependencies. If construction fails, all MCP fetches are
@@ -248,7 +342,14 @@ export class PlanCommand {
 				let bodyForPlan = issue.body
 				let bodyFromMcp = false
 				let commentsSection = ''
-				if (mcpProvider) {
+				if (mcpProvider && isCrossRepo) {
+					logger.warn(
+						`Cross-repo URL detected — skipping MCP getIssue/getChildIssues/getDependencies fetches. ` +
+						`Cross-repo MCP support is not yet implemented; falling back to issueTracker body. ` +
+						`(Tracked separately.)`
+					)
+				}
+				if (mcpProvider && !isCrossRepo) {
 					try {
 						const mcpIssue = await mcpProvider.getIssue({ number: detection.identifier, includeComments: true })
 						if (mcpIssue.body) {
@@ -297,7 +398,7 @@ export class PlanCommand {
 
 				// Fetch existing children and dependencies using MCP provider
 				// This allows users to resume planning where they left off
-				if (mcpProvider) {
+				if (mcpProvider && !isCrossRepo) {
 					try {
 						// Fetch child issues
 						logger.debug('Fetching child issues for decomposition context', { identifier: decompositionContext.identifier })
@@ -330,7 +431,7 @@ export class PlanCommand {
 			} else {
 				// Input matched issue pattern but issue not found - treat as regular prompt
 				logger.debug('Input matched issue pattern but issue not found, treating as planning topic', {
-					identifier: prompt,
+					identifier: identifierForLookup,
 					detectionType: detection.type
 				})
 			}
@@ -460,6 +561,7 @@ export class PlanCommand {
 				TelemetryService.getInstance().track('auto_swarm.started', {
 					source: autoSwarmSource,
 					planner: effectivePlanner,
+					identifier_source: identifierSource,
 				})
 			} catch (error) {
 				logger.debug(`Telemetry auto_swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
@@ -772,6 +874,7 @@ ${initialMessage}`
 					TelemetryService.getInstance().track('epic.planned', {
 						child_count: children.length,
 						tracker: provider,
+						identifier_source: identifierSource,
 					})
 				} catch (error) {
 					logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)

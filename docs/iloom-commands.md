@@ -51,6 +51,7 @@ Create an isolated loom workspace with complete AI-assisted context establishmen
 ```bash
 il start <issue-number>
 il start <pr-number>
+il start <issue-or-pr-url>
 il start <branch-name>
 il start "<issue-description>"
 ```
@@ -58,8 +59,30 @@ il start "<issue-description>"
 **Arguments:**
 - `<issue-number>` - GitHub or Linear issue number (e.g., `25`)
 - `<pr-number>` - GitHub pull request number (e.g., `42`)
+- `<issue-or-pr-url>` - A full URL to a tracker issue or GitHub PR (see "Supported URL Forms" below)
 - `<branch-name>` - Existing git branch name
 - `<issue-description>` - Free-form description to create a new issue (quoted string)
+
+**Supported URL Forms:**
+
+`il start` accepts a full tracker URL in addition to a bare identifier. The URL is parsed into a tracker identifier and dispatched normally.
+
+| Tracker | URL shape |
+|---------|-----------|
+| GitHub issue | `https://github.com/<owner>/<repo>/issues/<n>` |
+| GitHub PR | `https://github.com/<owner>/<repo>/pull/<n>` |
+| Linear | `https://linear.app/<workspace>/issue/<TEAM-NUM>/...` |
+| Jira (cloud) | `https://<host>.atlassian.net/browse/<KEY-NUM>` |
+| Jira (self-hosted) | `https://<host>/browse/<KEY-NUM>` |
+
+URL parsing is robust to trailing slashes, query strings, fragments (e.g., `#comment-123`), and mixed-case hosts.
+
+**URL Policy for `il start`:**
+
+- **Same-repo only:** Cross-repo URLs are rejected. `il start` operates on the current repository's worktree, so the URL must point to the same `<owner>/<repo>` as the configured remote.
+- **Provider must match:** The URL's provider must match the configured issue tracker (e.g., a Linear URL on a GitHub-configured project is rejected).
+  - **GitHub PR carve-out:** A GitHub PR URL is always accepted by `il start`, even when the configured issue tracker is Linear or Jira. PRs are GitHub-native, so this is a deliberate exception to the provider-match rule.
+- **PR URLs are valid here:** Both issue and PR URLs are accepted by `il start`. (PR URLs are NOT valid for `il plan` — see that section.)
 
 **Options:**
 
@@ -134,6 +157,15 @@ il start 25
 
 # Start work on Linear issue ILM-42
 il start ILM-42
+
+# Start from a tracker URL (GitHub issue)
+il start https://github.com/iloom-ai/iloom-cli/issues/1009
+
+# Start from a Linear issue URL
+il start https://linear.app/my-team/issue/WEB-123/some-slug
+
+# Start from a GitHub PR URL (allowed even on Linear/Jira-configured repos)
+il start https://github.com/iloom-ai/iloom-cli/pull/1010
 
 # Create a new issue and start work
 il start "Add dark mode toggle to settings"
@@ -1391,11 +1423,13 @@ Launch an interactive planning session with an Architect persona to decompose fe
 ```bash
 il plan [prompt] [options]
 il plan <issue-number> [options]
+il plan <issue-url> [options]
 ```
 
 **Arguments:**
 - `[prompt]` - Optional initial planning prompt or topic for fresh planning mode
 - `<issue-number>` - Issue identifier to decompose (GitHub: `#123` or `123`, Linear: `ENG-123`)
+- `<issue-url>` - Full URL to a tracker issue (see "Supported URL Forms" below)
 
 **Operating Modes:**
 
@@ -1403,6 +1437,27 @@ il plan <issue-number> [options]
 |------|---------|-------------|
 | Fresh Planning | `il plan` or `il plan "topic"` | Start a new planning session for a feature or epic |
 | Decomposition | `il plan 123` or `il plan #123` | Break down an existing issue into child issues |
+| Decomposition (URL) | `il plan https://github.com/owner/repo/issues/123` | Same as above, but pasted as a URL |
+
+**Supported URL Forms:**
+
+`il plan` accepts a full tracker issue URL in addition to a bare identifier. The URL is parsed into a tracker identifier before fetching.
+
+| Tracker | URL shape |
+|---------|-----------|
+| GitHub issue | `https://github.com/<owner>/<repo>/issues/<n>` |
+| Linear | `https://linear.app/<workspace>/issue/<TEAM-NUM>/...` |
+| Jira (cloud) | `https://<host>.atlassian.net/browse/<KEY-NUM>` |
+| Jira (self-hosted) | `https://<host>/browse/<KEY-NUM>` |
+
+URL parsing is robust to trailing slashes, query strings, fragments, and mixed-case hosts.
+
+**URL Policy for `il plan`:**
+
+- **PR URLs are rejected:** `il plan` is for issue decomposition only. GitHub PR URLs (`/pull/<n>`) are not valid input — use `il start` for PRs.
+- **Provider must match:** The URL's provider must match the configured issue tracker. There is no GitHub PR carve-out here (PR URLs are not accepted in the first place).
+- **Cross-repo URLs are accepted:** Unlike `il start`, `il plan` accepts GitHub issue URLs that point to a different `<owner>/<repo>` than the cwd repo. This lets you decompose an issue in another repository.
+  - When the URL repo doesn't match the cwd repo, MCP-backed features that require write access to the issue tracker — specifically child-issue creation and dependency management — are skipped with a warning. Plan output is still generated, but you'll need to create the child issues manually (or run `il plan` from the target repo's worktree).
 
 **Options:**
 
@@ -1467,6 +1522,12 @@ il plan "#42"
 
 # Linear issue
 il plan ENG-123
+
+# Tracker URL (GitHub issue)
+il plan https://github.com/iloom-ai/iloom-cli/issues/1009
+
+# Cross-repo GitHub issue URL (MCP write features will be skipped with a warning)
+il plan https://github.com/some-other-org/some-other-repo/issues/42
 ```
 
 In decomposition mode, the Architect:

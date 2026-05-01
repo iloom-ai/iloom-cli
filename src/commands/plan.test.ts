@@ -988,6 +988,7 @@ describe('PlanCommand', () => {
 			expect(mockTrack).toHaveBeenCalledWith('epic.planned', {
 				child_count: 3,
 				tracker: 'github',
+				identifier_source: 'identifier',
 			})
 		})
 
