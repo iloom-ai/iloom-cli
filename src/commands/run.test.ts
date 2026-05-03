@@ -10,6 +10,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import { execa } from 'execa'
 import { openBrowser } from '../utils/browser.js'
+import { MacOSRequiredError, buildAndRunIOS } from '../utils/ios.js'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
@@ -32,6 +33,18 @@ vi.mock('../utils/browser.js', () => ({
 	openBrowser: vi.fn().mockResolvedValue(undefined),
 	detectPlatform: vi.fn().mockReturnValue('darwin'),
 }))
+
+// Mock iOS utilities
+vi.mock('../utils/ios.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/ios.js')>()
+	return {
+		...actual,
+		assertMacOS: vi.fn(),
+		buildAndRunIOS: vi.fn().mockResolvedValue(undefined),
+		openIOSProject: vi.fn().mockResolvedValue(undefined),
+		isReactNativeProject: vi.fn().mockReturnValue(false),
+	}
+})
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -307,6 +320,68 @@ describe('RunCommand', () => {
 
 			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
 				'No CLI or web capabilities detected'
+			)
+		})
+
+		it('should build and run iOS app for ios-only project', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			await command.execute({ identifier: '87' })
+
+			expect(buildAndRunIOS).toHaveBeenCalledWith(mockWorktree.path, ['ios'], [])
+			expect(execa).not.toHaveBeenCalled()
+			expect(openBrowser).not.toHaveBeenCalled()
+		})
+
+		it('should build iOS for ios+cli project (ios takes precedence)', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios', 'cli'],
+				binEntries: { il: './dist/cli.js' },
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			await command.execute({ identifier: '87' })
+
+			expect(buildAndRunIOS).toHaveBeenCalledWith(mockWorktree.path, ['ios', 'cli'], [])
+			expect(execa).not.toHaveBeenCalled()
+		})
+
+		it('should pass args to buildAndRunIOS', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			await command.execute({ identifier: '87', args: ['--device', 'iPhone 15'] })
+
+			expect(buildAndRunIOS).toHaveBeenCalledWith(mockWorktree.path, ['ios'], ['--device', 'iPhone 15'])
+		})
+
+		it('should throw macOS-only error on non-darwin platform for ios project', async () => {
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['ios'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			// buildAndRunIOS internally calls assertMacOS — simulate it throwing
+			vi.mocked(buildAndRunIOS).mockRejectedValueOnce(new MacOSRequiredError())
+
+			await expect(command.execute({ identifier: '87' })).rejects.toThrow(
+				'iOS development requires macOS'
 			)
 		})
 	})

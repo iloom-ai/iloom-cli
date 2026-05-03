@@ -807,4 +807,26 @@ describe('getExplicitCapabilities', () => {
 
     expect(result).toEqual([])
   })
+
+  it('should accept ios as valid capability', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-ios-project',
+      capabilities: ['ios'],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual(['ios'])
+  })
+
+  it('should accept combination of cli, web, and ios capabilities', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-multi-project',
+      capabilities: ['cli', 'web', 'ios'],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual(['cli', 'web', 'ios'])
+  })
 })

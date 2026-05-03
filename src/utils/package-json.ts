@@ -16,8 +16,8 @@ export const ILOOM_PACKAGE_LOCAL_PATH = '.iloom/package.iloom.local.json'
  * Defines project capabilities and custom shell commands for non-Node.js projects
  */
 export const PackageIloomSchema = z.object({
-  capabilities: z.array(z.enum(['cli', 'web'])).optional()
-    .describe('Project capabilities - "cli" for command-line tools (enables CLI isolation), "web" for web applications (enables port assignment and dev server)'),
+  capabilities: z.array(z.enum(['cli', 'web', 'ios'])).optional()
+    .describe('Project capabilities - "cli" for command-line tools (enables CLI isolation), "web" for web applications (enables port assignment and dev server), "ios" for iOS projects (enables Xcode build configuration)'),
   scripts: z.object({
     install: z.string().optional().describe('Install command (e.g., "bundle install", "poetry install")'),
     build: z.string().optional().describe('Build/compile command'),
@@ -146,12 +146,14 @@ export async function getPackageConfig(dir: string): Promise<PackageJson> {
       const basePackage = await readPackageJson(dir)
       getLogger().debug('Merging scripts from .iloom/package.iloom.json over package.json')
       // Merge: base package.json with iloom scripts taking precedence
+      const mergedCapabilities = iloomPackage.capabilities ?? basePackage.capabilities
       return {
         ...basePackage,
         scripts: {
           ...basePackage.scripts,
           ...iloomPackage.scripts,
         },
+        ...(mergedCapabilities && { capabilities: mergedCapabilities }),
       }
     } catch {
       // No package.json - use iloom package as-is (non-Node project)
@@ -218,6 +220,25 @@ export function hasWebDependencies(pkgJson: PackageJson): boolean {
 }
 
 /**
+ * Check if package.json indicates an iOS/mobile application
+ * @param pkgJson Parsed package.json object
+ * @returns true if package has iOS/mobile framework dependencies
+ */
+export function hasIosDependencies(pkgJson: PackageJson): boolean {
+  const iosIndicators = [
+    'react-native',
+    'expo'
+  ]
+
+  const allDeps = {
+    ...pkgJson.dependencies,
+    ...pkgJson.devDependencies
+  }
+
+  return iosIndicators.some(indicator => indicator in allDeps)
+}
+
+/**
  * Check if package.json has a specific script
  * @param pkgJson Parsed package.json object
  * @param scriptName Script name to check for
@@ -263,7 +284,7 @@ export async function getPackageScripts(dir: string): Promise<Record<string, Pac
 /**
  * Valid capability values that can be explicitly declared
  */
-const VALID_CAPABILITIES: readonly ProjectCapability[] = ['cli', 'web'] as const
+const VALID_CAPABILITIES: readonly ProjectCapability[] = ['cli', 'web', 'ios'] as const
 
 /**
  * Extract explicit capabilities from package configuration

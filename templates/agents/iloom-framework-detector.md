@@ -77,12 +77,17 @@ Examine the project root for language-specific files **and** a Dockerfile:
 | `*.csproj`, `*.sln` | C#/.NET | dotnet |
 | `Makefile` | C/C++/Generic | make |
 | `CMakeLists.txt` | C/C++ | cmake |
+| `Podfile`, `*.xcodeproj` | iOS (Native Xcode) | cocoapods/xcodebuild |
+| `react-native` in package.json deps | iOS (React Native) | npm/yarn + cocoapods |
+| `expo` in package.json deps | iOS (Expo) | expo-cli |
 | `Dockerfile` | Any (Docker) | docker |
 
 Use the `Glob` tool to check for these files:
 ```
-Glob pattern: "{Cargo.toml,requirements.txt,pyproject.toml,setup.py,Gemfile,go.mod,pom.xml,build.gradle*,Package.swift,mix.exs,*.csproj,*.sln,Makefile,CMakeLists.txt,Dockerfile}"
+Glob pattern: "{Cargo.toml,requirements.txt,pyproject.toml,setup.py,Gemfile,go.mod,pom.xml,build.gradle*,Package.swift,mix.exs,*.csproj,*.sln,Makefile,CMakeLists.txt,Podfile,*.xcodeproj,*.xcworkspace,*.xcodeproj/project.pbxproj,Dockerfile}"
 ```
+
+For iOS/mobile detection, also read `package.json` (if it exists) and check for `react-native` or `expo` in `dependencies` or `devDependencies`.
 
 ### Step 2: Detect Framework (if applicable)
 
@@ -109,6 +114,15 @@ For each detected language, look for framework-specific indicators:
 - `gorilla/mux` in go.mod = Gorilla Mux
 - `fiber` in go.mod = Fiber
 
+**iOS/Mobile:**
+- `react-native` in package.json dependencies + `ios/` directory present = React Native
+- `expo` in package.json dependencies = Expo (React Native with Expo tooling)
+- `*.xcodeproj` or `*.xcworkspace` without react-native dependency = Native Xcode (SwiftUI/UIKit)
+- If both `react-native` and web dependencies (next, vite, etc.) exist = React Native with web target (dual capability)
+- To detect package manager for React Native projects: check for `yarn.lock` (yarn), `pnpm-lock.yaml` (pnpm), or default to `npm`
+- For Native Xcode: check if `Podfile` is present. If no `Podfile`, the project uses Swift Package Manager — omit the `install` script
+- For Native Xcode build/test scripts: derive the scheme name from the `.xcodeproj` directory name (strip `.xcodeproj` extension)
+
 ### Step 3: Docker Detection (Report Only)
 
 If a `Dockerfile` was found in Step 1:
@@ -130,6 +144,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts and capabilities bas
 **Capabilities Detection:**
 - `"cli"` - Include if project has CLI components (e.g., `[[bin]]` in Cargo.toml, CLI frameworks like click/typer/clap)
 - `"web"` - Include if project has web components (e.g., Flask/Django/FastAPI/Rails/Actix/Rocket)
+- `"ios"` - Include if project has iOS/mobile components (e.g., React Native, Expo, native Xcode projects with Podfile or .xcodeproj)
 
 **Dockerfile Detection (from Step 3):**
 If a Dockerfile was found, include `"dockerfileFound": true` in `_metadata`. Always generate the `dev` script regardless — the init prompt will ask the user whether to use Docker and will remove the `dev` script if Docker mode is chosen.
@@ -362,6 +377,100 @@ Example — web project where Dockerfile was found:
 }
 ```
 
+#### React Native (iOS, npm)
+Use this example when the project has `package-lock.json` or no lockfile. Replace `npm` with `yarn` if `yarn.lock` is detected, or `pnpm` if `pnpm-lock.yaml` is detected. Include `&& cd ios && pod install && cd ..` in the install script only when the `ios/` directory is present.
+```json
+{
+  "capabilities": ["ios"],
+  "scripts": {
+    "install": "npm install && cd ios && pod install && cd ..",
+    "build": "npx react-native run-ios --configuration Release",
+    "test": "npm test",
+    "dev": "npx react-native start"
+  },
+  "_metadata": {
+    "detectedLanguage": "javascript",
+    "detectedFramework": "react-native",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### React Native (iOS + Web)
+Use when both `react-native` and a web framework (next, vite, etc.) are in dependencies. Same package manager detection rules apply.
+```json
+{
+  "capabilities": ["web", "ios"],
+  "scripts": {
+    "install": "npm install && cd ios && pod install && cd ..",
+    "build": "npx react-native run-ios --configuration Release",
+    "test": "npm test",
+    "dev": "npx react-native start"
+  },
+  "_metadata": {
+    "detectedLanguage": "javascript",
+    "detectedFramework": "react-native",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### Expo (iOS)
+Use when `expo` is in dependencies but `react-native` is not a direct dependency (or project uses managed Expo workflow). Use `eas build` for cloud builds; `npx expo run:ios` for local device/simulator builds.
+```json
+{
+  "capabilities": ["ios"],
+  "scripts": {
+    "install": "npm install",
+    "build": "npx expo run:ios --configuration Release",
+    "test": "npm test",
+    "dev": "npx expo start"
+  },
+  "_metadata": {
+    "detectedLanguage": "javascript",
+    "detectedFramework": "expo",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### Native Xcode with CocoaPods (SwiftUI/UIKit)
+Use when `*.xcodeproj` or `*.xcworkspace` is detected without `react-native` dependency AND `Podfile` is present. Derive `<scheme-name>` from the `.xcodeproj` directory name (strip the `.xcodeproj` extension — e.g., `MyApp.xcodeproj` → scheme `MyApp`).
+```json
+{
+  "capabilities": ["ios"],
+  "scripts": {
+    "install": "pod install",
+    "build": "xcodebuild -scheme MyApp -sdk iphonesimulator build",
+    "test": "xcodebuild -scheme MyApp -sdk iphonesimulator test",
+    "dev": "xcodebuild -scheme MyApp -sdk iphonesimulator build"
+  },
+  "_metadata": {
+    "detectedLanguage": "swift",
+    "detectedFramework": "xcode-native",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### Native Xcode with Swift Package Manager (SwiftUI/UIKit)
+Use when `*.xcodeproj` or `*.xcworkspace` is detected without `react-native` dependency AND no `Podfile` is present (SPM-only project). Derive scheme name the same way.
+```json
+{
+  "capabilities": ["ios"],
+  "scripts": {
+    "build": "xcodebuild -scheme MyApp -sdk iphonesimulator build",
+    "test": "xcodebuild -scheme MyApp -sdk iphonesimulator test",
+    "dev": "xcodebuild -scheme MyApp -sdk iphonesimulator build"
+  },
+  "_metadata": {
+    "detectedLanguage": "swift",
+    "detectedFramework": "xcode-native",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
 #### Library (no CLI or web)
 ```json
 {
@@ -426,7 +535,7 @@ Detected:
 - Language: [language]
 - Framework: [framework or "None detected"]
 - Package Manager: [package manager]
-- Capabilities: [cli, web, or none]
+- Capabilities: [cli, web, ios, or none]
 - Dockerfile: [Found | Not found]
 - Fork Status: [Yes (origin + upstream) | No]
 

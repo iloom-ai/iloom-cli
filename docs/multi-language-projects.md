@@ -77,6 +77,9 @@ An array defining what type of project this is:
 - `"web"` - Web application with a development server
   - Enables automatic port assignment (3000 + issue number)
   - Prevents port conflicts when running multiple dev servers
+- `"ios"` - iOS application built with Xcode
+  - Enables iOS-specific build configuration (simulator device, scheme, bundle ID, etc.)
+  - Activates Xcode build strategy for dev server commands
 
 You can specify both capabilities if your project is both a CLI and web app.
 
@@ -346,6 +349,54 @@ Some projects are both CLI and web applications:
 **Example:** A Rust web framework that:
 - Compiles to a binary (`cli`)
 - Runs a web server (`web`)
+
+### iOS Capability
+
+Declare `"ios"` capability when your project is an iOS application built with Xcode:
+
+```json
+{
+  "capabilities": ["ios"]
+}
+```
+
+This tells iloom that:
+- Your project uses Xcode for building and running
+- iOS-specific settings (simulator device, scheme, bundle ID, etc.) apply
+- The dev server strategy will use `xcodebuild` or `simctl`
+
+**Use cases:**
+- Native iOS apps
+- Swift Package Manager libraries with iOS targets
+- iOS app extensions
+
+#### iOS-Specific Settings
+
+Configure iOS build behavior in `.iloom/settings.json` under the `capabilities.ios` key:
+
+```json
+{
+  "capabilities": {
+    "ios": {
+      "simulatorDevice": "iPhone 16",
+      "scheme": "MyApp",
+      "bundleId": "com.example.myapp",
+      "configuration": "Debug",
+      "deployTarget": "simulator",
+      "developmentTeam": "TEAM123456"
+    }
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `simulatorDevice` | string | `"iPhone 16"` | Target simulator device name |
+| `scheme` | string | — | Xcode scheme to build |
+| `bundleId` | string | — | App bundle identifier |
+| `configuration` | `"Debug"` \| `"Release"` | `"Debug"` | Build configuration |
+| `deployTarget` | `"simulator"` \| `"device"` | `"simulator"` | Whether to deploy to simulator or physical device |
+| `developmentTeam` | string | — | Apple Developer Team ID (required for physical device deployment) |
 
 ## Secret Storage Limitations
 

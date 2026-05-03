@@ -701,7 +701,7 @@ il spin --complexity=complex --yolo
 
 ### il open
 
-Open loom in browser (web projects) or run configured CLI tool (CLI projects).
+Open loom in browser (web projects), Xcode (iOS projects), or run configured CLI tool (CLI projects).
 
 **Alias:** `run`
 
@@ -716,6 +716,11 @@ il open [identifier]
 - If omitted outside a loom, prompts for selection
 
 **Behavior by Project Type:**
+
+**iOS Projects (requires macOS):**
+- React Native (`web` + `ios` capabilities): Opens the `ios/` subdirectory in Xcode
+- Native iOS (`ios` capability only): Opens the project root in Xcode (searches for `.xcworkspace` or `.xcodeproj`)
+- Non-macOS platforms produce a clear error message
 
 **Web Projects:**
 - Opens development server in default browser
@@ -810,7 +815,19 @@ il dev-server [identifier] [options]
 - If omitted and inside a loom, starts dev server for current loom
 - If omitted outside a loom, prompts for selection
 
-**Behavior:**
+**Behavior by Project Type:**
+
+**React Native iOS (`web` + `ios` capabilities):**
+- Starts the Metro bundler as a foreground dev server
+- Metro is cross-platform and works on macOS, Linux, and Windows
+- The iOS Simulator must be launched separately via `il run` or Xcode
+
+**Native iOS (`ios` capability only, requires macOS):**
+- Not applicable — native iOS does not use a dev server
+- Displays a guidance message directing you to `il run`
+- Non-macOS platforms produce a clear error message
+
+**Web Projects:**
 
 1. Resolves the target loom
 2. Loads environment variables from `.env` files
@@ -927,6 +944,47 @@ Containers are named `iloom-dev-<identifier>` where the identifier is derived fr
   ```
   Normal cleanup via `il cleanup`, `il finish`, or Ctrl+C handles container shutdown automatically.
 - **`runArgs` is passed verbatim:** Flags provided in `dockerRunArgs` are forwarded directly to `docker run` without validation. You are responsible for the correctness of any flags you pass.
+
+---
+
+### iOS Project Configuration
+
+For iOS projects, declare the `"ios"` capability in `.iloom/package.iloom.json` and configure Xcode build settings in `.iloom/settings.json`:
+
+**`.iloom/package.iloom.json`:**
+```json
+{
+  "name": "MyiOSApp",
+  "capabilities": ["ios"]
+}
+```
+
+**`.iloom/settings.json`:**
+```json
+{
+  "capabilities": {
+    "ios": {
+      "simulatorDevice": "iPhone 16",
+      "scheme": "MyApp",
+      "bundleId": "com.example.myapp",
+      "configuration": "Debug",
+      "deployTarget": "simulator",
+      "developmentTeam": "TEAM123456"
+    }
+  }
+}
+```
+
+**iOS Configuration Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `simulatorDevice` | `string` | `"iPhone 16"` | Target simulator device name as shown in Xcode (e.g., `"iPhone 16"`, `"iPad Pro 13-inch"`). |
+| `scheme` | `string` | — | Xcode scheme to build and run. Corresponds to the scheme name in your `.xcodeproj` or `.xcworkspace`. |
+| `bundleId` | `string` | — | App bundle identifier (e.g., `"com.example.myapp"`). Used for device installation and code signing. |
+| `configuration` | `"Debug"` \| `"Release"` | `"Debug"` | Xcode build configuration. |
+| `deployTarget` | `"simulator"` \| `"device"` | `"simulator"` | Whether to deploy to a simulator or a physical device connected via USB. |
+| `developmentTeam` | `string` | — | Apple Developer Team ID for code signing. Required when `deployTarget` is `"device"`. Find your Team ID in Xcode under Signing & Capabilities. |
 
 ---
 

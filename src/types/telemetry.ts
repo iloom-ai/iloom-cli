@@ -29,6 +29,7 @@ export interface LoomCreatedProperties {
   one_shot_mode: 'default' | 'skip-reviews' | 'yolo'
   complexity_override: boolean
   create_only: boolean
+  has_ios_capability: boolean
 }
 
 export interface LoomFinishedProperties {
@@ -143,6 +144,15 @@ export interface DevServerStoppedEvent {
   reason: 'user' | 'cleanup' | 'error'
 }
 
+export interface IOSCommandInvokedProperties {
+  /** Which command invoked iOS behavior */
+  command: 'open' | 'run' | 'dev-server'
+  /** Whether it's a React Native project (has both web+ios) or native iOS */
+  is_react_native: boolean
+  /** Whether the command succeeded */
+  success: boolean
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -166,6 +176,7 @@ export interface TelemetryEventMap {
   'epic.report_generated': EpicReportGeneratedProperties
   'devServer.started': DevServerStartedEvent
   'devServer.stopped': DevServerStoppedEvent
+  'ios.command_invoked': IOSCommandInvokedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

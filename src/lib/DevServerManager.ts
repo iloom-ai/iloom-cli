@@ -3,6 +3,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { DockerManager, type DockerConfig } from './DockerManager.js'
 import { DockerDevServerStrategy, type DockerConfig as StrategyDockerConfig, type DockerUtils } from './DockerDevServerStrategy.js'
 import { NativeDevServerStrategy } from './NativeDevServerStrategy.js'
+import { MetroDevServerStrategy } from './MetroDevServerStrategy.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -81,6 +82,7 @@ export class DevServerManager {
 	private readonly processManager: ProcessManager
 	private readonly options: Required<DevServerManagerOptions>
 	private readonly nativeStrategy: NativeDevServerStrategy
+	private readonly metroStrategy: MetroDevServerStrategy
 	private runningDockerContainers: Map<number, string> = new Map()
 
 	constructor(
@@ -93,6 +95,11 @@ export class DevServerManager {
 			checkInterval: options.checkInterval ?? 1000,
 		}
 		this.nativeStrategy = new NativeDevServerStrategy(
+			this.processManager,
+			this.options.startupTimeout,
+			this.options.checkInterval
+		)
+		this.metroStrategy = new MetroDevServerStrategy(
 			this.processManager,
 			this.options.startupTimeout,
 			this.options.checkInterval
@@ -116,8 +123,21 @@ export class DevServerManager {
 	 * @param dockerConfig - Optional Docker configuration for container-based server
 	 * @returns true if server is ready, false if startup failed/timed out
 	 */
-	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig, envOverrides?: Record<string, string>): Promise<boolean> {
+	async ensureServerRunning(worktreePath: string, port: number, dockerConfig?: DockerConfig, envOverrides?: Record<string, string>, metroMode?: boolean): Promise<boolean> {
 		logger.debug(`Checking if dev server is running on port ${port}...`)
+
+		// Metro mode: delegate to MetroDevServerStrategy
+		if (metroMode) {
+			const isRunning = await this.metroStrategy.isRunning(port)
+			if (isRunning) {
+				logger.debug(`Metro bundler already running on port ${port}`)
+				return true
+			}
+
+			logger.info(`Metro bundler not running on port ${port}, starting...`)
+			await this.metroStrategy.startBackground(worktreePath, port, envOverrides)
+			return true
+		}
 
 		// Docker mode: check if container is already running
 		if (dockerConfig) {
@@ -231,7 +251,10 @@ export class DevServerManager {
 	 * @param dockerConfig - Optional Docker configuration; when provided, checks container status
 	 * @returns true if server is running, false otherwise
 	 */
-	async isServerRunning(port: number, dockerConfig?: DockerConfig): Promise<boolean> {
+	async isServerRunning(port: number, dockerConfig?: DockerConfig, metroMode?: boolean): Promise<boolean> {
+		if (metroMode) {
+			return this.metroStrategy.isRunning(port)
+		}
 		if (dockerConfig) {
 			const strategy = this.createDockerStrategy(dockerConfig)
 			const containerName = dockerUtils.buildContainerName(dockerConfig.identifier)
@@ -258,8 +281,19 @@ export class DevServerManager {
 		onProcessStarted?: (pid?: number) => void,
 		envOverrides?: Record<string, string>,
 		dockerConfig?: DockerConfig,
-		onOutput?: (data: Buffer) => void
+		onOutput?: (data: Buffer) => void,
+		metroMode?: boolean
 	): Promise<{ pid?: number }> {
+		// Metro mode: delegate to MetroDevServerStrategy
+		if (metroMode) {
+			return this.metroStrategy.startForeground(worktreePath, port, {
+				redirectToStderr,
+				...(onProcessStarted !== undefined && { onProcessStarted }),
+				...(envOverrides !== undefined && { envOverrides }),
+				...(onOutput !== undefined && { onOutput }),
+			})
+		}
+
 		// Docker mode: build image and run container in foreground
 		if (dockerConfig) {
 			logger.debug(`Starting Docker dev server in foreground on port ${port}`)
@@ -319,6 +353,9 @@ export class DevServerManager {
 	async cleanup(): Promise<void> {
 		// Clean up native process-based servers
 		await this.nativeStrategy.stopAll()
+
+		// Clean up Metro bundler processes
+		await this.metroStrategy.stopAll()
 
 		// Clean up Docker containers using DockerDevServerStrategy
 		for (const [port, containerName] of this.runningDockerContainers.entries()) {

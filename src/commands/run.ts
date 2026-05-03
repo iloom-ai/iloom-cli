@@ -13,6 +13,8 @@ import { extractIssueNumber } from '../utils/git.js'
 import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { buildAndRunIOS, buildForDevice, isReactNativeProject } from '../utils/ios.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 export interface RunCommandInput {
@@ -61,8 +63,41 @@ export class RunCommand {
 
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
-		// 4. Execute based on capabilities (CLI first, web fallback)
-		if (capabilities.includes('cli')) {
+		// 4. Execute based on capabilities (iOS first, then CLI, web fallback)
+		if (capabilities.includes('ios')) {
+			let iosSuccess = false
+			try {
+				if (!isReactNativeProject(capabilities)) {
+					// Native iOS: check settings for device deployment
+					const settings = await this.settingsManager.loadSettings()
+					const iosSettings = settings.capabilities?.ios
+					if (iosSettings?.deployTarget === 'device' && iosSettings.developmentTeam) {
+						await buildForDevice({
+							scheme: iosSettings.scheme ?? 'App',
+							developmentTeam: iosSettings.developmentTeam,
+							configuration: iosSettings.configuration,
+							extraArgs: input.args ?? [],
+							cwd: worktree.path,
+						})
+					} else {
+						await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+					}
+				} else {
+					await buildAndRunIOS(worktree.path, capabilities, input.args ?? [])
+				}
+				iosSuccess = true
+			} finally {
+				try {
+					TelemetryService.getInstance().track('ios.command_invoked', {
+						command: 'run',
+						is_react_native: isReactNativeProject(capabilities),
+						success: iosSuccess,
+					})
+				} catch {
+					logger.debug('Telemetry tracking failed (non-fatal)')
+				}
+			}
+		} else if (capabilities.includes('cli')) {
 			await this.runCLITool(worktree.path, binEntries, input.args ?? [], input.env)
 		} else if (capabilities.includes('web')) {
 			await this.openWebBrowser(worktree, input.env)

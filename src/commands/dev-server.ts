@@ -15,6 +15,8 @@ import { extractIssueNumber } from '../utils/git.js'
 import { buildDevServerUrl } from '../utils/dev-server.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { assertMacOS, isReactNativeProject } from '../utils/ios.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 export interface DevServerCommandInput {
@@ -123,8 +125,40 @@ export class DevServerCommand {
 
 		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
 
-		// 4. If no web capability, return gracefully with info message
-		if (!capabilities.includes('web')) {
+		// 4. Handle iOS capability
+		let useMetroMode = false
+		if (capabilities.includes('ios')) {
+			if (isReactNativeProject(capabilities)) {
+				// React Native iOS: Metro bundler is cross-platform — proceed to web dev server path
+				useMetroMode = true
+				logger.debug('React Native iOS project detected — starting Metro bundler via dev server')
+				try {
+					TelemetryService.getInstance().track('ios.command_invoked', {
+						command: 'dev-server',
+						is_react_native: true,
+						success: true,
+					})
+				} catch {
+					logger.debug('Telemetry tracking failed (non-fatal)')
+				}
+			} else {
+				// Native iOS: macOS-only and no dev server applicable
+				assertMacOS()
+				try {
+					TelemetryService.getInstance().track('ios.command_invoked', {
+						command: 'dev-server',
+						is_react_native: false,
+						success: false,
+					})
+				} catch {
+					logger.debug('Telemetry tracking failed (non-fatal)')
+				}
+				const message = 'Native iOS projects do not use a dev server. Use \'il run\' to build and run the app on a simulator or device.'
+				logger.info(message)
+				throw new Error(message)
+			}
+		} else if (!capabilities.includes('web')) {
+			// No web or iOS capability
 			const message = 'No web capability detected in this workspace. Dev server not started.'
 			if (input.json) {
 				this.outputJson({
@@ -155,7 +189,7 @@ export class DevServerCommand {
 		const url = buildDevServerUrl(port, protocol)
 
 		// 6. Check if server already running
-		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig)
+		const isRunning = await this.devServerManager.isServerRunning(port, dockerConfig, useMetroMode)
 
 		if (isRunning) {
 			const message = `Dev server already running at ${url}`
@@ -254,7 +288,8 @@ export class DevServerCommand {
 					},
 					envOverrides,
 					dockerConfig,
-					onOutput
+					onOutput,
+					useMetroMode
 				)
 
 				if (processInfo.pid) {
