@@ -2574,14 +2574,24 @@ const error: { code?: string; message: string } = {
 				expect(result).toEqual({})
 			})
 
-			it('should warn but return empty object on validation error', async () => {
-				const invalidSettings = {
-					mainBranch: 123, // Invalid: should be string
-				}
-				vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(invalidSettings))
+			it('should warn but return empty object when content is not a JSON object', async () => {
+				vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(['not', 'an', 'object']))
 
 				const result = await settingsManager['loadGlobalSettingsFile']()
 				expect(result).toEqual({})
+			})
+
+			it('should pass schema-invalid global settings through for post-merge validation', async () => {
+				// Schema validation no longer runs per-file — it happens after merge in
+				// loadSettings() so partial configs (e.g. shared apiToken in global with
+				// teamId set per-project) are not rejected before the merge completes.
+				const partiallyInvalidSettings = {
+					mainBranch: 123, // Bad type — caught later by loadSettings()
+				}
+				vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(partiallyInvalidSettings))
+
+				const result = await settingsManager['loadGlobalSettingsFile']()
+				expect(result).toEqual(partiallyInvalidSettings)
 			})
 		})
 

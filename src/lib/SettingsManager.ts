@@ -1369,19 +1369,18 @@ export class SettingsManager {
 				return {}
 			}
 
-			// Validate with non-defaulting schema
-			try {
-				const validated = IloomSettingsSchemaNoDefaults.strict().parse(parsed)
-				return validated
-			} catch (error) {
-				if (error instanceof z.ZodError) {
-					const errorMsg = this.formatAllZodErrors(error, 'global settings')
-					logger.warn(`${errorMsg.message}. Ignoring global settings.`)
-				} else {
-					logger.warn(`Validation error in global settings: ${error instanceof Error ? error.message : 'Unknown error'}. Ignoring global settings.`)
-				}
+			// Only enforce that the file is a JSON object here. Full schema validation
+			// happens post-merge in loadSettings() so that partial configs (e.g. a
+			// shared apiToken in global with teamId set per-project) are not rejected
+			// before the merge has a chance to complete them.
+			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+				logger.warn(
+					`Global settings at ${settingsPath} is not a JSON object (received ${Array.isArray(parsed) ? 'array' : typeof parsed}). Ignoring global settings.`,
+				)
 				return {}
 			}
+
+			return parsed as z.infer<typeof IloomSettingsSchemaNoDefaults>
 		} catch (error) {
 			// File not found is not an error - return empty settings
 			if ((error as { code?: string }).code === 'ENOENT') {
