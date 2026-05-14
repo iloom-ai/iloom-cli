@@ -19,18 +19,22 @@ const mergeModeTransform = (val: string): MergeMode => {
 
 // Valid Claude model shorthands: standard + 1M context window variants
 export const VALID_CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const
-export type ClaudeModel = (typeof VALID_CLAUDE_MODELS)[number]
+export type ClaudeModel = (typeof VALID_CLAUDE_MODELS)[number] | (string & {})
+
+// Zod schema that accepts shorthands or full model IDs (e.g. claude-opus-4-6[1m])
+export const claudeModelSchema = z.union([
+	z.enum(VALID_CLAUDE_MODELS),
+	z.string().regex(/^claude-/, 'Full model IDs must start with "claude-"'),
+])
 
 /**
  * Zod schema for base agent settings (without nested agents)
  */
 export const BaseAgentSettingsSchema = z.object({
-	model: z
-		.enum(VALID_CLAUDE_MODELS)
+	model: claudeModelSchema
 		.optional()
-		.describe('Claude model shorthand: sonnet, opus, haiku, sonnet[1m], or opus[1m]'),
-	swarmModel: z
-		.enum(VALID_CLAUDE_MODELS)
+		.describe('Claude model shorthand (sonnet, opus, haiku, sonnet[1m], opus[1m]) or full model ID (e.g. claude-opus-4-6[1m])'),
+	swarmModel: claudeModelSchema
 		.optional()
 		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
 	effort: z
@@ -72,12 +76,10 @@ export const AgentSettingsSchema = BaseAgentSettingsSchema
  * Used for the spin orchestrator configuration
  */
 export const SpinAgentSettingsSchema = z.object({
-	model: z
-		.enum(VALID_CLAUDE_MODELS)
+	model: claudeModelSchema
 		.default('opus')
 		.describe('Claude model shorthand for spin orchestrator'),
-	swarmModel: z
-		.enum(VALID_CLAUDE_MODELS)
+	swarmModel: claudeModelSchema
 		.optional()
 		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
 	effort: z
@@ -99,8 +101,7 @@ export const SpinAgentSettingsSchema = z.object({
  * Used for the plan command configuration
  */
 export const PlanCommandSettingsSchema = z.object({
-	model: z
-		.enum(VALID_CLAUDE_MODELS)
+	model: claudeModelSchema
 		.default('opus[1m]')
 		.describe('Claude model shorthand for plan command'),
 	effort: z
@@ -126,8 +127,7 @@ export const PlanCommandSettingsSchema = z.object({
  * Used for session summary generation configuration
  */
 export const SummarySettingsSchema = z.object({
-	model: z
-		.enum(VALID_CLAUDE_MODELS)
+	model: claudeModelSchema
 		.default('sonnet')
 		.describe('Claude model shorthand for session summary generation'),
 })
@@ -853,8 +853,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		),
 	spin: z
 		.object({
-			model: z.enum(VALID_CLAUDE_MODELS).optional(),
-			swarmModel: z.enum(VALID_CLAUDE_MODELS).optional(),
+			model: claudeModelSchema.optional(),
+			swarmModel: claudeModelSchema.optional(),
 			effort: z.enum(VALID_EFFORT_LEVELS).optional(),
 			swarmEffort: z.enum(VALID_EFFORT_LEVELS).optional(),
 			postSwarmReview: z.boolean().optional(),
@@ -863,7 +863,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Spin orchestrator configuration'),
 	plan: z
 		.object({
-			model: z.enum(VALID_CLAUDE_MODELS).optional(),
+			model: claudeModelSchema.optional(),
 			effort: z.enum(VALID_EFFORT_LEVELS).optional(),
 			planner: z.enum(['claude', 'gemini', 'codex']).optional(),
 			reviewer: z.enum(['claude', 'gemini', 'codex', 'none']).optional(),
@@ -873,7 +873,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Plan command configuration'),
 	summary: z
 		.object({
-			model: z.enum(VALID_CLAUDE_MODELS).optional(),
+			model: claudeModelSchema.optional(),
 		})
 		.optional()
 		.describe('Session summary generation configuration'),

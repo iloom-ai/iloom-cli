@@ -688,7 +688,7 @@ describe('SettingsManager', () => {
 			}
 
 			expect(() => settingsManager['validateSettings'](invalidSettings as never)).toThrow(
-				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku' \| 'sonnet\[1m\]' \| 'opus\[1m\]'/,
+				/Full model IDs must start with "claude-"/,
 			)
 		})
 
@@ -705,6 +705,27 @@ describe('SettingsManager', () => {
 				}
 
 				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+		})
+
+		it('should accept full Claude model IDs', () => {
+			const fullModelIds = [
+				'claude-opus-4-6[1m]',
+				'claude-sonnet-4-20250514',
+				'claude-haiku-4-5-20251001',
+				'claude-opus-4-6',
+			]
+
+			fullModelIds.forEach(model => {
+				const settings = {
+					agents: {
+						'test-agent': {
+							model,
+						},
+					},
+				}
+
+				expect(() => settingsManager['validateSettings'](settings as never)).not.toThrow()
 			})
 		})
 
