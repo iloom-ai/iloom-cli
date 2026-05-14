@@ -1,0 +1,19 @@
+.iloom/settings.json
+  s_49f4d2e20ac47d::t_efbd419a8be7d7 13-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "260fcec46c5fe194c673a8dac78f7653f37ed3a1",
+  "prompts": {},
+  "sessions": {
+    "s_49f4d2e20ac47d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7eb22891-4d94-4839-a9b5-26fb6811276e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
