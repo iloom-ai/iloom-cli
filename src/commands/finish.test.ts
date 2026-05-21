@@ -1676,6 +1676,144 @@ describe('FinishCommand', () => {
 					expect(mockValidationRunner.runValidations).toHaveBeenCalled()
 				})
 
+				it('should allow closed issue for draft-PR loom (skip to cleanup)', async () => {
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					// Mock MetadataManager to return draft PR metadata
+					const { MetadataManager } = await import('../lib/MetadataManager.js')
+					vi.spyOn(MetadataManager.prototype, 'readMetadata').mockResolvedValue({
+						draftPrNumber: 55,
+						prUrls: { '55': 'https://github.com/test/repo/pull/55' },
+					} as never)
+
+					// Mock settings for draft-pr mode
+					vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+						mainBranch: 'main',
+						worktreeDir: '/test/worktrees',
+						mergeBehavior: { mode: 'draft-pr' },
+					})
+
+					// Mock fetchPR to return a merged PR
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
+						number: 55,
+						title: 'Draft PR',
+						state: 'merged',
+						branch: 'feat/issue-123__test',
+						url: 'https://github.com/test/repo/pull/55',
+					})
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// Should NOT throw - draft-PR loom with closed issue is allowed
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
+					// Should skip rebase/validate/commit and go straight to cleanup
+					expect(mockMergeManager.rebaseOnMain).not.toHaveBeenCalled()
+					expect(mockValidationRunner.runValidations).not.toHaveBeenCalled()
+				})
+
+				it('should still throw for closed issue when loom has no draft PR', async () => {
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					// MetadataManager returns null (no draft PR)
+					const { MetadataManager } = await import('../lib/MetadataManager.js')
+					vi.spyOn(MetadataManager.prototype, 'readMetadata').mockResolvedValue(null)
+
+					await expect(
+						command.execute({
+							identifier: '123',
+							options: {},
+						})
+					).rejects.toThrow('Issue #123 is closed. Use --force to finish anyway.')
+				})
+
+				it('should respect --no-cleanup for merged draft PR with closed issue', async () => {
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					const { MetadataManager } = await import('../lib/MetadataManager.js')
+					vi.spyOn(MetadataManager.prototype, 'readMetadata').mockResolvedValue({
+						draftPrNumber: 55,
+						prUrls: { '55': 'https://github.com/test/repo/pull/55' },
+					} as never)
+
+					vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+						mainBranch: 'main',
+						worktreeDir: '/test/worktrees',
+						mergeBehavior: { mode: 'draft-pr' },
+					})
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
+						number: 55,
+						title: 'Draft PR',
+						state: 'merged',
+						branch: 'feat/issue-123__test',
+						url: 'https://github.com/test/repo/pull/55',
+					})
+
+					await command.execute({
+						identifier: '123',
+						options: { cleanup: false },
+					})
+
+					// Should not perform cleanup
+					expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+					// Should not attempt rebase/validate/commit
+					expect(mockMergeManager.rebaseOnMain).not.toHaveBeenCalled()
+				})
+
 				it('should throw error if issue not found on GitHub', async () => {
 					// Mock parseForPatternDetection to return issue type
 					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({

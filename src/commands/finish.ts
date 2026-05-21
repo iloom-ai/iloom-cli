@@ -535,17 +535,29 @@ export class FinishCommand {
 				// Fetch issue from GitHub
 				const issue = await this.issueTracker.fetchIssue(parsed.number, repo)
 
-				// Validate issue state (warn if closed unless --force)
+				// Find associated worktree (needed before closed-issue check to read metadata)
+				const issueWorktrees = await this.findWorktreeForIdentifier(parsed)
+
+				// Validate issue state (warn if closed unless --force or draft-PR loom)
 				if (issue.state === 'closed' && !options.force) {
-					throw new Error(
-						`Issue #${parsed.number} is closed. Use --force to finish anyway.`
-					)
+					const worktree = issueWorktrees[0]
+					let isDraftPrLoom = false
+					if (worktree) {
+						const metadataManager = new MetadataManager()
+						const metadata = await metadataManager.readMetadata(worktree.path)
+						isDraftPrLoom = !!metadata?.draftPrNumber
+					}
+					if (!isDraftPrLoom) {
+						throw new Error(
+							`Issue #${parsed.number} is closed. Use --force to finish anyway.`
+						)
+					}
+					getLogger().debug(`Issue #${parsed.number} is closed but loom has a draft PR - allowing finish for cleanup`)
 				}
 
 				getLogger().debug(`Validated issue #${parsed.number} (state: ${issue.state})`)
 
-				// Find associated worktree
-				return await this.findWorktreeForIdentifier(parsed)
+				return issueWorktrees
 			}
 
 			case 'branch': {
@@ -681,6 +693,45 @@ export class FinishCommand {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 			jsonStream: options.jsonStream ?? false,
+		}
+
+		// Early exit: if this is a draft-PR loom whose PR is already merged/closed,
+		// skip all rebase/validate/commit steps and go straight to cleanup
+		const earlySettings = await this.settingsManager.loadSettings(worktree.path)
+		const earlyMergeBehavior = earlySettings.mergeBehavior ?? { mode: 'local' }
+		const earlyRawMode = earlyMergeBehavior.mode as string
+		const earlyMergeMode = earlyRawMode === 'github-draft-pr' ? 'draft-pr' : earlyRawMode
+		if (earlyMergeMode === 'draft-pr') {
+			const earlyMetadataManager = new MetadataManager()
+			const earlyMetadata = await earlyMetadataManager.readMetadata(worktree.path)
+			if (earlyMetadata?.draftPrNumber) {
+				try {
+					const draftPr = await this.fetchPullRequest(earlyMetadata.draftPrNumber)
+					if (draftPr.state === 'merged' || draftPr.state === 'closed') {
+						getLogger().info(`Draft PR #${earlyMetadata.draftPrNumber} is already ${draftPr.state.toUpperCase()} - skipping to cleanup`)
+
+						if (!options.dryRun) {
+							await earlyMetadataManager.archiveMetadata(worktree.path)
+						}
+
+						if (options.cleanup === false) {
+							getLogger().info('Worktree kept active (--no-cleanup flag)')
+							getLogger().info(`To cleanup later: il cleanup ${parsed.originalInput}`)
+						} else {
+							await this.performPRCleanup(parsed, options, worktree, draftPr.state as 'closed' | 'merged', result)
+							getLogger().success(`Draft PR #${earlyMetadata.draftPrNumber} cleanup completed`)
+							result.operations.push({
+								type: 'cleanup',
+								message: `Draft PR #${earlyMetadata.draftPrNumber} cleanup completed`,
+								success: true,
+							})
+						}
+						return
+					}
+				} catch (error) {
+					getLogger().debug(`Failed to fetch draft PR #${earlyMetadata.draftPrNumber} state: ${error instanceof Error ? error.message : String(error)}`)
+				}
+			}
 		}
 
 		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)

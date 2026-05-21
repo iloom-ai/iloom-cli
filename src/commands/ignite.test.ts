@@ -95,10 +95,18 @@ describe('IgniteCommand', () => {
 			}),
 		} as unknown as GitWorktreeManager
 
-		// Create command with mocked dependencies
+		const mockSettingsManager = {
+			loadSettings: vi.fn().mockResolvedValue({}),
+			getSpinModel: vi.fn().mockReturnValue('opus'),
+			getSpinEffort: vi.fn().mockReturnValue('high'),
+		}
+
+		// Create command with mocked dependencies (including SettingsManager to avoid reading real config)
 		command = new IgniteCommand(
 			mockTemplateManager,
-			mockGitWorktreeManager
+			mockGitWorktreeManager,
+			undefined,
+			mockSettingsManager as never,
 		)
 	})
 
