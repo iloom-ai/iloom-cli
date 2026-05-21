@@ -184,16 +184,16 @@ Remember to:
 
 ## Handling Requests
 
-When the user requests help, **prefer subagents** to preserve your context window for ongoing conversation.
+When the user requests help, **prefer subagents (run_in_background: true)** to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
 |--------------|--------|
 | Trivial (quick answer, single-line fix) | Handle directly |
-| Bug investigation / analysis | `@agent-iloom-issue-analyzer` → present findings → offer to fix |
-| Code changes | `@agent-iloom-issue-implementer` |
-| New features / complex changes | `@agent-iloom-issue-analyze-and-plan` → if approved, `@agent-iloom-issue-implementer` |
-| Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` |
-| Code review request | `@agent-iloom-code-reviewer` (foreground) |
+| Bug investigation / analysis | `@agent-iloom-issue-analyzer` (run_in_background: true) → present findings → offer to fix |
+| Code changes | `@agent-iloom-issue-implementer` (run_in_background: true) |
+| New features / complex changes | `@agent-iloom-issue-analyze-and-plan` (run_in_background: true) → if approved, `@agent-iloom-issue-implementer` (run_in_background: true) |
+| Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` (run_in_background: true) |
+| Code review request | `@agent-iloom-code-reviewer` (foreground — needs MCP tool access) |
 | Out-of-scope requests | Ask user: help anyway, create new issue, or skip |
 | Epic decomposition / large task breakdown | Recommend `il plan <epic-number>` then `il start <epic-number>` (see below) |
 | Ready to wrap up | Show Wrapping Up Instructions (see below) |
@@ -216,22 +216,22 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 {{#if ANALYZER_REVIEW_ENABLED}}
 **After @agent-iloom-issue-analyzer completes:**
 1. Capture the analyzer's output before presenting to user
-2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for PR #{{PR_NUMBER}}: [ANALYZER_OUTPUT]"
+2. Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this ANALYSIS artifact for PR #{{PR_NUMBER}}: [ANALYZER_OUTPUT]"
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
    a. If verdict is SUGGEST_IMPROVEMENTS:
       - Log: "Artifact review suggests improvements: [summary]"
-      - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+      - Re-invoke @agent-iloom-issue-analyzer (run_in_background: true) with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
       - After update, proceed to next step (do not re-review)
    b. If verdict is RECOMMEND_REGENERATION:
       - Log: "Artifact review recommends regeneration: [summary]"
-      - Re-run analyzer from scratch with the reviewer's feedback
+      - Re-run analyzer (run_in_background: true) from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements to the analysis. How would you like to proceed?"
       - Options: "Accept analysis as-is", "Regenerate with feedback", "Manually edit"
-   c. If regenerate: Re-run analyzer with feedback
+   c. If regenerate: Re-run analyzer (run_in_background: true) with feedback
    d. If manually edit: Wait for user edits, then proceed
 {{/if}}
 5. If review approves: Present results to user
@@ -240,22 +240,22 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 {{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
 **After @agent-iloom-issue-analyze-and-plan completes:**
 1. Capture the agent's output before presenting to user
-2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for PR #{{PR_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+2. Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this PLAN artifact for PR #{{PR_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
    a. If verdict is SUGGEST_IMPROVEMENTS:
       - Log: "Artifact review suggests improvements: [summary]"
-      - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
+      - Re-invoke @agent-iloom-issue-analyze-and-plan (run_in_background: true) with: "Apply these specific improvements to your existing output: [REVIEWER_FEEDBACK]"
       - After update, proceed to next step (do not re-review)
    b. If verdict is RECOMMEND_REGENERATION:
       - Log: "Artifact review recommends regeneration: [summary]"
-      - Re-run analyze-and-plan from scratch with the reviewer's feedback
+      - Re-run analyze-and-plan (run_in_background: true) from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements to the plan. How would you like to proceed?"
       - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
-   c. If regenerate: Re-run analyze-and-plan with feedback
+   c. If regenerate: Re-run analyze-and-plan (run_in_background: true) with feedback
    d. If manually edit: Wait for user edits, then proceed
 {{/if}}
 5. If review approves: Proceed to implementation
@@ -264,22 +264,22 @@ When workflow agents complete their tasks and produce artifacts, check if artifa
 {{#if IMPLEMENTER_REVIEW_ENABLED}}
 **After @agent-iloom-issue-implementer completes:**
 1. Capture the implementer's summary output
-2. Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for PR #{{PR_NUMBER}}: [IMPLEMENTER_OUTPUT]"
+2. Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this IMPLEMENTATION artifact for PR #{{PR_NUMBER}}: [IMPLEMENTER_OUTPUT]"
 3. Wait for review results
 4. If review suggests improvements:
 {{#if ONE_SHOT_MODE}}
    a. If verdict is SUGGEST_IMPROVEMENTS:
       - Log: "Artifact review suggests improvements: [summary]"
-      - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements: [REVIEWER_FEEDBACK]"
+      - Re-invoke @agent-iloom-issue-implementer (run_in_background: true) with: "Apply these specific improvements: [REVIEWER_FEEDBACK]"
       - After update, proceed to next step (do not re-review)
    b. If verdict is RECOMMEND_REGENERATION:
       - Log: "Artifact review recommends regeneration: [summary]"
-      - Re-run implementer from scratch with the reviewer's feedback
+      - Re-run implementer (run_in_background: true) from scratch with the reviewer's feedback
 {{else}}
    a. Present review findings to user
    b. Ask: "The artifact reviewer suggests improvements. How would you like to proceed?"
       - Options: "Accept implementation as-is", "Address feedback", "Manually edit"
-   c. If address feedback: Re-run implementer with feedback
+   c. If address feedback: Re-run implementer (run_in_background: true) with feedback
 {{/if}}
 5. If review approves: Proceed to code review
 {{/if}}

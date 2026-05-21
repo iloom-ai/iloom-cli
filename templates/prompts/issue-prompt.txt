@@ -429,9 +429,9 @@ You are orchestrating a set of agents through a development process, with human 
 
 **Todo List:**
 1. Scan issue and determine workflow plan
-2. Run issue enhancement for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-enhancer
+2. Run issue enhancement for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-enhancer (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ENHANCER_REVIEW_ENABLED}}
-2a. Run artifact review on enhancement output using @agent-iloom-artifact-reviewer
+2a. Run artifact review on enhancement output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
 3. Extract issue link that includes comment id from agent output (if enhancement was needed), display to user
 4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
@@ -440,35 +440,35 @@ You are orchestrating a set of agents through a development process, with human 
 5. Complexity has been overridden to {{COMPLEXITY_OVERRIDE}} via CLI flag. Skip complexity evaluation and proceed directly to routing.
 6. Route to appropriate workflow based on overridden complexity: {{COMPLEXITY_OVERRIDE}}
 {{else}}
-5. Run complexity evaluation for {{ISSUE_NUMBER}} using @agent-iloom-issue-complexity-evaluator
+5. Run complexity evaluation for {{ISSUE_NUMBER}} using @agent-iloom-issue-complexity-evaluator (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if COMPLEXITY_REVIEW_ENABLED}}
-5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer
+5a. Run artifact review on complexity evaluation output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
 6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE, or COMPLEX)
 {{/if}}
-9. If SIMPLE: Run combined analysis and planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyze-and-plan
+9. If SIMPLE: Run combined analysis and planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyze-and-plan (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZE_AND_PLAN_REVIEW_ENABLED}}
-9a. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer
+9a. If SIMPLE: Run artifact review on combined analysis and plan output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
-10. If COMPLEX: Run separate analysis for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyzer
+10. If COMPLEX: Run separate analysis for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyzer (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if ANALYZER_REVIEW_ENABLED}}
-10a. If COMPLEX: Run artifact review on analysis output using @agent-iloom-artifact-reviewer
+10a. If COMPLEX: Run artifact review on analysis output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
 11. Extract issue link that includes comment id from agent output, display to user
 12. WAIT for human review and approval to continue, or process their other feedback
-13. If COMPLEX workflow: Run planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-planner
+13. If COMPLEX workflow: Run planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-planner (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if PLANNER_REVIEW_ENABLED}}
-13a. If COMPLEX workflow: Run artifact review on plan output using @agent-iloom-artifact-reviewer
+13a. If COMPLEX workflow: Run artifact review on plan output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
 14. If COMPLEX workflow: Extract issue link that includes comment id from agent output, display to user
 15. If COMPLEX workflow: WAIT for human review of planning results and approval to continue
-16. Run issue implementation for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-implementer
+16. Run issue implementation for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-implementer (run_in_background: true)
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
-16a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer
+16a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
-17. Run code review using @agent-iloom-code-reviewer
+17. Run code review using @agent-iloom-code-reviewer (foreground -- needs MCP tool access)
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 18. Auto-commit and push changes to draft PR (STEP 5.5)
@@ -574,7 +574,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
 1. Execute enhancement phase via /iloom-swarm-issue-enhancer skill with prompt: "Enhance issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
-1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} (run_in_background: true) {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 {{/if}}
@@ -591,7 +591,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
      c. Compare user's answers to the agent's documented assumptions:
         - If ANY mismatches detected:
           - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
-          - Re-run @agent-iloom-issue-enhancer with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
+          - Re-run @agent-iloom-issue-enhancer (run_in_background: true) with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
@@ -603,7 +603,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this ENHANCEMENT artifact for issue #{{ISSUE_NUMBER}}: [ENHANCER_OUTPUT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -613,7 +613,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
         - Re-invoke enhancer via /iloom-swarm-issue-enhancer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-enhancer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-enhancer (run_in_background: true) with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -621,13 +621,13 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 {{#if SWARM_MODE}}
         - Re-run enhancer via /iloom-swarm-issue-enhancer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
-        - Re-run @agent-iloom-issue-enhancer from scratch with the reviewer's feedback, return to step 2
+        - Re-run @agent-iloom-issue-enhancer (run_in_background: true) from scratch with the reviewer's feedback, return to step 2
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
         - Options: "Accept enhancement as-is", "Regenerate with feedback", "Manually edit"
-     c. If regenerate: Re-run @agent-iloom-issue-enhancer with feedback, return to step 2
+     c. If regenerate: Re-run @agent-iloom-issue-enhancer (run_in_background: true) with feedback, return to step 2
      d. If manually edit: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to next step
@@ -678,7 +678,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
 1. Execute complexity evaluation via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Evaluate complexity for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
-1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} (run_in_background: true) {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 {{/if}}
@@ -695,7 +695,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
      c. Compare user's answers to the agent's documented assumptions:
         - If ANY mismatches detected:
           - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
-          - Re-run @agent-iloom-issue-complexity-evaluator with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
+          - Re-run @agent-iloom-issue-complexity-evaluator (run_in_background: true) with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
@@ -707,7 +707,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this COMPLEXITY EVALUATION artifact for issue #{{ISSUE_NUMBER}}: [COMPLEXITY_EVALUATOR_OUTPUT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -717,7 +717,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
         - Re-invoke complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-complexity-evaluator with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-complexity-evaluator (run_in_background: true) with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -725,13 +725,13 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{#if SWARM_MODE}}
         - Re-run complexity evaluator via /iloom-swarm-issue-complexity-evaluator skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
-        - Re-run @agent-iloom-issue-complexity-evaluator from scratch with the reviewer's feedback, return to step 2
+        - Re-run @agent-iloom-issue-complexity-evaluator (run_in_background: true) from scratch with the reviewer's feedback, return to step 2
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
         - Options: "Accept evaluation as-is", "Regenerate with feedback", "Manually edit"
-     c. If regenerate: Re-run @agent-iloom-issue-complexity-evaluator with feedback, return to step 2
+     c. If regenerate: Re-run @agent-iloom-issue-complexity-evaluator (run_in_background: true) with feedback, return to step 2
      d. If manually edit: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to step 3
@@ -791,7 +791,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if SWARM_MODE}}
 1. Execute analysis phase via /iloom-swarm-issue-analyzer skill with prompt: "Analyze issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
-1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} (run_in_background: true) {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 {{/if}}
@@ -808,7 +808,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
      c. Compare user's answers to the agent's documented assumptions:
         - If ANY mismatches detected:
           - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
-          - Re-run @agent-iloom-issue-analyzer with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
+          - Re-run @agent-iloom-issue-analyzer (run_in_background: true) with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
@@ -820,7 +820,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this ANALYSIS artifact for issue #{{ISSUE_NUMBER}}: [ANALYZER_OUTPUT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -830,7 +830,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if SWARM_MODE}}
         - Re-invoke analyzer via /iloom-swarm-issue-analyzer skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-analyzer with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-analyzer (run_in_background: true) with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -838,13 +838,13 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 {{#if SWARM_MODE}}
         - Re-run analyzer via /iloom-swarm-issue-analyzer skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
-        - Re-run @agent-iloom-issue-analyzer from scratch with the reviewer's feedback, return to step 2
+        - Re-run @agent-iloom-issue-analyzer (run_in_background: true) from scratch with the reviewer's feedback, return to step 2
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
         - Options: "Accept analysis as-is", "Regenerate with feedback", "Manually edit"
-     c. If regenerate: Re-run @agent-iloom-issue-analyzer with feedback, return to step 2
+     c. If regenerate: Re-run @agent-iloom-issue-analyzer (run_in_background: true) with feedback, return to step 2
      d. If manually edit: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to step 3
@@ -928,7 +928,7 @@ Execute combined analyze-and-plan agent:
 {{#if SWARM_MODE}}
 2. Execute combined analyze-and-plan phase via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Analyze and plan issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
-2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
+2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} (run_in_background: true) {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 {{/if}}
@@ -947,7 +947,7 @@ Execute combined analyze-and-plan agent:
      c. Compare user's answers to the agent's documented assumptions:
         - If ANY mismatches detected:
           - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
-          - Re-run @agent-iloom-issue-analyze-and-plan with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
+          - Re-run @agent-iloom-issue-analyze-and-plan (run_in_background: true) with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
           - Return to step 3.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
@@ -959,7 +959,7 @@ Execute combined analyze-and-plan agent:
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this ANALYSIS AND PLAN artifact for issue #{{ISSUE_NUMBER}}: [ANALYZE_AND_PLAN_OUTPUT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -969,7 +969,7 @@ Execute combined analyze-and-plan agent:
 {{#if SWARM_MODE}}
         - Re-invoke analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-analyze-and-plan with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-analyze-and-plan (run_in_background: true) with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -977,13 +977,13 @@ Execute combined analyze-and-plan agent:
 {{#if SWARM_MODE}}
         - Re-run analyze-and-plan via /iloom-swarm-issue-analyze-and-plan skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
-        - Re-run @agent-iloom-issue-analyze-and-plan from scratch with the reviewer's feedback, return to step 2
+        - Re-run @agent-iloom-issue-analyze-and-plan (run_in_background: true) from scratch with the reviewer's feedback, return to step 2
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
         - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
-     c. If regenerate: Re-run @agent-iloom-issue-analyze-and-plan with feedback, return to step 2
+     c. If regenerate: Re-run @agent-iloom-issue-analyze-and-plan (run_in_background: true) with feedback, return to step 2
      d. If manually edit: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to step 4
@@ -1013,7 +1013,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if SWARM_MODE}}
 1. Execute planning phase via /iloom-swarm-issue-planner skill with prompt: "Create implementation plan for issue #ISSUE_NUMBER. Before making assumptions, scan ALL issue comments for previously asked questions and their answers. When creating question tables, fill in your own assumed answers."
 {{else}}
-1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} (run_in_background: true) {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 {{/if}}
@@ -1032,7 +1032,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
      c. Compare user's answers to the agent's documented assumptions:
         - If ANY mismatches detected:
           - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
-          - Re-run @agent-iloom-issue-planner with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
+          - Re-run @agent-iloom-issue-planner (run_in_background: true) with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]. Update your existing comment (comment ID: [COMMENT_ID])."
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
@@ -1044,7 +1044,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this PLAN artifact for issue #{{ISSUE_NUMBER}}: [PLANNER_OUTPUT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -1054,7 +1054,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if SWARM_MODE}}
         - Re-invoke planner via /iloom-swarm-issue-planner skill with prompt: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-planner with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-planner (run_in_background: true) with: "Apply these specific improvements to your existing comment (comment ID: [COMMENT_ID]): [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -1062,13 +1062,13 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 {{#if SWARM_MODE}}
         - Re-run planner via /iloom-swarm-issue-planner skill from scratch with the reviewer's feedback, return to step 2
 {{else}}
-        - Re-run @agent-iloom-issue-planner from scratch with the reviewer's feedback, return to step 2
+        - Re-run @agent-iloom-issue-planner (run_in_background: true) from scratch with the reviewer's feedback, return to step 2
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer suggests improvements. How would you like to proceed?"
         - Options: "Accept plan as-is", "Regenerate with feedback", "Manually edit"
-     c. If regenerate: Re-run @agent-iloom-issue-planner with feedback, return to step 2
+     c. If regenerate: Re-run @agent-iloom-issue-planner (run_in_background: true) with feedback, return to step 2
      d. If manually edit: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to step 3
@@ -1142,12 +1142,12 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
       - Update progress comment for all completed steps
 {{else}}
       **If line says "Run Step N" (sequential):**
-      - Launch @agent-iloom-issue-implementer with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+      - Launch @agent-iloom-issue-implementer (run_in_background: true) with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
       - Wait for completion
       - Update progress comment: `- [x] Step N: [name] - [brief result]`
 
       **If line says "Run Steps X, Y, Z in parallel":**
-      - Launch MULTIPLE Task tool calls in ONE message - one per step
+      - Launch MULTIPLE Task tool calls in ONE message - one per step (run_in_background: true for each)
       - Each with: "You are implementing Step N of a parallel wave. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment. Note: other steps in this wave are running simultaneously — compile errors from missing modules created by parallel steps are expected."
       - Wait for ALL to complete
       - **Post-wave validation**: After all parallel steps in a wave complete, run `il compile` (or `pnpm build` / equivalent) to verify the integrated result compiles. If compile errors remain after all parallel steps completed, fix them before proceeding to the next wave. This is the integration checkpoint — individual steps may have had expected compile errors, but the combined result must build.
@@ -1160,7 +1160,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    - Execute implementer via /iloom-swarm-issue-implementer skill with prompt: "Implement the plan in comment [COMMENT_ID] for issue #ISSUE_NUMBER. DO NOT create your own issue comment."
    - Wait for completion
 {{else}}
-   - Launch ONE @agent-iloom-issue-implementer with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+   - Launch ONE @agent-iloom-issue-implementer (run_in_background: true) with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
    - Wait for completion
 {{/if}}
 
@@ -1212,7 +1212,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 {{#if SWARM_MODE}}
    - Execute artifact review via /iloom-swarm-artifact-reviewer skill with prompt: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{else}}
-   - Invoke: @agent-iloom-artifact-reviewer with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
+   - Invoke: @agent-iloom-artifact-reviewer (run_in_background: true) with context: "Review this IMPLEMENTATION artifact for issue #{{ISSUE_NUMBER}}: [IMPLEMENTER_OUTPUT]. The plan it was executing: [PLAN_CONTENT]"
 {{/if}}
    - Wait for review results
    - If review suggests improvements:
@@ -1222,7 +1222,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 {{#if SWARM_MODE}}
         - Re-invoke implementer via /iloom-swarm-issue-implementer skill with prompt: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{else}}
-        - Re-invoke @agent-iloom-issue-implementer with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
+        - Re-invoke @agent-iloom-issue-implementer (run_in_background: true) with: "Apply these specific improvements to address plan gaps: [REVIEWER_FEEDBACK]"
 {{/if}}
         - After update, proceed to next step (do not re-review)
      b. If verdict is RECOMMEND_REGENERATION:
@@ -1230,13 +1230,13 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 {{#if SWARM_MODE}}
         - Re-run implementer via /iloom-swarm-issue-implementer skill from scratch with the reviewer's feedback
 {{else}}
-        - Re-run @agent-iloom-issue-implementer from scratch with the reviewer's feedback
+        - Re-run @agent-iloom-issue-implementer (run_in_background: true) from scratch with the reviewer's feedback
 {{/if}}
 {{else}}
      a. Present review findings to user
      b. Use AskUserQuestion tool: "The artifact reviewer found plan alignment issues. How would you like to proceed?"
         - Options: "Accept implementation as-is", "Address feedback", "Manually fix"
-     c. If address feedback: Re-run @agent-iloom-issue-implementer with feedback
+     c. If address feedback: Re-run @agent-iloom-issue-implementer (run_in_background: true) with feedback
      d. If manually fix: Wait for user edits, then proceed
 {{/if}}
    - If review approves: Proceed to STEP 5 - Review Phase
@@ -1415,15 +1415,15 @@ After completing the implementation phase, tell the user:
 
 **Handling Requests:**
 
-When the user requests help, **YOU MUST USE subagents** to preserve your context window for ongoing conversation.
+When the user requests help, **YOU MUST USE subagents (run_in_background: true)** to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
 |--------------|--------|
 | Trivial (quick answer, single-line fix) | Handle directly |
-| Bug investigation / analysis | `@agent-iloom-issue-analyzer` → present findings → offer to fix |
-| Code changes | `@agent-iloom-issue-implementer` |
-| New features / complex changes | `@agent-iloom-issue-analyze-and-plan` → if approved, `@agent-iloom-issue-implementer` |
-| Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` |
+| Bug investigation / analysis | `@agent-iloom-issue-analyzer` (run_in_background: true) → present findings → offer to fix |
+| Code changes | `@agent-iloom-issue-implementer` (run_in_background: true) |
+| New features / complex changes | `@agent-iloom-issue-analyze-and-plan` (run_in_background: true) → if approved, `@agent-iloom-issue-implementer` (run_in_background: true) |
+| Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` (run_in_background: true) |
 | Out-of-scope requests | Ask user: help anyway, create new issue, or skip |
 | Epic decomposition / large task breakdown | Recommend `il plan <epic-number>` then `il start <epic-number>` (see below) |
 | Ready to wrap up | Show Wrapping Up Instructions (see below) |
