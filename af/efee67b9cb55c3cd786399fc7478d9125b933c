@@ -1,0 +1,37 @@
+src/lib/MergeManager.test.ts
+  s_5c710ea600c134::t_c24371b3a1b514 1729,1741-1742,1751,1780,1802
+  s_5c710ea600c134::t_0d84b2a2acfd66 2051
+  s_5c710ea600c134::t_b3d4c6e9f3a708 189-190,195-196
+  s_5c710ea600c134::t_9b7e5d97f5c1e4 304-305,331-332,353-354
+  s_5c710ea600c134::t_6bc6d9ddd8aa4d 602-603,624-625
+src/commands/rebase.ts
+  s_5c710ea600c134::t_660ed94bb3eb83 157
+  s_5c710ea600c134::t_fc37d8fa5dfd95 175,189,194
+src/lib/MergeManager.ts
+  s_5c710ea600c134::t_4bf954f3889548 224,243
+  s_5c710ea600c134::t_a627edd70d75b0 212
+  s_5c710ea600c134::t_51481f92e8c1a1 111,123,172-192
+  s_5c710ea600c134::t_125fd358c26630 275,297
+  s_5c710ea600c134::t_0bc9b9a6ab21fc 77
+src/types/index.ts
+  s_5c710ea600c134::t_979bef130025b2 310
+src/commands/finish.ts
+  s_5c710ea600c134::t_9e943d69c444e6 704-705
+  s_5c710ea600c134::t_3aa878fc7b55f4 697,700
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "afefee67b9cb55c3cd786399fc7478d9125b933c",
+  "prompts": {},
+  "sessions": {
+    "s_5c710ea600c134": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51b39173-3740-4416-9c55-e5480f80f740",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
