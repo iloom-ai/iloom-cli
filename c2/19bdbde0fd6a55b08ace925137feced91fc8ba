@@ -1,0 +1,52 @@
+src/types/telemetry.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 146-152,176
+src/lib/SettingsManager.test.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 17
+src/lib/MergeManager.ts
+  s_5c710ea600c134::t_115e9d94800835 795-799
+  s_5c710ea600c134::t_5ac74a902dfba8 6,130,150-191,195,198,200-204,206-256,271,293,361,363,404-407,431-432,437-438,443-446,448-451,453,455,567,569-570,578-597,601-625,639,653-665,719-794
+src/types/index.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 302,309,405
+src/commands/finish.test.ts
+  s_5c710ea600c134::t_c8192c3db45d11 693-694
+  s_5c710ea600c134::t_5ac74a902dfba8 189-194,494,651-692
+src/lib/MergeManager.test.ts
+  s_5c710ea600c134::t_cf9e473200b002 2250,2256
+  s_5c710ea600c134::t_5ac74a902dfba8 105,130,151,157-158,171,207,231,259,390,418,451,478,515,548,574,649,685,711,951,989,1027,1102,1114-1115,1162,1263,1308,1337,1362,1449,1482,1507,1536,1560,1583,1610,1646,1678,1707,1716,1735,1748,1763,1776,1784-1982,1985-2249,2251-2255
+src/commands/finish.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 29,686-690,699,703-705,955-963,966
+src/commands/finish.pr-workflow.test.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 122,290,505,629,837,924,1087,1203
+src/commands/ignite.test.ts
+  s_5c710ea600c134::t_bf38ab9a574291 203
+  s_5c710ea600c134::t_2b47b8a8c003d2 800
+  s_5c710ea600c134::t_ab2258bb7ee10f 340
+  s_5c710ea600c134::t_9828e92624ba3e 127
+  s_5c710ea600c134::t_5ce4c60a972f04 922
+src/commands/rebase.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 136-140,166
+src/lib/SettingsManager.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 770-782,1086-1098
+src/lib/CLAUDE.md
+  s_5c710ea600c134::t_5ac74a902dfba8 35
+docs/iloom-commands.md
+  s_5c710ea600c134::t_5ac74a902dfba8 326-327,417-461,480
+src/commands/rebase.test.ts
+  s_5c710ea600c134::t_5ac74a902dfba8 54,247,253,261,542,552,574,584,587-618
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "c219bdbde0fd6a55b08ace925137feced91fc8ba",
+  "prompts": {},
+  "sessions": {
+    "s_5c710ea600c134": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51b39173-3740-4416-9c55-e5480f80f740",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
