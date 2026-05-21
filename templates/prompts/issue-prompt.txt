@@ -1148,8 +1148,9 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
       **If line says "Run Steps X, Y, Z in parallel":**
       - Launch MULTIPLE Task tool calls in ONE message - one per step
-      - Each with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+      - Each with: "You are implementing Step N of a parallel wave. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment. Note: other steps in this wave are running simultaneously — compile errors from missing modules created by parallel steps are expected."
       - Wait for ALL to complete
+      - **Post-wave validation**: After all parallel steps in a wave complete, run `il compile` (or `pnpm build` / equivalent) to verify the integrated result compiles. If compile errors remain after all parallel steps completed, fix them before proceeding to the next wave. This is the integration checkpoint — individual steps may have had expected compile errors, but the combined result must build.
       - Update progress comment for all completed steps
 {{/if}}
 

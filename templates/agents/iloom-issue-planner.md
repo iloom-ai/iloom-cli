@@ -238,19 +238,29 @@ copySettingsFile() {
 
 **Goal: Maximize parallel execution.** The orchestrator spawns separate agents for parallel steps — every unnecessary sequential dependency slows execution. Design for a **wide, shallow execution graph**, not a deep sequential chain.
 
-**Use contract-based parallelism.** When Step B needs a type, function, or module that Step A creates, do NOT automatically make them sequential. Instead:
+**Start by assuming ALL steps run in parallel.** Only add sequential dependencies you truly cannot eliminate. For each potential dependency, ask: "Can I replace this with a shared contract so both steps run concurrently?" If yes, define the contract and remove the dependency.
+
+**Use contract-based parallelism.** When Step B needs a type, function, or module that Step A creates, do NOT make them sequential. Instead:
 1. Define the shared contract (interface, function signature, module export) explicitly in both steps
 2. Let both steps execute in parallel — each implements against the agreed contract
-3. A later integration step (if needed) catches any mismatches
+3. The post-wave validation step catches any mismatches
+
+**Compilation errors during parallel execution are expected and OK.** When steps run in parallel against shared contracts, individual steps may encounter build errors because the other step's contract implementation doesn't exist yet. This is normal. The errors resolve when all parallel steps complete. Implementer agents are aware of this and will not block on compile errors caused by missing contract implementations from parallel steps.
 
 **Example:** If Step 1 creates a `UserService` class and Step 2 needs to call `UserService.getById()`, don't block Step 2 on Step 1. Instead, specify in both steps: "The `UserService` class will expose `getById(id: string): Promise<User>`". Both agents implement against this contract simultaneously.
 
-**Only force sequential execution when truly necessary:**
+**Only force sequential execution when:**
 - Steps modifying the same file (concurrent edits cause conflicts)
-- Step B literally cannot define any meaningful contract without Step A's output (rare)
 - Step B modifies files that Step A creates from scratch (not just imports them)
 
+**These are NOT valid reasons for sequential ordering:**
+- "Step B imports a type/function from Step A" → define the contract, run in parallel
+- "Step B calls an API that Step A creates" → define the contract, run in parallel
+- "Step B needs Step A's module to compile" → compile errors are expected during parallel waves
+
 **A sign your plan needs more parallelism:** If your execution plan is mostly linear (Step 1 → Step 2 → Step 3 → Step 4), rethink the decomposition. Ask: "Can I define contracts so these run concurrently?" Usually the answer is yes.
+
+**Validation gate before finalizing:** Before writing the Execution Plan, audit every sequential dependency. For each one, ask: "Can I replace this with a shared contract?" If yes, rewrite the steps with an explicit contract and remove the dependency. The goal is the widest, shallowest execution graph possible.
 
 **Example — sequential (avoid):**
 ```
@@ -266,8 +276,7 @@ Step 5: Add tests → sequential last
 Step 1: Create types.ts, validation.ts, and handler.ts in parallel
   - Each step's description includes the shared contract: "UserInput = { name: string, email: string }"
   - types.ts defines it, validation.ts and handler.ts implement against it
-Step 2: Wire up in index.ts (depends on Step 1 completing)
-Step 3: Add tests (depends on Step 2)
+Step 2: Wire up in index.ts and add tests in parallel (different files)
 ```
 
 ### General Best Practices
@@ -465,17 +474,20 @@ Provide execution steps concisely. Group steps by parallel execution phase — s
 
 This section tells the orchestrator EXACTLY how to execute the implementation steps. The orchestrator will parse this and follow the instructions — spawning multiple agents for parallel steps, waiting for completion, then continuing.
 
-### Maximize Parallelism
+### Maximize Parallelism — Contracts Over Dependencies
 
 **The entire value of parallel execution is running many steps concurrently.** Every sequential dependency you add forces the orchestrator to wait. Design your execution plan for maximum width — the ideal plan has 2-3 phases with many parallel steps each, not 5-6 phases with 1 step each.
 
+**Compile errors during waves are expected.** When parallel steps implement against shared contracts, individual agents may encounter build errors because the contract's implementation from another parallel step doesn't exist yet. This is normal and expected — the orchestrator runs a validation step after each wave completes. Implementer agents know not to block on these errors.
+
 **Rules:**
-1. **Default to parallel.** Only mark steps as sequential when they modify the same files or literally cannot proceed without another step's output files existing.
+1. **Default to parallel.** Start by putting ALL steps in one wave. Only split into sequential phases when steps modify the same files.
 2. **Use contract-based parallelism.** If Step B needs a type/function that Step A creates, define the contract in both step descriptions and run them in parallel. Do NOT make B wait for A.
 3. **Consolidate tiny sequential steps.** If two sequential steps are small and related, combine them into one step to reduce overhead.
-4. **Tests can often run in parallel with integration.** If tests only depend on the modules they test (not on the integration wiring), they can run alongside integration steps.
+4. **Tests can often run in parallel with implementation.** If tests only depend on the modules they test (not on the integration wiring), they can run alongside implementation steps.
+5. **Importing is not a dependency.** "Step B imports from Step A" is NOT a reason for sequential execution. Define the contract and run in parallel.
 
-**Format:** A numbered list specifying execution phases. Steps within a phase run in parallel:
+**Format:** A numbered list specifying execution phases. Steps within a phase run in parallel. Include the shared contract when steps implement against a common interface:
 
 ```
 1. Run Steps 1, 2, 3 in parallel (contract: SharedType = { ... })
@@ -498,6 +510,8 @@ This section tells the orchestrator EXACTLY how to execute the implementation st
 ```
 
 **A sign your plan needs rework:** If most phases have only 1 step, you're effectively running sequentially. Rethink the step boundaries and apply contract-based parallelism.
+
+**Pre-submit validation:** Before writing this section, count phases vs steps. If you have more phases than steps-per-phase on average, your plan is too sequential. Go back and apply contracts to collapse phases.
 
 ## Dependencies and Configuration
 

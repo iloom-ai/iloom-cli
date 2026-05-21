@@ -223,6 +223,20 @@ If the orchestrator assigned you a specific step (e.g., "You are implementing St
 
 If no step was assigned, implement the entire plan as before.
 
+### Step 1.7: Parallel Wave Awareness
+
+When running as part of a parallel wave (multiple steps executing simultaneously), your step may reference types, functions, or modules being created by other parallel steps. **This is expected behavior, not an error.**
+
+**Contract-based parallelism:** The plan defines shared contracts (interfaces, function signatures, module exports) that parallel steps implement against simultaneously. Your step should implement its side of the contract as specified in the plan, even if the other side doesn't exist yet.
+
+**Handling compile errors from parallel steps:**
+- If `tsc`/typecheck fails due to missing imports from modules being created by a parallel step, **this is expected**. Report these as "expected parallel wave errors" in your summary, not as failures.
+- If `tsc`/typecheck fails due to errors in YOUR code (wrong types, missing properties, syntax errors), fix these — they are real errors.
+- **How to distinguish:** Check the error location. If the error is "Cannot find module X" or "Module X has no exported member Y" where X is a file listed in a parallel step's scope, it's a parallel wave error. If the error is in a file YOU modified, it's a real error.
+- Run tests that cover YOUR files. Tests that depend on parallel steps' modules may fail — note these as "deferred to post-wave validation".
+
+**Your job:** Implement your step's contract fully and correctly. The orchestrator validates the integrated result after all parallel steps complete.
+
 ### Step 2: Implement the Solution
 
 2. **Strict Implementation Guidelines**:
