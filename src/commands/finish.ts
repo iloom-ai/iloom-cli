@@ -745,15 +745,15 @@ export class FinishCommand {
 		} else {
 			// Step 1: Rebase branch on main FIRST (Issue #344)
 			// This ensures validation runs against the rebased code (with latest main changes)
-			getLogger().info('Rebasing branch on main...')
+			getLogger().info('Synchronizing with parent branch...')
 
 			rebaseOutcome = await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
-			getLogger().success('Branch rebased successfully')
+			getLogger().success(rebaseOutcome?.strategy === 'merge' ? 'Branch synchronized via merge' : 'Branch rebased successfully')
 			result.operations.push({
 				type: 'rebase',
 				message: rebaseOutcome.strategy === 'merge'
-					? 'Branch synchronized with main via merge'
-					: 'Branch rebased on main',
+					? `Branch synchronized with ${rebaseOutcome.targetBranch} via merge`
+					: `Branch rebased on ${rebaseOutcome.targetBranch}`,
 				success: true,
 			})
 

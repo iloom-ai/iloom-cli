@@ -307,6 +307,7 @@ export interface RebaseOutcome {
   claudeLaunched: boolean
   conflictsResolved: boolean
   strategy: 'rebase' | 'merge'
+  targetBranch: string
 }
 
 // Deprecated: Result types - use exception-based error handling instead

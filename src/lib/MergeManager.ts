@@ -74,7 +74,7 @@ export class MergeManager {
 			targetBranch = mainBranch
 		}
 
-		getLogger().info(`Starting rebase on ${targetBranch}...`)
+		getLogger().info(`Starting synchronization with ${targetBranch}...`)
 
 		// Step 1: Check if branch exists (remote ref for origin/, local ref otherwise)
 		const refPath = useRemote ? `refs/remotes/${targetBranch}` : `refs/heads/${targetBranch}`
@@ -108,7 +108,7 @@ export class MergeManager {
 			getLogger().debug(`Created WIP commit: ${wipCommitHash}`)
 		}
 
-		// Step 3: Check if rebase is needed by comparing merge-base with target HEAD
+		// Step 3: Compute merge-base and target HEAD
 		const mergeBase = await executeGitCommand(['merge-base', targetBranch, 'HEAD'], {
 			cwd: worktreePath,
 		})
@@ -120,32 +120,13 @@ export class MergeManager {
 		const mergeBaseTrimmed = mergeBase.trim()
 		const targetHeadTrimmed = targetHead.trim()
 
-		// If merge-base matches target HEAD, branch is already up to date
-		if (mergeBaseTrimmed === targetHeadTrimmed) {
-			getLogger().success(`Branch is already up to date with ${targetBranch}. No rebase needed.`)
-			// Restore WIP commit if created (soft reset to remove temporary commit)
-			if (wipCommitHash) {
-				await this.restoreWipCommit(worktreePath, wipCommitHash)
-			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' }
-		}
-
-		// Step 4: Show commits to be rebased (for informational purposes)
+		// Step 4: Compute commits ahead of target (needed for strategy detection)
 		const commitsOutput = await executeGitCommand(['log', '--oneline', `${targetBranch}..HEAD`], {
 			cwd: worktreePath,
 		})
 
 		const commits = commitsOutput.trim()
 		const commitLines = commits ? commits.split('\n') : []
-
-		if (commits) {
-			// Show commits that will be rebased
-			getLogger().info(`Found ${commitLines.length} commit(s) to rebase:`)
-			commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
-		} else {
-			// Target has moved forward but branch has no new commits
-			getLogger().info(`${targetBranch} has moved forward. Rebasing to update branch...`)
-		}
 
 		// Step 5: Detect merge commits from parent branch
 		const hasMergesFromParent = await this.hasMergesFromParent(worktreePath, targetBranch)
@@ -188,6 +169,29 @@ export class MergeManager {
 			getLogger().debug(`Failed to track rebase.strategy_selected telemetry: ${error instanceof Error ? error.message : String(error)}`)
 		}
 
+		// Step 6b: Check if already up to date (strategy-aware)
+		if (mergeBaseTrimmed === targetHeadTrimmed) {
+			if (strategy === 'merge') {
+				getLogger().success(`Already synchronized with ${targetBranch}. No new changes to merge.`)
+			} else {
+				getLogger().success(`Branch is already up to date with ${targetBranch}. No rebase needed.`)
+			}
+			// Restore WIP commit if created (soft reset to remove temporary commit)
+			if (wipCommitHash) {
+				await this.restoreWipCommit(worktreePath, wipCommitHash)
+			}
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy, targetBranch }
+		}
+
+		// Step 6c: Show commits to be synchronized (for informational purposes)
+		if (commits) {
+			getLogger().info(`Found ${commitLines.length} commit(s) to ${strategy === 'merge' ? 'merge' : 'rebase'}:`)
+			commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
+		} else {
+			// Target has moved forward but branch has no new commits
+			getLogger().info(`${targetBranch} has moved forward. ${strategy === 'merge' ? 'Merging' : 'Rebasing'} to update branch...`)
+		}
+
 		// Step 7: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
@@ -205,7 +209,7 @@ export class MergeManager {
 			if (commitLines.length > 0) {
 				getLogger().info(`[DRY RUN] This would ${strategy} ${commitLines.length} commit(s)`)
 			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy }
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy, targetBranch }
 		}
 
 		if (strategy === 'merge') {
@@ -217,7 +221,7 @@ export class MergeManager {
 				if (wipCommitHash) {
 					await this.restoreWipCommit(worktreePath, wipCommitHash)
 				}
-				return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'merge' }
+				return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'merge', targetBranch }
 			} catch (error) {
 				const conflictedFiles = await this.detectConflictedFiles(worktreePath)
 
@@ -236,7 +240,7 @@ export class MergeManager {
 						if (wipCommitHash) {
 							await this.restoreWipCommit(worktreePath, wipCommitHash)
 						}
-						return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'merge' }
+						return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'merge', targetBranch }
 					}
 
 					// Claude couldn't resolve - abort merge and fail
@@ -268,7 +272,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' }
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase', targetBranch }
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
@@ -290,7 +294,7 @@ export class MergeManager {
 					if (wipCommitHash) {
 						await this.restoreWipCommit(worktreePath, wipCommitHash)
 					}
-					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'rebase' }
+					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'rebase', targetBranch }
 				}
 
 				// Claude couldn't resolve or not available - fail fast

@@ -154,7 +154,7 @@ export class RebaseCommand {
 		}
 
 		// Run build for CLI projects after successful rebase
-		await this.runPostRebaseBuild(worktreePath, options)
+		await this.runPostRebaseBuild(worktreePath, options, outcome.strategy)
 
 		// Return result if jsonStream mode
 		if (options.jsonStream) {
@@ -172,7 +172,7 @@ export class RebaseCommand {
 	 * Run post-rebase build for CLI projects
 	 * Non-blocking: build failures are logged as warnings but don't fail the rebase
 	 */
-	private async runPostRebaseBuild(worktreePath: string, options: RebaseOptions): Promise<void> {
+	private async runPostRebaseBuild(worktreePath: string, options: RebaseOptions, strategy: 'rebase' | 'merge' = 'rebase'): Promise<void> {
 		if (options.dryRun) {
 			logger.info('[DRY RUN] Would run post-rebase build for CLI projects')
 			return
@@ -186,12 +186,12 @@ export class RebaseCommand {
 			if (buildResult.skipped) {
 				logger.debug(`Build skipped: ${buildResult.reason}`)
 			} else {
-				logger.success('Post-rebase build completed successfully')
+				logger.success(`Post-${strategy === 'merge' ? 'merge' : 'rebase'} build completed successfully`)
 			}
 		} catch (error) {
 			// Log warning but don't fail - rebase succeeded, user can fix build manually
 			const message = error instanceof Error ? error.message : 'Unknown error'
-			logger.warn(`Post-rebase build failed: ${message}`)
+			logger.warn(`Post-${strategy === 'merge' ? 'merge' : 'rebase'} build failed: ${message}`)
 			logger.warn('Please run the build command manually')
 		}
 	}

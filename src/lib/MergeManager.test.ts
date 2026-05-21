@@ -186,12 +186,14 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse origin/main (SAME = no rebase needed)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			// Should succeed without attempting rebase
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Verify: rebase was NOT called (only 5 git commands: 1 rev-parse for isRebaseInProgress + 4 rebase flow + 1 fetchOrigin)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(5)
+			// Verify: rebase was NOT called (7 git commands: 1 rev-parse for isRebaseInProgress + 6 rebase flow + 1 fetchOrigin)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(7)
 			expect(git.fetchOrigin).toHaveBeenCalledTimes(1)
 		})
 
@@ -299,6 +301,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
@@ -324,6 +328,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
@@ -344,6 +350,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
@@ -591,6 +599,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('wipcommithash') // rev-parse HEAD
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse origin/main (already up to date)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
 				.mockResolvedValueOnce('') // reset HEAD (unstage)
 
@@ -611,6 +621,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123wipcommit') // rev-parse HEAD (WIP commit hash)
 				.mockResolvedValueOnce('def456') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main (SAME = no rebase needed)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
 				.mockResolvedValueOnce('') // reset HEAD (unstage)
 
@@ -1714,6 +1726,7 @@ describe('MergeManager', () => {
 				claudeLaunched: false,
 				conflictsResolved: false,
 				strategy: 'rebase',
+				targetBranch: 'origin/main',
 			})
 		})
 
@@ -1725,6 +1738,8 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // status
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse main (SAME)
+				.mockResolvedValueOnce('') // log --oneline: no commits ahead
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			const result = await manager.rebaseOnMain('/test/worktree', { force: true })
 
@@ -1733,6 +1748,7 @@ describe('MergeManager', () => {
 				claudeLaunched: false,
 				conflictsResolved: false,
 				strategy: 'rebase',
+				targetBranch: 'origin/main',
 			})
 		})
 
@@ -1761,6 +1777,7 @@ describe('MergeManager', () => {
 				claudeLaunched: true,
 				conflictsResolved: true,
 				strategy: 'rebase',
+				targetBranch: 'origin/main',
 			})
 		})
 
@@ -1782,6 +1799,7 @@ describe('MergeManager', () => {
 				claudeLaunched: false,
 				conflictsResolved: false,
 				strategy: 'rebase',
+				targetBranch: 'origin/main',
 			})
 		})
 	})
@@ -2030,6 +2048,7 @@ describe('MergeManager', () => {
 					claudeLaunched: false,
 					conflictsResolved: false,
 					strategy: 'merge',
+					targetBranch: 'origin/main',
 				})
 			})
 
