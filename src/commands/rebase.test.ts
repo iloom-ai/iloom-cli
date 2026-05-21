@@ -51,7 +51,7 @@ describe('RebaseCommand', () => {
 
 		// Create mock MergeManager
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
+			rebaseOnMain: vi.fn().mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' }),
 		} as unknown as MergeManager
 
 		// Create mock GitWorktreeManager
@@ -244,13 +244,13 @@ describe('RebaseCommand', () => {
 		})
 
 		it('succeeds when branch is already up to date', async () => {
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
 
 		it('succeeds when rebase completes without conflicts', async () => {
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
@@ -258,7 +258,7 @@ describe('RebaseCommand', () => {
 		it('handles rebase conflicts by launching Claude (via MergeManager)', async () => {
 			// MergeManager.rebaseOnMain handles Claude conflict resolution internally
 			// It only throws if conflicts cannot be resolved
-			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false })
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({ conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' })
 
 			await expect(command.execute()).resolves.toBeUndefined()
 		})
@@ -539,6 +539,7 @@ describe('RebaseCommand', () => {
 				conflictsDetected: true,
 				claudeLaunched: true,
 				conflictsResolved: true,
+				strategy: 'rebase',
 			})
 
 			const result = await command.execute({ jsonStream: true })
@@ -548,6 +549,7 @@ describe('RebaseCommand', () => {
 				conflictsDetected: true,
 				claudeLaunched: true,
 				conflictsResolved: true,
+				strategy: 'rebase',
 			})
 		})
 
@@ -569,6 +571,7 @@ describe('RebaseCommand', () => {
 				conflictsDetected: false,
 				claudeLaunched: false,
 				conflictsResolved: false,
+				strategy: 'rebase',
 			})
 
 			const result = await command.execute({ jsonStream: true })
@@ -578,7 +581,41 @@ describe('RebaseCommand', () => {
 				conflictsDetected: false,
 				claudeLaunched: false,
 				conflictsResolved: false,
+				strategy: 'rebase',
 			})
+		})
+
+		it('should include strategy in jsonStream result when merge strategy was used', async () => {
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+				strategy: 'merge',
+			})
+
+			const result = await command.execute({ jsonStream: true })
+
+			expect(result).toEqual({
+				success: true,
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+				strategy: 'merge',
+			})
+		})
+
+		it('should return strategy field when merge was used', async () => {
+			vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+				conflictsDetected: false,
+				claudeLaunched: false,
+				conflictsResolved: false,
+				strategy: 'merge',
+			})
+
+			const result = await command.execute({ jsonStream: true })
+
+			expect(result).toBeDefined()
+			expect(result!.strategy).toBe('merge')
 		})
 	})
 })

@@ -26,7 +26,7 @@ import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { UserAbortedCommitError, type FinishResult } from '../types/index.js'
-import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
+import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest, RebaseOutcome } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
@@ -734,6 +734,11 @@ export class FinishCommand {
 			}
 		}
 
+		// Track rebase outcome across the method — when rebaseOnMain falls back to merge strategy,
+		// the local-mode merge step needs to use --no-ff instead of --ff-only.
+		// undefined when skipToPr is set (rebase is skipped entirely).
+		let rebaseOutcome: RebaseOutcome | undefined
+
 		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)
 		if (options.skipToPr) {
 			getLogger().info('Skipping rebase/validation/commit (--skip-to-pr flag)')
@@ -742,11 +747,13 @@ export class FinishCommand {
 			// This ensures validation runs against the rebased code (with latest main changes)
 			getLogger().info('Rebasing branch on main...')
 
-			await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
+			rebaseOutcome = await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
 			getLogger().success('Branch rebased successfully')
 			result.operations.push({
 				type: 'rebase',
-				message: 'Branch rebased on main',
+				message: rebaseOutcome.strategy === 'merge'
+					? 'Branch synchronized with main via merge'
+					: 'Branch rebased on main',
 				success: true,
 			})
 
@@ -996,13 +1003,18 @@ export class FinishCommand {
 			return
 		}
 
-		// Step 6: Perform fast-forward merge
-		getLogger().info('Performing fast-forward merge...')
-		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
-		getLogger().success('Fast-forward merge completed successfully')
+		// Step 6: Perform merge into main
+		// When rebaseOnMain used merge strategy (instead of rebase), the branch can't fast-forward.
+		// Pass noFf: true so performFastForwardMerge uses --no-ff instead of --ff-only.
+		const localMergeOptions: MergeOptions = rebaseOutcome?.strategy === 'merge'
+			? { ...mergeOptions, noFf: true }
+			: mergeOptions
+		getLogger().info(localMergeOptions.noFf ? 'Performing no-ff merge...' : 'Performing fast-forward merge...')
+		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, localMergeOptions)
+		getLogger().success(localMergeOptions.noFf ? 'No-ff merge completed successfully' : 'Fast-forward merge completed successfully')
 		result.operations.push({
 			type: 'merge',
-			message: 'Fast-forward merge completed',
+			message: localMergeOptions.noFf ? 'No-ff merge completed' : 'Fast-forward merge completed',
 			success: true,
 		})
 

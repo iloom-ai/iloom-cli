@@ -3,6 +3,7 @@ import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
+import { TelemetryService } from './TelemetryService.js'
 import type { MergeOptions, RebaseOutcome } from '../types/index.js'
 
 /**
@@ -126,7 +127,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' }
 		}
 
 		// Step 4: Show commits to be rebased (for informational purposes)
@@ -146,20 +147,114 @@ export class MergeManager {
 			getLogger().info(`${targetBranch} has moved forward. Rebasing to update branch...`)
 		}
 
-		// Step 5: User confirmation (unless force mode or dry-run)
+		// Step 5: Detect merge commits from parent branch
+		const hasMergesFromParent = await this.hasMergesFromParent(worktreePath, targetBranch)
+
+		// Step 6: Determine strategy (merge-commit detection + commit count threshold)
+		const maxCommits = settings.rebase?.maxCommitsForRebase ?? 20
+		const commitCountExceedsThreshold =
+			maxCommits === 0 || (maxCommits > 0 && commitLines.length >= maxCommits)
+
+		let strategy: 'rebase' | 'merge' = 'rebase'
+		let strategyReason = ''
+
+		if (hasMergesFromParent) {
+			strategy = 'merge'
+			strategyReason = `Found merge commits from ${targetBranch} on this branch`
+		} else if (commitCountExceedsThreshold) {
+			strategy = 'merge'
+			strategyReason =
+				maxCommits === 0
+					? 'rebase.maxCommitsForRebase is set to 0 (always merge)'
+					: `Branch has ${commitLines.length} commits ahead of ${targetBranch} (threshold: ${maxCommits})`
+		}
+
+		if (strategy === 'merge') {
+			getLogger().info(`${strategyReason} — using merge instead of rebase`)
+		}
+
+		// Track strategy selection telemetry
+		try {
+			const telemetryReason: 'merge_commits' | 'commit_threshold' | 'always_merge' | 'default' =
+				hasMergesFromParent ? 'merge_commits'
+					: commitCountExceedsThreshold && maxCommits === 0 ? 'always_merge'
+						: commitCountExceedsThreshold ? 'commit_threshold'
+							: 'default'
+			TelemetryService.getInstance().track('rebase.strategy_selected', {
+				strategy,
+				reason: telemetryReason,
+			})
+		} catch (error: unknown) {
+			getLogger().debug(`Failed to track rebase.strategy_selected telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
+		// Step 7: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
-			getLogger().info('Proceeding with rebase... (use --force to skip confirmations)')
+			getLogger().info(`Proceeding with ${strategy}... (use --force to skip confirmations)`)
 		}
 
-		// Step 6: Execute rebase (unless dry-run)
+		// Step 8: Execute rebase or merge (unless dry-run)
 		if (dryRun) {
-			getLogger().info(`[DRY RUN] Would execute: git rebase ${targetBranch}`)
-			if (commitLines.length > 0) {
-				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
+			if (strategy === 'merge') {
+				getLogger().info(`[DRY RUN] Would execute: git merge ${targetBranch}`)
+			} else {
+				getLogger().info(`[DRY RUN] Would execute: git rebase ${targetBranch}`)
 			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
+			if (commitLines.length > 0) {
+				getLogger().info(`[DRY RUN] This would ${strategy} ${commitLines.length} commit(s)`)
+			}
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy }
+		}
+
+		if (strategy === 'merge') {
+			// Execute merge from parent branch
+			try {
+				await executeGitCommand(['merge', targetBranch], { cwd: worktreePath })
+				getLogger().success('Merge from parent branch completed successfully!')
+
+				if (wipCommitHash) {
+					await this.restoreWipCommit(worktreePath, wipCommitHash)
+				}
+				return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'merge' }
+			} catch (error) {
+				const conflictedFiles = await this.detectConflictedFiles(worktreePath)
+
+				if (conflictedFiles.length > 0) {
+					getLogger().info('Merge conflicts detected, attempting Claude-assisted resolution...')
+
+					const resolved = await this.attemptClaudeConflictResolution(
+						worktreePath,
+						conflictedFiles,
+						{ jsonStream, conflictType: 'merge' }
+					)
+
+					if (resolved) {
+						getLogger().success('Conflicts resolved with Claude assistance, merge completed')
+
+						if (wipCommitHash) {
+							await this.restoreWipCommit(worktreePath, wipCommitHash)
+						}
+						return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'merge' }
+					}
+
+					// Claude couldn't resolve - abort merge and fail
+					try {
+						await executeGitCommand(['merge', '--abort'], { cwd: worktreePath })
+					} catch (abortError) {
+						getLogger().warn(`Failed to abort merge: ${abortError instanceof Error ? abortError.message : String(abortError)}`)
+					}
+					const conflictError = this.formatConflictError(conflictedFiles)
+					throw new Error(conflictError)
+				}
+
+				throw new Error(
+					`Merge failed: ${error instanceof Error ? error.message : String(error)}\n` +
+						'Run: git status for more details\n' +
+						'Or: git merge --abort to cancel the merge'
+				)
+			}
 		}
 
 		// Execute rebase
@@ -173,7 +268,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
-			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' }
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
@@ -195,7 +290,7 @@ export class MergeManager {
 					if (wipCommitHash) {
 						await this.restoreWipCommit(worktreePath, wipCommitHash)
 					}
-					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true }
+					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true, strategy: 'rebase' }
 				}
 
 				// Claude couldn't resolve or not available - fail fast
@@ -263,9 +358,9 @@ export class MergeManager {
 		worktreePath: string,
 		options: MergeOptions = {}
 	): Promise<void> {
-		const { dryRun = false, force = false } = options
+		const { dryRun = false, force = false, noFf = false } = options
 
-		getLogger().info('Starting fast-forward merge...')
+		getLogger().info(noFf ? 'Starting no-fast-forward merge...' : 'Starting fast-forward merge...')
 
 		// Step 1: Get the merge target branch FIRST
 		// For child looms, this will be the parent branch from metadata
@@ -306,8 +401,10 @@ export class MergeManager {
 			)
 		}
 
-		// Step 5: Validate fast-forward is possible
-		await this.validateFastForwardPossible(mainBranch, branchName, mainWorktreePath)
+		// Step 5: Validate fast-forward is possible (skip when using --no-ff)
+		if (!noFf) {
+			await this.validateFastForwardPossible(mainBranch, branchName, mainWorktreePath)
+		}
 
 		// Step 6: Show commits to be merged
 		const commitsOutput = await executeGitCommand(['log', '--oneline', `${mainBranch}..${branchName}`], {
@@ -331,24 +428,31 @@ export class MergeManager {
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
-			getLogger().info('Proceeding with fast-forward merge... (use --force to skip confirmations)')
+			const mergeType = noFf ? 'no-fast-forward merge' : 'fast-forward merge'
+			getLogger().info(`Proceeding with ${mergeType}... (use --force to skip confirmations)`)
 		}
 
 		// Step 8: Execute merge (unless dry-run)
 		if (dryRun) {
-			getLogger().info(`[DRY RUN] Would execute: git merge --ff-only ${branchName}`)
+			const mergeFlag = noFf ? '--no-ff' : '--ff-only'
+			getLogger().info(`[DRY RUN] Would execute: git merge ${mergeFlag} ${branchName}`)
 			getLogger().info(`[DRY RUN] This would merge ${commitLines.length} commit(s)`)
 			return
 		}
 
-		// Execute fast-forward merge
+		// Execute merge (fast-forward or no-ff depending on options)
+		const mergeArgs = noFf
+			? ['merge', '--no-ff', branchName]
+			: ['merge', '--ff-only', branchName]
 		try {
-			getLogger().debug(`Executing fast-forward merge of ${branchName} into ${mainBranch} using cwd: ${mainWorktreePath}...`)
-			await executeGitCommand(['merge', '--ff-only', branchName], { cwd: mainWorktreePath })
-			getLogger().success(`Fast-forward merge completed! Merged ${commitLines.length} commit(s).`)
+			const mergeType = noFf ? 'no-fast-forward' : 'fast-forward'
+			getLogger().debug(`Executing ${mergeType} merge of ${branchName} into ${mainBranch} using cwd: ${mainWorktreePath}...`)
+			await executeGitCommand(mergeArgs, { cwd: mainWorktreePath })
+			getLogger().success(`${noFf ? 'No-fast-forward' : 'Fast-forward'} merge completed! Merged ${commitLines.length} commit(s).`)
 		} catch (error) {
+			const mergeType = noFf ? 'Merge' : 'Fast-forward merge'
 			throw new Error(
-				`Fast-forward merge failed: ${error instanceof Error ? error.message : String(error)}\n\n` +
+				`${mergeType} failed: ${error instanceof Error ? error.message : String(error)}\n\n` +
 					'To recover:\n' +
 					'  1. Check merge status: git status\n' +
 					'  2. Abort merge if needed: git merge --abort\n' +
@@ -460,8 +564,10 @@ export class MergeManager {
 	private async attemptClaudeConflictResolution(
 		worktreePath: string,
 		conflictedFiles: string[],
-		options: { jsonStream?: boolean } = {}
+		options: { jsonStream?: boolean; conflictType?: 'rebase' | 'merge' } = {}
 	): Promise<boolean> {
+		const conflictType = options.conflictType ?? 'rebase'
+
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
 		if (!isClaudeAvailable) {
@@ -469,36 +575,54 @@ export class MergeManager {
 			return false
 		}
 
-		getLogger().info(`Launching Claude to resolve conflicts in ${conflictedFiles.length} file(s)...`)
+		getLogger().info(`Launching Claude to resolve ${conflictType} conflicts in ${conflictedFiles.length} file(s)...`)
 
-		// Hard-coded prompt matching bash script line 844
-		// No templates, no complexity - just the essential instruction
-		const systemPrompt =
-			`Please help resolve the git rebase conflicts in this repository. ` +
-			`Analyze the conflicted files, understand the changes from both branches, ` +
-			`fix the conflicts, then run 'git add .' to stage the resolved files, ` +
-			`and finally run 'git rebase --continue' to continue the rebase process. ` +
-			`Once the issue is resolved, tell the user they can use /exit to continue with the process.`
+		// Adapt prompt based on conflict type
+		const systemPrompt = conflictType === 'merge'
+			? `Please help resolve the git merge conflicts in this repository. ` +
+				`Analyze the conflicted files, understand the changes from both branches, ` +
+				`fix the conflicts, then run 'git add .' to stage the resolved files, ` +
+				`and finally run 'git commit' to finalize the merge. ` +
+				`Once the issue is resolved, tell the user they can use /exit to continue with the process.`
+			: `Please help resolve the git rebase conflicts in this repository. ` +
+				`Analyze the conflicted files, understand the changes from both branches, ` +
+				`fix the conflicts, then run 'git add .' to stage the resolved files, ` +
+				`and finally run 'git rebase --continue' to continue the rebase process. ` +
+				`Once the issue is resolved, tell the user they can use /exit to continue with the process.`
 
-		const prompt =
-			`Help me with this rebase please.`
+		const prompt = conflictType === 'merge'
+			? `Help me with this merge please.`
+			: `Help me with this rebase please.`
 
-		// Tools to auto-approve during rebase conflict resolution
+		// Tools to auto-approve during conflict resolution
 		// Includes core file tools for reading/editing conflicted files,
 		// plus the essential git commands Claude needs to analyze and resolve conflicts
 		// Note: git reset and git checkout are intentionally excluded as they can be destructive
-		const rebaseAllowedTools = [
-			'Read',
-			'Grep',
-			'Glob',
-			'Bash(git status:*)',
-			'Bash(git diff:*)',
-			'Bash(git log:*)',
-			'Bash(git show:*)',
-			'Bash(git add:*)',
-			'Bash(git rebase:*)',
-			'Bash(GIT_EDITOR=true git rebase:*)',
-		]
+		const allowedTools = conflictType === 'merge'
+			? [
+				'Read',
+				'Grep',
+				'Glob',
+				'Bash(git status:*)',
+				'Bash(git diff:*)',
+				'Bash(git log:*)',
+				'Bash(git show:*)',
+				'Bash(git add:*)',
+				'Bash(git commit:*)',
+				'Bash(git merge:*)',
+			]
+			: [
+				'Read',
+				'Grep',
+				'Glob',
+				'Bash(git status:*)',
+				'Bash(git diff:*)',
+				'Bash(git log:*)',
+				'Bash(git show:*)',
+				'Bash(git add:*)',
+				'Bash(git rebase:*)',
+				'Bash(GIT_EDITOR=true git rebase:*)',
+			]
 
 		try {
 			// Launch Claude interactively in current terminal
@@ -512,7 +636,7 @@ export class MergeManager {
 				...(options.jsonStream && {
 					passthroughStdout: true,
 				}),
-				allowedTools: rebaseAllowedTools,
+				allowedTools,
 				noSessionPersistence: true, // Utility operation - no session persistence needed
 			})
 
@@ -526,12 +650,19 @@ export class MergeManager {
 				return false
 			}
 
-			// Check if rebase completed or still in progress
-			const rebaseInProgress = await this.isRebaseInProgress(worktreePath)
-
-			if (rebaseInProgress) {
-				getLogger().warn('Rebase still in progress after Claude assistance')
-				return false
+			// Check if operation completed or still in progress
+			if (conflictType === 'merge') {
+				const mergeInProgress = await this.isMergeInProgress(worktreePath)
+				if (mergeInProgress) {
+					getLogger().warn('Merge still in progress after Claude assistance')
+					return false
+				}
+			} else {
+				const rebaseInProgress = await this.isRebaseInProgress(worktreePath)
+				if (rebaseInProgress) {
+					getLogger().warn('Rebase still in progress after Claude assistance')
+					return false
+				}
 			}
 
 			return true
@@ -580,6 +711,87 @@ export class MergeManager {
 			return true
 		} catch {
 			// Directory doesn't exist
+		}
+
+		return false
+	}
+
+	/**
+	 * Check if a git merge is currently in progress
+	 * Checks for MERGE_HEAD file in the git directory
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @returns true if merge in progress, false otherwise
+	 * @private
+	 */
+	private async isMergeInProgress(worktreePath: string): Promise<boolean> {
+		const fs = await import('node:fs/promises')
+		const path = await import('node:path')
+
+		const gitDir = (await executeGitCommand(
+			['rev-parse', '--absolute-git-dir'],
+			{ cwd: worktreePath }
+		)).trim()
+
+		const mergeHeadPath = path.join(gitDir, 'MERGE_HEAD')
+
+		try {
+			await fs.access(mergeHeadPath)
+			return true
+		} catch {
+			// MERGE_HEAD doesn't exist - no merge in progress
+			return false
+		}
+	}
+
+	/**
+	 * Detect whether the current branch has merge commits that incorporate
+	 * changes from the target branch (e.g., merges from main into the feature branch).
+	 *
+	 * For each merge commit on the branch, checks if any non-first-parent is an
+	 * ancestor of the target branch. This avoids false positives from merges of
+	 * other feature branches.
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @param targetBranch - The branch to check ancestry against (e.g., 'main' or 'origin/main')
+	 * @returns true if merges from the target branch are found
+	 * @private
+	 */
+	private async hasMergesFromParent(worktreePath: string, targetBranch: string): Promise<boolean> {
+		const mergesOutput = await executeGitCommand(
+			['log', '--merges', '--format=%H', `${targetBranch}..HEAD`],
+			{ cwd: worktreePath }
+		)
+
+		const mergeHashes = mergesOutput.trim().split('\n').filter(h => h.length > 0)
+		if (mergeHashes.length === 0) {
+			return false
+		}
+
+		for (const mergeHash of mergeHashes) {
+			// Get all parents of this merge commit (^@ = all parents)
+			const parentsOutput = await executeGitCommand(
+				['rev-parse', `${mergeHash}^@`],
+				{ cwd: worktreePath }
+			)
+			const parents = parentsOutput.trim().split('\n').filter(p => p.length > 0)
+
+			// Check non-first parents (index 1+) for target branch ancestry
+			for (const parent of parents.slice(1)) {
+				try {
+					await executeGitCommand(
+						['merge-base', '--is-ancestor', parent.trim(), targetBranch],
+						{ cwd: worktreePath }
+					)
+					// If the command succeeds (exit 0), the parent IS an ancestor of targetBranch
+					return true
+				} catch (error) {
+					if (error instanceof GitCommandError && error.exitCode === 1) {
+						continue
+					}
+					throw error
+				}
+			}
 		}
 
 		return false

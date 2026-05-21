@@ -767,6 +767,19 @@ export const IloomSettingsSchema = z.object({
 		})
 		.default({ }) // ensures the object always exists and uses default for the inner properties
 		.describe('Git operation settings'),
+	rebase: z
+		.object({
+			maxCommitsForRebase: z
+				.number()
+				.int('maxCommitsForRebase must be an integer')
+				.default(20)
+				.describe(
+					'Maximum number of commits before switching from rebase to merge-from-parent. ' +
+						'Set to 0 to always use merge. Set to a negative value (e.g., -1) to disable the commit count check.'
+				),
+		})
+		.default({})
+		.describe('Rebase behavior settings'),
 })
 
 /**
@@ -1070,6 +1083,19 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Git operation settings'),
+	rebase: z
+		.object({
+			maxCommitsForRebase: z
+				.number()
+				.int('maxCommitsForRebase must be an integer')
+				.optional()
+				.describe(
+					'Maximum number of commits before switching from rebase to merge-from-parent. ' +
+						'Set to 0 to always use merge. Set to a negative value (e.g., -1) to disable the commit count check.'
+				),
+		})
+		.optional()
+		.describe('Rebase behavior settings'),
 })
 
 /**

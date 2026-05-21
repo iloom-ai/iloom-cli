@@ -186,7 +186,12 @@ describe('FinishCommand', () => {
 		vi.mocked(mockCommitManager.commitChanges).mockResolvedValue(undefined)
 
 		// Mock MergeManager methods to succeed by default
-		vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
+		vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+			conflictsDetected: false,
+			claudeLaunched: false,
+			conflictsResolved: false,
+			strategy: 'rebase',
+		})
 		vi.mocked(mockMergeManager.performFastForwardMerge).mockResolvedValue(undefined)
 
 		// Mock ResourceCleanup.cleanupWorktree to succeed by default
@@ -486,6 +491,7 @@ describe('FinishCommand', () => {
 
 				vi.mocked(mockMergeManager.rebaseOnMain).mockImplementation(async () => {
 					executionOrder.push('rebase')
+					return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false, strategy: 'rebase' as const }
 				})
 
 				vi.mocked(installDependencies).mockImplementationOnce(async () => {
@@ -640,6 +646,50 @@ describe('FinishCommand', () => {
 						jsonStream: false,
 					}
 				)
+			})
+
+			describe('smart rebase/merge strategy in local merge', () => {
+				it('should pass noFf: true to performFastForwardMerge when rebaseOnMain used merge strategy', async () => {
+					vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+						conflictsDetected: false,
+						claudeLaunched: false,
+						conflictsResolved: false,
+						strategy: 'merge',
+					})
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// performFastForwardMerge should receive noFf: true when strategy was 'merge'
+					expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith(
+						mockWorktree.branch,
+						mockWorktree.path,
+						expect.objectContaining({ noFf: true })
+					)
+				})
+
+				it('should not pass noFf when rebaseOnMain used rebase strategy', async () => {
+					vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue({
+						conflictsDetected: false,
+						claudeLaunched: false,
+						conflictsResolved: false,
+						strategy: 'rebase',
+					})
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// performFastForwardMerge should NOT have noFf when strategy was 'rebase'
+					expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith(
+						mockWorktree.branch,
+						mockWorktree.path,
+						expect.not.objectContaining({ noFf: true })
+					)
+				})
 			})
 
 			it('should pass jsonStream through mergeOptions to rebaseOnMain', async () => {

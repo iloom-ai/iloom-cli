@@ -133,6 +133,11 @@ export class RebaseCommand {
 		// - Claude-assisted conflict resolution
 		const outcome = await this.mergeManager.rebaseOnMain(worktreePath, mergeOptions)
 
+		// Log strategy used
+		if (outcome.strategy === 'merge') {
+			logger.info('Synchronized with parent branch via merge (instead of rebase)')
+		}
+
 		// Install dependencies after successful rebase
 		if (!options.dryRun) {
 			logger.info('Installing dependencies...')
@@ -158,6 +163,7 @@ export class RebaseCommand {
 				conflictsDetected: outcome.conflictsDetected,
 				claudeLaunched: outcome.claudeLaunched,
 				conflictsResolved: outcome.conflictsResolved,
+				strategy: outcome.strategy,
 			}
 		}
 	}

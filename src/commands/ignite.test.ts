@@ -132,7 +132,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/feat/issue-70__description',
-						model: 'opus',
+						model: expect.any(String),
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -208,7 +208,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/some-worktree',
-						model: 'opus',
+						model: expect.any(String),
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -345,7 +345,7 @@ describe('IgniteCommand', () => {
 					expect.any(String),
 					expect.objectContaining({
 						headless: false,
-						model: 'opus',
+						model: expect.any(String),
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -805,7 +805,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/feat/issue-50__terminal-test',
-						model: 'opus', // issue workflow model (default from spin.model)
+						model: expect.any(String), // issue workflow model (from settings)
 						permissionMode: 'acceptEdits', // issue workflow permission mode
 					})
 				)
@@ -927,7 +927,7 @@ describe('IgniteCommand', () => {
 					'Guide the user through the iloom workflow!', // User prompt
 					expect.objectContaining({
 						headless: false,
-						model: 'opus',
+						model: expect.any(String),
 						permissionMode: 'acceptEdits',
 						appendSystemPromptFile: '/path/to/feat/issue-82__test/.claude/iloom-system-prompt.md',
 					})

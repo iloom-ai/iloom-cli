@@ -32,7 +32,7 @@ This is the most common source of architectural mistakes. Memorize these rules:
 | **GitWorktreeManager** | Git worktree CRUD: list, create, find, remove | All workspace commands |
 | **MetadataManager** | Loom metadata persistence to `~/.config/iloom-ai/looms/` | All commands needing loom state |
 | **ResourceCleanup** | Teardown: kill processes, delete database branch, remove worktree | `finish`, `cleanup` |
-| **MergeManager** | Git rebase, merge target resolution, conflict detection | `finish`, `rebase` |
+| **MergeManager** | Git rebase, merge target resolution, conflict detection, smart rebase/merge strategy detection (merge-commit detection, commit count threshold), merge-from-parent execution, `--no-ff` merge support | `finish`, `rebase` |
 | **CommitManager** | Git commit with issue references, message generation | `commit` |
 | **ValidationRunner** | Run lint/test scripts as pre-merge validation | `finish`, `commit` |
 | **BuildRunner** | Execute project build scripts | `finish`, `rebase`, `build` |

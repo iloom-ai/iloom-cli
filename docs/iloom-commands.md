@@ -323,8 +323,8 @@ Behavior depends on the `mergeBehavior.mode` setting in your iloom configuration
 1. Detects uncommitted changes and auto-commits
 2. Runs validation pipeline: typecheck, lint, tests
 3. If failures occur, launches Claude to help fix issues
-4. Rebases on main branch
-5. Validates fast-forward merge is possible
+4. Synchronizes with main branch (rebase or merge -- see [Smart Rebase/Merge Strategy](#smart-rebasemerge-strategy))
+5. Validates fast-forward merge is possible (or uses `--no-ff` if step 4 used merge)
 6. Merges to main
 7. Installs dependencies in main
 8. Runs post-merge build verification
@@ -414,9 +414,51 @@ il rebase [options]
 **Workflow:**
 
 1. Fetches latest changes from main branch
-2. Attempts to rebase current branch
-3. If conflicts occur, launches Claude to help resolve
-4. Validates resolution and completes rebase
+2. Detects the optimal synchronization strategy (see [Smart Rebase/Merge Strategy](#smart-rebasemerge-strategy) below)
+3. Rebases or merges from the main branch depending on the detected strategy
+4. If conflicts occur, launches Claude to help resolve
+5. Validates resolution and completes the operation
+
+#### Smart Rebase/Merge Strategy
+
+iloom automatically detects when a standard `git rebase` would be problematic and falls back to `git merge` from the parent branch instead. This applies to both `il rebase` and the rebase step within `il finish`.
+
+A merge strategy is used when either condition is met:
+
+- **Merge commits from parent detected:** The branch contains merge commits that originated from the parent branch (e.g., from a previous `git merge main`). Rebasing a branch with such merge commits can produce duplicate commits and confusing history.
+- **Commit count exceeds threshold:** The branch has more commits ahead of the parent than the configured threshold (default: 20). Large rebases are slow, error-prone, and produce many individual conflict points.
+
+When neither condition is met, iloom uses the standard rebase strategy.
+
+The strategy is logged so you can see which approach was chosen:
+
+```
+Found merge commits from main on this branch -- using merge instead of rebase
+```
+
+or:
+
+```
+Branch has 47 commits ahead of main (threshold: 20) -- using merge instead of rebase
+```
+
+**Configuration:**
+
+The commit count threshold is controlled by the `rebase.maxCommitsForRebase` setting:
+
+```json
+{
+  "rebase": {
+    "maxCommitsForRebase": 20
+  }
+}
+```
+
+| Value | Behavior |
+|-------|----------|
+| Positive (e.g., `20`) | Use merge when the branch has this many or more commits ahead of the parent |
+| `0` | Always use merge (never rebase by commit count) |
+| Negative (e.g., `-1`) | Disable the commit count check entirely (merge-commit detection still applies) |
 
 **Examples:**
 
@@ -435,6 +477,7 @@ il rebase --dry-run
 - Useful when main branch has advanced and you need to sync
 - Claude provides context-aware conflict resolution assistance
 - Safe to run multiple times
+- When merge strategy is used during `il finish` local mode, the final merge to main uses `--no-ff` instead of `--ff-only` since the branch is no longer a clean fast-forward
 
 ---
 

@@ -119,7 +119,7 @@ describe('FinishCommand - PR State Detection', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -287,7 +287,7 @@ describe('FinishCommand - Open PR Workflow', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -502,7 +502,7 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -626,7 +626,7 @@ describe('FinishCommand - Closed PR Workflow', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -834,7 +834,7 @@ describe('FinishCommand - Merged PR Workflow', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -921,7 +921,7 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -1084,7 +1084,7 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 
@@ -1200,7 +1200,7 @@ describe('FinishCommand - Linear issue tracker with GitHub PRs', () => {
 		} as unknown as CommitManager
 
 		mockMergeManager = {
-			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			rebaseOnMain: vi.fn().mockResolvedValue({ strategy: 'rebase', conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }),
 			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
 		} as unknown as MergeManager
 

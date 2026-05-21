@@ -14,6 +14,7 @@ vi.mock('../utils/logger.js', () => ({
 
 const defaultSettings = {
 	git: { commitTimeout: 60000 },
+	rebase: { maxCommitsForRebase: 20 },
 }
 
 describe('SettingsManager', () => {

@@ -143,6 +143,13 @@ export interface DevServerStoppedEvent {
   reason: 'user' | 'cleanup' | 'error'
 }
 
+export interface RebaseStrategySelectedProperties {
+  /** The strategy chosen for updating the branch */
+  strategy: 'rebase' | 'merge'
+  /** The reason the strategy was selected */
+  reason: 'merge_commits' | 'commit_threshold' | 'always_merge' | 'default'
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -166,6 +173,7 @@ export interface TelemetryEventMap {
   'epic.report_generated': EpicReportGeneratedProperties
   'devServer.started': DevServerStartedEvent
   'devServer.stopped': DevServerStoppedEvent
+  'rebase.strategy_selected': RebaseStrategySelectedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

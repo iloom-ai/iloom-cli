@@ -299,12 +299,14 @@ export interface RebaseResult {
   claudeLaunched: boolean
   conflictsResolved?: boolean
   error?: string
+  strategy?: 'rebase' | 'merge'
 }
 
 export interface RebaseOutcome {
   conflictsDetected: boolean
   claudeLaunched: boolean
   conflictsResolved: boolean
+  strategy: 'rebase' | 'merge'
 }
 
 // Deprecated: Result types - use exception-based error handling instead
@@ -400,6 +402,7 @@ export interface MergeOptions {
 	force?: boolean       // Skip confirmation prompts
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
 	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
+	noFf?: boolean        // Use --no-ff instead of --ff-only for local merge (set when rebase fell back to merge strategy)
 }
 
 export interface MergeResult {

@@ -102,6 +102,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log: commits to rebase
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 
 			// Should succeed without throwing
@@ -126,6 +127,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -146,13 +148,14 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			// Should not prompt - just proceed
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Success - should complete without interaction (7 git commands: 1 rev-parse for isRebaseInProgress + 6 rebase flow + 1 fetchOrigin)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(7)
+			// Success - should complete without interaction (8 git commands: 1 rev-parse for isRebaseInProgress + 6 rebase flow + 1 log --merges + 1 fetchOrigin)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(8)
 			expect(git.fetchOrigin).toHaveBeenCalledTimes(1)
 		})
 
@@ -165,6 +168,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts\nsrc/file2.ts') // conflicted files
 
@@ -200,6 +204,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts\nsrc/file2.ts\nsrc/file3.ts') // conflicted files
 
@@ -223,6 +228,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files
 
@@ -250,6 +256,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('def456') // merge-base
 				.mockResolvedValueOnce('ghi789') // rev-parse origin/main
 				.mockResolvedValueOnce('def456 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 				.mockResolvedValueOnce('') // reset --soft HEAD~1
 				.mockResolvedValueOnce('') // reset HEAD
@@ -380,6 +387,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main (needs rebase)
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -407,6 +415,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -439,6 +448,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -465,6 +475,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase main: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -501,6 +512,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse parent branch
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase parent: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -533,6 +545,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase main: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -558,6 +571,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -632,6 +646,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - resolved)
@@ -667,6 +682,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 				.mockRejectedValueOnce(new Error('reset failed')) // reset --soft HEAD~1 fails
 
@@ -692,6 +708,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/main: success
 				.mockResolvedValueOnce('') // reset --soft HEAD~1
 				.mockResolvedValueOnce('') // reset HEAD (unstage)
@@ -931,6 +948,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
 
@@ -968,6 +986,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
 
@@ -1005,6 +1024,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
 
@@ -1079,6 +1099,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file.ts') // conflicted files
 
@@ -1090,8 +1111,8 @@ describe('MergeManager', () => {
 				// This test documents the intended workflow separation
 			}
 
-			// Verify: only rebase-related commands were called (8 = 1 rev-parse for isRebaseInProgress + 7 rebase flow)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(8)
+			// Verify: only rebase-related commands were called (9 = 1 rev-parse for isRebaseInProgress + 7 rebase flow + 1 log --merges)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(9)
 		})
 	})
 
@@ -1138,6 +1159,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/develop
 				.mockResolvedValueOnce('abc123 Commit 1') // log: commits to rebase
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/develop: success
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -1238,6 +1260,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -1282,6 +1305,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/parent branch
 				.mockResolvedValueOnce('abc123 Commit 1') // log: commits to rebase
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase origin/parent: success
 
 			await manager.rebaseOnMain('/test/child-worktree', { force: true })
@@ -1310,6 +1334,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -1334,6 +1359,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -1420,6 +1446,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
@@ -1452,6 +1479,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files
 
@@ -1476,6 +1504,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (after Claude - still there)
@@ -1504,6 +1533,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - resolved)
@@ -1527,6 +1557,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files
 
@@ -1549,6 +1580,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first)
 				.mockResolvedValueOnce('') // conflicted files (after Claude)
@@ -1575,6 +1607,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse origin/main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first)
 				.mockResolvedValueOnce('') // conflicted files (after Claude)
@@ -1610,6 +1643,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
@@ -1641,6 +1675,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
@@ -1669,6 +1704,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockResolvedValueOnce('') // rebase: success
 
 			const result = await manager.rebaseOnMain('/test/worktree', { force: true })
@@ -1677,6 +1713,7 @@ describe('MergeManager', () => {
 				conflictsDetected: false,
 				claudeLaunched: false,
 				conflictsResolved: false,
+				strategy: 'rebase',
 			})
 		})
 
@@ -1695,6 +1732,7 @@ describe('MergeManager', () => {
 				conflictsDetected: false,
 				claudeLaunched: false,
 				conflictsResolved: false,
+				strategy: 'rebase',
 			})
 		})
 
@@ -1707,6 +1745,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first check)
 				.mockResolvedValueOnce('') // conflicted files (after Claude - none)
@@ -1721,6 +1760,7 @@ describe('MergeManager', () => {
 				conflictsDetected: true,
 				claudeLaunched: true,
 				conflictsResolved: true,
+				strategy: 'rebase',
 			})
 		})
 
@@ -1733,6 +1773,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // log --merges: no merge commits from parent
 
 			const result = await manager.rebaseOnMain('/test/worktree', { dryRun: true })
 
@@ -1740,7 +1781,478 @@ describe('MergeManager', () => {
 				conflictsDetected: false,
 				claudeLaunched: false,
 				conflictsResolved: false,
+				strategy: 'rebase',
 			})
+		})
+	})
+
+	describe('Smart Rebase/Merge Strategy', () => {
+		describe('Merge commit detection', () => {
+			it('should detect merge commits from parent branch and use merge strategy', async () => {
+				// Mock: branch has merge commits from origin/main
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log --oneline: 2 commits
+					.mockResolvedValueOnce('merge111') // log --merges: one merge commit found
+					.mockResolvedValueOnce('parent1\nparent2') // rev-parse merge111^@: two parents
+					.mockResolvedValueOnce('') // merge-base --is-ancestor parent2 origin/main: succeeds (ancestor!)
+					.mockResolvedValueOnce('') // git merge origin/main: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('merge')
+				// Verify: merge was called instead of rebase
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['merge', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+				// Verify: rebase was NOT called
+				expect(git.executeGitCommand).not.toHaveBeenCalledWith(
+					['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+					expect.any(Object)
+				)
+			})
+
+			it('should NOT trigger merge strategy for merge commits from other feature branches', async () => {
+				// Mock: branch has merge commit but it's from another feature branch, not parent
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('merge222') // log --merges: one merge commit
+					.mockResolvedValueOnce('parent1\nparent2') // rev-parse merge222^@
+					.mockRejectedValueOnce(new GitCommandError('exit code 1', 1, '')) // merge-base --is-ancestor: NOT ancestor
+					.mockResolvedValueOnce('') // rebase: success (falls through to rebase path)
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('rebase')
+				// Verify: rebase was called
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should use rebase when no merge commits exist', async () => {
+				// Mock: no merge commits on branch
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // rebase: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('rebase')
+			})
+		})
+
+		describe('Commit count threshold', () => {
+			it('should use merge when commit count >= maxCommitsForRebase (default 20)', async () => {
+				// Generate 20 commit lines to meet the default threshold
+				const commitLines = Array.from({ length: 20 }, (_, i) => `hash${i} Commit ${i + 1}`).join('\n')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce(commitLines) // log --oneline: 20 commits
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge origin/main: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('merge')
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['merge', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should use rebase when commit count < maxCommitsForRebase threshold', async () => {
+				// 19 commits: below default threshold of 20
+				const commitLines = Array.from({ length: 19 }, (_, i) => `hash${i} Commit ${i + 1}`).join('\n')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce(commitLines) // log --oneline: 19 commits
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // rebase: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('rebase')
+			})
+
+			it('should always merge when maxCommitsForRebase is 0', async () => {
+				// Setup: maxCommitsForRebase = 0 means always merge
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 0 },
+				})
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline: just 1 commit
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('merge')
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['merge', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should ignore commit count when maxCommitsForRebase is negative', async () => {
+				// Setup: maxCommitsForRebase = -1 means disable commit count check
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: -1 },
+				})
+
+				// 50 commits: would exceed default threshold, but -1 disables the check
+				const commitLines = Array.from({ length: 50 }, (_, i) => `hash${i} Commit ${i + 1}`).join('\n')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce(commitLines) // log --oneline: 50 commits
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // rebase: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('rebase')
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should respect custom threshold from settings', async () => {
+				// Setup: maxCommitsForRebase = 5 (custom low threshold)
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 5 },
+				})
+
+				// 5 commits: meets the custom threshold of 5
+				const commitLines = Array.from({ length: 5 }, (_, i) => `hash${i} Commit ${i + 1}`).join('\n')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce(commitLines) // log --oneline: 5 commits
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('merge')
+			})
+		})
+
+		describe('Strategy execution', () => {
+			it('should execute git merge targetBranch when strategy is merge', async () => {
+				// Trigger merge via merge-commit detection
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('mergehash') // log --merges: merge commit found
+					.mockResolvedValueOnce('p1\np2') // rev-parse mergehash^@
+					.mockResolvedValueOnce('') // merge-base --is-ancestor: success
+					.mockResolvedValueOnce('') // git merge origin/main: success
+
+				await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['merge', 'origin/main'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should return strategy field in RebaseOutcome for merge', async () => {
+				// Trigger merge via maxCommitsForRebase=0
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 0 },
+				})
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result).toEqual({
+					conflictsDetected: false,
+					claudeLaunched: false,
+					conflictsResolved: false,
+					strategy: 'merge',
+				})
+			})
+
+			it('should handle WIP commit correctly with merge strategy', async () => {
+				// Trigger merge via maxCommitsForRebase=0
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 0 },
+				})
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('M src/file.ts') // status: uncommitted changes
+					.mockResolvedValueOnce('') // git add -A
+					.mockResolvedValueOnce('') // git commit -m WIP
+					.mockResolvedValueOnce('wipcommit') // rev-parse HEAD (WIP hash)
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+					.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
+					.mockResolvedValueOnce('') // reset HEAD (unstage)
+
+				const result = await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				expect(result.strategy).toBe('merge')
+				// Verify WIP was restored
+				expect(git.executeGitCommand).toHaveBeenCalledWith(
+					['reset', '--soft', 'HEAD~1'],
+					expect.objectContaining({ cwd: '/test/worktree' })
+				)
+			})
+
+			it('should report strategy in dry-run mode', async () => {
+				// Trigger merge via maxCommitsForRebase=0
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 0 },
+				})
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+
+				const result = await manager.rebaseOnMain('/test/worktree', { dryRun: true })
+
+				expect(result.strategy).toBe('merge')
+				// Verify no merge or rebase command was executed
+				expect(git.executeGitCommand).not.toHaveBeenCalledWith(
+					['merge', 'origin/main'],
+					expect.any(Object)
+				)
+			})
+		})
+
+		describe('User-facing logging', () => {
+			it('should log merge-commit reason when merge commits detected', async () => {
+				// Import logger to check log calls
+				const { logger } = await import('../utils/logger.js')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('merge111') // log --merges: merge commit found
+					.mockResolvedValueOnce('p1\np2') // rev-parse merge111^@
+					.mockResolvedValueOnce('') // merge-base --is-ancestor: success
+					.mockResolvedValueOnce('') // git merge: success
+
+				await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				// Verify: info log explains merge-commit detection reason
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('merge commits from origin/main')
+				)
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('using merge instead of rebase')
+				)
+			})
+
+			it('should log threshold reason when commit count exceeds threshold', async () => {
+				const { logger } = await import('../utils/logger.js')
+
+				// 20 commits meets the default threshold
+				const commitLines = Array.from({ length: 20 }, (_, i) => `hash${i} Commit ${i + 1}`).join('\n')
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce(commitLines) // log --oneline: 20 commits
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+
+				await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				// Verify: info log explains threshold reason
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('20 commits')
+				)
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('using merge instead of rebase')
+				)
+			})
+
+			it('should log always-merge reason when maxCommitsForRebase is 0', async () => {
+				const { logger } = await import('../utils/logger.js')
+
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
+					mergeBehavior: { mode: 'pr' },
+					rebase: { maxCommitsForRebase: 0 },
+				})
+
+				vi.mocked(git.executeGitCommand)
+					.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
+					.mockResolvedValueOnce('') // show-ref
+					.mockResolvedValueOnce('') // status: clean
+					.mockResolvedValueOnce('abc123') // merge-base
+					.mockResolvedValueOnce('def456') // rev-parse origin/main
+					.mockResolvedValueOnce('abc123 Commit 1') // log --oneline
+					.mockResolvedValueOnce('') // log --merges: no merge commits
+					.mockResolvedValueOnce('') // git merge: success
+
+				await manager.rebaseOnMain('/test/worktree', { force: true })
+
+				// Verify: info log explains always-merge reason
+				expect(logger.info).toHaveBeenCalledWith(
+					expect.stringContaining('maxCommitsForRebase is set to 0')
+				)
+			})
+		})
+	})
+
+	describe('No-FF Merge in performFastForwardMerge', () => {
+		it('should use --no-ff when noFf option is true', async () => {
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('main') // branch --show-current
+				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log commits
+				.mockResolvedValueOnce('') // merge --no-ff
+
+			await manager.performFastForwardMerge('feature-branch', '/test/worktree', {
+				force: true,
+				noFf: true,
+			})
+
+			// Verify: merge used --no-ff instead of --ff-only
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['merge', '--no-ff', 'feature-branch'],
+				expect.objectContaining({ cwd: '/test/repo' })
+			)
+			expect(git.executeGitCommand).not.toHaveBeenCalledWith(
+				['merge', '--ff-only', 'feature-branch'],
+				expect.any(Object)
+			)
+		})
+
+		it('should skip FF validation when noFf is true', async () => {
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('main') // branch --show-current
+				.mockResolvedValueOnce('abc123 Commit 1') // log commits
+				.mockResolvedValueOnce('') // merge --no-ff
+
+			await manager.performFastForwardMerge('feature-branch', '/test/worktree', {
+				force: true,
+				noFf: true,
+			})
+
+			// Verify: merge-base validation was NOT called (no FF validation)
+			expect(git.executeGitCommand).not.toHaveBeenCalledWith(
+				['merge-base', 'main', 'feature-branch'],
+				expect.any(Object)
+			)
+		})
+
+		it('should still use --ff-only when noFf is false/undefined', async () => {
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('main') // branch --show-current
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log commits
+				.mockResolvedValueOnce('') // merge --ff-only
+
+			await manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
+
+			// Verify: --ff-only was used
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['merge', '--ff-only', 'feature-branch'],
+				expect.objectContaining({ cwd: '/test/repo' })
+			)
+		})
+
+		it('should use --no-ff in dry-run message when noFf is true', async () => {
+			const { logger } = await import('../utils/logger.js')
+
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('main') // branch --show-current
+				.mockResolvedValueOnce('abc123 Commit 1') // log commits
+
+			await manager.performFastForwardMerge('feature-branch', '/test/worktree', {
+				dryRun: true,
+				noFf: true,
+			})
+
+			// Verify: dry-run message mentions --no-ff
+			expect(logger.info).toHaveBeenCalledWith(
+				expect.stringContaining('--no-ff')
+			)
 		})
 	})
 })
