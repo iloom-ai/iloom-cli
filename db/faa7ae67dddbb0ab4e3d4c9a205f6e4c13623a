@@ -1,0 +1,19 @@
+package.json
+  s_0ca5a10b4b748f::t_6e43832863d832 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "dbfaa7ae67dddbb0ab4e3d4c9a205f6e4c13623a",
+  "prompts": {},
+  "sessions": {
+    "s_0ca5a10b4b748f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b9fded3-211a-48c5-aeae-a231c0f71aff",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
