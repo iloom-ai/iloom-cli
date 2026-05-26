@@ -46,6 +46,26 @@ export interface GetReviewCommentsInput {
 }
 
 /**
+ * Input schema for getting PR review submissions (the body text submitted via "Submit review")
+ */
+export interface GetReviewsInput {
+	number: string // PR number
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL
+}
+
+/**
+ * Output schema for a single PR review submission
+ */
+export interface ReviewSubmissionResult {
+	id: string
+	body: string
+	state: string // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
+	author: FlexibleAuthor | null
+	submittedAt: string
+	htmlUrl: string
+}
+
+/**
  * Output schema for a single PR review comment (inline code comment)
  */
 export interface ReviewCommentResult {
@@ -58,7 +78,7 @@ export interface ReviewCommentResult {
 	createdAt: string
 	updatedAt: string | null
 	inReplyToId: string | null // If this is a reply to another review comment
-	pullRequestReviewId: number | null // The review this comment belongs to
+	pullRequestReviewId: string | null // The review this comment belongs to
 }
 
 /**

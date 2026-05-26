@@ -9,6 +9,7 @@ import type {
 	GetIssueInput,
 	GetPRInput,
 	GetReviewCommentsInput,
+	GetReviewsInput,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
@@ -25,6 +26,7 @@ import type {
 	IssueResult,
 	PRResult,
 	ReviewCommentResult,
+	ReviewSubmissionResult,
 	CommentDetailResult,
 	CommentResult,
 	DependenciesResult,
@@ -433,7 +435,58 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				createdAt: comment.created_at,
 				updatedAt: comment.updated_at ?? null,
 				inReplyToId: comment.in_reply_to_id ? String(comment.in_reply_to_id) : null,
-				pullRequestReviewId: comment.pull_request_review_id,
+				pullRequestReviewId: comment.pull_request_review_id != null ? String(comment.pull_request_review_id) : null,
+			})
+		}
+
+		return results
+	}
+
+	/**
+	 * Fetch PR review submissions (the body text submitted via "Submit review")
+	 * Uses gh api with --paginate to handle PRs with many reviews
+	 */
+	async getReviewSubmissions(input: GetReviewsInput): Promise<ReviewSubmissionResult[]> {
+		const { number, repo } = input
+
+		const prNumber = parseInt(number, 10)
+		if (isNaN(prNumber)) {
+			throw new Error(`Invalid GitHub PR number: ${number}. GitHub PR IDs must be numeric.`)
+		}
+
+		interface GitHubReview {
+			id: number
+			body: string
+			state: string
+			user: GitHubAuthor | null
+			submitted_at: string
+			html_url: string
+		}
+
+		const apiPath = repo
+			? `repos/${repo}/pulls/${prNumber}/reviews`
+			: `repos/:owner/:repo/pulls/${prNumber}/reviews`
+
+		const args = [
+			'api',
+			apiPath,
+			'--paginate',
+			'--jq',
+			'[.[] | {id: .id, body: .body, state: .state, user: .user, submitted_at: .submitted_at, html_url: .html_url}]',
+		]
+
+		const raw = await executeGhCommand<GitHubReview[]>(args)
+
+		const results: ReviewSubmissionResult[] = []
+		for (const review of raw) {
+			const processedBody = review.body ? await processMarkdownImages(review.body, 'github') : ''
+			results.push({
+				id: String(review.id),
+				body: processedBody,
+				state: review.state,
+				author: normalizeAuthor(review.user),
+				submittedAt: review.submitted_at,
+				htmlUrl: review.html_url,
 			})
 		}
 

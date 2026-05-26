@@ -10,7 +10,7 @@ This directory contains MCP (Model Context Protocol) servers that expose tools t
 
 Exposes issue/PR operations to agents. Provider-agnostic — routes to GitHub, Linear, or Jira based on `ISSUE_PROVIDER` env var.
 
-**Tools (27):** `get_issue`, `get_pr`, `get_review_comments`, `get_comment`, `create_comment`, `update_comment`, `create_issue`, `create_child_issue`, `create_dependency`, `get_dependencies`, `remove_dependency`, `get_child_issues`, `close_issue`, `reopen_issue`, `edit_issue`, and more.
+**Tools (28):** `get_issue`, `get_pr`, `get_review_comments`, `get_reviews`, `get_comment`, `create_comment`, `update_comment`, `create_issue`, `create_child_issue`, `create_dependency`, `get_dependencies`, `remove_dependency`, `get_child_issues`, `close_issue`, `reopen_issue`, `edit_issue`, and more.
 
 **Used by:** All execution contexts (regular, swarm child, swarm orchestrator).
 

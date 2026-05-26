@@ -1,7 +1,7 @@
 // BitBucketVCSProvider - Implements VersionControlProvider for BitBucket
 // Provides PR/VCS operations via BitBucket REST API
 
-import type { VersionControlProvider, ExistingPR, PRCreationResult, ReviewComment } from '../../VersionControlProvider.js'
+import type { VersionControlProvider, ExistingPR, PRCreationResult, ReviewComment, ReviewSubmission } from '../../VersionControlProvider.js'
 import type { PullRequest } from '../../../types/index.js'
 import { BitBucketApiClient, type BitBucketConfig, type BitBucketPullRequest } from './BitBucketApiClient.js'
 import type { IloomSettings } from '../../SettingsManager.js'
@@ -242,6 +242,11 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 			})
 		}
 		return inlineComments
+	}
+
+	// BitBucket has no "Submit review" flow — approvals are a simple toggle with no body text.
+	async getReviewSubmissions(_prNumber: number, _cwd?: string): Promise<ReviewSubmission[]> {
+		return []
 	}
 
 	/**

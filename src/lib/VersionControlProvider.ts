@@ -21,6 +21,18 @@ export interface ExistingPR {
 }
 
 /**
+ * Represents a review submission on a pull request (the body text submitted via "Submit review")
+ */
+export interface ReviewSubmission {
+	id: string
+	body: string
+	state: string // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING (GitHub); similar for other providers
+	author: { id: string; displayName: string } | null
+	submittedAt: string
+	htmlUrl: string
+}
+
+/**
  * Represents an inline review comment on a pull request
  */
 export interface ReviewComment {
@@ -76,6 +88,7 @@ export interface VersionControlProvider {
 	createPRComment(prNumber: number, body: string, cwd?: string): Promise<{ id: string; url: string }>
 	updatePRComment?(prNumber: number, commentId: string, body: string, cwd?: string): Promise<{ id: string; url: string }>
 	getReviewComments?(prNumber: number, cwd?: string): Promise<ReviewComment[]>
+	getReviewSubmissions?(prNumber: number, cwd?: string): Promise<ReviewSubmission[]>
 	createReviewComment?(prNumber: number, path: string, line: number, body: string, cwd?: string): Promise<{ id: string; url: string }>
 
 	// Remote and repository detection

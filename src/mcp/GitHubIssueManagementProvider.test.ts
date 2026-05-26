@@ -836,7 +836,7 @@ describe('GitHubIssueManagementProvider', () => {
 				createdAt: '2025-01-01T00:00:00Z',
 				updatedAt: '2025-01-01T01:00:00Z',
 				inReplyToId: null,
-				pullRequestReviewId: 5000,
+				pullRequestReviewId: '5000',
 			})
 			expect(result[1].id).toBe('1002')
 			expect(result[1].path).toBe('src/bar.ts')
@@ -876,7 +876,7 @@ describe('GitHubIssueManagementProvider', () => {
 
 			expect(result).toHaveLength(1)
 			expect(result[0].id).toBe('2001')
-			expect(result[0].pullRequestReviewId).toBe(100)
+			expect(result[0].pullRequestReviewId).toBe('100')
 		})
 
 		it('handles empty review comments', async () => {
@@ -959,6 +959,125 @@ describe('GitHubIssueManagementProvider', () => {
 			const result = await provider.getReviewComments({ number: '42' })
 
 			expect(result[0].inReplyToId).toBe('3000')
+		})
+	})
+
+	describe('getReviewSubmissions', () => {
+		it('returns review submissions with state, body, and author', async () => {
+			const mockResponse = [
+				{
+					id: 9001,
+					body: 'LGTM — dismissing the CodeRabbit finding as a false positive',
+					state: 'APPROVED',
+					user: { login: 'reviewer1' },
+					submitted_at: '2025-01-01T00:00:00Z',
+					html_url: 'https://github.com/owner/repo/pull/42#pullrequestreview-9001',
+				},
+				{
+					id: 9002,
+					body: 'Please fix the null check issue',
+					state: 'CHANGES_REQUESTED',
+					user: { login: 'reviewer2' },
+					submitted_at: '2025-01-02T00:00:00Z',
+					html_url: 'https://github.com/owner/repo/pull/42#pullrequestreview-9002',
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewSubmissions({ number: '42' })
+
+			expect(result).toHaveLength(2)
+			expect(result[0]).toEqual({
+				id: '9001',
+				body: 'LGTM — dismissing the CodeRabbit finding as a false positive',
+				state: 'APPROVED',
+				author: { id: 'reviewer1', displayName: 'reviewer1', login: 'reviewer1' },
+				submittedAt: '2025-01-01T00:00:00Z',
+				htmlUrl: 'https://github.com/owner/repo/pull/42#pullrequestreview-9001',
+			})
+			expect(result[1].state).toBe('CHANGES_REQUESTED')
+		})
+
+		it('handles reviews with empty body', async () => {
+			const mockResponse = [
+				{
+					id: 9003,
+					body: '',
+					state: 'APPROVED',
+					user: { login: 'reviewer' },
+					submitted_at: '2025-01-01T00:00:00Z',
+					html_url: 'https://github.com/owner/repo/pull/42#pullrequestreview-9003',
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewSubmissions({ number: '42' })
+
+			expect(result).toHaveLength(1)
+			expect(result[0].body).toBe('')
+		})
+
+		it('handles empty reviews list', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			const result = await provider.getReviewSubmissions({ number: '42' })
+
+			expect(result).toEqual([])
+		})
+
+		it('passes repo to API path when provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewSubmissions({ number: '42', repo: 'other-owner/other-repo' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/other-owner/other-repo/pulls/42/reviews',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('uses :owner/:repo placeholder when repo is not provided', async () => {
+			vi.mocked(executeGhCommand).mockResolvedValueOnce([])
+
+			await provider.getReviewSubmissions({ number: '42' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/:owner/:repo/pulls/42/reviews',
+				'--paginate',
+				'--jq',
+				expect.any(String),
+			])
+		})
+
+		it('throws error for non-numeric PR number', async () => {
+			await expect(provider.getReviewSubmissions({ number: 'not-a-number' })).rejects.toThrow(
+				'Invalid GitHub PR number: not-a-number. GitHub PR IDs must be numeric.'
+			)
+		})
+
+		it('handles reviews with null user', async () => {
+			const mockResponse = [
+				{
+					id: 9004,
+					body: 'Automated review',
+					state: 'COMMENTED',
+					user: null,
+					submitted_at: '2025-01-01T00:00:00Z',
+					html_url: 'https://github.com/owner/repo/pull/42#pullrequestreview-9004',
+				},
+			]
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getReviewSubmissions({ number: '42' })
+
+			expect(result[0].author).toBeNull()
 		})
 	})
 

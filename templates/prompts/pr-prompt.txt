@@ -61,6 +61,7 @@ Use these Recap MCP tools:
 
 - **Read PR details** using `mcp__issue_management__get_pr` with `{ number: "{{PR_NUMBER}}", includeComments: true }`
 - **Read inline code review comments** using `mcp__issue_management__get_review_comments` with `{ number: "{{PR_NUMBER}}" }`
+- **Read review submissions** (verdicts and body text from "Submit review") using `mcp__issue_management__get_reviews` with `{ number: "{{PR_NUMBER}}" }`
 - **Write comments** to PR #{{PR_NUMBER}} using `type: "pr"`
 
 When calling `mcp__issue_management__create_comment`:
@@ -103,7 +104,17 @@ To read inline code review comments (comments on specific files and lines), use:
 This returns:
 - Inline comments on specific files and lines (path, line number, diff side)
 - Review comment threads and replies (inReplyToId)
+- Each comment's `pullRequestReviewId` links it to a review submission
 - Optionally filter by review ID: `{ number: "{{PR_NUMBER}}", reviewId: "REVIEW_ID" }`
+
+To read review submissions (verdicts and body text from the "Submit review" flow), use:
+`mcp__issue_management__get_reviews` with `{ number: "{{PR_NUMBER}}" }`
+
+This returns:
+- Review state (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED)
+- Review body text (often contains rationale for approving/dismissing findings)
+- Author and timestamp
+- Each review's `id` matches the `pullRequestReviewId` on inline review comments
 
 Also check if the branch name contains an issue number (like issue-123) and if so, read that issue for context:
 `mcp__issue_management__get_issue` with `{ number: "{{ISSUE_NUMBER}}", includeComments: true }`
@@ -121,7 +132,18 @@ When working with libraries, frameworks, or APIs that you need documentation for
 
 ## Addressing PR Review Feedback
 
-After reading the PR, check for unresolved inline review comments using `mcp__issue_management__get_review_comments`. If there are unresolved review threads:
+After reading the PR, gather all feedback sources:
+1. Fetch inline review comments: `mcp__issue_management__get_review_comments` with `{ number: "{{PR_NUMBER}}" }`
+2. Fetch review submissions: `mcp__issue_management__get_reviews` with `{ number: "{{PR_NUMBER}}" }`
+
+**Cross-reference to identify truly unresolved feedback:**
+- Each inline review comment has a `pullRequestReviewId` that links it to a review submission
+- A review submission's `id` matches the `pullRequestReviewId` on its inline comments
+- Check review submissions for responses that address or dismiss inline findings (e.g., a reviewer submitting a COMMENT or APPROVED review with body text explaining why a finding was dismissed or resolved)
+- Also check inline comment reply threads (`inReplyToId`) for direct replies addressing findings
+- Only treat feedback as **unresolved** if no subsequent review submission or inline reply addresses it
+
+If there are unresolved review threads:
 
 {{#if ONE_SHOT_MODE}}
 Evaluate unresolved review comments using the same severity framework as the code review agent, then address automatically where appropriate:
@@ -133,7 +155,7 @@ Evaluate unresolved review comments using the same severity framework as the cod
 2. **Summarize**: Post a PR comment summarizing all feedback, grouped by what was addressed vs deferred. For deferred items, explain why.
 3. **Address must-fix items and low-effort nice-to-haves**: For each:
    a. Make the code change
-   b. Reply to the review thread explaining what was changed:
+   b. Reply to the specific inline comment thread explaining what was changed:
       ```bash
       gh api \
         --method POST \
@@ -146,6 +168,7 @@ Evaluate unresolved review comments using the same severity framework as the cod
       }
       EOF
       ```
+      Always reply to the specific inline comment thread (using `in_reply_to`) rather than posting a standalone review. This keeps responses threaded under the finding they address.
 4. **Commit and push** changes after addressing comments
 5. Proceed to code review (see "Code Review" section below)
 {{else}}
@@ -161,7 +184,7 @@ Present a summary of unresolved review feedback to the user:
    - "Skip for now" — move on to other work
 3. **For each comment being addressed**:
    a. Make the code change
-   b. Reply to the review thread explaining the fix (using `gh api` as shown above)
+   b. Reply to the specific inline comment thread explaining the fix (using `gh api` with `in_reply_to` as shown above). Always reply inline rather than posting a standalone review.
 4. After addressing comments, offer to run code review
 {{/if}}
 

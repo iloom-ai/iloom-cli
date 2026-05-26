@@ -32,6 +32,7 @@ import type {
 	ReopenIssueInput,
 	EditIssueInput,
 	GetReviewCommentsInput,
+	GetReviewsInput,
 } from './types.js'
 
 // Module-level settings loaded at startup
@@ -360,7 +361,7 @@ server.registerTool(
 					createdAt: z.string().describe('Comment creation timestamp'),
 					updatedAt: z.string().nullable().describe('Comment last updated timestamp'),
 					inReplyToId: z.string().nullable().describe('ID of the comment this replies to'),
-					pullRequestReviewId: z.number().nullable().describe('The review this comment belongs to'),
+					pullRequestReviewId: z.string().nullable().describe('The review submission ID this comment belongs to (matches get_reviews id)'),
 				})
 			).describe('Inline review comments on the PR'),
 		},
@@ -423,6 +424,102 @@ server.registerTool(
 				error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to fetch review comments: ${errorMessage}`)
 			throw new Error(`Failed to fetch review comments: ${errorMessage}`)
+		}
+	}
+)
+
+// Register get_reviews tool (review submissions — the body text submitted via "Submit review")
+server.registerTool(
+	'get_reviews',
+	{
+		title: 'Get PR Review Submissions',
+		description:
+			'Fetch review submissions on a pull request (the body text and verdict submitted via the "Submit review" flow). ' +
+			'Returns reviews with state (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED), body text, author, and timestamp. ' +
+			'These are distinct from inline review comments (use get_review_comments for those). ' +
+			'Uses the configured VCS provider when available, falls back to GitHub.',
+		inputSchema: {
+			number: z.string().describe('The PR number'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository.'
+				),
+		},
+		outputSchema: {
+			reviews: z.array(
+				z.object({
+					id: z.string().describe('Review submission ID'),
+					body: z.string().describe('Review body text'),
+					state: z.string().describe('Review state: APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING'),
+					author: flexibleAuthorSchema.nullable().describe('Review author'),
+					submittedAt: z.string().describe('Review submission timestamp'),
+					htmlUrl: z.string().describe('URL to the review on the provider'),
+				})
+			).describe('Review submissions on the PR'),
+		},
+	},
+	async ({ number, repo }: GetReviewsInput) => {
+		console.error(`Fetching review submissions for PR ${number}${repo ? ` from ${repo}` : ''}`)
+
+		const prNumber = parseInt(number, 10)
+		if (isNaN(prNumber)) {
+			throw new Error(`Invalid PR number: ${number}. PR numbers must be numeric.`)
+		}
+
+		try {
+			if (vcsProvider?.getReviewSubmissions) {
+				if (repo) {
+					console.error(`VCS provider path does not support 'repo' override parameter, using configured repository`)
+				}
+				const reviewSubmissions = await vcsProvider.getReviewSubmissions(prNumber)
+
+				const reviews = reviewSubmissions.map(r => ({
+					id: r.id,
+					body: r.body,
+					state: r.state,
+					author: r.author ? { id: r.author.id, displayName: r.author.displayName } : null,
+					submittedAt: r.submittedAt,
+					htmlUrl: r.htmlUrl,
+				}))
+
+				console.error(`Review submissions fetched successfully: ${reviews.length} reviews`)
+
+				const result = { reviews }
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: JSON.stringify(result),
+						},
+					],
+					structuredContent: result as unknown as { [x: string]: unknown },
+				}
+			}
+
+			// Fall back to GitHub provider
+			const provider = new GitHubIssueManagementProvider()
+			const reviews = await provider.getReviewSubmissions({ number, repo })
+
+			console.error(`Review submissions fetched successfully: ${reviews.length} reviews`)
+
+			const result = { reviews }
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to fetch review submissions: ${errorMessage}`)
+			throw new Error(`Failed to fetch review submissions: ${errorMessage}`)
 		}
 	}
 )
