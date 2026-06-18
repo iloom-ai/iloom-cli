@@ -325,10 +325,10 @@ export async function validateIdeForStartCommand(command: Command): Promise<void
     return
   }
 
-  // Check if --no-code flag was passed (Commander stores negated option as 'code' = false)
-  const codeOption = command.opts()['code']
-  if (codeOption === false) {
-    return // User explicitly disabled IDE launch
+  // Check if --no-code or --create-only flag was passed
+  const opts = command.opts()
+  if (opts['code'] === false || opts['createOnly'] === true) {
+    return // IDE launch will be skipped
   }
 
   // Load settings to check IDE configuration and startIde default
@@ -343,7 +343,7 @@ export async function validateIdeForStartCommand(command: Command): Promise<void
 
   // If startIde is explicitly false in workflow config and --code flag wasn't used, skip validation
   const workflowConfig = settings.workflows?.issue
-  if (workflowConfig?.startIde === false && codeOption !== true) {
+  if (workflowConfig?.startIde === false && opts['code'] !== true) {
     return
   }
 

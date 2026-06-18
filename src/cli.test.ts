@@ -285,6 +285,18 @@ describe('IDE validation', () => {
       })
     })
 
+    describe('--create-only flag handling', () => {
+      it('should skip validation when --create-only flag is used', async () => {
+        commandName = 'start'
+        commandOpts = { createOnly: true }
+
+        await validateIdeForStartCommand(createMockCommand())
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
+      })
+    })
+
     describe('startIde setting handling', () => {
       it('should skip validation when startIde is false in settings', async () => {
         commandName = 'start'
