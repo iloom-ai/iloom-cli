@@ -1,0 +1,21 @@
+README.md
+  s_5d6c43bf061ee2::t_17e57a7dbc8a41 883
+LICENSE
+  s_5d6c43bf061ee2::t_170738e591afba 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "508ba7e0008cdbc6024d25470dc3bbcc9146b5fe",
+  "prompts": {},
+  "sessions": {
+    "s_5d6c43bf061ee2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b42cad13-a5af-4dfc-b691-6a90875c6bd4",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
