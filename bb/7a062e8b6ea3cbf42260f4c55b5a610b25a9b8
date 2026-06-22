@@ -1,0 +1,26 @@
+templates/prompts/issue-prompt.txt
+  s_7fe36969fef871::t_d593008ed2fddf 16
+  s_7fe36969fef871::t_a9cf286aaa4ccd 373
+  s_7fe36969fef871::t_520748ef374d48 482-491
+  s_7fe36969fef871::t_34cc89a3c9c456 1145,1147-1148,1178-1222,1233-1273
+  s_7fe36969fef871::t_05450a54270f96 1363-1364
+  s_7fe36969fef871::t_fef8519364aced 423-432
+templates/agents/iloom-issue-analyze-and-plan.md
+  s_7fe36969fef871::t_bad4d32a5fe641 538-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "bb7a062e8b6ea3cbf42260f4c55b5a610b25a9b8",
+  "prompts": {},
+  "sessions": {
+    "s_7fe36969fef871": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ff7dca8-0b38-4ee0-972c-a439112ceb6e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
