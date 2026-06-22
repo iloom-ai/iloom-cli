@@ -1,0 +1,32 @@
+templates/agents/CLAUDE.md
+  s_7fe36969fef871::t_e4412c2d4b154f 17
+  s_7fe36969fef871::t_063a79a226cef2 30
+  s_7fe36969fef871::t_21d80e749982b4 12
+templates/agents/iloom-issue-planner.md
+  s_7fe36969fef871::t_c84aac38efe190 485-497
+  s_7fe36969fef871::t_ea1b414d373963 590
+  s_7fe36969fef871::t_a8c40d594dd614 454-459,471-476,481
+templates/agents/iloom-issue-analyze-and-plan.md
+  s_7fe36969fef871::t_73a5d3129d6ad9 538-544,549-555,560,564-575
+  s_7fe36969fef871::t_6e9cebefa0c1e0 799
+src/lib/AgentManager.integration.test.ts
+  s_7fe36969fef871::t_3fce13077d9c62 29
+templates/agents/iloom-issue-phase-verifier.md
+  s_7fe36969fef871::t_5ea856ad013709 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "eda118b23df9e25191662ec5ab3e069146543c50",
+  "prompts": {},
+  "sessions": {
+    "s_7fe36969fef871": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ff7dca8-0b38-4ee0-972c-a439112ceb6e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
