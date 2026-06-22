@@ -535,6 +535,8 @@ If structure is >5 lines:
 
 **NOTE:** These steps are executed in a SINGLE implementation run. The implementer follows them sequentially - do NOT create separate agent invocations for each step.
 
+**NOTE:** For SIMPLE tasks, the implementer executes all phases in a single run. Phase verification runs ONCE after the implementation completes, not between phases. The phase must-haves below are verified as a batch post-implementation.
+
 ### Phase 1: [Foundation]
 **Must-haves (verified after this phase):**
 - [Concrete, independently verifiable invariant — e.g. "`UserService.getById(id: string): Promise<User>` exists and is exported from src/services/user.ts"]
