@@ -9,11 +9,12 @@ This directory contains phase agent definitions as Markdown files with YAML fron
 Agents execute in a fixed sequence during issue workflows. Each phase has a single responsibility:
 
 ```
-complexity-evaluator → analyzer (or analyze-and-plan for SIMPLE) → planner → implementer → code-reviewer
+complexity-evaluator → analyzer (or analyze-and-plan for SIMPLE) → planner → implementer → phase-verifier + code-reviewer
 ```
 
 - **SIMPLE tasks** (< 5 files, < 200 LOC): Use `analyze-and-plan` which combines analysis + planning into one step, then `implementer`
 - **COMPLEX tasks**: Full pipeline: `analyzer` → `planner` → `implementer`
+- **Phase verification**: `phase-verifier` runs after each implementation phase to verify must-haves (both modes)
 - **Code review**: `code-reviewer` runs after implementation (swarm mode only; in regular mode, review is optional)
 - **Wave verification**: `wave-verifier` is an epic-level agent that verifies a wave of completed children
 
@@ -26,6 +27,7 @@ complexity-evaluator → analyzer (or analyze-and-plan for SIMPLE) → planner �
 | `iloom-issue-analyze-and-plan.md` | Analysis + Planning | opus | Regular + Swarm | Combined phase for SIMPLE tasks |
 | `iloom-issue-planner.md` | Planning | opus | Regular + Swarm | Detailed implementation plan (COMPLEX only) |
 | `iloom-issue-implementer.md` | Implementation | opus | Regular + Swarm | Execute the plan, run typecheck/lint/tests |
+| `iloom-issue-phase-verifier.md` | Verification | inherit | Regular + Swarm | Verify phase must-haves, GO/NO-GO verdict |
 | `iloom-code-reviewer.md` | Review | opus | Swarm | Autonomous code review, no human gates |
 | `iloom-issue-enhancer.md` | Enhancement | — | Regular | Enhance issue descriptions with context |
 | `iloom-wave-verifier.md` | Verification | — | Swarm (epic) | Verify a wave of completed children |

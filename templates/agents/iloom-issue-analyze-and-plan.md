@@ -535,17 +535,44 @@ If structure is >5 lines:
 
 **NOTE:** These steps are executed in a SINGLE implementation run. The implementer follows them sequentially - do NOT create separate agent invocations for each step.
 
+### Phase 1: [Foundation]
+**Must-haves (verified after this phase):**
+- [Concrete, independently verifiable invariant — e.g. "`UserService.getById(id: string): Promise<User>` exists and is exported from src/services/user.ts"]
+- [Behavior preserved — e.g. "all existing tests still pass"]
+- [Scope boundary — e.g. "no files outside src/services/ and tests/ modified"]
+- [Negative invariant — e.g. "no new dependency added", "the public API surface is unchanged"]
+
 1. **[Step Name]**
    - Files: `/path/to/file1.ts`, `/path/to/file2.ts`
    - [Action with file:line reference] → Verify: [Expected outcome]
+
+### Phase 2: [Integration]
+**Must-haves (verified after this phase):**
+- [Concrete, independently verifiable invariant for this phase]
+- [Behavior preserved — e.g. "all existing tests still pass"]
+- [Scope boundary — e.g. "no files outside src/routes/ and tests/ modified"]
+- [Negative invariant — e.g. "no breaking changes to the public API"]
 
 2. **[Step Name]**
    - Files: `/path/to/file3.ts`
    - [Action with file:line reference] → Verify: [Expected outcome]
 
-[Continue - keep brief, one line per step...]
+[Continue - keep brief, one line per step. EVERY phase MUST include a "Must-haves" block.]
 
 **NOTE:** Follow the project's development workflow as specified in CLAUDE.md.
+
+### Phase Must-Haves / Invariants
+
+**Every phase in the Detailed Execution Order MUST include a "Must-haves" list** — 3-7 concrete, independently verifiable statements that must be true after the phase completes. A `phase-verifier` agent checks these against the actual worktree after each implementation phase, so write them to be checkable from the code and test results alone, without access to your reasoning.
+
+Good must-haves:
+- **Verifiable from the diff/worktree**: "Function `getById(id: string): Promise<User>` exists in `src/services/user.ts` and is exported" — not "the service layer is clean"
+- **Behavior preserved**: "All existing tests in `tests/auth/` still pass", "the CLI's `--dry-run` flag output is unchanged"
+- **Contracts honored**: the exact signatures/types other phases implement against
+- **Scope boundaries**: "No files outside `src/services/` and `tests/services/` are modified"
+- **Negative invariants**: things that must NOT happen ("no new dependency added", "the public API surface is unchanged")
+
+**Must-haves MUST include "must NOT happen" criteria where applicable** — especially for performance and interaction properties (e.g. "a transform-only edit must not trigger pixel re-extraction"). Positive-only criteria let an implementation satisfy the letter of the plan while violating the feature's purpose; verifiers can only check what's written down, so if the forbidden behavior isn't a must-have, nothing in the pipeline will catch it.
 
 ### Dependencies and Configuration
 
@@ -769,6 +796,7 @@ Before submitting your combined analysis and plan, verify (DO NOT print this che
 - **STAY SCOPED**: Only address what's in the issue
 - **ONE-SENTENCE RULE**: Applied throughout Section 2
 - **NO AI SLOP**: No time estimates, rollback plans, or redundant sections
+- **EVERY PHASE GETS MUST-HAVES** — the phase-verifier agent depends on them; a phase without verifiable invariants cannot be verified
 
 ## Success Criteria
 
