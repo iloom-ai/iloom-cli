@@ -1,0 +1,27 @@
+src/lib/DockerManager.ts
+  s_7fe36969fef871::t_3875b2d4f9b0c6 278,285
+  s_7fe36969fef871::t_3ac3577e05054d 299,306,308-309
+  s_7fe36969fef871::t_02906673bbaa86 304
+src/lib/DockerManager.test.ts
+  s_7fe36969fef871::t_dc9bbf56a581e1 554
+  s_7fe36969fef871::t_956ff127586945 537
+  s_7fe36969fef871::t_e077ac9248e3dc 508
+src/lib/ResourceCleanup.ts
+  s_7fe36969fef871::t_2dcd57191774e6 593,595,605,607,626
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "f34e0af3f9b16da1bbbaac99002095fe38cd8043",
+  "prompts": {},
+  "sessions": {
+    "s_7fe36969fef871": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ff7dca8-0b38-4ee0-972c-a439112ceb6e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
