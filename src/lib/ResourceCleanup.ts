@@ -590,7 +590,9 @@ export class ResourceCleanup {
 		// Try Docker container cleanup first if identifier provided
 		if (dockerIdentifier !== undefined) {
 			const containerName = DockerManager.buildContainerName(dockerIdentifier)
+			getLogger().debug(`Checking Docker container: ${containerName}`)
 			const isRunning = await DockerManager.isContainerRunning(containerName)
+			getLogger().debug(`Docker container ${containerName} running: ${isRunning}`)
 			if (isRunning) {
 				getLogger().info(`Terminating Docker container: ${containerName}`)
 				await DockerManager.stopAndRemoveContainer(containerName)
@@ -600,7 +602,9 @@ export class ResourceCleanup {
 		}
 
 		// Existing process-based detection
+		getLogger().debug(`Detecting dev server process on port ${port}`)
 		const processInfo = await this.processManager.detectDevServer(port)
+		getLogger().debug(`Dev server detection result: ${processInfo ? `${processInfo.name} (PID: ${processInfo.pid})` : 'none'}`)
 
 		if (!processInfo) {
 			getLogger().debug(`No process found on port ${port}`)
@@ -619,6 +623,7 @@ export class ResourceCleanup {
 		await this.processManager.terminateProcess(processInfo.pid)
 
 		// Verify termination
+		getLogger().debug(`Verifying port ${port} is free`)
 		const isFree = await this.processManager.verifyPortFree(port)
 		if (!isFree) {
 			throw new Error(`Dev server may still be running on port ${port}`)
