@@ -1,0 +1,19 @@
+templates/agents/iloom-issue-analyze-and-plan.md
+  s_7fe36969fef871::t_9b8fb80c95bb63 536
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "68fe2a1a38440a3a4cd3d20e9d076c14aa57188e",
+  "prompts": {},
+  "sessions": {
+    "s_7fe36969fef871": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ff7dca8-0b38-4ee0-972c-a439112ceb6e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
