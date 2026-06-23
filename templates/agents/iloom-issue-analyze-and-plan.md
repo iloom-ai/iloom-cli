@@ -533,7 +533,7 @@ If structure is >5 lines:
 
 ### Detailed Execution Order
 
-**NOTE:** These steps are executed in a SINGLE implementation run. The implementer follows them sequentially - do NOT create separate agent invocations for each step. Must-haves are verified after the run completes.
+**NOTE:** These steps are executed in a SINGLE implementation run. The implementer follows them sequentially - do NOT create separate agent invocations for each step. The orchestrator runs the phase-verifier against all must-haves after the implementation run completes.
 
 
 ### Phase 1: [Foundation]
