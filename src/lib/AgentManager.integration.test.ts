@@ -26,6 +26,7 @@ const ALL_AGENT_NAMES = [
 	'iloom-issue-complexity-evaluator',
 	'iloom-issue-enhancer',
 	'iloom-issue-implementer',
+	'iloom-issue-phase-verifier',
 	'iloom-issue-planner',
 	'iloom-wave-verifier',
 ]

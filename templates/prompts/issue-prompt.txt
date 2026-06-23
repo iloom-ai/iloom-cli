@@ -13,6 +13,7 @@ Each phase agent is available as a skill in your .claude/skills/ directory.
 - Planning: /iloom-swarm-issue-planner "Create implementation plan..."
 - Analyze+Plan: /iloom-swarm-issue-analyze-and-plan "Analyze and plan..."
 - Implementation: /iloom-swarm-issue-implementer "Implement the plan..."
+- Phase Verification: /iloom-swarm-issue-phase-verifier "Verify phase N..."
 - Code Review: /iloom-swarm-code-reviewer "Run code review."
 - Artifact Review: /iloom-swarm-artifact-reviewer "Review this artifact..."
 
@@ -369,6 +370,7 @@ The following skills are pre-rendered in your .claude/skills/ directory:
 - /iloom-swarm-issue-analyze-and-plan
 - /iloom-swarm-issue-planner
 - /iloom-swarm-issue-implementer
+- /iloom-swarm-issue-phase-verifier
 - /iloom-swarm-code-reviewer
 - /iloom-swarm-artifact-reviewer
 
@@ -418,7 +420,16 @@ Always prepend: `"Your working directory is <worktree-path>. cd there before doi
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
 7a. Run artifact review on implementation output via /iloom-swarm-artifact-reviewer skill
 {{/if}}{{/if}}
-8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`), run code review via /iloom-swarm-code-reviewer skill
+7b. COMPLEX only: After each phase completes, commit the phase and run per-phase verification:
+    - Commit: `git add -A && git commit -m "Phase N: <phase-name>"`
+    - Run /iloom-swarm-issue-phase-verifier and /iloom-swarm-code-reviewer sequentially for the phase
+    - If verifier NO-GO or critical findings: run fix implementer, commit fix, re-verify (max 2 attempts, then fail)
+    - If verifier GO and no critical findings: proceed to next phase
+7c. SIMPLE only: After implementation completes, commit and run single verification pass:
+    - Commit: `git add -A && git commit -m "Implementation: <summary>"`
+    - Run /iloom-swarm-issue-phase-verifier (if must-haves exist) and /iloom-swarm-code-reviewer sequentially
+    - If verifier NO-GO or critical findings: run fix implementer, commit fix, re-verify (max 2 attempts, then fail)
+8. Set state to `code_review` (pass `worktreePath: "<your-worktree-path>"`). If per-phase code review was already done (COMPLEX workflow), skip standalone code review. Otherwise run code review via /iloom-swarm-code-reviewer skill.
 9. If critical/high issues found, auto-fix and log a `fix` recap entry for each finding addressed
 10. Stage and commit all changes: `git add -A && git commit -m "feat(issue-<issue-number>): [descriptive summary of changes]"` — the commit message must summarize what was implemented (not just "fixes #NNN")
 11. Set state to `done` (pass `worktreePath: "<your-worktree-path>"`), report structured result to orchestrator
@@ -468,7 +479,16 @@ You are orchestrating a set of agents through a development process, with human 
 {{#if ARTIFACT_REVIEW_ENABLED}}{{#if IMPLEMENTER_REVIEW_ENABLED}}
 16a. Run artifact review on implementation output using @agent-iloom-artifact-reviewer (run_in_background: true)
 {{/if}}{{/if}}
-17. Run code review using @agent-iloom-code-reviewer (foreground -- needs MCP tool access)
+16b. COMPLEX only: After each phase completes, commit the phase and run per-phase verification:
+    - Commit: `git add -A && git commit -m "Phase N: <phase-name>"`
+    - Run @agent-iloom-issue-phase-verifier (run_in_background: true) and @agent-iloom-code-reviewer (run_in_background: true) in parallel for the phase
+    - If verifier NO-GO or critical findings: run fix implementer, commit fix, re-verify (max 2 attempts, then ask user)
+    - If verifier GO and no critical findings: proceed to next phase
+16c. SIMPLE only: After implementation completes, commit and run single verification pass:
+    - Commit: `git add -A && git commit -m "Implementation: <summary>"`
+    - Run @agent-iloom-issue-phase-verifier (run_in_background: true, if must-haves exist) and @agent-iloom-code-reviewer (run_in_background: true) in parallel
+    - If verifier NO-GO or critical findings: run fix implementer, commit fix, re-verify (max 2 attempts, then ask user)
+17. Run code review using @agent-iloom-code-reviewer (foreground -- needs MCP tool access). NOTE: If per-phase code review was already done (COMPLEX workflow), skip this step.
 {{#if DRAFT_PR_MODE}}
 {{#if AUTO_COMMIT_PUSH}}
 18. Auto-commit and push changes to draft PR (STEP 5.5)
@@ -1122,9 +1142,10 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
 
 3. **Execute implementation:**
 
-   **FOR COMPLEX workflows with Execution Plan (multiple steps):**
+   **FOR COMPLEX workflows with Execution Plan (multiple phases with steps):**
 
-   a. Update progress comment with step checklist from Execution Plan
+   a. Update progress comment with step checklist from Execution Plan.
+      Record the current commit hash as `prev_phase_hash` (the baseline for diffing the first phase).
 
    b. Execute according to the Execution Plan - EACH STEP GETS ITS OWN IMPLEMENTER AGENT:
 
@@ -1154,6 +1175,51 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
       - Update progress comment for all completed steps
 {{/if}}
 
+   c. **Phase commit**: After all steps in the current phase pass post-wave validation:
+      ```bash
+      git add -A && git commit -m "Phase N: <phase-name>"
+      ```
+      Record the commit hash as `phase_hash`.
+
+   d. **Phase verification** (run verifier and reviewer):
+
+{{#if SWARM_MODE}}
+      Execute BOTH agents sequentially (skills run inline):
+
+      1. Run /iloom-swarm-issue-phase-verifier skill with prompt:
+         "Verify Phase N. ## Phase Must-Haves\n[paste Phase N's must-haves from the plan]\n## Worktree\n- Path: <worktree-path>\n- Branch: <branch>\n## Commit Range\n- Previous: <prev_phase_hash>\n- Phase: <phase_hash>\n## Implementer Report\n[implementer's summary output]"
+
+      2. Run /iloom-swarm-code-reviewer skill with prompt:
+         "Review Phase N changes only (flag issues in THESE changes, not missing functionality for later phases). ## Pre-gathered Diff\n[output of git diff <prev_phase_hash>..<phase_hash>]"
+{{else}}
+      Launch BOTH agents simultaneously in ONE message:
+
+      1. @agent-iloom-issue-phase-verifier (run_in_background: true) with prompt:
+         "Verify Phase N. ## Phase Must-Haves\n[paste Phase N's must-haves from the plan]\n## Worktree\n- Path: <worktree-path>\n- Branch: <branch>\n## Commit Range\n- Previous: <prev_phase_hash>\n- Phase: <phase_hash>\n## Implementer Report\n[implementer's summary output]"
+
+      2. @agent-iloom-code-reviewer (run_in_background: true) with prompt:
+         "Review Phase N changes only (flag issues in THESE changes, not missing functionality for later phases). ## Pre-gathered Diff\n[output of git diff <prev_phase_hash>..<phase_hash>]"
+{{/if}}
+
+   e. **Gate on results**:
+      - Verifier GO + no critical review findings → update progress comment, set `prev_phase_hash = phase_hash`, proceed to next phase
+      - Verifier NO-GO or critical findings → **fix round**:
+{{#if SWARM_MODE}}
+        1. Execute fresh implementer via /iloom-swarm-issue-implementer skill with the specific violations/findings
+        2. After fix completes: `git commit -am "Fix Phase N: <reason>"`
+        3. Update `phase_hash` to the new commit hash
+        4. Re-run verification (phase-verifier + code-reviewer, same prompts with updated commit range)
+        5. If second verification also fails: report failure and stop workflow
+{{else}}
+        1. Launch fresh @agent-iloom-issue-implementer (run_in_background: true) with the specific violations/findings
+        2. After fix completes: `git commit -am "Fix Phase N: <reason>"`
+        3. Update `phase_hash` to the new commit hash
+        4. Re-run verification (phase-verifier + code-reviewer in parallel, same prompts with updated commit range)
+        5. If second verification also fails: stop and ask user how to proceed via AskUserQuestion tool
+{{/if}}
+
+   f. Repeat steps b–e for each subsequent phase in the Execution Plan.
+
    **FOR SIMPLE/TRIVIAL workflows (single implementation run):**
 
 {{#if SWARM_MODE}}
@@ -1163,6 +1229,48 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    - Launch ONE @agent-iloom-issue-implementer (run_in_background: true) with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
    - Wait for completion
 {{/if}}
+
+   **SIMPLE/TRIVIAL post-implementation verification:**
+
+   After implementation completes:
+
+   a. **Commit**: `git add -A && git commit -m "Implementation: <summary>"`. Record the commit hash as `impl_hash` and the previous commit as `pre_impl_hash`.
+
+   b. **Run verification** (if must-haves exist in the plan):
+{{#if SWARM_MODE}}
+      Execute agents sequentially:
+
+      1. Run /iloom-swarm-issue-phase-verifier skill with prompt:
+         "Verify implementation. ## Phase Must-Haves\n[paste all must-haves from the plan]\n## Worktree\n- Path: <worktree-path>\n- Branch: <branch>\n## Commit Range\n- Previous: <pre_impl_hash>\n- Implementation: <impl_hash>\n## Implementer Report\n[implementer's summary output]"
+
+      2. Run /iloom-swarm-code-reviewer skill with prompt:
+         "Review implementation changes. ## Pre-gathered Diff\n[output of git diff <pre_impl_hash>..<impl_hash>]"
+{{else}}
+      Launch BOTH agents simultaneously in ONE message:
+
+      1. @agent-iloom-issue-phase-verifier (run_in_background: true) with prompt:
+         "Verify implementation. ## Phase Must-Haves\n[paste all must-haves from the plan]\n## Worktree\n- Path: <worktree-path>\n- Branch: <branch>\n## Commit Range\n- Previous: <pre_impl_hash>\n- Implementation: <impl_hash>\n## Implementer Report\n[implementer's summary output]"
+
+      2. @agent-iloom-code-reviewer (run_in_background: true) with prompt:
+         "Review implementation changes. ## Pre-gathered Diff\n[output of git diff <pre_impl_hash>..<impl_hash>]"
+{{/if}}
+
+   c. **Gate on results** (same logic as COMPLEX):
+      - Verifier GO + no critical review findings → proceed to finalize
+      - Verifier NO-GO or critical findings → **fix round**:
+{{#if SWARM_MODE}}
+        1. Execute fresh implementer via /iloom-swarm-issue-implementer skill with the specific violations/findings
+        2. After fix completes: `git commit -am "Fix: <reason>"`
+        3. Re-run verification (same prompts with updated commit range)
+        4. If second verification also fails: report failure and stop workflow
+{{else}}
+        1. Launch fresh @agent-iloom-issue-implementer (run_in_background: true) with the specific violations/findings
+        2. After fix completes: `git commit -am "Fix: <reason>"`
+        3. Re-run verification (phase-verifier + code-reviewer in parallel, same prompts with updated commit range)
+        4. If second verification also fails: stop and ask user how to proceed via AskUserQuestion tool
+{{/if}}
+
+   d. If no must-haves exist in the plan, skip verification and proceed to finalize.
 
 4. **Finalize the progress comment:**
    - Update the progress comment to this format:
@@ -1251,6 +1359,8 @@ If workflow plan determined SKIP_IMPLEMENTATION:
 ---
 
 ## STEP 5 - Review Phase
+
+**NOTE:** If you executed a COMPLEX multi-phase plan in STEP 4 with per-phase verification and code review, the code review is already complete. Skip this step and proceed to the next step. Similarly, if you executed a SIMPLE workflow in STEP 4 and ran the post-implementation verification pass (which includes code review), skip this step.
 
 This section is about reviewing code changes for quality, security, and compliance issues.
 

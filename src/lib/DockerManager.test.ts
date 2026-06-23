@@ -505,7 +505,7 @@ describe('DockerManager', () => {
 
 			expect(result).toBe(true)
 			// Should have used docker rm -f (atomic force-remove)
-			expect(execa).toHaveBeenNthCalledWith(2, 'docker', ['rm', '-f', 'iloom-dev-123'], { reject: false })
+			expect(execa).toHaveBeenNthCalledWith(2, 'docker', ['rm', '-f', 'iloom-dev-123'], { reject: false, timeout: 10000 })
 		})
 
 		it('should not throw if container does not exist', async () => {
@@ -534,7 +534,7 @@ describe('DockerManager', () => {
 			const result = await DockerManager.stopAndRemoveContainer('iloom-dev-stopped')
 
 			expect(result).toBe(false)
-			expect(execa).toHaveBeenNthCalledWith(2, 'docker', ['rm', '-f', 'iloom-dev-stopped'], { reject: false })
+			expect(execa).toHaveBeenNthCalledWith(2, 'docker', ['rm', '-f', 'iloom-dev-stopped'], { reject: false, timeout: 10000 })
 		})
 	})
 
@@ -551,7 +551,7 @@ describe('DockerManager', () => {
 			expect(execa).toHaveBeenCalledWith(
 				'docker',
 				['ps', '--filter', 'name=^iloom-dev-123$', '--format', '{{.Names}}'],
-				{ reject: false }
+				{ reject: false, timeout: 5000 }
 			)
 		})
 

@@ -451,6 +451,12 @@ If structure is >5 lines:
 Provide execution steps concisely. Group steps by parallel execution phase — steps within the same phase run concurrently, phases run sequentially:
 
 ### Phase 1 (parallel): [Foundation]
+**Must-haves (verified after this phase):**
+- [Concrete, independently verifiable invariant — e.g. "`UserService.getById(id: string): Promise<User>` exists and is exported from src/services/user.ts"]
+- [Behavior preserved — e.g. "all existing tests still pass"]
+- [Scope boundary — e.g. "no files outside src/services/ and tests/ modified"]
+- [Negative invariant — e.g. "no new dependency added", "the public API surface is unchanged"]
+
 #### Step 1a: [Step Name]
 **Files:** [List all files this step touches]
 **Contract:** [If this step produces or consumes a shared interface/type, specify it here]
@@ -462,13 +468,32 @@ Provide execution steps concisely. Group steps by parallel execution phase — s
 1. [Action with file:line reference] → Verify: [Expected outcome]
 
 ### Phase 2 (sequential): [Integration]
+**Must-haves (verified after this phase):**
+- [Concrete, independently verifiable invariant for this phase]
+- [Behavior preserved — e.g. "all existing tests still pass"]
+- [Scope boundary — e.g. "no files outside src/routes/ and tests/ modified"]
+- [Negative invariant — e.g. "no breaking changes to the public API"]
+
 #### Step 2: [Step Name]
 **Files:** [List all files this step touches]
 1. [Action with file:line reference] → Verify: [Expected outcome]
 
-[Continue for all phases — maximize steps per parallel phase, minimize the number of phases...]
+[Continue for all phases — maximize steps per parallel phase, minimize the number of phases. EVERY phase MUST include a "Must-haves" block.]
 
 **NOTE:** Follow the project's development workflow as specified in CLAUDE.md (e.g., TDD, test-after, or other approaches).
+
+### Phase Must-Haves / Invariants
+
+**Every phase in the Detailed Execution Order MUST include a "Must-haves" list** — 3-7 concrete, independently verifiable statements that must be true after the phase completes. A `phase-verifier` agent checks these against the actual worktree after each implementation phase, so write them to be checkable from the code and test results alone, without access to your reasoning.
+
+Good must-haves:
+- **Verifiable from the diff/worktree**: "Function `getById(id: string): Promise<User>` exists in `src/services/user.ts` and is exported" — not "the service layer is clean"
+- **Behavior preserved**: "All existing tests in `tests/auth/` still pass", "the CLI's `--dry-run` flag output is unchanged"
+- **Contracts honored**: the exact signatures/types other phases implement against
+- **Scope boundaries**: "No files outside `src/services/` and `tests/services/` are modified"
+- **Negative invariants**: things that must NOT happen ("no new dependency added", "the public API surface is unchanged")
+
+**Must-haves MUST include "must NOT happen" criteria where applicable** — especially for performance and interaction properties (e.g. "a transform-only edit must not trigger pixel re-extraction"). Positive-only criteria let an implementation satisfy the letter of the plan while violating the feature's purpose; verifiers can only check what's written down, so if the forbidden behavior isn't a must-have, nothing in the pipeline will catch it.
 
 ## Execution Plan
 
@@ -562,6 +587,7 @@ This section tells the orchestrator EXACTLY how to execute the implementation st
 - **NO ENHANCEMENTS** - stick strictly to stated requirements
 - **QUESTION NECESSITY** - if requirements describe writing values that already match the system's built-in defaults, the write may be unnecessary. Plan for the actual need, not the literal phrasing of the issue.
 - **NO CROSS-COMPONENT FABRICATION** - when your plan includes a specific value (score range, threshold, enum, format) from another component's source, look it up and cite file:line. If you cannot find it, describe the intent (e.g., "the reviewer's critical category") instead of a plausible-sounding number. Log a recap assumption. Fabricating values is a hard error.
+- **EVERY PHASE GETS MUST-HAVES** — the phase-verifier agent depends on them; a phase without verifiable invariants cannot be verified
 
 ## Workflow
 

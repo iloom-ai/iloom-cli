@@ -275,14 +275,14 @@ export class DockerManager {
 		if (!isRunning) {
 			logger.debug(`No running container found with name "${containerName}"`)
 			// Still try to remove in case container exists but is stopped
-			await execa('docker', ['rm', '-f', containerName], { reject: false })
+			await execa('docker', ['rm', '-f', containerName], { reject: false, timeout: 10000 })
 			return false
 		}
 
 		logger.info(`Removing Docker container "${containerName}"...`)
 
 		// Atomic force-remove: handles running and stopped containers
-		await execa('docker', ['rm', '-f', containerName], { reject: false })
+		await execa('docker', ['rm', '-f', containerName], { reject: false, timeout: 10000 })
 
 		logger.success(`Docker container "${containerName}" removed`)
 		return true
@@ -296,14 +296,17 @@ export class DockerManager {
 	 */
 	static async isContainerRunning(containerName: string): Promise<boolean> {
 		try {
+			logger.debug(`Running: docker ps --filter name=^${containerName}$ (timeout: 5s)`)
 			const result = await execa('docker', [
 				'ps',
 				'--filter', `name=^${containerName}$`,
 				'--format', '{{.Names}}',
-			], { reject: false })
+			], { reject: false, timeout: 5000 })
 
+			logger.debug(`docker ps exited ${result.exitCode}, stdout: "${result.stdout.trim()}"`)
 			return result.exitCode === 0 && result.stdout.trim() === containerName
-		} catch {
+		} catch (error) {
+			logger.debug(`docker ps failed: ${error instanceof Error ? error.message : String(error)}`)
 			return false
 		}
 	}
