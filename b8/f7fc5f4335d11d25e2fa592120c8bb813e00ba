@@ -1,0 +1,31 @@
+src/commands/rebase.ts
+  s_c371304a36b3be::t_e909334cde1400 122,127
+src/commands/finish.ts
+  s_c371304a36b3be::t_c61c0e735c35dd 692-695,700
+src/types/index.ts
+  s_c371304a36b3be::t_04604e97d9f629 409
+src/lib/PRManager.ts
+  s_c371304a36b3be::t_8007163ea6bfa3 77
+src/lib/MergeManager.ts
+  s_c371304a36b3be::t_9a924484f6a7c6 234
+  s_c371304a36b3be::t_2dbbd9da63c12d 47
+  s_c371304a36b3be::t_431e1dddb0541b 571
+  s_c371304a36b3be::t_7f53c9527e335e 645
+  s_c371304a36b3be::t_b7be149ec608d6 287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b8f7fc5f4335d11d25e2fa592120c8bb813e00ba",
+  "prompts": {},
+  "sessions": {
+    "s_c371304a36b3be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a1402ec-b969-408e-9948-4c836918ceee",
+        "model": "unknown"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
