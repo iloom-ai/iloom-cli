@@ -689,15 +689,16 @@ export class FinishCommand {
 		result: FinishResult
 	): Promise<void> {
 		// Define merge options early so they're available for all code paths
+		// Early exit: if this is a draft-PR loom whose PR is already merged/closed,
+		// skip all rebase/validate/commit steps and go straight to cleanup
+		const earlySettings = await this.settingsManager.loadSettings(worktree.path)
+
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 			jsonStream: options.jsonStream ?? false,
+			skipBareMode: earlySettings.skipBareMode,
 		}
-
-		// Early exit: if this is a draft-PR loom whose PR is already merged/closed,
-		// skip all rebase/validate/commit steps and go straight to cleanup
-		const earlySettings = await this.settingsManager.loadSettings(worktree.path)
 		const earlyMergeBehavior = earlySettings.mergeBehavior ?? { mode: 'local' }
 		const earlyRawMode = earlyMergeBehavior.mode as string
 		const earlyMergeMode = earlyRawMode === 'github-draft-pr' ? 'draft-pr' : earlyRawMode

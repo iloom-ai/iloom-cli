@@ -406,6 +406,7 @@ export interface MergeOptions {
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
 	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
 	noFf?: boolean        // Use --no-ff instead of --ff-only for local merge (set when rebase fell back to merge strategy)
+	skipBareMode?: boolean // Skip bare mode attempt for Claude CLI calls
 }
 
 export interface MergeResult {

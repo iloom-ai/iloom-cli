@@ -74,6 +74,7 @@ export class PRManager {
 					addDir: worktreePath,
 					timeout: 30000,
 					noSessionPersistence: true, // Utility operation - don't persist session
+					...(this.settings.skipBareMode && { skipBareMode: this.settings.skipBareMode }),
 				})
 
 				if (body && typeof body === 'string' && body.trim()) {
