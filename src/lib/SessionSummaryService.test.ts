@@ -697,6 +697,7 @@ describe('SessionSummaryService', () => {
 			expect(launchClaude).toHaveBeenCalledWith('Generated prompt content', {
 				headless: true,
 				model: 'sonnet',
+				noSessionPersistence: true,
 			})
 
 			// Verify comment was posted to issue
