@@ -1186,7 +1186,6 @@ export class IgniteCommand {
 		// and its child processes (execa's env option doesn't reliably pass them)
 		process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'
 		process.env.ILOOM_SWARM = '1'
-		process.env.ENABLE_TOOL_SEARCH = 'auto:30'
 		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
 		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
 		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
