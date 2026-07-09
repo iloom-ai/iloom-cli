@@ -278,6 +278,7 @@ export class SessionSummaryService {
 			const reportResult = await launchClaude(prompt, {
 				headless: true,
 				model: summaryModel,
+				noSessionPersistence: true,
 			})
 
 			if (!reportResult || typeof reportResult !== 'string' || reportResult.trim() === '') {

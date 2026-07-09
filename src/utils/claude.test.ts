@@ -2952,6 +2952,88 @@ describe('claude utils', () => {
 			// Should only have been called once (no retry)
 			expect(execa).toHaveBeenCalledTimes(1)
 		})
+
+		it('should retry without --bare when session-in-use --resume retry fails with auth error', async () => {
+			// Set up OAuth token so bare mode will be auto-applied
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+
+			const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+			// First call: fails with session-in-use error (bare mode auto-applied)
+			mockExeca().mockRejectedValueOnce({
+				stderr: `Error: Session ID ${sessionId} is already in use.`,
+				exitCode: 1,
+			})
+
+			// Second call (--resume retry): fails with auth error
+			const authError = Object.assign(new Error('authentication_failed'), {
+				stderr: 'Invalid API key',
+				exitCode: 1,
+			})
+			mockExeca().mockRejectedValueOnce(authError)
+
+			// Third call: succeeds (retry without bare)
+			mockExeca().mockResolvedValueOnce({
+				stdout: 'success without bare',
+				exitCode: 0,
+			})
+
+			const result = await launchClaude('test prompt', {
+				headless: true,
+				noSessionPersistence: true,
+				sessionId,
+			})
+
+			expect(result).toBe('success without bare')
+			expect(execa).toHaveBeenCalledTimes(3)
+
+			// First call should have --bare and --session-id
+			const firstCallArgs = mockExeca().mock.calls[0][1] as string[]
+			expect(firstCallArgs).toContain('--bare')
+			expect(firstCallArgs).toContain('--session-id')
+
+			// Second call (--resume) should have --bare and --resume
+			const secondCallArgs = mockExeca().mock.calls[1][1] as string[]
+			expect(secondCallArgs).toContain('--bare')
+			expect(secondCallArgs).toContain('--resume')
+
+			// Third call should NOT have --bare (fallback)
+			const thirdCallArgs = mockExeca().mock.calls[2][1] as string[]
+			expect(thirdCallArgs).not.toContain('--bare')
+
+			// Verify warning was logged
+			expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Bare mode failed during --resume retry'))
+		})
+
+		it('should throw when session-in-use --resume retry fails with non-auth error', async () => {
+			// Set up OAuth token so bare mode will be auto-applied
+			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
+
+			const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+			// First call: fails with session-in-use error
+			mockExeca().mockRejectedValueOnce({
+				stderr: `Error: Session ID ${sessionId} is already in use.`,
+				exitCode: 1,
+			})
+
+			// Second call (--resume retry): fails with non-auth error
+			mockExeca().mockRejectedValueOnce({
+				stderr: 'Some other error on retry',
+				exitCode: 1,
+			})
+
+			await expect(
+				launchClaude('test prompt', {
+					headless: true,
+					noSessionPersistence: true,
+					sessionId,
+				})
+			).rejects.toThrow('Claude CLI error: Some other error on retry')
+
+			// Should have been called exactly twice (initial + resume retry, no bare fallback)
+			expect(execa).toHaveBeenCalledTimes(2)
+		})
 	})
 
 	describe.runIf(process.platform === 'darwin')('launchClaudeInNewTerminalWindow', () => {
