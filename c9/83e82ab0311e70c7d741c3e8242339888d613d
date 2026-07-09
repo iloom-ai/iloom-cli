@@ -1,0 +1,27 @@
+src/types/telemetry.ts
+  s_c371304a36b3be::t_5680033e51d852 32
+src/utils/claude.test.ts
+  s_c371304a36b3be::t_5727e857ef6c39 2446-2525
+src/commands/start.test.ts
+  s_c371304a36b3be::t_e8090d11b5d1ae 1643
+src/commands/start.ts
+  s_c371304a36b3be::t_65853cd94f8128 406
+docs/iloom-commands.md
+  s_c371304a36b3be::t_43543c4b8b308b 2395-2416
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c983e82ab0311e70c7d741c3e8242339888d613d",
+  "prompts": {},
+  "sessions": {
+    "s_c371304a36b3be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a1402ec-b969-408e-9948-4c836918ceee",
+        "model": "unknown"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
