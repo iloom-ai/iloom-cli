@@ -116,6 +116,7 @@ Your response should be the raw markdown that will become the issue body.`
 				model: 'sonnet',
 				agents,
 				noSessionPersistence: true, // Utility operation - don't persist session
+				skipBareMode: settings.skipBareMode,
 			})
 
 			if (enhanced && typeof enhanced === 'string') {
@@ -256,6 +257,7 @@ Press any key to open issue for editing...`
 			model: 'sonnet',
 			agents,
 			noSessionPersistence: true, // Headless operation - no session persistence needed
+			skipBareMode: settings.skipBareMode,
 			...(mcpConfig && { mcpConfig }),
 			...(allowedTools && { allowedTools }),
 			...(disallowedTools && { disallowedTools }),

@@ -106,7 +106,7 @@ export class StartCommand {
 		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
 
 		// Create BranchNamingService (defaults to Claude-based strategy)
-		const branchNaming = new DefaultBranchNamingService({ useClaude: true })
+		const branchNaming = new DefaultBranchNamingService({ useClaude: true, skipBareMode: settings.skipBareMode })
 
 		this.loomManager = new LoomManager(
 			new GitWorktreeManager(mainWorktreePath),

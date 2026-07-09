@@ -709,7 +709,8 @@ export function hasApiKeyForBareMode(): boolean {
 export async function generateBranchName(
 	issueTitle: string,
 	issueNumber: string | number,
-	model: string = 'haiku'
+	model: string = 'haiku',
+	skipBareMode?: boolean
 ): Promise<string> {
 	try {
 		// Check if Claude CLI is available
@@ -747,6 +748,7 @@ Generate a git branch name for the following issue:
 			noSessionPersistence: true, // Utility operation - don't persist session
 			systemPrompt: 'You are a git branch name generator. Given an issue title and number, generate a branch name following the exact format and constraints provided. Output only the branch name, nothing else. No preamble, analysis, or meta-commentary.',
 			effort: 'low', // Simple text generation, minimize turns
+			...(skipBareMode ? { skipBareMode } : {}),
 		})) as string
 
 		// Normalize to lowercase for consistency (Linear IDs are uppercase but branches should be lowercase)
