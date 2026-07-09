@@ -70,13 +70,13 @@ describe('il list --json: finished looms gating regression', () => {
     expect(allLooms).toEqual([])
   })
 
-  it('should include finished looms when --finished flag is set', () => {
+  it('should include finished looms when --finished flag is set', async () => {
     // Simulate: il list --json --finished
     const options = { json: true, finished: true }
     const showFinished = Boolean(options.finished) || Boolean((options as { all?: boolean }).all)
 
     const finishedJson = showFinished
-      ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+      ? await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
       : []
 
     const allLooms = [...activeJson, ...finishedJson]
@@ -90,13 +90,13 @@ describe('il list --json: finished looms gating regression', () => {
     })
   })
 
-  it('should include finished looms when --all flag is set', () => {
+  it('should include finished looms when --all flag is set', async () => {
     // Simulate: il list --json --all
     const options = { json: true, all: true }
     const showFinished = Boolean((options as { finished?: boolean }).finished) || Boolean(options.all)
 
     const finishedJson = showFinished
-      ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+      ? await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
       : []
 
     const allLooms = [...activeJson, ...finishedJson]
@@ -110,7 +110,7 @@ describe('il list --json: finished looms gating regression', () => {
     })
   })
 
-  it('should demonstrate the bug: without gating, finished looms leak into output', () => {
+  it('should demonstrate the bug: without gating, finished looms leak into output', async () => {
     // This test shows what USED TO happen before the fix:
     // finishedJson was always populated from finishedLooms.map(...)
     // regardless of showFinished
@@ -118,11 +118,11 @@ describe('il list --json: finished looms gating regression', () => {
     const showFinished = Boolean((options as { finished?: boolean }).finished) || Boolean((options as { all?: boolean }).all)
 
     // BUG BEHAVIOR (old code): always map finishedLooms
-    const buggyFinishedJson = finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+    const buggyFinishedJson = await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
 
     // FIX BEHAVIOR (new code): gate with showFinished
     const fixedFinishedJson = showFinished
-      ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+      ? await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
       : []
 
     // The buggy version incorrectly includes finished looms

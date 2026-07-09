@@ -1,5 +1,6 @@
 import { realpathSync } from 'fs'
 import { extractIssueNumber } from './git.js'
+import { resolveRecapFilePath, readRecapFile } from './mcp.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata, SwarmState } from '../lib/MetadataManager.js'
 import type { ProjectCapability } from '../types/loom.js'
@@ -68,6 +69,15 @@ export interface ChildrenJson {
 }
 
 /**
+ * Complexity data for a swarm issue, sourced from recap files.
+ * Intentionally excludes timestamp from RecapComplexity.
+ */
+export interface SwarmComplexity {
+  level: string
+  reason?: string
+}
+
+/**
  * Swarm issue data for epic loom JSON output
  * Each child issue enriched with state and worktreePath from its loom metadata
  */
@@ -77,6 +87,7 @@ export interface SwarmIssue {
   url: string
   state: SwarmState | null
   worktreePath: string | null
+  complexity: SwarmComplexity | null
 }
 
 /**
@@ -178,18 +189,20 @@ function extractIssueNumbers(branch: string): string[] {
  * When a child loom is not found in active metadata, falls back to checking
  * finished/archived metadata to preserve state for cleaned-up child looms.
  *
+ * For children with a worktreePath, reads the recap file to extract complexity data.
+ *
  * @param childIssues - Child issues from epic metadata
  * @param allMetadata - All active loom metadata to search for child looms
  * @param finishedMetadata - Optional finished/archived loom metadata for fallback lookup
  * @param projectPath - Optional project path to scope metadata filtering (prevents cross-project collisions)
- * @returns Array of SwarmIssue with enriched state and worktreePath
+ * @returns Array of SwarmIssue with enriched state, worktreePath, and complexity
  */
-export function enrichSwarmIssues(
+export async function enrichSwarmIssues(
   childIssues: LoomMetadata['childIssues'],
   allMetadata: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
   projectPath?: string | null,
-): SwarmIssue[] {
+): Promise<SwarmIssue[]> {
   // When projectPath is provided, filter metadata to only entries from the same project.
   // This prevents cross-project collisions where different projects share issue numbers.
   const resolvedProjectPath = projectPath ? resolvePathSafe(projectPath) : null
@@ -218,7 +231,7 @@ export function enrichSwarmIssues(
     }
   }
 
-  return childIssues.map((child) => {
+  return Promise.all(childIssues.map(async (child) => {
     // Strip the '#' prefix from GitHub issue numbers for lookup
     // e.g., "#123" -> "123", "ENG-123" stays as-is
     const lookupNumber = child.number.startsWith('#')
@@ -227,14 +240,29 @@ export function enrichSwarmIssues(
     const childMeta = issueNumberToMetadata.get(lookupNumber)
       ?? finishedIssueNumberToMetadata.get(lookupNumber)
 
+    let complexity: SwarmComplexity | null = null
+    if (childMeta?.worktreePath) {
+      try {
+        const recapPath = resolveRecapFilePath(childMeta.worktreePath)
+        const recap = await readRecapFile(recapPath)
+        const comp = recap.complexity as { level?: string; reason?: string } | undefined
+        if (comp && typeof comp.level === 'string') {
+          complexity = { level: comp.level, ...(comp.reason ? { reason: comp.reason } : {}) }
+        }
+      } catch {
+        // Recap file missing or invalid - complexity stays null
+      }
+    }
+
     return {
       number: child.number,
       title: child.title,
       url: child.url,
       state: childMeta?.state ?? null,
       worktreePath: childMeta?.worktreePath ?? null,
+      complexity,
     }
-  })
+  }))
 }
 
 /**
@@ -248,13 +276,13 @@ export function enrichSwarmIssues(
  * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  * @param finishedMetadata - Optional finished/archived metadata for fallback swarm issue enrichment
  */
-export function formatLoomForJson(
+export async function formatLoomForJson(
   worktree: GitWorktree,
   mainWorktreePath?: string,
   metadata?: LoomMetadata | null,
   allMetadata?: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
-): LoomJsonOutput {
+): Promise<LoomJsonOutput> {
   // Use metadata values when available, otherwise derive from worktree
   const loomType = metadata?.issueType ?? determineLoomType(worktree)
 
@@ -283,7 +311,7 @@ export function formatLoomForJson(
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata?.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata?.projectPath)
+    ? await enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata?.projectPath)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata?.dependencyMap && Object.keys(metadata.dependencyMap).length > 0
@@ -324,18 +352,18 @@ export function formatLoomForJson(
  * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  * @param finishedMetadata - Optional finished/archived metadata for fallback swarm issue enrichment
  */
-export function formatLoomsForJson(
+export async function formatLoomsForJson(
   worktrees: GitWorktree[],
   mainWorktreePath?: string,
   metadata?: Map<string, LoomMetadata | null>,
   allMetadata?: LoomMetadata[],
   finishedMetadata?: LoomMetadata[],
-): LoomJsonOutput[] {
+): Promise<LoomJsonOutput[]> {
   // If allMetadata not provided, derive from metadata map values
   const resolvedAllMetadata = allMetadata ?? (metadata
     ? Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
     : [])
-  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path), resolvedAllMetadata, finishedMetadata))
+  return Promise.all(worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path), resolvedAllMetadata, finishedMetadata)))
 }
 
 /**
@@ -347,14 +375,14 @@ export function formatLoomsForJson(
  * @param allMetadata - Optional array of all active loom metadata (for enriching epic swarm issues)
  * @param finishedMetadata - Optional finished/archived metadata for fallback swarm issue enrichment
  */
-export function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: LoomMetadata[], finishedMetadata?: LoomMetadata[]): LoomJsonOutput {
+export async function formatFinishedLoomForJson(metadata: LoomMetadata, allMetadata?: LoomMetadata[], finishedMetadata?: LoomMetadata[]): Promise<LoomJsonOutput> {
   // Use metadata values for type, default to 'branch' if not set
   const loomType = metadata.issueType ?? 'branch'
 
   // Build swarmIssues and dependencyMap for epic looms
   const isEpic = loomType === 'epic'
   const swarmIssues = isEpic && metadata.childIssues && metadata.childIssues.length > 0
-    ? enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata.projectPath)
+    ? await enrichSwarmIssues(metadata.childIssues, allMetadata ?? [], finishedMetadata, metadata.projectPath)
     : isEpic ? [] : undefined
   const dependencyMap = isEpic
     ? (metadata.dependencyMap && Object.keys(metadata.dependencyMap).length > 0

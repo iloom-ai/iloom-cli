@@ -1258,14 +1258,14 @@ program
           : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
 
         // Format active looms
-        let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
+        let activeJson: Awaited<ReturnType<typeof formatLoomsForJson>> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
         if (showActive) {
           if (options.global) {
             // Format global active looms from metadata (similar to finished looms format)
-            activeJson = globalActiveLooms.map(loom => {
+            activeJson = await Promise.all(globalActiveLooms.map(async loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
+                ? await enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
@@ -1295,10 +1295,10 @@ program
                 ...(swarmIssues !== undefined && { swarmIssues }),
                 ...(depMap !== undefined && { dependencyMap: depMap }),
               }
-            })
+            }))
           } else {
             // Format worktrees from current repo
-            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms).map(loom => ({
+            activeJson = (await formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms)).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
@@ -1329,7 +1329,7 @@ program
 
         // Format finished looms (only when --finished or --all is set)
         let finishedJson = showFinished
-          ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+          ? await Promise.all(finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms)))
           : []
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
