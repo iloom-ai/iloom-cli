@@ -2443,6 +2443,86 @@ describe('claude utils', () => {
 					expect.any(Object)
 				)
 			})
+
+			it('should skip auto-apply bare mode when skipBareMode is true', async () => {
+				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				try {
+					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+					const prompt = 'Test prompt'
+
+					mockExeca().mockResolvedValueOnce({
+						stdout: 'output',
+						exitCode: 0,
+					})
+
+					await launchClaude(prompt, {
+						headless: true,
+						noSessionPersistence: true,
+						skipBareMode: true,
+					})
+
+					const execaCall = mockExeca().mock.calls[0]
+					expect(execaCall[1]).not.toContain('--bare')
+				} finally {
+					if (originalApiKey !== undefined) {
+						process.env.ANTHROPIC_API_KEY = originalApiKey
+					} else {
+						delete process.env.ANTHROPIC_API_KEY
+					}
+				}
+			})
+
+			it('should still auto-apply bare mode when skipBareMode is false', async () => {
+				const originalApiKey = process.env.ANTHROPIC_API_KEY
+				try {
+					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
+					const prompt = 'Test prompt'
+
+					mockExeca().mockResolvedValueOnce({
+						stdout: 'output',
+						exitCode: 0,
+					})
+
+					await launchClaude(prompt, {
+						headless: true,
+						noSessionPersistence: true,
+						skipBareMode: false,
+					})
+
+					expect(execa).toHaveBeenCalledWith(
+						'claude',
+						expect.arrayContaining(['--bare']),
+						expect.any(Object)
+					)
+				} finally {
+					if (originalApiKey !== undefined) {
+						process.env.ANTHROPIC_API_KEY = originalApiKey
+					} else {
+						delete process.env.ANTHROPIC_API_KEY
+					}
+				}
+			})
+
+			it('should honor explicit bare:true even when skipBareMode is true', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					bare: true,
+					skipBareMode: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					expect.arrayContaining(['--bare']),
+					expect.any(Object)
+				)
+			})
 		})
 	})
 

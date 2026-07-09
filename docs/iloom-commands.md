@@ -2392,6 +2392,28 @@ iloom supports multiple version control providers for PR operations. By default,
 
 **Note:** Draft PR mode (`mergeBehavior.mode: "draft-pr"`) is GitHub-only. BitBucket does not support draft pull requests.
 
+**Database Branching Settings:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `skipBareMode` | boolean | `false` | Skip bare mode for Neon database branching. When `true`, iloom never attempts bare mode and goes straight to the standard (non-bare) code path. This avoids the try-then-fallback overhead on every `start`, `commit`, and `finish` for accounts where bare mode is not supported (e.g., Neon Enterprise accounts). |
+
+**Example:**
+
+`.iloom/settings.json` (project-level, shared with team):
+```json
+{
+  "skipBareMode": true
+}
+```
+
+Or in `~/.config/iloom-ai/settings.json` (global, all projects):
+```json
+{
+  "skipBareMode": true
+}
+```
+
 ---
 
 ### il update

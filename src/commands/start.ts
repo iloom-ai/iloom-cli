@@ -403,6 +403,7 @@ export class StartCommand {
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
 					complexity_override: !!input.options.complexity,
 					create_only: !!input.options.createOnly,
+					skip_bare_mode: !!settings.skipBareMode,
 				})
 			} catch (error: unknown) {
 				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)
