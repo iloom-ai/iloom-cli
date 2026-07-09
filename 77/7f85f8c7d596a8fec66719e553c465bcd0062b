@@ -1,0 +1,26 @@
+src/utils/claude.ts
+  s_c371304a36b3be::t_034c3b480efa78 171
+  s_c371304a36b3be::t_5cdddbbf518d6c 87
+  s_c371304a36b3be::t_702410e64f07f4 161
+src/lib/SettingsManager.ts
+  s_c371304a36b3be::t_27b5bb86042671 500-507
+  s_c371304a36b3be::t_22d5d830b532e4 815-822
+src/lib/SettingsManager.test.ts
+  s_c371304a36b3be::t_7d8e9a0b9921d6 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "777f85f8c7d596a8fec66719e553c465bcd0062b",
+  "prompts": {},
+  "sessions": {
+    "s_c371304a36b3be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a1402ec-b969-408e-9948-4c836918ceee",
+        "model": "unknown"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
