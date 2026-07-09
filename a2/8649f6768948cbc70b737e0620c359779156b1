@@ -1,0 +1,59 @@
+src/lib/BranchNamingService.ts
+  s_c371304a36b3be::t_9c30a374c1c608 30,35
+  s_c371304a36b3be::t_e8e2073574e933 64,70
+src/lib/CommitManager.ts
+  s_c371304a36b3be::t_6f0cb9cdb85052 76
+  s_c371304a36b3be::t_8031eeaed3c663 367
+  s_c371304a36b3be::t_43325fc59b017b 303-304
+src/types/index.ts
+  s_c371304a36b3be::t_996f376572d5f4 359
+  s_c371304a36b3be::t_95516eada7dfc5 388
+src/utils/claude.ts
+  s_c371304a36b3be::t_32afc9b76f68b8 751
+  s_c371304a36b3be::t_96609f40fb312a 712-713
+src/commands/start.ts
+  s_c371304a36b3be::t_d2100307bef7f2 109
+src/commands/finish.ts
+  s_c371304a36b3be::t_aaa3617ea9143f 146
+  s_c371304a36b3be::t_9e4f50fce8b9ba 779,784
+src/commands/cleanup.ts
+  s_c371304a36b3be::t_c9bfdb3d67f7aa 128
+src/lib/IssueEnhancementService.ts
+  s_c371304a36b3be::t_14ffd1974c5487 119
+  s_c371304a36b3be::t_804ca1342d9316 260
+src/lib/BranchNamingService.test.ts
+  s_c371304a36b3be::t_245efa0cc22eca 173,183,191
+src/lib/SessionSummaryService.ts
+  s_c371304a36b3be::t_e34840b7b442ad 283
+  s_c371304a36b3be::t_c66ee64462db7e 175
+  s_c371304a36b3be::t_60bdd32b0f08ea 87
+  s_c371304a36b3be::t_5ba2fe75adf22f 376
+  s_c371304a36b3be::t_16bd44208bf176 93
+src/lib/ValidationRunner.ts
+  s_c371304a36b3be::t_71b8c4209164cf 396
+  s_c371304a36b3be::t_c4deb99f12e53c 31-34,41,56,69
+  s_c371304a36b3be::t_01045f89a8d67c 423
+  s_c371304a36b3be::t_956d5566d7743e 164
+  s_c371304a36b3be::t_bd878862e39be9 88,197,293
+  s_c371304a36b3be::t_8eb67518a47cf8 262
+  s_c371304a36b3be::t_194f666824d5c3 358
+src/commands/commit.ts
+  s_c371304a36b3be::t_bbeb6f06b1e55f 122-125,131
+  s_c371304a36b3be::t_402246bd74394a 168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a28649f6768948cbc70b737e0620c359779156b1",
+  "prompts": {},
+  "sessions": {
+    "s_c371304a36b3be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a1402ec-b969-408e-9948-4c836918ceee",
+        "model": "unknown"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
