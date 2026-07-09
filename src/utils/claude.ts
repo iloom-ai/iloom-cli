@@ -449,6 +449,15 @@ export async function launchClaude(
 						const retryExecaError = retryError as { stderr?: string; message?: string }
 						// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
 						const retryErrorMessage = retryExecaError.stderr || retryExecaError.message || 'Unknown Claude CLI error'
+
+						if (attempt === 1 && bareModeAutoApplied) {
+							const isAuthError = /not logged in|unauthorized|authentication|invalid api key|Could not resolve credentials/i.test(retryErrorMessage)
+							if (isAuthError) {
+								logger.warn('Bare mode failed during --resume retry (likely expired OAuth token), retrying without --bare')
+								continue
+							}
+						}
+
 						throw new Error(`Claude CLI error: ${redactSettings(retryErrorMessage)}`)
 					}
 				}
