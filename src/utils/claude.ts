@@ -84,6 +84,7 @@ export interface ClaudeCliOptions {
 	env?: Record<string, string> // Additional environment variables to pass to the Claude process
 	signal?: AbortSignal // Optional AbortSignal for graceful termination of the Claude process
 	bare?: boolean // Minimal mode: skip hooks, LSP, plugins, CLAUDE.md auto-discovery. Requires ANTHROPIC_API_KEY (disables OAuth/keychain).
+	skipBareMode?: boolean // When true, never auto-apply bare mode (skip the try-then-fallback overhead)
 	settings?: string // JSON settings string for --settings flag (e.g., '{"apiKeyHelper": "echo TOKEN"}')
 }
 
@@ -157,7 +158,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, systemPrompt, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal, bare, settings } = options
+	const { model, permissionMode, addDir, headless = false, systemPrompt, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal, bare, skipBareMode, settings } = options
 	const log = getLogger()
 
 	// Resolve bare mode configuration
@@ -167,7 +168,7 @@ export async function launchClaude(
 	let oauthToken: string | undefined
 
 	// Auto-apply bare mode for headless utility operations when not explicitly set
-	if (bare === undefined && headless && noSessionPersistence) {
+	if (bare === undefined && headless && noSessionPersistence && !skipBareMode) {
 		const config = await resolveBareModeConfig()
 		effectiveBare = config.bare
 		effectiveSettings ??= config.settings

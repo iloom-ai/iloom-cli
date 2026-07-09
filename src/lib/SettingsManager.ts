@@ -497,6 +497,14 @@ export const IloomSettingsSchema = z.object({
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
 		),
+	skipBareMode: z
+		.boolean()
+		.default(false)
+		.describe(
+			'Skip bare mode entirely for all Claude CLI operations. ' +
+				'When true, iloom never attempts --bare mode, avoiding the try-then-fallback overhead ' +
+				'on accounts where bare mode is incompatible (e.g., Enterprise accounts).',
+		),
 	worktreePrefix: z
 		.string()
 		.optional()
@@ -803,6 +811,14 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'Before enabling, verify ALL your .env.* files do not contain unquoted special characters ' +
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
+		),
+	skipBareMode: z
+		.boolean()
+		.optional()
+		.describe(
+			'Skip bare mode entirely for all Claude CLI operations. ' +
+				'When true, iloom never attempts --bare mode, avoiding the try-then-fallback overhead ' +
+				'on accounts where bare mode is incompatible (e.g., Enterprise accounts).',
 		),
 	worktreePrefix: z
 		.string()
