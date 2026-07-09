@@ -122,13 +122,14 @@ function handleLinearError(error: unknown, context: string): never {
 /**
  * Fetch a Linear issue by identifier
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Linear issue details
  * @throws LinearServiceError if issue not found or SDK error
  */
-export async function fetchLinearIssue(identifier: string): Promise<LinearIssue> {
+export async function fetchLinearIssue(identifier: string, apiToken?: string): Promise<LinearIssue> {
   try {
     logger.debug(`Fetching Linear issue: ${identifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
     const issue = await client.issue(identifier)
 
     if (!issue) {
@@ -192,6 +193,7 @@ export async function fetchLinearIssue(identifier: string): Promise<LinearIssue>
  * @param body - Issue description (markdown)
  * @param teamKey - Team key (e.g., "ENG", "PLAT")
  * @param labels - Optional label names to apply
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Created issue identifier and URL
  * @throws LinearServiceError on creation failure
  */
@@ -200,10 +202,11 @@ export async function createLinearIssue(
   body: string,
   teamKey: string,
   _labels?: string[],
+  apiToken?: string,
 ): Promise<{ identifier: string; url: string }> {
   try {
     logger.debug(`Creating Linear issue in team ${teamKey}: ${title}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get team by key
     const teams = await client.teams()
@@ -254,6 +257,7 @@ export async function createLinearIssue(
  * @param teamKey - Team key (e.g., "ENG")
  * @param parentId - Parent issue UUID (from issue.id, not identifier)
  * @param labels - Optional label names to apply
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Created issue identifier and URL
  * @throws LinearServiceError on creation failure
  */
@@ -263,10 +267,11 @@ export async function createLinearChildIssue(
   teamKey: string,
   parentId: string,
   _labels?: string[],
+  apiToken?: string,
 ): Promise<{ identifier: string; url: string }> {
   try {
     logger.debug(`Creating Linear child issue in team ${teamKey}: ${title}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get team by key
     const teams = await client.teams()
@@ -314,16 +319,18 @@ export async function createLinearChildIssue(
  * Create a comment on a Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
  * @param body - Comment body (markdown)
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Created comment details
  * @throws LinearServiceError on creation failure
  */
 export async function createLinearComment(
   identifier: string,
   body: string,
+  apiToken?: string,
 ): Promise<LinearComment> {
   try {
     logger.debug(`Creating comment on Linear issue ${identifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get issue by identifier to get its ID
     const issue = await client.issue(identifier)
@@ -362,15 +369,17 @@ export async function createLinearComment(
  * Update a Linear issue's workflow state
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
  * @param stateName - Target state name (e.g., "In Progress", "Done")
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @throws LinearServiceError on update failure
  */
 export async function updateLinearIssueState(
   identifier: string,
   stateName: string,
+  apiToken?: string,
 ): Promise<void> {
   try {
     logger.debug(`Updating Linear issue ${identifier} state to: ${stateName}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get issue by identifier
     const issue = await client.issue(identifier)
@@ -450,13 +459,14 @@ export async function editLinearIssue(
 /**
  * Get a specific comment by ID
  * @param commentId - Linear comment UUID
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Comment details
  * @throws LinearServiceError if comment not found
  */
-export async function getLinearComment(commentId: string): Promise<LinearComment> {
+export async function getLinearComment(commentId: string, apiToken?: string): Promise<LinearComment> {
   try {
     logger.debug(`Fetching Linear comment: ${commentId}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
     const comment = await client.comment({ id: commentId })
 
     if (!comment) {
@@ -482,16 +492,18 @@ export async function getLinearComment(commentId: string): Promise<LinearComment
  * Update an existing comment
  * @param commentId - Linear comment UUID
  * @param body - New comment body (markdown)
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Updated comment details
  * @throws LinearServiceError on update failure
  */
 export async function updateLinearComment(
   commentId: string,
   body: string,
+  apiToken?: string,
 ): Promise<LinearComment> {
   try {
     logger.debug(`Updating Linear comment: ${commentId}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     const payload = await client.updateComment(commentId, { body })
     const comment = await payload.comment
@@ -518,13 +530,14 @@ export async function updateLinearComment(
 /**
  * Fetch all comments for a Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Array of comments
  * @throws LinearServiceError on fetch failure
  */
-export async function fetchLinearIssueComments(identifier: string): Promise<LinearComment[]> {
+export async function fetchLinearIssueComments(identifier: string, apiToken?: string): Promise<LinearComment[]> {
   try {
     logger.debug(`Fetching comments for Linear issue: ${identifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get issue by identifier
     const issue = await client.issue(identifier)
@@ -615,15 +628,17 @@ export interface LinearDependencyResult {
  * Create a blocking relationship between two issues
  * @param blockingIssueId - UUID of the issue that blocks (the blocker)
  * @param blockedIssueId - UUID of the issue being blocked
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @throws LinearServiceError on creation failure
  */
 export async function createLinearIssueRelation(
   blockingIssueId: string,
   blockedIssueId: string,
+  apiToken?: string,
 ): Promise<void> {
   try {
     logger.debug(`Creating Linear issue relation: ${blockingIssueId} blocks ${blockedIssueId}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Create a "blocks" relation from blockingIssue to blockedIssue
     // In Linear, the relation is created on the blocking issue pointing to the blocked issue
@@ -648,16 +663,18 @@ export async function createLinearIssueRelation(
  * Get dependencies for a Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
  * @param direction - 'blocking' for issues this blocks, 'blocked_by' for blockers, 'both' for all
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns Object with blocking and blockedBy arrays
  * @throws LinearServiceError on fetch failure
  */
 export async function getLinearIssueDependencies(
   identifier: string,
   direction: 'blocking' | 'blocked_by' | 'both',
+  apiToken?: string,
 ): Promise<{ blocking: LinearDependencyResult[]; blockedBy: LinearDependencyResult[] }> {
   try {
     logger.debug(`Fetching Linear issue dependencies: ${identifier} (direction: ${direction})`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get issue by identifier
     const issue = await client.issue(identifier)
@@ -739,12 +756,13 @@ export async function getLinearIssueDependencies(
 /**
  * Delete an issue relation by ID
  * @param relationId - UUID of the relation to delete
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @throws LinearServiceError on deletion failure
  */
-export async function deleteLinearIssueRelation(relationId: string): Promise<void> {
+export async function deleteLinearIssueRelation(relationId: string, apiToken?: string): Promise<void> {
   try {
     logger.debug(`Deleting Linear issue relation: ${relationId}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     const payload = await client.deleteIssueRelation(relationId)
 
@@ -848,16 +866,18 @@ export async function fetchLinearIssueList(
  * Find the relation ID between two issues for removal
  * @param blockingIdentifier - Identifier of the blocking issue
  * @param blockedIdentifier - Identifier of the blocked issue
+ * @param apiToken - Optional API token (takes precedence over env var)
  * @returns The relation ID if found, null otherwise
  * @throws LinearServiceError on fetch failure
  */
 export async function findLinearIssueRelation(
   blockingIdentifier: string,
   blockedIdentifier: string,
+  apiToken?: string,
 ): Promise<string | null> {
   try {
     logger.debug(`Finding Linear issue relation: ${blockingIdentifier} blocks ${blockedIdentifier}`)
-    const client = createLinearClient()
+    const client = createLinearClient(apiToken)
 
     // Get the blocking issue
     const blockingIssue = await client.issue(blockingIdentifier)

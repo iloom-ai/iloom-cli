@@ -24,7 +24,7 @@ export interface LinearServiceConfig {
   teamId?: string
   /** Branch naming template (e.g., "feat/{{key}}__{{title}}") */
   branchFormat?: string
-  /** Linear API token (lin_api_...). If provided, sets process.env.LINEAR_API_TOKEN */
+  /** Linear API token (lin_api_...). If provided, passed to Linear API calls */
   apiToken?: string
 }
 
@@ -38,6 +38,7 @@ export class LinearService implements IssueTracker {
 
   private config: LinearServiceConfig
   private prompter: (message: string) => Promise<boolean>
+  private apiToken: string | undefined
 
   constructor(
     config?: LinearServiceConfig,
@@ -45,11 +46,7 @@ export class LinearService implements IssueTracker {
   ) {
     this.config = config ?? {}
     this.prompter = options?.prompter ?? promptConfirmation
-
-    // Set API token from config if provided (follows mcp.ts pattern)
-    if (this.config.apiToken) {
-      process.env.LINEAR_API_TOKEN = this.config.apiToken
-    }
+    this.apiToken = this.config.apiToken
   }
 
   /**
@@ -99,7 +96,7 @@ export class LinearService implements IssueTracker {
    * @throws LinearServiceError if issue not found
    */
   public async fetchIssue(identifier: string | number, _repo?: string): Promise<Issue> {
-    const linearIssue = await fetchLinearIssue(String(identifier))
+    const linearIssue = await fetchLinearIssue(String(identifier), this.apiToken)
     return this.mapLinearIssueToIssue(linearIssue)
   }
 
@@ -164,7 +161,7 @@ export class LinearService implements IssueTracker {
 
     getLogger().info(`Creating Linear issue in team ${this.config.teamId}: ${title}`)
 
-    const result = await createLinearIssue(title, body, this.config.teamId, labels)
+    const result = await createLinearIssue(title, body, this.config.teamId, labels, this.apiToken)
 
     return {
       number: result.identifier,
@@ -200,7 +197,7 @@ export class LinearService implements IssueTracker {
    */
   public async moveIssueToInProgress(identifier: string | number): Promise<void> {
     getLogger().info(`Moving Linear issue ${identifier} to In Progress`)
-    await updateLinearIssueState(String(identifier), 'In Progress')
+    await updateLinearIssueState(String(identifier), 'In Progress', this.apiToken)
   }
 
   /**
