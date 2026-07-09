@@ -1,0 +1,19 @@
+src/utils/claude.ts
+  s_8a441c3f620459::t_c20ccd1b7172fd 452-460
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "179ab1009b142d6d4c8eb52caf004fab6172bd57",
+  "prompts": {},
+  "sessions": {
+    "s_8a441c3f620459": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "df6544ba-b7d2-4bd9-8cf8-3725726662db",
+        "model": "unknown"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
