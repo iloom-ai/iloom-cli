@@ -499,11 +499,13 @@ export const IloomSettingsSchema = z.object({
 		),
 	skipBareMode: z
 		.boolean()
-		.default(false)
+		.default(true)
 		.describe(
-			'Skip bare mode entirely for all Claude CLI operations. ' +
-				'When true, iloom never attempts --bare mode, avoiding the try-then-fallback overhead ' +
-				'on accounts where bare mode is incompatible (e.g., Enterprise accounts).',
+			'Skip bare mode for headless Claude CLI utility operations (branch-name generation, ' +
+				'commit messages, conflict resolution, and session summaries). Bare mode launches the Claude ' +
+				'CLI with --bare — a minimal mode that skips hooks, LSP, plugins, and CLAUDE.md auto-discovery ' +
+				'and requires ANTHROPIC_API_KEY (disabling OAuth/keychain). Defaults to true (bare mode off); ' +
+				'set to false to opt into bare mode on accounts where it is supported. Unrelated to database/Neon branching.',
 		),
 	worktreePrefix: z
 		.string()
@@ -816,9 +818,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.boolean()
 		.optional()
 		.describe(
-			'Skip bare mode entirely for all Claude CLI operations. ' +
-				'When true, iloom never attempts --bare mode, avoiding the try-then-fallback overhead ' +
-				'on accounts where bare mode is incompatible (e.g., Enterprise accounts).',
+			'Skip bare mode for headless Claude CLI utility operations (branch-name generation, ' +
+				'commit messages, conflict resolution, and session summaries). Bare mode launches the Claude ' +
+				'CLI with --bare — a minimal mode that skips hooks, LSP, plugins, and CLAUDE.md auto-discovery ' +
+				'and requires ANTHROPIC_API_KEY (disabling OAuth/keychain). Defaults to true (bare mode off); ' +
+				'set to false to opt into bare mode on accounts where it is supported. Unrelated to database/Neon branching.',
 		),
 	worktreePrefix: z
 		.string()

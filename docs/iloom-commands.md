@@ -2392,25 +2392,27 @@ iloom supports multiple version control providers for PR operations. By default,
 
 **Note:** Draft PR mode (`mergeBehavior.mode: "draft-pr"`) is GitHub-only. BitBucket does not support draft pull requests.
 
-**Database Branching Settings:**
+**Bare Mode Settings:**
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `skipBareMode` | boolean | `false` | Skip bare mode for Neon database branching. When `true`, iloom never attempts bare mode and goes straight to the standard (non-bare) code path. This avoids the try-then-fallback overhead on every `start`, `commit`, and `finish` for accounts where bare mode is not supported (e.g., Neon Enterprise accounts). |
+| `skipBareMode` | boolean | `true` | Skip _bare mode_ for headless Claude CLI utility operations (branch-name generation, commit messages, conflict resolution, and session summaries). Bare mode launches the Claude CLI with `--bare` — a minimal mode that skips hooks, LSP, plugins, and CLAUDE.md auto-discovery, and requires `ANTHROPIC_API_KEY` (which disables OAuth/keychain auth). When `true` (the default), iloom skips bare mode entirely and uses the standard Claude launch. Set to `false` to opt into bare mode's lower-overhead launch on accounts where it is supported. **This setting has nothing to do with database or Neon branching.** |
 
 **Example:**
+
+Bare mode is off by default. To opt _into_ bare mode, set `skipBareMode` to `false`.
 
 `.iloom/settings.json` (project-level, shared with team):
 ```json
 {
-  "skipBareMode": true
+  "skipBareMode": false
 }
 ```
 
 Or in `~/.config/iloom-ai/settings.json` (global, all projects):
 ```json
 {
-  "skipBareMode": true
+  "skipBareMode": false
 }
 ```
 
