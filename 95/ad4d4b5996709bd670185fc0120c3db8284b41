@@ -1,0 +1,24 @@
+src/lib/SettingsManager.test.ts
+  s_bb481f5757a47a::t_9327a3ebdde769 18
+docs/iloom-commands.md
+  s_bb481f5757a47a::t_1d4c363b0b4702 2395,2399,2403-2404,2408,2415
+src/lib/SettingsManager.ts
+  s_bb481f5757a47a::t_c87cf4eccae26c 502,504-508
+  s_bb481f5757a47a::t_5d8411dd688c25 821-825
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "95ad4d4b5996709bd670185fc0120c3db8284b41",
+  "prompts": {},
+  "sessions": {
+    "s_bb481f5757a47a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38ffe199-bcda-4f09-bb31-29b833d1fa5a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
