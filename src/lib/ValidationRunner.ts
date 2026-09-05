@@ -28,14 +28,17 @@ export class ValidationRunner {
 		const startTime = Date.now()
 		const steps: ValidationStepResult[] = []
 
-		const { jsonStream } = options
+		const claudeOpts = {
+			...(options.jsonStream != null && { jsonStream: options.jsonStream }),
+			...(options.skipBareMode != null && { skipBareMode: options.skipBareMode }),
+		}
 
 		// Run typecheck
 		if (!options.skipTypecheck) {
 			const typecheckResult = await this.runTypecheck(
 				worktreePath,
 				options.dryRun ?? false,
-				{ jsonStream }
+				claudeOpts
 			)
 			steps.push(typecheckResult)
 
@@ -50,7 +53,7 @@ export class ValidationRunner {
 
 		// Run lint
 		if (!options.skipLint) {
-			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false, { jsonStream })
+			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false, claudeOpts)
 			steps.push(lintResult)
 
 			if (!lintResult.passed && !lintResult.skipped) {
@@ -63,7 +66,7 @@ export class ValidationRunner {
 			const testResult = await this.runTests(
 				worktreePath,
 				options.dryRun ?? false,
-				{ jsonStream }
+				claudeOpts
 			)
 			steps.push(testResult)
 
@@ -82,7 +85,7 @@ export class ValidationRunner {
 	private async runTypecheck(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; skipBareMode?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -158,7 +161,7 @@ export class ValidationRunner {
 				scriptToRun,
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, skipBareMode: options.skipBareMode }
 			)
 
 			if (fixed) {
@@ -191,7 +194,7 @@ export class ValidationRunner {
 	private async runLint(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; skipBareMode?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -256,7 +259,7 @@ export class ValidationRunner {
 				'lint',
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, skipBareMode: options.skipBareMode }
 			)
 
 			if (fixed) {
@@ -287,7 +290,7 @@ export class ValidationRunner {
 	private async runTests(
 		worktreePath: string,
 		dryRun: boolean,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; skipBareMode?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -352,7 +355,7 @@ export class ValidationRunner {
 				'test',
 				worktreePath,
 				packageManager,
-				{ jsonStream: options.jsonStream }
+				{ jsonStream: options.jsonStream, skipBareMode: options.skipBareMode }
 			)
 
 			if (fixed) {
@@ -390,7 +393,7 @@ export class ValidationRunner {
 		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		worktreePath: string,
 		packageManager: string,
-		options: { jsonStream?: boolean | undefined } = {}
+		options: { jsonStream?: boolean | undefined; skipBareMode?: boolean | undefined } = {}
 	): Promise<boolean> {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
@@ -417,6 +420,7 @@ export class ValidationRunner {
 				permissionMode: options.jsonStream ? 'bypassPermissions' : 'acceptEdits',
 				model: 'sonnet',
 				noSessionPersistence: true,
+				...(options.skipBareMode != null && { skipBareMode: options.skipBareMode }),
 				...(options.jsonStream && { passthroughStdout: true }),
 			})
 

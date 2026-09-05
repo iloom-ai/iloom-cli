@@ -119,12 +119,16 @@ export class CommitCommand {
 			return
 		}
 
-		// Step 5: Run validations unless --wip-commit is specified
+		// Step 5: Load settings (needed for validation and issue prefix)
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+
+		// Step 6: Run validations unless --wip-commit is specified
 		let validationPassed = false
 		if (!input.wipCommit) {
 			logger.info('Running pre-commit validations...')
 			const validationResult = await this.validationRunner.runValidations(worktreePath, {
 				dryRun: false,
+				skipBareMode: settings.skipBareMode,
 				...(input.jsonStream !== undefined && { jsonStream: input.jsonStream }),
 			})
 			if (!validationResult.success) {
@@ -133,9 +137,6 @@ export class CommitCommand {
 			logger.success('All validations passed')
 			validationPassed = true
 		}
-
-		// Step 6: Load settings to get issue prefix
-		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const providerType = settings.issueManagement?.provider ?? 'github'
 		const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
 
@@ -164,6 +165,7 @@ export class CommitCommand {
 			noReview: input.noReview ?? false,
 			trailerType,
 			timeout: settings.git?.commitTimeout,
+			skipBareMode: settings.skipBareMode,
 			...(commitMessage && { message: commitMessage }),
 			...(detected.issueNumber !== undefined && { issueNumber: detected.issueNumber }),
 		}

@@ -143,7 +143,7 @@ export class FinishCommand {
 		this.loomManager ??= new LoomManager(
 			this.gitWorktreeManager,
 			this.issueTracker,
-			new DefaultBranchNamingService({ useClaude: true }),
+			new DefaultBranchNamingService({ useClaude: true, skipBareMode: settings.skipBareMode }),
 			environmentManager,
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),
@@ -689,15 +689,16 @@ export class FinishCommand {
 		result: FinishResult
 	): Promise<void> {
 		// Define merge options early so they're available for all code paths
+		// Early exit: if this is a draft-PR loom whose PR is already merged/closed,
+		// skip all rebase/validate/commit steps and go straight to cleanup
+		const earlySettings = await this.settingsManager.loadSettings(worktree.path)
+
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 			jsonStream: options.jsonStream ?? false,
+			skipBareMode: earlySettings.skipBareMode,
 		}
-
-		// Early exit: if this is a draft-PR loom whose PR is already merged/closed,
-		// skip all rebase/validate/commit steps and go straight to cleanup
-		const earlySettings = await this.settingsManager.loadSettings(worktree.path)
 		const earlyMergeBehavior = earlySettings.mergeBehavior ?? { mode: 'local' }
 		const earlyRawMode = earlyMergeBehavior.mode as string
 		const earlyMergeMode = earlyRawMode === 'github-draft-pr' ? 'draft-pr' : earlyRawMode
@@ -776,10 +777,12 @@ export class FinishCommand {
 			// Validates code with latest main changes integrated
 			if (!options.dryRun) {
 				getLogger().info('Running pre-merge validations...')
+				const validationSettings = await this.settingsManager.loadSettings(worktree.path)
 
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
 					jsonStream: options.jsonStream ?? false,
+					skipBareMode: validationSettings.skipBareMode,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({
