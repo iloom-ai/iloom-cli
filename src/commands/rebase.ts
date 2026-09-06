@@ -119,12 +119,10 @@ export class RebaseCommand {
 			throw error
 		}
 
-		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 			jsonStream: options.jsonStream ?? false,
-			skipBareMode: settings.skipBareMode,
 		}
 
 		// MergeManager.rebaseOnMain() handles:

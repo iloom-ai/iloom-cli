@@ -84,13 +84,12 @@ export class SessionSummaryService {
 	 * causing a "Prompt is too long" error. This helper detects that condition (either as a
 	 * thrown error or as a returned result string) and retries with opus[1m] (1M context).
 	 */
-	private async launchSessionSummary(prompt: string, model: string, sessionId: string, skipBareMode?: boolean): Promise<string | void> {
+	private async launchSessionSummary(prompt: string, model: string, sessionId: string): Promise<string | void> {
 		const launchOptions = {
 			headless: true,
 			model,
 			sessionId,
 			noSessionPersistence: true,
-			...(skipBareMode ? { skipBareMode } : {}),
 		}
 
 		try {
@@ -172,7 +171,7 @@ export class SessionSummaryService {
 			// 7. Invoke Claude headless to generate summary
 			// Use --resume with session ID so Claude knows which conversation to summarize
 			const summaryModel = this.settingsManager.getSummaryModel(settings)
-			const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId, settings.skipBareMode)
+			const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId)
 
 			if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
 				logger.warn('Session summary generation returned empty result')
@@ -280,7 +279,6 @@ export class SessionSummaryService {
 				headless: true,
 				model: summaryModel,
 				noSessionPersistence: true,
-				...(settings.skipBareMode ? { skipBareMode: settings.skipBareMode } : {}),
 			})
 
 			if (!reportResult || typeof reportResult !== 'string' || reportResult.trim() === '') {
@@ -373,7 +371,7 @@ export class SessionSummaryService {
 
 		// 6. Invoke Claude headless to generate summary
 		const summaryModel = this.settingsManager.getSummaryModel(settings)
-		const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId, settings.skipBareMode)
+		const summaryResult = await this.launchSessionSummary(prompt, summaryModel, sessionId)
 
 		if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
 			throw new Error('Session summary generation returned empty result')

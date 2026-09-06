@@ -143,7 +143,7 @@ export class FinishCommand {
 		this.loomManager ??= new LoomManager(
 			this.gitWorktreeManager,
 			this.issueTracker,
-			new DefaultBranchNamingService({ useClaude: true, skipBareMode: settings.skipBareMode }),
+			new DefaultBranchNamingService({ useClaude: true }),
 			environmentManager,
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),
@@ -697,7 +697,6 @@ export class FinishCommand {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 			jsonStream: options.jsonStream ?? false,
-			skipBareMode: earlySettings.skipBareMode,
 		}
 		const earlyMergeBehavior = earlySettings.mergeBehavior ?? { mode: 'local' }
 		const earlyRawMode = earlyMergeBehavior.mode as string
@@ -777,12 +776,10 @@ export class FinishCommand {
 			// Validates code with latest main changes integrated
 			if (!options.dryRun) {
 				getLogger().info('Running pre-merge validations...')
-				const validationSettings = await this.settingsManager.loadSettings(worktree.path)
 
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
 					jsonStream: options.jsonStream ?? false,
-					skipBareMode: validationSettings.skipBareMode,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({

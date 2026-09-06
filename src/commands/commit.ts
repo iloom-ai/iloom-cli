@@ -128,7 +128,6 @@ export class CommitCommand {
 			logger.info('Running pre-commit validations...')
 			const validationResult = await this.validationRunner.runValidations(worktreePath, {
 				dryRun: false,
-				skipBareMode: settings.skipBareMode,
 				...(input.jsonStream !== undefined && { jsonStream: input.jsonStream }),
 			})
 			if (!validationResult.success) {
@@ -165,7 +164,6 @@ export class CommitCommand {
 			noReview: input.noReview ?? false,
 			trailerType,
 			timeout: settings.git?.commitTimeout,
-			skipBareMode: settings.skipBareMode,
 			...(commitMessage && { message: commitMessage }),
 			...(detected.issueNumber !== undefined && { issueNumber: detected.issueNumber }),
 		}
