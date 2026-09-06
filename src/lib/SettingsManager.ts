@@ -497,16 +497,6 @@ export const IloomSettingsSchema = z.object({
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
 		),
-	skipBareMode: z
-		.boolean()
-		.default(true)
-		.describe(
-			'Skip bare mode for headless Claude CLI utility operations (branch-name generation, ' +
-				'commit messages, conflict resolution, and session summaries). Bare mode launches the Claude ' +
-				'CLI with --bare — a minimal mode that skips hooks, LSP, plugins, and CLAUDE.md auto-discovery ' +
-				'and requires ANTHROPIC_API_KEY (disabling OAuth/keychain). Defaults to true (bare mode off); ' +
-				'set to false to opt into bare mode on accounts where it is supported. Unrelated to database/Neon branching.',
-		),
 	worktreePrefix: z
 		.string()
 		.optional()
@@ -813,16 +803,6 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'Before enabling, verify ALL your .env.* files do not contain unquoted special characters ' +
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
-		),
-	skipBareMode: z
-		.boolean()
-		.optional()
-		.describe(
-			'Skip bare mode for headless Claude CLI utility operations (branch-name generation, ' +
-				'commit messages, conflict resolution, and session summaries). Bare mode launches the Claude ' +
-				'CLI with --bare — a minimal mode that skips hooks, LSP, plugins, and CLAUDE.md auto-discovery ' +
-				'and requires ANTHROPIC_API_KEY (disabling OAuth/keychain). Defaults to true (bare mode off); ' +
-				'set to false to opt into bare mode on accounts where it is supported. Unrelated to database/Neon branching.',
 		),
 	worktreePrefix: z
 		.string()

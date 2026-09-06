@@ -1640,7 +1640,6 @@ describe('StartCommand', () => {
 				one_shot_mode: 'default',
 				complexity_override: false,
 				create_only: false,
-				skip_bare_mode: false,
 			})
 		})
 

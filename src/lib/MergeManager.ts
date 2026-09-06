@@ -44,7 +44,7 @@ export class MergeManager {
 	 * @throws Error if main branch doesn't exist, uncommitted changes exist, or conflicts occur
 	 */
 	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<RebaseOutcome> {
-		const { dryRun = false, force = false, jsonStream = false, skipBareMode } = options
+		const { dryRun = false, force = false, jsonStream = false } = options
 
 		// Pre-check: abort any in-progress rebase before starting a new one
 		await this.abortInProgressRebase(worktreePath)
@@ -231,7 +231,7 @@ export class MergeManager {
 					const resolved = await this.attemptClaudeConflictResolution(
 						worktreePath,
 						conflictedFiles,
-						{ jsonStream, conflictType: 'merge', ...(skipBareMode != null && { skipBareMode }) }
+						{ jsonStream, conflictType: 'merge' }
 					)
 
 					if (resolved) {
@@ -284,7 +284,7 @@ export class MergeManager {
 				const resolved = await this.attemptClaudeConflictResolution(
 					worktreePath,
 					conflictedFiles,
-					{ jsonStream, ...(skipBareMode != null && { skipBareMode }) }
+					{ jsonStream }
 				)
 
 				if (resolved) {
@@ -568,7 +568,7 @@ export class MergeManager {
 	private async attemptClaudeConflictResolution(
 		worktreePath: string,
 		conflictedFiles: string[],
-		options: { jsonStream?: boolean; conflictType?: 'rebase' | 'merge'; skipBareMode?: boolean } = {}
+		options: { jsonStream?: boolean; conflictType?: 'rebase' | 'merge' } = {}
 	): Promise<boolean> {
 		const conflictType = options.conflictType ?? 'rebase'
 
@@ -642,7 +642,6 @@ export class MergeManager {
 				}),
 				allowedTools,
 				noSessionPersistence: true, // Utility operation - no session persistence needed
-				...(options.skipBareMode != null && { skipBareMode: options.skipBareMode }),
 			})
 
 			// After Claude interaction completes, check if conflicts resolved

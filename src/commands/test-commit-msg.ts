@@ -32,7 +32,9 @@ export class TestCommitMsgCommand {
     const result = await commitManager.generateClaudeCommitMessage(
       worktreePath,
       undefined,
-      '#'
+      '#',
+      undefined,
+      true, // bare:true — this diagnostic exists to exercise the opt-in bare-mode launch path
     )
     const duration = Date.now() - startTime
 

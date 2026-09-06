@@ -83,8 +83,7 @@ export interface ClaudeCliOptions {
 	effort?: string // Effort level to pass via --effort flag (e.g., 'low', 'high', 'max')
 	env?: Record<string, string> // Additional environment variables to pass to the Claude process
 	signal?: AbortSignal // Optional AbortSignal for graceful termination of the Claude process
-	bare?: boolean // Minimal mode: skip hooks, LSP, plugins, CLAUDE.md auto-discovery. Requires ANTHROPIC_API_KEY (disables OAuth/keychain).
-	skipBareMode?: boolean // When true, never auto-apply bare mode (skip the try-then-fallback overhead)
+	bare?: boolean // Minimal mode: skip hooks, LSP, plugins, CLAUDE.md auto-discovery. Requires ANTHROPIC_API_KEY (disables OAuth/keychain). Strictly opt-in — only applied when explicitly set to true.
 	settings?: string // JSON settings string for --settings flag (e.g., '{"apiKeyHelper": "echo TOKEN"}')
 }
 
@@ -158,30 +157,21 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, systemPrompt, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal, bare, skipBareMode, settings } = options
+	const { model, permissionMode, addDir, headless = false, systemPrompt, appendSystemPrompt, appendSystemPromptFile, mcpConfig, allowedTools, disallowedTools, agents, pluginDir, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, effort, env: extraEnv, signal, bare, settings } = options
 	const log = getLogger()
 
-	// Resolve bare mode configuration
+	// Resolve bare mode configuration. Bare mode is strictly opt-in: it is applied
+	// only when the caller explicitly passes bare:true. All other launches (including
+	// headless utility operations) use the standard, non-bare code path.
 	let effectiveBare = bare ?? false
 	let effectiveSettings = settings
-	let bareModeAutoApplied = false
 	let oauthToken: string | undefined
-
-	// Auto-apply bare mode for headless utility operations when not explicitly set
-	if (bare === undefined && headless && noSessionPersistence && !skipBareMode) {
-		const config = await resolveBareModeConfig()
-		effectiveBare = config.bare
-		effectiveSettings ??= config.settings
-		oauthToken = config.oauthToken
-		bareModeAutoApplied = config.bare // track that WE decided to use bare
-	}
 
 	// When caller explicitly sets bare:true without settings, resolve OAuth settings too
 	if (bare === true && !effectiveSettings) {
 		const config = await resolveBareModeConfig()
 		effectiveSettings ??= config.settings
 		oauthToken = config.oauthToken
-		// bareModeAutoApplied stays false - caller explicitly requested bare
 	}
 
 	const isDebugMode = logger.isDebugEnabled()
@@ -403,70 +393,47 @@ export async function launchClaude(
 		return
 	}
 
-	// Handle headless mode with retry loop (max 2 attempts)
+	// Handle headless mode (bare mode, when requested, is applied via buildBaseArgs)
 	if (headless) {
-		const maxAttempts = bareModeAutoApplied ? 2 : 1
-		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-			const useBare = attempt === 1
-			const args = buildBaseArgs(useBare)
-			const env = buildEnv(useBare)
+		const args = buildBaseArgs(true)
+		const env = buildEnv(true)
 
-			try {
-				return await runHeadlessSubprocess(args, env)
-			} catch (error) {
-				if (signal?.aborted) return
+		try {
+			return await runHeadlessSubprocess(args, env)
+		} catch (error) {
+			if (signal?.aborted) return
 
-				const execaError = error as { stderr?: string; message?: string; exitCode?: number }
-				// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
-				const rawErrorMessage = execaError.stderr || execaError.message || 'Unknown Claude CLI error'
-				const errorMessage = redactSettings(rawErrorMessage)
+			const execaError = error as { stderr?: string; message?: string; exitCode?: number }
+			// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
+			const rawErrorMessage = execaError.stderr || execaError.message || 'Unknown Claude CLI error'
+			const errorMessage = redactSettings(rawErrorMessage)
 
-				// On first attempt with auto-applied bare mode, check for auth failure and retry
-				if (attempt === 1 && bareModeAutoApplied) {
-					const isAuthError = /not logged in|unauthorized|authentication|invalid api key|Could not resolve credentials/i.test(rawErrorMessage)
-					if (isAuthError) {
-						logger.warn('Bare mode failed (likely expired OAuth token), retrying without --bare')
-						continue // Retry without bare on next iteration
-					}
+			// Check for "Session ID ... is already in use" error and retry with --resume
+			const sessionInUseMatch = errorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
+			const extractedSessionId = sessionInUseMatch?.[1]
+			if (sessionInUseMatch && sessionId && extractedSessionId) {
+				log.debug(`Session ID ${extractedSessionId} already in use, retrying with --resume`)
+
+				// Build clean args with --resume instead of --session-id
+				const resumeArgs = args.filter((arg, idx) => {
+					if (arg === '--session-id') return false
+					if (idx > 0 && args[idx - 1] === '--session-id') return false
+					return true
+				})
+				resumeArgs.push('--resume', extractedSessionId)
+
+				try {
+					return await runHeadlessSubprocess(resumeArgs, env)
+				} catch (retryError) {
+					const retryExecaError = retryError as { stderr?: string; message?: string }
+					// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
+					const retryErrorMessage = retryExecaError.stderr || retryExecaError.message || 'Unknown Claude CLI error'
+					throw new Error(`Claude CLI error: ${redactSettings(retryErrorMessage)}`)
 				}
-
-				// Check for "Session ID ... is already in use" error and retry with --resume
-				const sessionInUseMatch = errorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
-				const extractedSessionId = sessionInUseMatch?.[1]
-				if (sessionInUseMatch && sessionId && extractedSessionId) {
-					log.debug(`Session ID ${extractedSessionId} already in use, retrying with --resume`)
-
-					// Build clean args with --resume instead of --session-id
-					const resumeArgs = args.filter((arg, idx) => {
-						if (arg === '--session-id') return false
-						if (idx > 0 && args[idx - 1] === '--session-id') return false
-						return true
-					})
-					resumeArgs.push('--resume', extractedSessionId)
-
-					try {
-						return await runHeadlessSubprocess(resumeArgs, env)
-					} catch (retryError) {
-						const retryExecaError = retryError as { stderr?: string; message?: string }
-						// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: empty string stderr should fall through to message
-						const retryErrorMessage = retryExecaError.stderr || retryExecaError.message || 'Unknown Claude CLI error'
-
-						if (attempt === 1 && bareModeAutoApplied) {
-							const isAuthError = /not logged in|unauthorized|authentication|invalid api key|Could not resolve credentials/i.test(retryErrorMessage)
-							if (isAuthError) {
-								logger.warn('Bare mode failed during --resume retry (likely expired OAuth token), retrying without --bare')
-								continue
-							}
-						}
-
-						throw new Error(`Claude CLI error: ${redactSettings(retryErrorMessage)}`)
-					}
-				}
-
-				throw new Error(`Claude CLI error: ${errorMessage}`)
 			}
+
+			throw new Error(`Claude CLI error: ${errorMessage}`)
 		}
-		return
 	}
 
 	// Interactive mode: run Claude in current terminal with stdio inherit
@@ -710,7 +677,7 @@ export async function generateBranchName(
 	issueTitle: string,
 	issueNumber: string | number,
 	model: string = 'haiku',
-	skipBareMode?: boolean
+	bare?: boolean
 ): Promise<string> {
 	try {
 		// Check if Claude CLI is available
@@ -748,7 +715,7 @@ Generate a git branch name for the following issue:
 			noSessionPersistence: true, // Utility operation - don't persist session
 			systemPrompt: 'You are a git branch name generator. Given an issue title and number, generate a branch name following the exact format and constraints provided. Output only the branch name, nothing else. No preamble, analysis, or meta-commentary.',
 			effort: 'low', // Simple text generation, minimize turns
-			...(skipBareMode ? { skipBareMode } : {}),
+			...(bare ? { bare } : {}),
 		})) as string
 
 		// Normalize to lowercase for consistency (Linear IDs are uppercase but branches should be lowercase)

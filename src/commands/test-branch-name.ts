@@ -30,7 +30,8 @@ export class TestBranchNameCommand {
     logger.info('Generating branch name...\n')
 
     const startTime = Date.now()
-    const branchName = await generateBranchName(title, '999')
+    // bare:true — this diagnostic exists to exercise the opt-in bare-mode launch path
+    const branchName = await generateBranchName(title, '999', 'haiku', true)
     const duration = Date.now() - startTime
 
     logger.success(`Branch name: ${branchName}`)

@@ -170,7 +170,7 @@ describe('BranchNamingService', () => {
 
 			// Verify the mock was called with correct arguments
 			const { generateBranchName } = await import('../utils/claude.js')
-			expect(generateBranchName).toHaveBeenCalledWith('Test Issue', 123, 'haiku', undefined)
+			expect(generateBranchName).toHaveBeenCalledWith('Test Issue', 123, 'haiku')
 			// The mock should return the mocked value
 			expect(branchName).toBe('feat/issue-123__ai-generated-branch')
 		})
@@ -180,7 +180,7 @@ describe('BranchNamingService', () => {
 			await strategy.generate(456, 'Another Issue')
 
 			const { generateBranchName } = await import('../utils/claude.js')
-			expect(generateBranchName).toHaveBeenCalledWith('Another Issue', 456, 'sonnet', undefined)
+			expect(generateBranchName).toHaveBeenCalledWith('Another Issue', 456, 'sonnet')
 		})
 
 		it('should use haiku model by default', async () => {
@@ -188,7 +188,7 @@ describe('BranchNamingService', () => {
 			await strategy.generate(789, 'Default Model Test')
 
 			const { generateBranchName } = await import('../utils/claude.js')
-			expect(generateBranchName).toHaveBeenCalledWith('Default Model Test', 789, 'haiku', undefined)
+			expect(generateBranchName).toHaveBeenCalledWith('Default Model Test', 789, 'haiku')
 		})
 	})
 })
