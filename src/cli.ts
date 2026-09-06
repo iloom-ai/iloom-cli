@@ -2107,7 +2107,7 @@ program
 // Test command for bare mode branch name generation
 program
   .command('test-branch-name', { hidden: true })
-  .description('Test bare mode branch name generation')
+  .description('Test branch name generation')
   .option('--title <text>', 'Issue title to use for branch name generation')
   .option('--description <text>', 'Issue description for additional context')
   .action(async (options: { title?: string; description?: string }) => {
@@ -2127,7 +2127,7 @@ program
 // Test command for bare mode commit message generation
 program
   .command('test-commit-msg', { hidden: true })
-  .description('Test bare mode commit message generation')
+  .description('Test commit message generation')
   .action(async () => {
     try {
       const { TestCommitMsgCommand } = await import('./commands/test-commit-msg.js')

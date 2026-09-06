@@ -301,7 +301,6 @@ export class CommitManager {
     issueNumber: string | number | undefined,
     issuePrefix: string,
     trailerType?: 'Refs' | 'Fixes',
-    bare?: boolean,
   ): Promise<string | null> {
     const startTime = Date.now()
 
@@ -364,7 +363,6 @@ export class CommitManager {
         systemPrompt: 'You are a git commit message generator. Generate a concise commit message in imperative mood with subject line under 72 characters. Your entire response is used verbatim as the commit message — output ONLY the raw commit message, no explanatory text.',
         noSessionPersistence: true, // Utility operation - don't persist session
         effort: 'low', // Minimize turns for fast commit message generation
-        ...(bare != null && { bare }),
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,
