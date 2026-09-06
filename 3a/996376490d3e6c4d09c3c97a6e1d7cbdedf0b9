@@ -1,0 +1,26 @@
+src/cli.ts
+  s_bb481f5757a47a::t_27a1c51d29d703 2110
+  s_bb481f5757a47a::t_e65b8e1ce24f90 2130
+src/commands/test-branch-name.ts
+  s_bb481f5757a47a::t_c905fee87fec6e 2,5-7,14,20
+src/utils/claude.ts
+  s_bb481f5757a47a::t_d85b7f907da7f9 679
+src/commands/test-commit-msg.ts
+  s_bb481f5757a47a::t_c2e9809d1df908 5-6,10,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "3a996376490d3e6c4d09c3c97a6e1d7cbdedf0b9",
+  "prompts": {},
+  "sessions": {
+    "s_bb481f5757a47a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38ffe199-bcda-4f09-bb31-29b833d1fa5a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
