@@ -1,0 +1,59 @@
+src/lib/MergeManager.ts
+  s_bb481f5757a47a::t_484fe2f84a3893 47
+  s_bb481f5757a47a::t_34ad91efa20f83 287
+  s_bb481f5757a47a::t_c58cab44ea9203 234
+  s_bb481f5757a47a::t_ac745a5996db8d 571
+src/lib/BranchNamingService.ts
+  s_bb481f5757a47a::t_75166b2122b2bd 69
+  s_bb481f5757a47a::t_77914e79ba4abb 30,35
+src/commands/cleanup.ts
+  s_bb481f5757a47a::t_222b61eb831a61 128
+src/commands/start.ts
+  s_bb481f5757a47a::t_c781acdd568207 109
+src/commands/test-branch-name.ts
+  s_bb481f5757a47a::t_aacebe23ecb641 33-34
+src/commands/finish.ts
+  s_bb481f5757a47a::t_5322c62c2e26c9 146
+src/lib/CommitManager.ts
+  s_bb481f5757a47a::t_0f23a0eff07cdf 304
+  s_bb481f5757a47a::t_3de281a3fe3373 365,367
+  s_bb481f5757a47a::t_abd9a0a0b4dbe6 76
+src/lib/SessionSummaryService.ts
+  s_bb481f5757a47a::t_cbc6dcf6b011bd 87
+  s_bb481f5757a47a::t_72157666db2428 174,374
+src/utils/claude.ts
+  s_bb481f5757a47a::t_b57eafe78ee079 86
+  s_bb481f5757a47a::t_f39ee69c430f41 160
+  s_bb481f5757a47a::t_6035903efb180c 163-165
+  s_bb481f5757a47a::t_b3345f8f31dbbc 396,398-399,401-404,406-431,434-435
+  s_bb481f5757a47a::t_31595fadb3e7de 680
+  s_bb481f5757a47a::t_ea510d49c27975 718
+src/lib/ValidationRunner.ts
+  s_bb481f5757a47a::t_10394ba47df286 163,261,357
+  s_bb481f5757a47a::t_234580a9de4b93 87,196,292,395
+src/utils/claude.test.ts
+  s_bb481f5757a47a::t_69d4e3d5fb0f60 2425
+  s_bb481f5757a47a::t_a7249e0c804060 2298,2314-2315,2317
+src/commands/test-commit-msg.ts
+  s_bb481f5757a47a::t_cc6dc96f46f795 35-37
+src/lib/BranchNamingService.test.ts
+  s_bb481f5757a47a::t_3474bbbbc8208e 191
+  s_bb481f5757a47a::t_5c26ef38e7f590 183
+  s_bb481f5757a47a::t_65c95b6f51fc82 173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "7c74da560f1d827172b712861c13c2b5c1cc21e9",
+  "prompts": {},
+  "sessions": {
+    "s_bb481f5757a47a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38ffe199-bcda-4f09-bb31-29b833d1fa5a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
