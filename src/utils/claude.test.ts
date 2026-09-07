@@ -2113,13 +2113,6 @@ describe('claude utils', () => {
 			it('should add --no-session-persistence flag when noSessionPersistence is true', async () => {
 				const prompt = 'Test prompt'
 
-				// resolveBareModeConfig will try OAuth extraction - make it fail
-				if (process.platform === 'darwin') {
-					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
-				} else {
-					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
-				}
-
 				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
 					exitCode: 0,
@@ -2194,13 +2187,6 @@ describe('claude utils', () => {
 			it('should combine noSessionPersistence with other options in correct order', async () => {
 				const prompt = 'Test prompt'
 				const sessionId = '12345678-1234-5678-1234-567812345678'
-
-				// resolveBareModeConfig will try OAuth extraction - make it fail
-				if (process.platform === 'darwin') {
-					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
-				} else {
-					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
-				}
 
 				mockExeca().mockResolvedValueOnce({
 					stdout: 'output',
@@ -2309,7 +2295,7 @@ describe('claude utils', () => {
 				expect(execaCall[1]).not.toContain('--bare')
 			})
 
-			it('should auto-apply --bare when headless + noSessionPersistence and ANTHROPIC_API_KEY is set', async () => {
+			it('should NOT auto-apply --bare for headless + noSessionPersistence (bare is strictly opt-in), even with ANTHROPIC_API_KEY set', async () => {
 				const originalApiKey = process.env.ANTHROPIC_API_KEY
 				try {
 					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
@@ -2325,11 +2311,10 @@ describe('claude utils', () => {
 						noSessionPersistence: true,
 					})
 
-					expect(execa).toHaveBeenCalledWith(
-						'claude',
-						expect.arrayContaining(['--bare']),
-						expect.any(Object)
+					const execaCall = mockExeca().mock.calls.find(
+						(call: unknown[]) => call[0] === 'claude'
 					)
+					expect(execaCall?.[1]).not.toContain('--bare')
 				} finally {
 					if (originalApiKey !== undefined) {
 						process.env.ANTHROPIC_API_KEY = originalApiKey
@@ -2346,13 +2331,6 @@ describe('claude utils', () => {
 					delete process.env.ANTHROPIC_API_KEY
 					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 					const prompt = 'Test prompt'
-
-					// On macOS, extractOAuthToken will call security command - make it fail
-					if (process.platform === 'darwin') {
-						mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
-					} else {
-						vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
-					}
 
 					mockExeca().mockResolvedValueOnce({
 						stdout: 'output',
@@ -2444,66 +2422,7 @@ describe('claude utils', () => {
 				)
 			})
 
-			it('should skip auto-apply bare mode when skipBareMode is true', async () => {
-				const originalApiKey = process.env.ANTHROPIC_API_KEY
-				try {
-					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
-					const prompt = 'Test prompt'
-
-					mockExeca().mockResolvedValueOnce({
-						stdout: 'output',
-						exitCode: 0,
-					})
-
-					await launchClaude(prompt, {
-						headless: true,
-						noSessionPersistence: true,
-						skipBareMode: true,
-					})
-
-					const execaCall = mockExeca().mock.calls[0]
-					expect(execaCall[1]).not.toContain('--bare')
-				} finally {
-					if (originalApiKey !== undefined) {
-						process.env.ANTHROPIC_API_KEY = originalApiKey
-					} else {
-						delete process.env.ANTHROPIC_API_KEY
-					}
-				}
-			})
-
-			it('should still auto-apply bare mode when skipBareMode is false', async () => {
-				const originalApiKey = process.env.ANTHROPIC_API_KEY
-				try {
-					process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
-					const prompt = 'Test prompt'
-
-					mockExeca().mockResolvedValueOnce({
-						stdout: 'output',
-						exitCode: 0,
-					})
-
-					await launchClaude(prompt, {
-						headless: true,
-						noSessionPersistence: true,
-						skipBareMode: false,
-					})
-
-					expect(execa).toHaveBeenCalledWith(
-						'claude',
-						expect.arrayContaining(['--bare']),
-						expect.any(Object)
-					)
-				} finally {
-					if (originalApiKey !== undefined) {
-						process.env.ANTHROPIC_API_KEY = originalApiKey
-					} else {
-						delete process.env.ANTHROPIC_API_KEY
-					}
-				}
-			})
-
-			it('should honor explicit bare:true even when skipBareMode is true', async () => {
+			it('should honor explicit bare:true', async () => {
 				const prompt = 'Test prompt'
 
 				mockExeca().mockResolvedValueOnce({
@@ -2514,7 +2433,6 @@ describe('claude utils', () => {
 				await launchClaude(prompt, {
 					headless: true,
 					bare: true,
-					skipBareMode: true,
 				})
 
 				expect(execa).toHaveBeenCalledWith(
@@ -2904,68 +2822,6 @@ describe('claude utils', () => {
 			}
 		})
 
-		it('should retry without --bare when auto-applied bare mode fails with auth error', async () => {
-			// Set up OAuth token so bare mode will be auto-applied
-			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
-
-			const fakeSubprocess1 = {
-				stdout: null,
-				on: vi.fn(),
-				kill: vi.fn(),
-			}
-
-			const fakeSubprocess2 = {
-				stdout: null,
-				on: vi.fn(),
-				kill: vi.fn(),
-			}
-
-			// First call: fails with auth error (bare mode auto-applied)
-			const authError = Object.assign(new Error('Invalid API Key'), {
-				stderr: 'Invalid API Key',
-				exitCode: 1,
-			})
-			mockExeca().mockReturnValueOnce(
-				Object.assign(Promise.reject(authError), fakeSubprocess1)
-			)
-
-			// Second call: succeeds (retry without bare)
-			mockExeca().mockReturnValueOnce(
-				Object.assign(Promise.resolve({ stdout: 'retry output', exitCode: 0 }), fakeSubprocess2)
-			)
-
-			const result = await launchClaude('test prompt', {
-				headless: true,
-				noSessionPersistence: true,
-			})
-
-			expect(result).toBe('retry output')
-
-			// Verify first call had --bare and --settings
-			const firstCallArgs = mockExeca().mock.calls[0][1] as string[]
-			expect(firstCallArgs).toContain('--bare')
-			expect(firstCallArgs).toContain('--settings')
-
-			// Verify first call passes OAuth token via env var, not in args
-			const firstCallOpts = mockExeca().mock.calls[0][2] as Record<string, unknown>
-			const firstCallEnv = firstCallOpts.env as Record<string, string>
-			expect(firstCallEnv.__ILOOM_OAUTH_TOKEN).toBe('sk-ant-oat01-test-token')
-
-			// Verify settings JSON does NOT contain the actual token
-			const settingsIdx = firstCallArgs.indexOf('--settings')
-			const settingsJson = firstCallArgs[settingsIdx + 1]
-			expect(settingsJson).not.toContain('sk-ant-oat01-test-token')
-			expect(settingsJson).toContain('__ILOOM_OAUTH_TOKEN')
-
-			// Verify second call does NOT have --bare or --settings
-			const secondCallArgs = mockExeca().mock.calls[1][1] as string[]
-			expect(secondCallArgs).not.toContain('--bare')
-			expect(secondCallArgs).not.toContain('--settings')
-
-			// Verify warning was logged
-			expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Bare mode failed'))
-		})
-
 		it('should NOT retry when bare was explicitly set by caller', async () => {
 			// Mock OAuth extraction failure so resolveBareModeConfig can complete
 			// (bare:true without settings triggers resolveBareModeConfig for OAuth)
@@ -3031,58 +2887,6 @@ describe('claude utils', () => {
 
 			// Should only have been called once (no retry)
 			expect(execa).toHaveBeenCalledTimes(1)
-		})
-
-		it('should retry without --bare when session-in-use --resume retry fails with auth error', async () => {
-			// Set up OAuth token so bare mode will be auto-applied
-			process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-test-token'
-
-			const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
-
-			// First call: fails with session-in-use error (bare mode auto-applied)
-			mockExeca().mockRejectedValueOnce({
-				stderr: `Error: Session ID ${sessionId} is already in use.`,
-				exitCode: 1,
-			})
-
-			// Second call (--resume retry): fails with auth error
-			const authError = Object.assign(new Error('authentication_failed'), {
-				stderr: 'Invalid API key',
-				exitCode: 1,
-			})
-			mockExeca().mockRejectedValueOnce(authError)
-
-			// Third call: succeeds (retry without bare)
-			mockExeca().mockResolvedValueOnce({
-				stdout: 'success without bare',
-				exitCode: 0,
-			})
-
-			const result = await launchClaude('test prompt', {
-				headless: true,
-				noSessionPersistence: true,
-				sessionId,
-			})
-
-			expect(result).toBe('success without bare')
-			expect(execa).toHaveBeenCalledTimes(3)
-
-			// First call should have --bare and --session-id
-			const firstCallArgs = mockExeca().mock.calls[0][1] as string[]
-			expect(firstCallArgs).toContain('--bare')
-			expect(firstCallArgs).toContain('--session-id')
-
-			// Second call (--resume) should have --bare and --resume
-			const secondCallArgs = mockExeca().mock.calls[1][1] as string[]
-			expect(secondCallArgs).toContain('--bare')
-			expect(secondCallArgs).toContain('--resume')
-
-			// Third call should NOT have --bare (fallback)
-			const thirdCallArgs = mockExeca().mock.calls[2][1] as string[]
-			expect(thirdCallArgs).not.toContain('--bare')
-
-			// Verify warning was logged
-			expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Bare mode failed during --resume retry'))
 		})
 
 		it('should throw when session-in-use --resume retry fails with non-auth error', async () => {
@@ -3323,15 +3127,6 @@ describe('claude utils', () => {
 			}
 		})
 
-		// Helper: mock OAuth extraction failure for macOS (security command) or Linux (readFile)
-		function mockOAuthExtractionFailure(): void {
-			if (process.platform === 'darwin') {
-				mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
-			} else {
-				vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
-			}
-		}
-
 		it('should generate branch name using Claude when available', async () => {
 			const issueTitle = 'Add user authentication'
 			const issueNumber = 123
@@ -3341,9 +3136,6 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
-
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
 
 			// Mock Claude response with full branch name
 			mockExeca().mockResolvedValueOnce({
@@ -3388,9 +3180,6 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
-
 			// Mock Claude returning error message
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'API error: rate limit exceeded',
@@ -3411,9 +3200,6 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
-
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
 
 			// Mock Claude returning empty string
 			mockExeca().mockResolvedValueOnce({
@@ -3436,9 +3222,6 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
-
 			// Mock Claude returning properly formatted branch
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'fix/issue-123__authentication-bug',
@@ -3460,9 +3243,6 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
-
 			// Mock Claude returning invalid format (no prefix)
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'add-user-auth',
@@ -3483,9 +3263,6 @@ describe('claude utils', () => {
 				stdout: '/usr/local/bin/claude',
 				exitCode: 0,
 			})
-
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
 
 			// Mock Claude execution fails
 			mockExeca().mockRejectedValueOnce({
@@ -3509,9 +3286,6 @@ describe('claude utils', () => {
 				exitCode: 0,
 			})
 
-			// OAuth extraction will fail (no credentials)
-			mockOAuthExtractionFailure()
-
 			// Mock Claude returning lowercase branch name (correct behavior)
 			mockExeca().mockResolvedValueOnce({
 				stdout: 'feat/issue-mark-1__nextjs-vercel',
@@ -3524,88 +3298,6 @@ describe('claude utils', () => {
 			expect(result).toBe('feat/issue-mark-1__nextjs-vercel')
 		})
 
-		describe('bare mode (auto-applied by launchClaude)', () => {
-			let originalApiKey: string | undefined
-			let originalOAuthToken: string | undefined
-
-			beforeEach(() => {
-				originalApiKey = process.env.ANTHROPIC_API_KEY
-				originalOAuthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN
-			})
-
-			afterEach(() => {
-				if (originalApiKey !== undefined) {
-					process.env.ANTHROPIC_API_KEY = originalApiKey
-				} else {
-					delete process.env.ANTHROPIC_API_KEY
-				}
-				if (originalOAuthToken !== undefined) {
-					process.env.CLAUDE_CODE_OAUTH_TOKEN = originalOAuthToken
-				} else {
-					delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-				}
-			})
-
-			it('should auto-apply --bare when ANTHROPIC_API_KEY is set (headless + noSessionPersistence)', async () => {
-				process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key'
-				const issueTitle = 'Add user authentication'
-				const issueNumber = 123
-
-				// Mock Claude CLI detection
-				mockExeca().mockResolvedValueOnce({
-					stdout: '/usr/local/bin/claude',
-					exitCode: 0,
-				})
-
-				// Mock Claude response
-				mockExeca().mockResolvedValueOnce({
-					stdout: 'feat/issue-123__user-authentication',
-					exitCode: 0,
-				})
-
-				await generateBranchName(issueTitle, issueNumber)
-
-				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					expect.arrayContaining(['--bare']),
-					expect.any(Object)
-				)
-			})
-
-			it('should not auto-apply --bare when no API key or OAuth token available', async () => {
-				delete process.env.ANTHROPIC_API_KEY
-				delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-				const issueTitle = 'Add user authentication'
-				const issueNumber = 123
-
-				// Mock Claude CLI detection
-				mockExeca().mockResolvedValueOnce({
-					stdout: '/usr/local/bin/claude',
-					exitCode: 0,
-				})
-
-				// On macOS, extractOAuthToken calls security command - make it fail
-				if (process.platform === 'darwin') {
-					mockExeca().mockRejectedValueOnce(new Error('security: item not found'))
-				} else {
-					vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
-				}
-
-				// Mock Claude response
-				mockExeca().mockResolvedValueOnce({
-					stdout: 'feat/issue-123__user-authentication',
-					exitCode: 0,
-				})
-
-				await generateBranchName(issueTitle, issueNumber)
-
-				// Find the launchClaude call (the claude command, not security)
-				const claudeCall = mockExeca().mock.calls.find(
-					(call: unknown[]) => call[0] === 'claude' && (call[1] as string[])?.includes('-p')
-				)
-				expect(claudeCall?.[1]).not.toContain('--bare')
-			})
-		})
 	})
 
 	describe('AbortSignal support', () => {

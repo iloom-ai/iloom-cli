@@ -1,28 +1,13 @@
 import { logger } from '../utils/logger.js'
-import { resolveBareModeConfig } from '../utils/claude.js'
 import { CommitManager } from '../lib/CommitManager.js'
 
 /**
- * Test command to demonstrate bare mode commit message generation.
- * Uses the real CommitManager code path to generate a commit message.
+ * Test command to demonstrate commit message generation.
+ * Uses the real CommitManager code path (default, non-bare launch).
  */
 export class TestCommitMsgCommand {
   public async execute(): Promise<void> {
-    logger.info('Testing Commit Message Generation (Bare Mode)\n')
-
-    // Show bare mode resolution
-    logger.info('Resolving bare mode configuration...')
-    const config = await resolveBareModeConfig()
-
-    if (config.bare && config.oauthToken) {
-      logger.success('Using bare mode with OAuth token')
-    } else if (config.bare) {
-      logger.success('Using bare mode with API key')
-    } else {
-      logger.warn('Using standard mode (no bare)')
-    }
-
-    logger.info('')
+    logger.info('Testing Commit Message Generation\n')
     logger.info('Generating commit message via CommitManager...\n')
 
     const commitManager = new CommitManager()

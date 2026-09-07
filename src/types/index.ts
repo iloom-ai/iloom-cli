@@ -356,7 +356,6 @@ export interface ValidationOptions {
 	skipLint?: boolean
 	skipTests?: boolean
 	jsonStream?: boolean
-	skipBareMode?: boolean
 }
 
 export interface ValidationStepResult {
@@ -385,7 +384,6 @@ export interface CommitOptions {
 	skipVerifySilent?: boolean  // Skip without warning (for --wip-commit)
 	trailerType?: 'Refs' | 'Fixes'  // Trailer type: "Refs" references issue, "Fixes" closes it (default: 'Fixes' for backward compat)
 	timeout?: number      // Timeout in milliseconds for commit operation
-	skipBareMode?: boolean // Skip bare mode attempt for Claude CLI calls
 }
 
 /**
@@ -406,7 +404,6 @@ export interface MergeOptions {
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
 	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
 	noFf?: boolean        // Use --no-ff instead of --ff-only for local merge (set when rebase fell back to merge strategy)
-	skipBareMode?: boolean // Skip bare mode attempt for Claude CLI calls
 }
 
 export interface MergeResult {

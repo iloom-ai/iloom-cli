@@ -27,12 +27,12 @@ export class SimpleBranchNameStrategy implements BranchNameStrategy {
  * Uses Claude CLI to generate semantic branch names
  */
 export class ClaudeBranchNameStrategy implements BranchNameStrategy {
-	constructor(private claudeModel = 'haiku', private skipBareMode?: boolean) {}
+	constructor(private claudeModel = 'haiku') {}
 
 	async generate(issueNumber: string | number, title: string): Promise<string> {
 		// Dynamic import to allow mocking in tests
 		const { generateBranchName } = await import('../utils/claude.js')
-		return generateBranchName(title, issueNumber, this.claudeModel, this.skipBareMode)
+		return generateBranchName(title, issueNumber, this.claudeModel)
 	}
 }
 
@@ -61,13 +61,12 @@ export class DefaultBranchNamingService implements BranchNamingService {
 		strategy?: BranchNameStrategy
 		useClaude?: boolean
 		claudeModel?: string
-		skipBareMode?: boolean
 	}) {
 		// Set up default strategy based on options
 		if (options?.strategy) {
 			this.defaultStrategy = options.strategy
 		} else if (options?.useClaude !== false) {
-			this.defaultStrategy = new ClaudeBranchNameStrategy(options?.claudeModel, options?.skipBareMode)
+			this.defaultStrategy = new ClaudeBranchNameStrategy(options?.claudeModel)
 		} else {
 			this.defaultStrategy = new SimpleBranchNameStrategy()
 		}

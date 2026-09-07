@@ -73,7 +73,7 @@ export class CommitManager {
     // Skip Claude if custom message provided
     if (!options.message) {
       try {
-        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber, options.issuePrefix, options.trailerType, options.skipBareMode)
+        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber, options.issuePrefix, options.trailerType)
       } catch (error) {
         getLogger().debug('Claude commit message generation failed, using fallback', { error })
       }
@@ -301,7 +301,6 @@ export class CommitManager {
     issueNumber: string | number | undefined,
     issuePrefix: string,
     trailerType?: 'Refs' | 'Fixes',
-    skipBareMode?: boolean,
   ): Promise<string | null> {
     const startTime = Date.now()
 
@@ -362,9 +361,8 @@ export class CommitManager {
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
         systemPrompt: 'You are a git commit message generator. Generate a concise commit message in imperative mood with subject line under 72 characters. Your entire response is used verbatim as the commit message — output ONLY the raw commit message, no explanatory text.',
-        noSessionPersistence: true, // Utility operation - bare mode auto-applied by launchClaude
+        noSessionPersistence: true, // Utility operation - don't persist session
         effort: 'low', // Minimize turns for fast commit message generation
-        ...(skipBareMode != null && { skipBareMode }),
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,

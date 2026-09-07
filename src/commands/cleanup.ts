@@ -125,7 +125,7 @@ export class CleanupCommand {
       this.loomManager = new LoomManager(
         this.gitWorktreeManager,
         IssueTrackerFactory.create(settings),
-        new DefaultBranchNamingService({ useClaude: true, skipBareMode: settings.skipBareMode }),
+        new DefaultBranchNamingService({ useClaude: true }),
         environmentManager,
         new ClaudeContextManager(),
         new ProjectCapabilityDetector(),
