@@ -1,0 +1,19 @@
+.github/workflows/release.yml
+  s_365f20663cc832::t_3e51f8d77fa56b 99-101,105,109-126,133-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "0bce5244f7e2cfa76671c982c8e6ab0fff4d9998",
+  "prompts": {},
+  "sessions": {
+    "s_365f20663cc832": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "69dfeb4d-1cef-4d8a-adf1-80452dd1c49b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Adam Creeger <adamcreeger@gmail.com>"
+    }
+  }
+}
