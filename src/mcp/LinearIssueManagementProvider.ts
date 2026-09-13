@@ -1,6 +1,11 @@
 /**
  * Linear implementation of Issue Management Provider
  * Uses @linear/sdk for all operations
+ *
+ * Note: This provider runs in an MCP subprocess where LINEAR_API_TOKEN is
+ * injected into the environment by mcp.ts before the process spawns.
+ * The linear.ts utility functions fall back to process.env.LINEAR_API_TOKEN
+ * via createLinearClient(), so explicit apiToken passing is not needed here.
  */
 
 import type {
