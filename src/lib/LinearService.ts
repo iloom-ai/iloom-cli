@@ -55,13 +55,17 @@ export class LinearService implements IssueTracker {
   /**
    * Detect if input matches Linear identifier format (TEAM-NUMBER)
    * @param input - User input string
-   * @param _repo - Repository (unused for Linear)
+   * @param repo - Repository override (ignored — Linear does not support cross-repo
+   *               addressing via owner/repo; logged at debug level if provided)
    * @returns Detection result with type and identifier
    */
   public async detectInputType(
     input: string,
-    _repo?: string,
+    repo?: string,
   ): Promise<IssueTrackerInputDetection> {
+    if (repo) {
+      getLogger().debug(`LinearService.detectInputType: ignoring repo argument "${repo}" — Linear does not support cross-repo addressing.`)
+    }
     getLogger().debug(`LinearService.detectInputType called with input: "${input}"`)
 
     // Pattern: TEAM-NUMBER (e.g., ENG-123, PLAT-456)
@@ -94,11 +98,15 @@ export class LinearService implements IssueTracker {
   /**
    * Fetch a Linear issue by identifier
    * @param identifier - Linear issue identifier (string or number)
-   * @param _repo - Repository (unused for Linear)
+   * @param repo - Repository override (ignored — Linear does not support cross-repo
+   *               addressing via owner/repo; logged at debug level if provided)
    * @returns Generic Issue type
    * @throws LinearServiceError if issue not found
    */
-  public async fetchIssue(identifier: string | number, _repo?: string): Promise<Issue> {
+  public async fetchIssue(identifier: string | number, repo?: string): Promise<Issue> {
+    if (repo) {
+      getLogger().debug(`LinearService.fetchIssue: ignoring repo argument "${repo}" — Linear does not support cross-repo addressing.`)
+    }
     const linearIssue = await fetchLinearIssue(String(identifier))
     return this.mapLinearIssueToIssue(linearIssue)
   }

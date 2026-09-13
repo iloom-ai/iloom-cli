@@ -147,6 +147,8 @@ describe('StartCommand', () => {
 		// Set IssueTracker interface properties
 		mockGitHubService.supportsPullRequests = true
 		mockGitHubService.providerName = 'github'
+		// GitHub identifiers are numeric — normalizeIdentifier just stringifies.
+		mockGitHubService.normalizeIdentifier = vi.fn((id: string | number) => String(id))
 		command = new StartCommand(mockGitHubService)
 
 		// Default: no child issues (epic detection returns empty)
@@ -525,6 +527,313 @@ describe('StartCommand', () => {
 				).rejects.toThrow('Invalid branch name')
 
 				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
+			})
+
+			describe('tracker URL input', () => {
+				it('should parse a GitHub issue URL into a numeric identifier', async () => {
+					const { hasMultipleRemotes } = await import('../utils/remote.js')
+					vi.mocked(hasMultipleRemotes).mockResolvedValue(false)
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+						number: 123,
+						title: 'Test',
+						body: '',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/123',
+					})
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/owner/repo/issues/123',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					// Issue tracker validates by number, not URL — URL was parsed.
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
+					// detectInputType should NOT be called when URL parsing already
+					// produced a typed identifier.
+					expect(mockGitHubService.detectInputType).not.toHaveBeenCalled()
+				})
+
+				it('should parse a GitHub PR URL into a numeric identifier', async () => {
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
+						number: 42,
+						title: 'Test PR',
+						body: '',
+						state: 'open',
+						branch: 'feature',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/42',
+						isDraft: false,
+					})
+					vi.mocked(mockGitHubService.validatePRState).mockResolvedValue()
+
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/owner/repo/pull/42',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(42, undefined)
+					expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+				})
+
+				it('should accept a GitHub PR URL even when configured tracker is Linear (carve-out)', async () => {
+					const mockLinearService = {
+						supportsPullRequests: false,
+						providerName: 'linear',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn(),
+						validateIssueState: vi.fn(),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const linearCommand = new StartCommand(mockLinearService as unknown as GitHubService)
+
+					const MockedGitHubService = vi.mocked(GitHubService)
+					MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue({
+						number: 99,
+						title: 'PR',
+						body: '',
+						state: 'open',
+						branch: 'feature',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/99',
+						isDraft: false,
+					})
+					MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+
+					await expect(
+						linearCommand.execute({
+							identifier: 'https://github.com/owner/repo/pull/99',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					// Linear tracker is bypassed for the PR carve-out.
+					expect(mockLinearService.detectInputType).not.toHaveBeenCalled()
+					expect(mockLinearService.fetchIssue).not.toHaveBeenCalled()
+					expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(99, undefined)
+				})
+
+				it('should reject a GitHub issue URL when configured tracker is Linear (provider mismatch)', async () => {
+					const mockLinearService = {
+						supportsPullRequests: false,
+						providerName: 'linear',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn(),
+						validateIssueState: vi.fn(),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const linearCommand = new StartCommand(mockLinearService as unknown as GitHubService)
+
+					await expect(
+						linearCommand.execute({
+							identifier: 'https://github.com/owner/repo/issues/123',
+							options: {},
+						})
+					).rejects.toThrow(/does not match the configured tracker/i)
+
+					expect(mockLinearService.fetchIssue).not.toHaveBeenCalled()
+				})
+
+				it('should parse a Linear URL into uppercase TEAM-NUM', async () => {
+					const mockLinearService = {
+						supportsPullRequests: false,
+						providerName: 'linear',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn().mockResolvedValue({
+							number: 'WEB-2423',
+							title: 'Test',
+							body: '',
+							state: 'open',
+							labels: [],
+							assignees: [],
+							url: 'https://linear.app/myco/issue/WEB-2423',
+						}),
+						validateIssueState: vi.fn().mockResolvedValue(undefined),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const linearCommand = new StartCommand(mockLinearService as unknown as GitHubService)
+
+					// Lowercase team in URL should be canonicalized to upper-case.
+					await expect(
+						linearCommand.execute({
+							identifier: 'https://linear.app/myco/issue/web-2423/some-slug',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockLinearService.fetchIssue).toHaveBeenCalledWith('WEB-2423', undefined)
+				})
+
+				it('should parse a Jira cloud URL into uppercase KEY-NUM', async () => {
+					const mockJiraService = {
+						supportsPullRequests: false,
+						providerName: 'jira',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn().mockResolvedValue({
+							number: 'PROJ-99',
+							title: 'Test',
+							body: '',
+							state: 'open',
+							labels: [],
+							assignees: [],
+							url: 'https://myco.atlassian.net/browse/PROJ-99',
+						}),
+						validateIssueState: vi.fn().mockResolvedValue(undefined),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const jiraCommand = new StartCommand(mockJiraService as unknown as GitHubService)
+
+					await expect(
+						jiraCommand.execute({
+							identifier: 'https://myco.atlassian.net/browse/proj-99',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockJiraService.fetchIssue).toHaveBeenCalledWith('PROJ-99', undefined)
+				})
+
+				it('should reject a Jira URL whose host does not match the configured Jira host', async () => {
+					// Configure a Jira host of 'myco.atlassian.net' via the SettingsManager mock.
+					const SettingsManagerMock = vi.mocked(SettingsManager)
+					SettingsManagerMock.mockImplementationOnce(() => ({
+						loadSettings: vi.fn().mockResolvedValue({
+							issueManagement: { jira: { host: 'myco.atlassian.net' } },
+						}),
+					}) as unknown as SettingsManager)
+
+					const mockJiraService = {
+						supportsPullRequests: false,
+						providerName: 'jira',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn(),
+						validateIssueState: vi.fn(),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const jiraCommand = new StartCommand(mockJiraService as unknown as GitHubService)
+
+					await expect(
+						jiraCommand.execute({
+							identifier: 'https://other-org.atlassian.net/browse/ENG-123',
+							options: {},
+						})
+					).rejects.toThrow(/Jira host mismatch/i)
+
+					expect(mockJiraService.fetchIssue).not.toHaveBeenCalled()
+				})
+
+				it('should parse a self-hosted Jira URL', async () => {
+					const mockJiraService = {
+						supportsPullRequests: false,
+						providerName: 'jira',
+						detectInputType: vi.fn(),
+						fetchIssue: vi.fn().mockResolvedValue({
+							number: 'OPS-7',
+							title: 'Test',
+							body: '',
+							state: 'open',
+							labels: [],
+							assignees: [],
+							url: 'https://jira.internal.example.com/browse/OPS-7',
+						}),
+						validateIssueState: vi.fn().mockResolvedValue(undefined),
+						normalizeIdentifier: vi.fn((id: string | number) => String(id).toUpperCase()),
+					}
+					const jiraCommand = new StartCommand(mockJiraService as unknown as GitHubService)
+
+					await expect(
+						jiraCommand.execute({
+							identifier: 'https://jira.internal.example.com/browse/OPS-7',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockJiraService.fetchIssue).toHaveBeenCalledWith('OPS-7', undefined)
+				})
+
+				it('should strip query strings, fragments, and trailing slashes', async () => {
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+						number: 555,
+						title: 'Test',
+						body: '',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/555',
+					})
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/owner/repo/issues/555/?foo=bar#comment-1',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(555, undefined)
+				})
+
+				it('should throw a user-friendly error for a malformed GitHub URL', async () => {
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/owner/repo/wat/123',
+							options: {},
+						})
+					).rejects.toThrow(/Invalid tracker URL/i)
+				})
+
+				it('should reject cross-repo GitHub URLs', async () => {
+					// Configure repo to be 'configured-owner/configured-repo'.
+					const { hasMultipleRemotes, getConfiguredRepoFromSettings } = await import(
+						'../utils/remote.js'
+					)
+					vi.mocked(hasMultipleRemotes).mockResolvedValue(true)
+					vi.mocked(getConfiguredRepoFromSettings).mockResolvedValue(
+						'configured-owner/configured-repo'
+					)
+
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/other-owner/other-repo/issues/1',
+							options: {},
+						})
+					).rejects.toThrow(/operates on the current repository only/i)
+				})
+
+				it('should accept GitHub URLs whose repo case-insensitively matches the configured repo', async () => {
+					const { hasMultipleRemotes, getConfiguredRepoFromSettings } = await import(
+						'../utils/remote.js'
+					)
+					vi.mocked(hasMultipleRemotes).mockResolvedValue(true)
+					vi.mocked(getConfiguredRepoFromSettings).mockResolvedValue('Owner/Repo')
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+						number: 1,
+						title: 'Test',
+						body: '',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/1',
+					})
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await expect(
+						command.execute({
+							identifier: 'https://github.com/OWNER/REPO/issues/1',
+							options: {},
+						})
+					).resolves.not.toThrow()
+
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(1, 'Owner/Repo')
+				})
 			})
 
 		})
@@ -1640,6 +1949,7 @@ describe('StartCommand', () => {
 				one_shot_mode: 'default',
 				complexity_override: false,
 				create_only: false,
+				identifier_source: 'identifier',
 			})
 		})
 
@@ -1691,6 +2001,55 @@ describe('StartCommand', () => {
 			).rejects.toThrow('API error')
 
 			expect(mockTrack).not.toHaveBeenCalled()
+		})
+
+		it('should mark identifier_source as "identifier" for bare identifiers', async () => {
+			vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+				type: 'issue',
+				number: 123,
+				rawInput: '123',
+			})
+
+			await command.execute({
+				identifier: '123',
+				options: {},
+			})
+
+			expect(mockTrack).toHaveBeenCalledWith(
+				'loom.created',
+				expect.objectContaining({
+					identifier_source: 'identifier',
+				})
+			)
+			// Should NOT log url_provider for bare identifier inputs.
+			const call = mockTrack.mock.calls.find(([eventName]) => eventName === 'loom.created')
+			expect(call?.[1]).not.toHaveProperty('url_provider')
+		})
+
+		it('should mark identifier_source as "url" with url_provider for tracker URL inputs', async () => {
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+				number: 123,
+				title: 'Test',
+				body: '',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/123',
+			})
+			vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+			await command.execute({
+				identifier: 'https://github.com/owner/repo/issues/123',
+				options: {},
+			})
+
+			expect(mockTrack).toHaveBeenCalledWith(
+				'loom.created',
+				expect.objectContaining({
+					identifier_source: 'url',
+					url_provider: 'github',
+				})
+			)
 		})
 	})
 

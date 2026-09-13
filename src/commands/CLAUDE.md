@@ -14,7 +14,7 @@ Commands are registered in `src/cli.ts` using Commander.js. Each command class h
 
 | Command | Aliases | File | Delegates To | Key Purpose |
 |---------|---------|------|-------------|-------------|
-| `start` | `new`, `create`, `up` | `start.ts` | LoomManager, GitWorktreeManager, DatabaseManager, AgentManager | Create isolated workspace for issue/PR/epic |
+| `start` | `new`, `create`, `up` | `start.ts` | LoomManager, GitWorktreeManager, DatabaseManager, AgentManager | Create isolated workspace for issue/PR/epic. Accepts a tracker URL (GitHub issue/PR, Linear, Jira) in addition to a bare identifier; parsed via `src/utils/TrackerUrlParser.ts`. Cross-repo URLs are rejected; GitHub PR URLs are accepted regardless of configured tracker. |
 | `finish` | `dn` | `finish.ts` | MergeManager, ValidationRunner, ResourceCleanup, PRManager | Merge branch, cleanup workspace |
 | `cleanup` | `remove`, `clean` | `cleanup.ts` | GitWorktreeManager, ResourceCleanup, LoomManager | Remove worktree(s) |
 | `list` | — | (inline in cli.ts) | LoomManager, GitWorktreeManager | Show active looms |
@@ -24,7 +24,7 @@ Commands are registered in `src/cli.ts` using Commander.js. Each command class h
 | Command | Aliases | File | Delegates To | Key Purpose |
 |---------|---------|------|-------------|-------------|
 | `spin` | `ignite` | `ignite.ts` | PromptTemplateManager, SwarmSetupService, AgentManager | Launch Claude with workspace context; swarm orchestrator for epics |
-| `plan` | — | `plan.ts` | PromptTemplateManager, IssueTrackerFactory, AgentManager | Architect-mode decomposition; optional auto-swarm |
+| `plan` | — | `plan.ts` | PromptTemplateManager, IssueTrackerFactory, AgentManager | Architect-mode decomposition; optional auto-swarm. Accepts a tracker issue URL in addition to a bare identifier; parsed via `src/utils/TrackerUrlParser.ts`. PR URLs are rejected; cross-repo GitHub issue URLs are accepted but MCP-backed write features (child issues, dependencies) are skipped with a warning. |
 
 ### Git & Commit Commands
 

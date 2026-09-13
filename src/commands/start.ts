@@ -14,6 +14,8 @@ import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
+import { parseTrackerUrl, TrackerUrlError, type TrackerUrlParseResult } from '../utils/TrackerUrlParser.js'
+import { validateTrackerUrlAgainstSettings } from '../utils/tracker-url-validation.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -39,6 +41,13 @@ export interface ParsedInput {
 	number?: string | number
 	branchName?: string
 	originalInput: string
+	/**
+	 * Whether the input was a tracker URL or a bare identifier. Used for
+	 * telemetry only — never include the URL itself in telemetry.
+	 */
+	identifierSource?: 'url' | 'identifier'
+	/** When `identifierSource === 'url'`, the tracker provider parsed from it. */
+	urlProvider?: TrackerUrlParseResult['provider']
 }
 
 export class StartCommand {
@@ -168,8 +177,9 @@ export class StartCommand {
 			// Step 0.6: Detect if running from inside an existing loom (for nested loom support)
 			let parentLoom = await this.detectParentLoom(loomManager)
 
-			// Step 1: Parse and validate input (pass repo to methods)
-			const parsed = await this.parseInput(input.identifier, repo, input.options)
+			// Step 1: Parse and validate input (pass repo + configured Jira host to methods)
+			const configuredJiraHost = initialSettings.issueManagement?.jira?.host
+			const parsed = await this.parseInput(input.identifier, repo, input.options, configuredJiraHost)
 
 			// Step 2: Validate based on type
 			await this.validateInput(parsed, repo)
@@ -396,6 +406,8 @@ export class StartCommand {
 					noReview: 'skip-reviews',
 					bypassPermissions: 'yolo',
 				}
+				const identifierSource: LoomCreatedProperties['identifier_source'] =
+					parsed.identifierSource ?? 'identifier'
 				TelemetryService.getInstance().track('loom.created', {
 					source_type: parsed.type === 'epic' ? 'issue' : parsed.type as LoomCreatedProperties['source_type'],
 					tracker: this.issueTracker.providerName,
@@ -403,6 +415,8 @@ export class StartCommand {
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
 					complexity_override: !!input.options.complexity,
 					create_only: !!input.options.createOnly,
+					identifier_source: identifierSource,
+					...(parsed.urlProvider && { url_provider: parsed.urlProvider }),
 				})
 			} catch (error: unknown) {
 				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)
@@ -447,7 +461,7 @@ export class StartCommand {
 	/**
 	 * Parse input to determine type and extract relevant data
 	 */
-	private async parseInput(identifier: string, repo?: string, options?: StartOptions): Promise<ParsedInput> {
+	private async parseInput(identifier: string, repo?: string, options?: StartOptions, configuredJiraHost?: string): Promise<ParsedInput> {
 		// Check if user wants to skip capitalization by prefixing with space
 		// We preserve this for description types so capitalizeFirstLetter() can handle it
 		const hasLeadingSpace = identifier.startsWith(' ')
@@ -456,6 +470,14 @@ export class StartCommand {
 		const trimmedIdentifier = identifier.trim()
 		if (!trimmedIdentifier) {
 			throw new Error('Missing required argument: identifier')
+		}
+
+		// Check if input is a tracker URL (GitHub issue/PR, Linear, Jira) and
+		// translate it to a canonical identifier before falling through to the
+		// existing identifier matching paths below.
+		const urlParsed = this.tryParseTrackerUrl(trimmedIdentifier, repo, configuredJiraHost)
+		if (urlParsed) {
+			return urlParsed
 		}
 
 		// Check for description: >15 chars AND has spaces (likely a natural language description)
@@ -562,6 +584,76 @@ export class StartCommand {
 			type: 'branch',
 			branchName: trimmedIdentifier,
 			originalInput: trimmedIdentifier,
+		}
+	}
+
+	/**
+	 * Attempt to parse `input` as a tracker URL (GitHub issue/PR, Linear,
+	 * Jira). Returns a `ParsedInput` if the input was a recognized URL, `null`
+	 * if it was not URL-shaped (caller should fall through to bare-identifier
+	 * matching), or throws a user-facing error if the URL was malformed or
+	 * doesn't match the configured tracker / current repo.
+	 *
+	 * Carve-out: GitHub PR URLs are accepted regardless of the configured
+	 * tracker, mirroring the bare-numeric PR detection at start.ts ~line 537
+	 * which lets Linear/Jira projects open GitHub PR worktrees.
+	 */
+	private tryParseTrackerUrl(input: string, configuredRepo?: string, configuredJiraHost?: string): ParsedInput | null {
+		let result: TrackerUrlParseResult | null
+		try {
+			result = parseTrackerUrl(input)
+		} catch (error: unknown) {
+			if (error instanceof TrackerUrlError) {
+				throw new Error(`Invalid tracker URL: ${error.message}`)
+			}
+			throw error
+		}
+
+		if (!result) {
+			return null
+		}
+
+		const trackerProviderName = this.issueTracker.providerName
+
+		// Provider mismatch + Jira host mismatch validation (shared with `il plan`).
+		// `allowPrCarveOut: true` lets GitHub PR URLs through regardless of the
+		// configured tracker — see start.ts:537-557 for the bare-numeric equivalent.
+		validateTrackerUrlAgainstSettings(result, {
+			configuredProvider: trackerProviderName as TrackerUrlParseResult['provider'],
+			...(configuredJiraHost !== undefined && { configuredJiraHost }),
+			allowPrCarveOut: true,
+		})
+
+		// Cross-repo URLs are rejected for `il start`: the worktree is created
+		// in the current repo, so a URL pointing at a different repo would
+		// silently start work on the wrong codebase. (See per-command policy
+		// in the issue plan.) Compare case-insensitively because GitHub repo
+		// slugs are case-insensitive in practice.
+		if (result.repo && configuredRepo) {
+			if (result.repo.toLowerCase() !== configuredRepo.toLowerCase()) {
+				throw new Error(
+					`Tracker URL points to "${result.repo}" but iloom is configured for "${configuredRepo}". ` +
+						`'il start' operates on the current repository only — switch to the target repo first or use a bare identifier.`
+				)
+			}
+		}
+
+		// Defensive normalization: TrackerUrlParser already returns canonical
+		// case, but legacy on-disk identifiers may be in a different case, so
+		// pipe through `normalizeIdentifier()` per the CLAUDE.md
+		// identifier-comparison rule.
+		const normalized = this.issueTracker.normalizeIdentifier(result.identifier)
+
+		// GitHub identifiers are numeric; everything else stays as a string.
+		const numberValue: string | number =
+			result.provider === 'github' ? parseInt(normalized, 10) : normalized
+
+		return {
+			type: result.kind === 'pr' ? 'pr' : 'issue',
+			number: numberValue,
+			originalInput: input,
+			identifierSource: 'url',
+			urlProvider: result.provider,
 		}
 	}
 
