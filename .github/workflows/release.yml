@@ -96,18 +96,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Setup Node.js FIRST — this defines the active npm on PATH. It must run
-      # before the npm upgrade below, or it resets npm back to Node's bundled
-      # version. Node >= 22.14.0 is required for OIDC trusted publishing.
+      # Enable Corepack BEFORE setup-node so pnpm is on PATH when setup-node's
+      # `cache: pnpm` computes its cache key (setup-node fails otherwise).
+      - name: Enable Corepack
+        run: corepack enable
+
+      # setup-node defines the active npm on PATH, so it must run BEFORE the npm
+      # upgrade below — otherwise it resets npm back to Node's bundled version.
+      # Node >= 22.14.0 is required for OIDC trusted publishing.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Enable Corepack
-        run: corepack enable
 
       # Upgrade npm AFTER setup-node so it isn't reset. Trusted publishing
       # requires npm >= 11.5.1 (Node 22 bundles npm 10.x, which is too old).
