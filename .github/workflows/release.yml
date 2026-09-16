@@ -96,27 +96,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure npm for user-specific global installs
-        run: |
-          npm config set prefix ~/.npm-global
-          echo "~/.npm-global/bin" >> $GITHUB_PATH
-        shell: bash
-
-      - name: Update npm to the latest version (now in a user-owned directory)
-        run: npm install -g npm@latest
-
-      - name: Verify the new npm version (optional)
-        run: npm -v
-        
-      - name: Enable Corepack
-        run: corepack enable
-
+      # Setup Node.js FIRST — this defines the active npm on PATH. It must run
+      # before the npm upgrade below, or it resets npm back to Node's bundled
+      # version. Node >= 22.14.0 is required for OIDC trusted publishing.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Upgrade npm AFTER setup-node so it isn't reset. Trusted publishing
+      # requires npm >= 11.5.1 (Node 22 bundles npm 10.x, which is too old).
+      - name: Upgrade npm for trusted publishing (OIDC)
+        run: npm install -g npm@latest
+
+      - name: Verify npm supports OIDC trusted publishing (>= 11.5.1)
+        run: |
+          npm -v
+          npm -v | awk -F. '{
+            if ($1 < 11 || ($1 == 11 && $2 < 5) || ($1 == 11 && $2 == 5 && $3 < 1)) {
+              print "npm " $0 " is too old for OIDC trusted publishing (need >= 11.5.1)"
+              exit 1
+            }
+          }'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -124,6 +130,10 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      # No NODE_AUTH_TOKEN: authentication comes from OIDC trusted publishing.
+      # If a token is present, npm uses it and never attempts OIDC. Requires the
+      # job-level `id-token: write` permission plus a Trusted Publisher configured
+      # for this repo + workflow filename (release.yml) on npmjs.com.
       - name: Publish to npm (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -133,11 +143,7 @@ jobs:
           else
             npm publish --tag ${{ github.event.inputs.tag }}
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm (tag push)
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm publish --tag latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
